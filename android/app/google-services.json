@@ -1,0 +1,39 @@
+{
+  "project_info": {
+    "project_number": "572589990953",
+    "project_id": "esp-novahome",
+    "storage_bucket": "esp-novahome.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:572589990953:android:cde1af91b0d254bed52838",
+        "android_client_info": {
+          "package_name": "com.espressif.novahome"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "572589990953-mttdsareb4nnmfiupddvoalt85imsud2.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyD0uwElV6qAIrLef6rxWhZSH_Ik1EixT84"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "572589990953-mttdsareb4nnmfiupddvoalt85imsud2.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
