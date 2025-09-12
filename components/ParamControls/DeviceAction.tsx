@@ -26,6 +26,10 @@ interface DeviceActionProps {
   onRemove?: () => void;
   rightSlot?: React.ReactNode;
   badgeLable?: React.ReactNode;
+  /** Event conditions for automation events (param -> {condition, value}) */
+  eventConditions?: Record<string, { condition: string; value: any }>;
+  /** Whether this is displaying event conditions instead of actions */
+  isEventMode?: boolean;
 }
 
 /**
@@ -44,8 +48,41 @@ const DeviceAction: React.FC<DeviceActionProps> = ({
   onPress,
   rightSlot,
   badgeLable,
+  eventConditions,
+  isEventMode = false,
 }) => {
   const { t } = useTranslation();
+
+  // Helper function to format condition labels
+  const getConditionLabel = (condition: string) => {
+    switch (condition) {
+      case "==":
+        return t("automation.conditions.equals");
+      case "!=":
+        return t("automation.conditions.notEquals");
+      case ">":
+        return t("automation.conditions.greaterThan");
+      case "<":
+        return t("automation.conditions.lessThan");
+      case ">=":
+        return t("automation.conditions.greaterThanOrEqual");
+      case "<=":
+        return t("automation.conditions.lessThanOrEqual");
+      default:
+        return condition;
+    }
+  };
+
+  // Helper function to format value display
+  const getValueDisplay = (value: any) => {
+    if (typeof value === "boolean") {
+      return value
+        ? t("automation.conditions.on")
+        : t("automation.conditions.off");
+    }
+    return value?.toString() || "N/A";
+  };
+
   return (
     <View style={styles.containerWrapper}>
       <Pressable style={[styles.container]} onPress={onPress}>
@@ -61,7 +98,23 @@ const DeviceAction: React.FC<DeviceActionProps> = ({
             <View style={styles.actionContainer}>
               {badgeLable ? (
                 <View style={styles.badgeContainer}>{badgeLable}</View>
+              ) : isEventMode && eventConditions ? (
+                // Render event conditions
+                Object.entries(eventConditions).map(
+                  ([param, conditionData], index) => (
+                    <Text
+                      style={[styles.actionText]}
+                      numberOfLines={1}
+                      key={`${param}-${index}-event`}
+                    >
+                      {`${param} ${getConditionLabel(
+                        conditionData.condition
+                      )} ${getValueDisplay(conditionData.value)}`}
+                    </Text>
+                  )
+                )
               ) : (
+                // Render actions (original logic)
                 Object.entries(actions).map(([key, value], index) => (
                   <Text
                     style={[styles.actionText]}

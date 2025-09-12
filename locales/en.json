@@ -83,6 +83,7 @@
         "home": "Home",
         "rooms": "Rooms",
         "scenes": "Scenes",
+        "automations": "Automations",
         "user": "User"
       }
     },
@@ -593,6 +594,110 @@
       "sceneDeletionFailed": "Scene deletion failed",
       "noScenes": "No scenes found",
       "fallback": "Something went wrong. Please try again later."
+    }
+  },
+  "automation": {
+    "automations": {
+      "title": "Automations",
+      "noAutomationsYet": "No Automations Added Yet",
+      "noAutomationsYetDescription": "Create your first automation\n to automate your devices",
+      "noDevicesForAutomation": "Add Your First Device!",
+      "noDevicesForAutomationDescription": "You need to have at least\n one device to create automations",
+      "addAutomation": "Add Automation",
+      "addFirstDevice": "Add Device",
+      "automationMenuBottomSheetEnabled": "Enabled",
+      "automationMenuBottomSheetDisabled": "Disabled",
+      "edit": "Edit",
+      "delete": "Delete",
+      "createAutomation": "Create Automation",
+      "automationNamePlaceholder": "Automation Name",
+      "automationDeleted": "Automation Deleted",
+      "automationDeletedMessage": "Automation has been deleted successfully",
+      "automationEnabled": "Automation Enabled",
+      "automationEnabledMessage": "Automation has been enabled successfully",
+      "automationDisabled": "Automation Disabled",
+      "automationDisabledMessage": "Automation has been disabled successfully"
+    },
+    "createAutomation": {
+      "title": "Create Automation",
+      "editAutomation": "Edit Automation",
+      "automationName": "Automation Name",
+      "automationNamePlaceholder": "Automation Name",
+      "retrigger": "Allow retrigger",
+      "retriggerDescription": "If enabled, will retrigger the automation for same event",
+      "event": "Event",
+      "actions": "Actions",
+      "noEventSelected": "No Event Selected",
+      "noEventSelectedDescription": "Add event to create your automation. Tap the + button to get started.",
+      "noActionsSelected": "No Actions Selected",
+      "noActionsSelectedDescription": "Add device actions to {{action}} your automation. Tap the + button to get started.",
+      "nameAlreadyExists": "An automation with this name already exists",
+      "automationUpdated": "Automation Updated",
+      "automationUpdatedMessage": "Automation has been updated successfully",
+      "automationDeleted": "Automation Deleted",
+      "automationDeletedMessage": "Automation has been deleted successfully",
+      "automationCreated": "Automation created successfully",
+      "automationCreatedMessage": "Automation has been created successfully"
+    },
+    "eventDeviceSelection": {
+      "title": "Select Device",
+      "selectDevice": "Select a device to create an event trigger",
+      "selectedDevice": "Selected Device",
+      "selectDifferentDevice": "Select a different device"
+    },
+    "eventParamSelection": {
+      "title": "Configure Event",
+      "parameterOn": "ON",
+      "parameterOff": "OFF",
+      "condition": "Trigger Condition"
+    },
+    "actionDeviceSelection": {
+      "title": "Select Devices",
+      "selectedDevices": "Selected Devices",
+      "selectDevices": "Select devices to control when automation triggers",
+      "selectMore": "Select more devices for actions",
+      "eventSummary": "Event Trigger",
+      "when": "When",
+      "createAutomation": "Create Automation"
+    },
+    "actionParamSelection": {
+      "title": "Configure Action",
+      "parameterOn": "ON",
+      "parameterOff": "OFF",
+      "incompatibleParamsTitle": "No compatible parameters \nfound on {{deviceName}}"
+    },
+    "card": {
+      "if": "If",
+      "set": "Set",
+      "on": "ON",
+      "off": "OFF",
+      "noEvents": "No trigger conditions",
+      "noActions": "No actions defined",
+      "unknownEvent": "Unknown trigger",
+      "unknownAction": "Unknown action",
+      "parameters": "parameters",
+      "devices": "devices",
+      "actions": "actions"
+    },
+    "conditions": {
+      "equals": "equals",
+      "notEquals": "not equals",
+      "greaterThan": "greater than",
+      "lessThan": "less than",
+      "greaterThanOrEqual": "greater than or equal",
+      "lessThanOrEqual": "less than or equal",
+      "on": "On",
+      "off": "Off"
+    },
+    "errors": {
+      "fallback": "Something went wrong. Please try again later.",
+      "updateFailedMessage": "Failed to update automation",
+      "deleteFailedMessage": "Failed to delete automation",
+      "pleaseEnterAutomationName": "Please enter an automation name",
+      "refreshFailed": "Failed to refresh automations",
+      "failedToFetchAutomation": "Failed to fetch automation",
+      "failedToActionAutomation": "Failed to {{action}} automation",
+      "failedToCreateAutomation": "Failed to create automation"
     }
   }
 }

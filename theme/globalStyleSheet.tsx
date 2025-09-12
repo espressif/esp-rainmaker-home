@@ -1215,8 +1215,8 @@ export const globalStyles = StyleSheet.create({
   // Scene Empty State Styles
   sceneEmptyStateContainer: {
     alignItems: "center",
-    flex:1,
-    marginBottom: 140
+    flex: 1,
+    marginBottom: 140,
   },
   sceneEmptyStateIconContainer: {
     backgroundColor: tokens.colors.white,
@@ -1285,5 +1285,50 @@ export const globalStyles = StyleSheet.create({
     shadowOpacity: 0.15,
     shadowRadius: 10,
     elevation: 6,
+  },
+
+  // Automation Empty State Styles
+  automationEmptyStateContainer: {
+    alignItems: "center",
+    flex: 1,
+    marginBottom: 140,
+  },
+  automationEmptyStateIconContainer: {
+    backgroundColor: tokens.colors.white,
+    borderRadius: 48,
+    padding: 20,
+    marginBottom: 24,
+  },
+  automationEmptyStateIconContainerTop: {
+    backgroundColor: tokens.colors.white,
+    borderRadius: 48,
+    padding: 20,
+    marginBottom: 24,
+    marginTop: "50%",
+  },
+  automationEmptyStateTitleLarge: {
+    fontSize: tokens.fontSize.sm,
+    fontWeight: "500",
+    color: tokens.colors.text_primary,
+    textAlign: "center",
+    marginBottom: 8,
+  },
+  automationEmptyStateDescription: {
+    fontSize: tokens.fontSize.sm,
+    color: tokens.colors.text_secondary,
+    textAlign: "center",
+    marginBottom: 24,
+  },
+  automationAddButtonContainer: {
+    position: "absolute",
+    bottom: 70,
+    left: 0,
+    right: 0,
+    padding: tokens.spacing._15,
+  },
+  automationAddButton: {
+    backgroundColor: tokens.colors.primary,
+    borderRadius: tokens.radius.md,
+    paddingVertical: tokens.spacing._15,
   },
 });

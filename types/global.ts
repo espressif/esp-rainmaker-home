@@ -18,6 +18,7 @@ import {
   ESPRMDevice,
   ESPRMNodeConfig,
   ESPRMGroup,
+  ESPAutomation,
 } from "@espressif/rainmaker-base-sdk";
 
 // ============================================================================
@@ -159,7 +160,6 @@ export interface NetworkListModalProps {
   onRefresh: () => void;
 }
 
-
 // ============================================================================
 // Home Types
 // ============================================================================
@@ -167,7 +167,7 @@ export interface HomeData {
   roomTabs: RoomTab[];
   rooms: ESPRMGroup[];
   devices: (ESPRMDevice & { node: WeakRef<ESPRMNode> })[];
-} 
+}
 
 // ============================================================================
 // Room Types
@@ -559,4 +559,73 @@ export interface SharingProps {
   onRemoveUser: (userId: string) => void;
   onAddUser: () => void;
   isPrimary: boolean;
+}
+
+// ============================================================================
+// Automations Types
+// ============================================================================
+export interface AutomationCardProps {
+  /** Automation object from ESPAutomation */
+  automation: ESPAutomation;
+  /** Callback when automation is pressed */
+  onPress?: () => void;
+  /** Callback when toggle is changed */
+  onToggle?: (enabled: boolean) => void;
+  /** Whether the toggle is in loading state */
+  toggleLoading?: boolean;
+}
+
+export interface AutomationDeviceCardProps {
+  /** Device object with type and name */
+  device: { type: string; name: string };
+  /** Display device name */
+  displayDeviceName: string;
+  /** Type of automation component (event or action) */
+  type: "event" | "action";
+  /** Action object (for action type) */
+  actions?: Record<string, any>;
+  /** Event conditions object (for event type) */
+  eventConditions?: Record<string, { condition: string; value: any }>;
+  /** Callback when device card is pressed */
+  onPress: () => void;
+}
+
+export interface DeviceSelectionData {
+  /** Node object from ESPRMNode */
+  node: ESPRMNode;
+  /** Device object from ESPRMDevice */
+  device: ESPRMDevice;
+  /** Whether the device is selected */
+  isSelected: boolean;
+}
+
+// Types
+export interface AutomationMenuOption {
+  /** Option ID */
+  id: string;
+  /** Option label */
+  label: string;
+  /** Option icon */
+  icon: React.ReactNode;
+  /** Option onPress */
+  onPress: () => void;
+  /** Whether the option is in loading state */
+  loading?: boolean;
+  /** Whether the option is destructive */
+  destructive?: boolean;
+}
+
+export interface AutomationMenuBottomSheetProps {
+  /** Automation object from ESPAutomation */
+  automation: ESPAutomation | null;
+  /** Whether the bottom sheet is visible */
+  visible: boolean;
+  /** Automation name to display in header */
+  automationName: string;
+  /** Menu options to display */
+  options: AutomationMenuOption[];
+  /** Callback when bottom sheet is closed */
+  onClose: () => void;
+  /** Warning message to display */
+  warning?: string;
 }

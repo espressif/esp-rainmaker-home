@@ -167,3 +167,5 @@ export const ERROR_CODES_MAP = {
 export const CDF_EXTERNAL_PROPERTIES = {
   IS_OAUTH_LOGIN: "isOauthLogin",
 } as const;
+
+export const ESPRM_PARAM_WRITE_PROPERTY = "write";

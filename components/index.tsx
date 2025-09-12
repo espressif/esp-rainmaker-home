@@ -88,3 +88,8 @@ export { default as HomeName } from "./HomeSettings/HomeName";
 export { default as HomeSharing } from "./HomeSettings/HomeSharing";
 export { default as HomeRemove } from "./HomeSettings/HomeRemove";
 export { default as AddUserModal } from "./HomeSettings/AddUserModal";
+
+// Automation
+export { default as AutomationDeviceCard } from "./Automation/AutomationDeviceCard";
+export { default as AutomationCard } from "./Automation/AutomationCard";
+export { default as AutomationMenuBottomSheet } from "./Automation/AutomationMenuBottomSheet";
