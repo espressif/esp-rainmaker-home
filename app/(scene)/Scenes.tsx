@@ -472,11 +472,11 @@ const Scenes = observer(() => {
         </ScrollView>
 
         {/* Fixed Add Scene Button */}
-        <View style={globalStyles.sceneAddButtonContainer}>
+        <View style={globalStyles.footerAddButtonContainer}>
           <Button
             label={t("scene.scenes.addScene")}
             onPress={handleAddScene}
-            style={globalStyles.sceneAddButton}
+            style={globalStyles.footerAddButton}
           />
         </View>
       </ScreenWrapper>

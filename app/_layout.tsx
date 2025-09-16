@@ -31,7 +31,7 @@ import { useTranslation } from "react-i18next";
 import { FooterTabs } from "@/components";
 import { ToastContainer } from "@/components";
 // icons
-import { Home, DoorOpen, Calendar, User, Zap } from "lucide-react-native";
+import { Home, DoorOpen, Calendar, User, History, Zap } from "lucide-react-native";
 
 const InnerLayout = () => {
   const { t } = useTranslation();
@@ -64,6 +64,11 @@ const InnerLayout = () => {
       Icon: Zap,
     },
     {
+      route: "/(schedule)/Schedules" as RelativePathString,
+      label: t("layout.navigation.footer.schedules"),
+      Icon: History,
+    },
+    {
       route: "/(user)/User" as RelativePathString,
       label: t("layout.navigation.footer.user"),
       Icon: User,
@@ -76,6 +81,7 @@ const InnerLayout = () => {
     "/User",
     "/Scenes",
     "/Automations",
+    "/Schedules"
   ].some((route) => pathname === route);
 
   return (

@@ -30,6 +30,7 @@ interface DeviceActionProps {
   eventConditions?: Record<string, { condition: string; value: any }>;
   /** Whether this is displaying event conditions instead of actions */
   isEventMode?: boolean;
+  isOutOfSync?: boolean;
 }
 
 /**
@@ -50,6 +51,7 @@ const DeviceAction: React.FC<DeviceActionProps> = ({
   badgeLable,
   eventConditions,
   isEventMode = false,
+  isOutOfSync = false,
 }) => {
   const { t } = useTranslation();
 
@@ -96,7 +98,11 @@ const DeviceAction: React.FC<DeviceActionProps> = ({
               {displayDeviceName}
             </Text>
             <View style={styles.actionContainer}>
-              {badgeLable ? (
+              {isOutOfSync ? (
+                <Text style={[styles.actionText, styles.outOfSyncText]}>
+                  {t("device.status.outOfSync")}
+                </Text>
+              ) : badgeLable ? (
                 <View style={styles.badgeContainer}>{badgeLable}</View>
               ) : isEventMode && eventConditions ? (
                 // Render event conditions
@@ -186,6 +192,10 @@ const styles = StyleSheet.create({
     fontSize: tokens.fontSize.xs,
     fontFamily: tokens.fonts.regular,
     color: tokens.colors.text_secondary,
+  },
+  outOfSyncText: {
+    color: tokens.colors.red,
+    fontFamily: tokens.fonts.medium,
   },
   statusIndicator: {
     marginLeft: tokens.spacing._10,

@@ -93,3 +93,5 @@ export { default as AddUserModal } from "./HomeSettings/AddUserModal";
 export { default as AutomationDeviceCard } from "./Automation/AutomationDeviceCard";
 export { default as AutomationCard } from "./Automation/AutomationCard";
 export { default as AutomationMenuBottomSheet } from "./Automation/AutomationMenuBottomSheet";
+// schedule
+export * from "./Schedule"

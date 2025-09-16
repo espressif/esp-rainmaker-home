@@ -277,11 +277,11 @@ const IOSScanSoftAP = () => {
         </View>
 
         {/* Connect Button */}
-        <View style={globalStyles.sceneAddButtonContainer}>
+        <View style={globalStyles.footerAddButtonContainer}>
           <ActionButton
             variant="primary"
             onPress={handleConnect}
-            style={globalStyles.sceneAddButton}
+            style={globalStyles.footerAddButton}
           >
             <Typo variant="body" style={globalStyles.buttonTextPrimary}>
               {t("device.scan.softAP.connectButton")}
@@ -474,11 +474,11 @@ const AndroidScanSoftAP = () => {
         )}
 
         {/* Connect Button - Only enabled when a device is selected */}
-        <View style={globalStyles.sceneAddButtonContainer}>
+        <View style={globalStyles.footerAddButtonContainer}>
           <ActionButton
             variant="primary"
             onPress={handleSoftAPDeviceConnect}
-            style={globalStyles.sceneAddButton}
+            style={globalStyles.footerAddButton}
             disabled={!selectedDevice || connectingDevice}
           >
             {connectingDevice ? (
