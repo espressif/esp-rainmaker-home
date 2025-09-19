@@ -1,93 +1,289 @@
-# esp-nova-home-app
+# ESP RainMaker Home App
 
+<div align="center">
+<p align="center">
+  <img src="assets/images/logo.png" alt="ESP RainMaker Home App" width="200"/>
+</p>
+</div>
 
+<div align="center">
 
-## Getting started
+[![License: Apache-2.0](https://img.shields.io/badge/License-Apache_2.0-yellow.svg)](https://opensource.org/licenses/Apache-2.0)
+[![React Native](https://img.shields.io/badge/React%20Native-v0.76.9-blue.svg)](https://reactnative.dev/)
+[![Expo](https://img.shields.io/badge/Expo-SDK%2052-black.svg)](https://expo.dev/)
 
-To make it easy for you to get started with GitLab, here's a list of recommended next steps.
+</div>
 
-Already a pro? Just edit this README.md and make it your own. Want to make it easy? [Use the template at the bottom](#editing-this-readme)!
+<div align="center">
+<p align="center">
+  A powerful React Native application built with Expo for managing your ESP RainMaker IoT ecosystem. 
+  Control your smart devices, manage rooms, and automate your home with ease.
+</p>
+</div>
 
-## Add your files
+## ⚡ Quick Start
 
-- [ ] [Create](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#create-a-file) or [upload](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#upload-a-file) files
-- [ ] [Add files using the command line](https://docs.gitlab.com/topics/git/add_files/#add-files-to-a-git-repository) or push an existing Git repository with the following command:
+> If you already have a React Native development environment set up with Node.js 22+, Android Studio/Xcode configured, you can jump straight into the Quick Start section below. For starting from scratch, refer to our detailed [Environment Setup](#environment-setup) section.
 
+**TL;DR - Get running in 5 minutes:**
+
+```bash
+# Prerequisites: Node.js 22+, Android Studio or Xcode
+git clone https://github.com/espressif/esp-rainmaker-home.git
+cd esp-rainmaker-home
+nvm use 22
+npm install
+
+## Devlopment Build
+
+# For Android
+npm run android
+
+# For iOS (macOS only)
+npm run ios -- --device
 ```
-cd existing_repo
-git remote add origin https://gitlab.espressif.cn:6688/app-frameworks/esp-nova-home-app.git
-git branch -M main
-git push -uf origin main
+
+## Key Features
+
+- **Easy Device Provisioning** - Seamlessly add new ESP devices via QR code scanning, BLE discovery, or SoftAP connection
+- **Room Management** - Organize devices by Homes and Rooms with intuitive controls
+- **Local & Cloud Control** - Control devices both locally and through the ESP RainMaker cloud
+- **Secure Authentication** - AWS Cognito-based authentication with OAuth providers (Google, Apple) and account management
+- **Real-time Updates** - Instant state synchronization across all connected devices
+- **Scene Management** - Create and manage automated scenes for multiple devices
+- **Cross-Platform** - Native iOS and Android apps with consistent UX
+- **Push Notifications** - Stay informed about device status and system events
+- **Customizable UI** - Themeable interface with support for custom device panels
+
+## 🚀 Getting Started
+
+### Prerequisites
+
+Before you begin, ensure you have the following installed:
+
+- **Node.js**: Version **22**
+- **npm** (Node Package Manager)
+- **NVM** (Node Version Manager) - Recommended for managing Node.js versions
+- A properly configured **React Native development environment**
+- **Android Studio** (for Android development)
+- **Xcode** (for iOS development on macOS)
+
+> ⚠️ **Important**: This project uses a **development build** and does **not** rely on EAS Build.
+
+#### Node.js Installation
+
+You have two options for installing Node.js:
+
+**Option 1: Using NVM (Recommended)**
+
+NVM allows you to manage multiple Node.js versions easily. Follow the installation guide at:
+
+- 📥 **[NVM Official Repository](https://github.com/nvm-sh/nvm)**
+
+After installing NVM, install Node.js 22:
+
+```bash
+nvm install 22
+nvm use 22
+node --version  # Should show v22.x.x
 ```
 
-## Integrate with your tools
+**Option 2: Direct Installation**
 
-- [ ] [Set up project integrations](https://gitlab.espressif.cn:6688/app-frameworks/esp-nova-home-app/-/settings/integrations)
+Install Node.js directly from the official website:
 
-## Collaborate with your team
+- 📥 **[Node.js Official Website](https://nodejs.org/)**
+- Download **Node.js 22 LTS**
+- Verify installation: `node --version` (should show v22.x.x)
 
-- [ ] [Invite team members and collaborators](https://docs.gitlab.com/ee/user/project/members/)
-- [ ] [Create a new merge request](https://docs.gitlab.com/ee/user/project/merge_requests/creating_merge_requests.html)
-- [ ] [Automatically close issues from merge requests](https://docs.gitlab.com/ee/user/project/issues/managing_issues.html#closing-issues-automatically)
-- [ ] [Enable merge request approvals](https://docs.gitlab.com/ee/user/project/merge_requests/approvals/)
-- [ ] [Set auto-merge](https://docs.gitlab.com/user/project/merge_requests/auto_merge/)
+### Environment Setup
 
-## Test and Deploy
+#### Android Setup
 
-Use the built-in continuous integration in GitLab.
+To configure your environment for building and running the app on Android using Android Studio:
 
-- [ ] [Get started with GitLab CI/CD](https://docs.gitlab.com/ee/ci/quick_start/)
-- [ ] [Analyze your code for known vulnerabilities with Static Application Security Testing (SAST)](https://docs.gitlab.com/ee/user/application_security/sast/)
-- [ ] [Deploy to Kubernetes, Amazon EC2, or Amazon ECS using Auto Deploy](https://docs.gitlab.com/ee/topics/autodevops/requirements.html)
-- [ ] [Use pull-based deployments for improved Kubernetes management](https://docs.gitlab.com/ee/user/clusters/agent/)
-- [ ] [Set up protected environments](https://docs.gitlab.com/ee/ci/environments/protected_environments.html)
+👉 **[Expo Environment Setup for Android](https://docs.expo.dev/get-started/set-up-your-environment/?mode=development-build&buildEnv=local&platform=android&device=physical)**
 
-***
+**Key Requirements:**
 
-# Editing this README
+- Install Android Studio with the Android SDK
+- Set up Android SDK Build-Tools and Platform-Tools
+- Configure Android Virtual Device (AVD) or connect a physical device
+- Enable USB Debugging on your Android device
 
-When you're ready to make this README your own, just edit this file and use the handy template below (or feel free to structure it however you want - this is just a starting point!). Thanks to [makeareadme.com](https://www.makeareadme.com/) for this template.
+> ⚠️ **Important:** Before syncing Gradle in Android Studio, ensure that the JDK in use is **Zulu JDK 17**.  
+> To verify or update this, navigate to:  
+> `Tools > SDK Manager > Build, Execution, Deployment > Gradle` and check the JDK path.
 
-## Suggestions for a good README
+If you encounter build issues, try deleting the `./gradle` folders from both your user directory and the project's Android directory.
 
-Every project is different, so consider which of these sections apply to yours. The sections used in the template are suggestions for most open source projects. Also keep in mind that while a README can be too long and detailed, too long is better than too short. If you think your README is too long, consider utilizing another form of documentation rather than cutting out information.
+#### iOS Setup
 
-## Name
-Choose a self-explaining name for your project.
+To set up your environment for building and running the app from Xcode (macOS only):
 
-## Description
-Let people know what your project can do specifically. Provide context and add a link to any reference visitors might be unfamiliar with. A list of Features or a Background subsection can also be added here. If there are alternatives to your project, this is a good place to list differentiating factors.
+👉 **[Expo Environment Setup for iOS](https://docs.expo.dev/get-started/set-up-your-environment/?mode=development-build&buildEnv=local&platform=ios&device=physical)**
 
-## Badges
-On some READMEs, you may see small images that convey metadata, such as whether or not all the tests are passing for the project. You can use Shields to add some to your README. Many services also have instructions for adding a badge.
+**Key Requirements:**
 
-## Visuals
-Depending on what you are making, it can be a good idea to include screenshots or even a video (you'll frequently see GIFs rather than actual videos). Tools like ttygif can help, but check out Asciinema for a more sophisticated method.
+- Install Xcode from the Mac App Store
+- Install Xcode Command Line Tools: `xcode-select --install`
+- Install CocoaPods: `sudo gem install cocoapods`
+- Configure iOS Simulator or connect a physical iOS device
 
-## Installation
-Within a particular ecosystem, there may be a common way of installing things, such as using Yarn, NuGet, or Homebrew. However, consider the possibility that whoever is reading your README is a novice and would like more guidance. Listing specific steps helps remove ambiguity and gets people to using your project as quickly as possible. If it only runs in a specific context like a particular programming language version or operating system or has dependencies that have to be installed manually, also add a Requirements subsection.
+### Installation
 
-## Usage
-Use examples liberally, and show the expected output if you can. It's helpful to have inline the smallest example of usage that you can demonstrate, while providing links to more sophisticated examples if they are too long to reasonably include in the README.
+1. **Use the correct Node version and clone the repository**
 
-## Support
-Tell people where they can go to for help. It can be any combination of an issue tracker, a chat room, an email address, etc.
+   ```bash
+   # Use Node.js 22
+   nvm use 22
 
-## Roadmap
-If you have ideas for releases in the future, it is a good idea to list them in the README.
+   # Clone the repository
+   git clone https://github.com/espressif/esp-rainmaker-home.git
+   cd esp-rainmaker-home
+   ```
 
-## Contributing
-State if you are open to contributions and what your requirements are for accepting them.
+2. **Install Dependencies**
+   ```bash
+   npm install
+   ```
 
-For people who want to make changes to your project, it's helpful to have some documentation on how to get started. Perhaps there is a script that they should run or some environment variables that they need to set. Make these steps explicit. These instructions could also be useful to your future self.
+### Configuration & Customization
 
-You can also document commands to lint the code or run tests. These steps help to ensure high code quality and reduce the likelihood that the changes inadvertently break something. Having instructions for running tests is especially helpful if it requires external setup, such as starting a Selenium server for testing in a browser.
+The app is highly configurable and customizable. For detailed configuration instructions, please see:
 
-## Authors and acknowledgment
-Show your appreciation to those who have contributed to the project.
+📖 **[Configuration & Customization Guide](./docs/CONFIGURATION.md)**
+
+This guide covers:
+
+- SDK configuration and setup
+- Device and parameter customization
+- Theme and UI customization
+- Localization and internationalization
+- Advanced customization options
+- API endpoint configuration
+
+### Running the App
+
+#### Android
+
+To run the app on a connected Android device or emulator:
+
+```bash
+npm run android
+```
+
+#### iOS
+
+To run the app on a connected iOS device or simulator:
+
+```bash
+npm run ios
+```
+
+#### Development Server
+
+To start the development server:
+
+```bash
+npm start
+```
+
+### Building for Production
+
+#### Android Release Build
+
+```bash
+npx react-native run-android --mode release
+```
+
+This command properly bundles the JavaScript code and builds a complete release APK. The APK will be available at `android/app/build/outputs/apk/release/app-release.apk`
+
+> **Note:** Using `./gradlew assembleRelease` directly may result in a white screen because it doesn't bundle the JavaScript code required for the app to run.
+
+#### iOS Release Build
+
+1. Install iOS dependencies:
+
+   ```bash
+   cd ios
+   pod install
+   ```
+
+2. Open the workspace in Xcode:
+
+   ```bash
+   open NOVA.xcworkspace
+   ```
+
+3. In Xcode:
+   - Select the "NOVA Release" scheme
+   - Select your target device or "Any iOS Device"
+   - Build and archive the app (Product → Archive)
+
+### Supports
+
+- **iOS**: Version **15.1** or greater
+- **Xcode**: Version **16.3** and above
+- **Android Studio**: Narwhal | 2025.1.1 Patch 1
+- **Android**: Version **9** & higher
+
+### Native Modules & Adapters
+
+The app includes several native modules and adapters that provide platform-specific functionality:
+
+#### Platform(iOS/Android) Specific Native Modules
+
+- **ESPDiscoveryModule** - Device discovery via mDNS
+- **ESPLocalControlModule** - Local control functionality
+- **ESPNotificationModule** - Push notification handling
+- **ESPOauthModule** - OAuth integration
+- **ESPProvModule** - Provisioning capabilities
+- **ESPAppUtilityModule** - Utility functions and permissions
+
+#### TypeScript Adapters
+
+Located in the `/adaptors` directory, these provide the bridge between React Native and native functionality:
+
+- `ESPDiscoveryAdapter.ts`
+- `ESPLocalControlAdapter.ts`
+- `ESPNotificationAdapter.ts`
+- `ESPOauthAdapter.ts`
+- `ESPProvAdapter.ts`
+- `ESPAppUtilityAdapter.ts`
+
+### Troubleshooting
+
+For comprehensive troubleshooting guidance, please see:
+
+🔧 **[Troubleshooting Guide](./docs/TROUBLESHOOTING.md)**
+
+This guide includes solutions for:
+
+- General build and dependency issues
+- iOS-specific problems and fixes
+- Android-specific issues and solutions
+- Development build troubleshooting
+- Network and connectivity problems
+
+## 📚 Documentation
+
+### Project Documentation
+
+- 📖 **[Configuration & Customization Guide](./docs/CONFIGURATION.md)** - Detailed guide on configuring and customizing the app
+- 🔧 **[Troubleshooting Guide](./docs/TROUBLESHOOTING.md)** - Solutions to common issues and problems
+
+### SDK Documentation
+
+- [ESP RainMaker SDK API Documentation](https://espressif.github.io/esp-rainmaker-app-sdk-ts/)
+- [ESP RainMaker CDF API Documentation](https://espressif.github.io/esp-rainmaker-app-cdf-ts/)
+- [SDK GitHub Repository](https://github.com/espressif/esp-rainmaker-app-sdk-ts)
+- [CDF GitHub Repository](https://github.com/espressif/esp-rainmaker-app-cdf-ts)
 
 ## License
-For open source projects, say how it is licensed.
 
-## Project status
-If you have run out of energy or time for your project, put a note at the top of the README saying that development has slowed down or stopped completely. Someone may choose to fork your project or volunteer to step in as a maintainer or owner, allowing your project to keep going. You can also make an explicit request for maintainers.
+This project is licensed under the Apache 2.0 license - see the [LICENSE](LICENSE) file for details.
+
+---
+
+> **⚠️ IMPORTANT NOTICE**: The AWS public deployment details provided in this repository are intended for **development and educational purposes only** and should **NOT be used for commercial purposes**.

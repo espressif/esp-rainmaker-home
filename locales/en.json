@@ -1,0 +1,598 @@
+{
+  "alexa": {
+    "guide": "Alexa Guide",
+    "step1": "1. Tap \"Skills & Games\" in the menu, then search \"ESP RainMaker Home\".",
+    "step2": "2. Select \"ESP RainMaker Home\" and tap \"ENABLE\" to enable the Skill.",
+    "step3": "3. You will be redirected to the account link page. Type in your ESP RainMaker Home account and password. Then tap \"Link Now\" to link your ESP RainMaker Home account.",
+    "step4": "4. Once the account linking is successful, allow Alexa to discover your devices. Once the devices are successfully discovered, the setup is complete and you can start controlling them using Alexa."
+  },
+  "googleAssistant": {
+    "guide": "Google Assistant Guide",
+    "step1": "1. Open Google Home app and tap \"Add\" then \"Set up device\".",
+    "step2": "2. Select \"Works with Google\" and search for \"ESP RainMaker Home\".",
+    "step3": "3. Sign in with your ESP RainMaker Home account credentials to link your account.",
+    "step4": "4. Once linked successfully, your devices will be available in Google Assistant. You can now control them with voice commands."
+  },
+  "error": {
+    "fallBack": "Something went wrong. Please try again later.",
+    "group": {
+      "id_missing": "Group ID is required",
+      "name_missing": "Group name is required",
+      "update_info_missing": "Group update information is required"
+    },
+    "node": {
+      "list_missing": "Node list is required",
+      "id_missing": "Node ID is required",
+      "unreachable": "Device is unreachable",
+      "reference_invalid": "Invalid device reference"
+    },
+    "device": {
+      "refresh_required": "Device list needs to be refreshed"
+    },
+    "auth": {
+      "secret_key_missing": "Secret key is required",
+      "base_url_missing": "Base URL is required"
+    },
+    "api": {
+      "delete_params_missing": "Delete endpoint parameters are missing",
+      "invalid_event_type": "Invalid event type"
+    },
+    "time": {
+      "invalid_timezone_format": "Invalid timezone format",
+      "service_unavailable": "Time service is currently unavailable",
+      "timezone_param_unavailable": "Timezone parameter is not available"
+    },
+    "ota": {
+      "job_id_missing": "OTA job ID is required"
+    },
+    "timeseries": {
+      "invalid_parameter": "Invalid time series parameter",
+      "invalid_simple_parameter": "Invalid simple time series parameter",
+      "invalid_data_type": "Invalid time series data type",
+      "invalid_mixed_parameter": "Cannot provide both number of intervals and start/end time",
+      "missing_timestamp": "Timestamp is required for time series",
+      "invalid_time_range": "Invalid time range",
+      "invalid_result_count": "Invalid result count",
+      "invalid_timestamp": "Invalid timestamp",
+      "invalid_interval": "Invalid time interval",
+      "invalid_aggregation_interval": "Invalid aggregation interval",
+      "invalid_aggregation": "Invalid aggregation method",
+      "invalid_week_start": "Invalid week start",
+      "invalid_differential": "Invalid differential configuration",
+      "invalid_reset_negative": "Invalid reset on negative configuration",
+      "invalid_timezone": "Invalid timezone",
+      "missing_aggregation_interval": "Aggregation interval is required when aggregate is provided"
+    },
+    "automation": {
+      "name_missing": "Automation name is required",
+      "events_missing": "Automation events are required",
+      "actions_missing": "Automation actions are required",
+      "id_missing": "Automation ID is required",
+      "update_details_missing": "Automation update details are required"
+    },
+    "geo": {
+      "latitude_missing": "Latitude is required",
+      "longitude_missing": "Longitude is required",
+      "coordinates_missing": "Geographic coordinates are required",
+      "coordinates_invalid": "Invalid geographic coordinates"
+    }
+  },
+  "layout": {
+    "navigation": {
+      "footer": {
+        "home": "Home",
+        "rooms": "Rooms",
+        "scenes": "Scenes",
+        "user": "User"
+      }
+    },
+    "shared": {
+      "version": "Version",
+      "termsOfUse": "Terms of Use",
+      "privacyPolicy": "Privacy Policy",
+      "errorHeader": "Error",
+      "successHeader": "Success",
+      "remove": "Remove",
+      "leave": "Leave",
+      "cancel": "Cancel",
+      "save": "Save",
+      "delete": "Delete",
+      "offline": "Offline",
+      "confirm": "Confirm",
+      "edit": "Edit",
+      "next": "Next",
+      "update": "Update",
+      "done": "Done",
+      "refresh": "Refresh",
+      "continue": "Continue",
+      "copiedToClipboard": "Copied to clipboard",
+      "copyFailed": "Failed to copy"
+    }
+  },
+  "auth": {
+    "shared": {
+      "emailPlaceholder": "Email",
+      "passwordPlaceholder": "Password",
+      "newPasswordPlaceholder": "New Password",
+      "confirmPasswordPlaceholder": "Confirm Password"
+    },
+    "login": {
+      "signInButton": "Sign in",
+      "forgotPassword": "Forgot password",
+      "thirdPartyLogin": "Third party account login",
+      "navigateToSignUp": "Don't have an account? Sign up"
+    },
+    "signup": {
+      "title": "Sign Up",
+      "confirmButton": "Confirm",
+      "navigateToSignIn": "Already have an account? Sign in",
+      "registrationSuccess": "Sign up successful!",
+      "consentText": "I agree to the",
+      "consentAnd": "and"
+    },
+    "verification": {
+      "title": "Verification Code",
+      "heading": "A verification code is on the way",
+      "subtitle": "Please enter the 6 digit code sent to you at {{email}}",
+      "verifyButton": "Verify",
+      "resendCode": "I haven't received a code"
+    },
+    "forgotPassword": {
+      "title": "Forgot Password",
+      "confirmButton": "Confirm",
+      "resetSuccess": "Password reset successfully"
+    },
+    "changePassword": {
+      "title": "Change Password",
+      "updateButton": "Update Password",
+      "passwordChangedSuccessfully": "Password changed successfully",
+      "currentPasswordPlaceholder": "Current Password"
+    },
+    "validation": {
+      "invalidEmail": "Please enter a valid email address",
+      "passwordsDoNotMatch": "Passwords do not match",
+      "invalidCode": "Please enter a valid 6-digit code",
+      "newPasswordSameAsCurrent": "New password cannot be the same as the current password"
+    },
+    "errors": {
+      "signInFailed": "Sign in failed",
+      "signUpFailed": "Sign up failed",
+      "verificationCodeSendFailed": "Failed to send verification code",
+      "fallback": "Something went wrong. Please try again later.",
+      "invalidToken": "Session expired. Please login again",
+      "changePasswordFailed": "Failed to change password. Please try again",
+      "authInstanceNotInitialized": "Authentication instance not initialized",
+      "signupConfirmationFailed": "Failed to confirm signup",
+      "passwordResetFailed": "Failed to reset password",
+      "autoSignInFailed": "Failed to auto sign in"
+    }
+  },
+  "user": {
+    "profile": {
+      "title": "My Profile",
+      "thirdPartyIntegration": {
+        "title": "Voice Assistants and Integrations"
+      },
+      "logoutModal": {
+        "message": "Are you sure you want to log out?",
+        "confirmButton": "Yes, Log Out",
+        "cancelButton": "Stay Logged In"
+      }
+    },
+    "settings": {
+      "title": "Settings",
+      "personalInformation": "Personal Information",
+      "accountSecurity": "Account and Security",
+      "aboutUs": "About Us"
+    },
+    "personalInfo": {
+      "title": "Personal Information",
+      "notSet": "Not set",
+      "nickname": "Nickname",
+      "nicknamePlaceholder": "Enter your nickname",
+      "userId": "User ID",
+      "userIdPlaceholder": "User ID"
+    },
+    "accountSecurity": {
+      "title": "Account and Security",
+      "changePassword": "Change Password",
+      "deleteAccount": "Delete Account"
+    },
+    "notifications": {
+      "title": "Notification Center",
+      "deviceSharingInvitation": "Device sharing invitation",
+      "groupSharingInvitation": "Group sharing invitation",
+      "invitationFrom": "You received an invitation from {{userName}}",
+      "noNotification": "No notifications"
+    },
+    "aboutUs": {
+      "title": "About Us",
+      "website": "Website"
+    },
+    "deleteAccount": {
+      "title": "Delete Account",
+      "notice": "Important Notice",
+      "description": "Deleting your account will permanently remove all your data, including devices, homes, rooms, and settings. This action cannot be undone.",
+      "verifyIdentity": "Verify Identity",
+      "verificationCodeSent": "A verification code has been sent to your email",
+      "verificationCodeSubtitle": "Please enter the 6-digit code sent to {{email}}",
+      "deleteConfirmed": "Account deleted successfully",
+      "proceed": "Delete Account",
+      "verificationTitle": "Verification Code",
+      "verifyButton": "Verify",
+      "resendCode": "I haven't received a code"
+    },
+    "validation": {
+      "invalidCode": "Please enter a valid 6-digit code"
+    },
+    "errors": {
+      "nicknameUpdateFailed": "Failed to update nickname",
+      "logoutFailed": "Failed to log out",
+      "fallback": "Something went wrong. Please try again later.",
+      "verificationCodeSendFailed": "Failed to send verification code",
+      "accountDeletionFailed": "Failed to delete account"
+    }
+  },
+  "group": {
+    "home": {
+      "title": "My Devices",
+      "commonTab": "Common",
+      "meshTab": "Mesh",
+      "rainmakerTab": "Rainmaker",
+      "matterTab": "Matter",
+      "addYourFirstDevice": "Add Your First Device!",
+      "addDeviceDescription": "Tap the button below or on the top right.",
+      "homeBannerTitle": "Welcome to",
+      "addYourFirstDeviceBannerTitle": "Add Your First Device!",
+      "addYourFirstDeviceBannerDescription": "Tap the button below or on the top right."
+    },
+    "rooms": {
+      "title": "Rooms",
+      "addYourFirstRoom": "Add Your First Room!",
+      "addRoomDescription": "Tap the button below or on the top right.",
+      "roomRemovedSuccessfully": "Room removed successfully",
+      "deleteModalTitle": "Confirm Remove Room",
+      "deleteModalDescription": "Are you sure you want to remove this Room?",
+      "deleteModalConfirmButton": "Remove",
+      "deleteModalCancelButton": "Cancel",
+      "roomPowerEnabled": "Enabled",
+      "roomPowerDisabled": "Disabled",
+      "roomAllDevicesPowerOn": "All devices in {{roomName}} are now on.",
+      "roomAllDevicesPowerOff": "All devices in {{roomName}} are now off.",
+      "singleDeviceCountPostfix": "device",
+      "multipleDeviceCountPostfix": "devices"
+    },
+    "homeManagement": {
+      "title": "Home Management",
+      "homeName": "Home Name",
+      "homeNamePlaceholder": "Enter home name",
+      "myHomes": "My Homes",
+      "addNewHomeInputDialogTitle": "Add New Home",
+      "addNewHomeInputDialogPlaceholder": "Enter home name",
+      "addNewHomeInputDialogConfirmButton": "Confirm",
+      "addNewHomeInputDialogCancelButton": "Cancel",
+      "addNewHome": "Add new home",
+      "enterHomeNamePlaceholder": "Enter home name",
+      "confirmBtn": "Confirm",
+      "cancelBtn": "Cancel",
+      "homeCreatedSuccessfully": "Home created successfully",
+      "homeNameUpdatedSuccessfully": "Home name updated successfully",
+      "homeRemovedSuccessfully": "Home removed successfully",
+      "errorUpdatingHomeName": "Error updating home name",
+      "sharingRequestedSuccessfully": "Sharing requested successfully",
+      "sharingRemovedSuccessfully": "Sharing removed successfully",
+      "roomCountPostfix": "rooms",
+      "deviceCountPostfix": "devices"
+    },
+    "settings": {
+      "roomManagement": "Room Management",
+      "homeNameUpdatedSuccessfully": "Home name updated successfully",
+      "homeRemovedSuccessfully": "Home removed successfully",
+      "homeLeftSuccessfully": "Left home successfully",
+      "sharingRequestedSuccessfully": "Sharing requested successfully",
+      "transferRequestedSuccessfully": "Transfer requested successfully",
+      "sharingRemovedSuccessfully": "Sharing removed successfully",
+      "confirmRemoveHomeTitle": "Confirm Remove Home",
+      "confirmRemoveHomeMessage": "Are you sure you want to remove this Home?",
+      "addUserModalTitle": "Add User",
+      "addUserModalDescription": "Enter the email address of the user you want to share the home with.",
+      "addUserModalEmailPlaceholder": "Email",
+      "grantOwnershipDescription": "Grant ownership/full access",
+      "transferGroupDescription": "Transfer group ownership",
+      "transferAndAssignRoleDescription": "Transfer group and assign new role to self",
+      "addUserModalConfirmButton": "Confirm",
+      "homeSharingSharedWith": "Shared with",
+      "homeSharingButton": "Add User",
+      "homeSharingPendingForAcceptance": "Pending for Acceptance",
+      "homeShareByTitle": "Shared by",
+      "homeRemoveButton": "Remove Home",
+      "leaveHomeButton": "Leave Home",
+      "confirmLeaveHomeTitle": "Confirm Leave Home",
+      "confirmLeaveHomeMessage": "Are you sure you want to leave this home? You will lose access to all devices and rooms in this home.",
+      "sharedBy": "Shared by",
+      "expiresIn": "Expires in",
+      "expiresInDays": "{{count}} days",
+      "expiresInDay": "1 day",
+      "expiresToday": "Expires today",
+      "sharing": "Sharing"
+    },
+    "createRoom": {
+      "roomManagement": "Room Management",
+      "createRoom": "Create a Room",
+      "editRoom": "Edit Room",
+      "roomName": "Room Name",
+      "addCustomizedRoom": "Add Customized Room",
+      "existingDevice": "Existing Devices",
+      "addDevice": "Add Devices",
+      "pleaseSelectDevices": "Devices added to this room will appear here",
+      "noMoreDevicesAvailable": "No more devices available to add",
+      "roomCreatedSuccessfully": "Room created successfully",
+      "roomUpdatedSuccessfully": "Room updated successfully",
+      "roomRemovedSuccessfully": "Room removed successfully",
+      "confirmRemoveRoom": "Confirm Remove Room",
+      "confirmRemoveRoomMessage": "Are you sure you want to remove this Room?"
+    },
+    "customizeRoomName": {
+      "title": "Customize Room Name",
+      "nameList": "Name List",
+      "addOwnRoomName": "Add your own room name",
+      "roomNamePlaceholder": "Room name",
+      "selectExitingRoomName": "Select Existing Room Name",
+      "confirmBtn": "Confirm",
+      "cancelBtn": "Cancel",
+      "roomNames": {
+        "bedroom": "Bedroom",
+        "livingRoom": "Living Room",
+        "readingRoom": "Reading Room",
+        "frontYard": "Front Yard",
+        "backYard": "Back Yard",
+        "familyRoom": "Family Room",
+        "diningRoom": "Dining Room",
+        "basement": "Basement",
+        "lounge": "Lounge",
+        "christmasLights": "Christmas Lights",
+        "outdoorLights": "Outdoor Lights",
+        "kitchen": "Kitchen",
+        "toilet": "Toilet"
+      }
+    },
+    "createRoomSuccess": {
+      "title": "Room is ready!",
+      "roomUpdatedSuccessfully": "Room updated successfully",
+      "groupControlDescription": "You can try group control the devices now!",
+      "done": "Done"
+    },
+    "validation": {
+      "homeNameCannotBeEmpty": "Home name cannot be empty",
+      "homeNameTooLong": "Home name cannot exceed 32 characters",
+      "homeNameAlreadyExists": "A home with this name already exists",
+      "homeNameMinLength": "Home name must be at least 3 characters long",
+      "homeNameMaxLength": "Home name must be less than 20 characters",
+      "pleaseEnterValidEmail": "Please enter a valid email address"
+    },
+    "errors": {
+      "homeNameUpdateFailed": "Failed to update home name",
+      "failedToRefreshHomes": "Failed to refresh homes",
+      "failedToRemoveRoom": "Failed to remove room",
+      "failedToCreateHome": "Failed to create home",
+      "fallback": "Something went wrong. Please try again later.",
+      "errorGettingSharedUsers": "Error getting shared users",
+      "errorRemovingUser": "Failed to remove user sharing",
+      "errorRemovingHome": "Error removing home",
+      "errorLeavingHome": "Error leaving home",
+      "userNotFound": "User not found",
+      "addingSelfNotAllowed": "Adding self not allowed"
+    }
+  },
+  "device": {
+    "availableOnWLAN": "Available on WLAN",
+    "addDeviceSelection": {
+      "title": "Add Device",
+      "note": "Please read quick user guide and choose an option to add device",
+      "bluetoothOption": "Bluetooth",
+      "bluetoothDescription": "Add device using Bluetooth connection",
+      "qrOption": "Scan QR Code",
+      "qrDescription": "Quickly add device by scanning its QR code",
+      "softAPOption": "SoftAP",
+      "softAPDescription": "Add device using SoftAP connection"
+    },
+    "control": {
+      "title": "Device Control",
+      "deviceNotFound": "Device not found"
+    },
+    "pop": {
+      "title": "Proof of Possession",
+      "enterCode": "Enter POP Code",
+      "description": "Enter the Proof of Possession code found on your device or packaging",
+      "placeholder": "Code",
+      "verify": "Connect device"
+    },
+    "provision": {
+      "title": "Connecting Device",
+      "success": "Device provisioned successfully",
+      "sendingCredentialsTitle": "Sending WiFi Credentials",
+      "sendingCredentialsDescription": "Sending network credentials to device...",
+      "confirmingConnectionTitle": "Confirming WiFi Connection",
+      "confirmingConnectionDescription": "Verifying network connection...",
+      "configuringDeviceAssociationTitle": "Configuring Device Association",
+      "configuringDeviceAssociationDescription": "Setting up device association...",
+      "verifyingDeviceAssociation": "Verifying device association...",
+      "settingUpNode": "Setting Up Node",
+      "settingUpNodeDescription": "Finalizing device setup..."
+    },
+    "scan": {
+      "ble": {
+        "title": "Scan Bluetooth Devices",
+        "scanningDevices": "Scanning for devices...",
+        "devicesFound": "{{count}} Device Found",
+        "devicesFoundPlural": "{{count}} Devices Found",
+        "allDevices": "All Devices",
+        "scanAgain": "Scan Again ?",
+        "connectingDevice": "Connecting Device",
+        "noDevicesFound": "No Devices Found"
+      },
+      "qr": {
+        "title": "Scan QR Code",
+        "holdSteady": "Hold your phone steady",
+        "alignQRCode": "Align QR code within the frame",
+        "requestingPermission": "Checking camera permission...",
+        "noCameraPermission": "Camera Access Required",
+        "cameraPermissionRequired": "We need camera access to scan QR codes. Please grant permission to continue.",
+        "grantPermission": "Proceed",
+        "invalidQRCode": "Invalid QR Code",
+        "androidNotImplemented": "Android QR scan connection not yet implemented",
+        "platformNotSupported": "Platform not supported for QR scanning",
+        "sessionInitFailed": "Failed to initialize session. Please try again.",
+        "scanAgain": "Scan Again"
+      },
+      "softAP": {
+        "title": "Connect to Device",
+        "mainHeading": "Connect to your device",
+        "instructions": "To provision your device, make sure\nit is turned ON. Connect your mobile\nphone to the Wi-Fi network with a name\nlike PROV_XXXXXX",
+        "connectButton": "Connect",
+        "scanningDevices": "Scanning for devices...",
+        "connectingDevice": "Connecting Device",
+        "devicesFound": "{{count}} Device Found",
+        "devicesFoundPlural": "{{count}} Devices Found",
+        "noDevicesFound": "No Devices Found",
+        "scanAgain": "Scan Again ?",
+        "deviceConnected": "Device connected successfully"
+      }
+    },
+    "wifi": {
+      "title": "Connect to Wi-Fi",
+      "selectNetwork": "Select Wi-Fi",
+      "availableNetworks": "Available Wi-Fi",
+      "password": "Password",
+      "connect": "Connect",
+      "saveNetwork": "Save Wi-Fi",
+      "signalStrength": {
+        "excellent": "Excellent",
+        "good": "Good",
+        "fair": "Fair",
+        "weak": "Weak"
+      }
+    },
+    "settings": {
+      "title": "Device Settings",
+      "deviceNotFound": "Device not found",
+      "removeDevice": "Remove Device",
+      "removeDeviceConfirm": "Are you sure you want to remove this device? This action cannot be undone.",
+      "deviceNameUpdatedSuccessfully": "Device name updated successfully",
+      "noOTAUpdateAvailable": "No update available",
+      "otaUpdateStarted": "Update started",
+      "deviceNameTitle": "Device Name",
+      "enterDeviceNamePlaceholder": "Enter device name",
+      "deviceInfoTitle": "Node Information",
+      "deviceInfoIdLabel": "Node ID",
+      "deviceInfoVersionLabel": "Version",
+      "otaTitle": "OTA",
+      "otaCurrentVersionLabel": "Current Version",
+      "otaNewVersionLabel": "New Version",
+      "otaUpdating": "Updating device...",
+      "otaCheckForUpdates": "Check for Updates",
+      "otaUpdateNow": "Update Now"
+    },
+    "panels": {
+      "light": {
+        "whiteTab": "White",
+        "colorTab": "Color",
+        "sceneTab": "Scene",
+        "comingSoon": "Scene presets coming soon...",
+        "sceneDescription": "Create and save custom lighting scenes for different moods and activities."
+      },
+      "switch": {
+        "on": "ON",
+        "off": "OFF"
+      },
+      "temperature": {
+        "title": "Temperature",
+        "unit": "°C"
+      }
+    },
+    "validation": {
+      "deviceNameCannotBeEmpty": "Device name cannot be empty"
+    },
+    "errors": {
+      "connectionFailed": "Connection failed",
+      "noDeviceSelected": "No device selected",
+      "sessionInitFailed": "Session initialization failed",
+      "provisioningFailed": "Provisioning failed",
+      "failedToScanNetworks": "Failed to scan for networks",
+      "invalidCredentials": "Please enter valid credentials",
+      "fallback": "Something went wrong. Please try again later.",
+      "deviceCreationFailed": "Device creation failed",
+      "failedToVerifyCode": "Failed to verify code",
+      "failedToRefreshDeviceState": "Failed to refresh device state",
+      "failedToUpdateDeviceName": "Failed to update device name",
+      "failedToRemoveDevice": "Failed to remove device",
+      "checkOTAUpdateError": "Failed to check for updates",
+      "otaUpdateStartError": "Failed to start update"
+    }
+  },
+  "scene": {
+    "scenes": {
+      "title": "Scenes",
+      "addScene": "Add Scene",
+      "edit": "Edit",
+      "done": "Done",
+      "activate": "Activate",
+      "delete": "Delete",
+      "favourites": "Favourites",
+      "allScenes": "Scenes",
+      "noScenesYet": "No Scenes Added Yet",
+      "noScenesYetDescription": "Create your first scene to automate your devices",
+      "allScenesFavorites": "All your scenes are favorites!",
+      "allScenesFavoritesDescription": "Add more scenes to see them here, or remove some from favorites.",
+      "sceneTriggeredSuccessfully": "Scene activated successfully",
+      "sceneDeletedSuccessfully": "Scene deleted successfully",
+      "someDevicesFailedUpdate": "Some devices failed to update scene",
+      "someDevicesFailedTrigger": "Some devices failed to activate scene",
+      "someDevicesFailedDelete": "Some devices failed to delete scene",
+      "someDevicesNotConnected": "Some devices are Offline",
+      "createScene": "Create Scene",
+      "sceneNamePlaceholder": "Scene Name",
+      "editScene": "Edit Scene",
+      "singleDeviceCountPostfix": "device",
+      "multipleDeviceCountPostfix": "devices"
+    },
+    "createScene": {
+      "title": "Create Scene",
+      "editScene": "Edit Scene",
+      "sceneName": "Scene Name",
+      "sceneNamePlaceholder": "Scene Name",
+      "sceneActions": "Actions",
+      "noActionsSelected": "No Actions Selected",
+      "noActionsSelectedDescription": "Add device actions to create your scene. Tap the + button to get started.",
+      "sceneUpdatedSuccessfully": "Scene updated successfully",
+      "sceneCreatedSuccessfully": "Scene created successfully",
+      "sceneDeletedSuccessfully": "Scene deleted successfully"
+    },
+    "deviceSelection": {
+      "title": "Select Devices",
+      "selectDevices": "Select Devices",
+      "selectedDevices": "Selected Devices",
+      "selectedActions": "Selected Actions",
+      "selectMore": "Select More",
+      "noDevicesAvailable": "No devices available to select",
+      "maxSceneReached": "Max Scene Reached"
+    },
+    "deviceParamsSelection": {
+      "title": "Select Actions",
+      "noDevicesAvailable": "No devices available",
+      "noActionsSelectedDescription": "Add device actions to create your scene. Tap the + button to get started.",
+      "parameterOn": "On",
+      "parameterOff": "Off",
+      "setTo": "to"
+    },
+    "errors": {
+      "sceneTriggerFailed": "Scene trigger failed",
+      "someSceneTriggerFailed": "Some scene trigger failed",
+      "sceneCreationFailed": "Scene creation failed",
+      "someSceneDeletionFailed": "Some scene deletion failed",
+      "sceneDeletionFailed": "Scene deletion failed",
+      "noScenes": "No scenes found",
+      "fallback": "Something went wrong. Please try again later."
+    }
+  }
+}

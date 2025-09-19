@@ -1,0 +1,436 @@
+/*
+ * SPDX-FileCopyrightText: 2025 Espressif Systems (Shanghai) CO LTD
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+import React, { useState, useEffect, useRef } from "react";
+import {
+  View,
+  Text,
+  StyleSheet,
+  Image,
+  ScrollView,
+  ActivityIndicator,
+} from "react-native";
+
+// Styles
+import { tokens } from "@/theme/tokens";
+import { globalStyles } from "@/theme/globalStyleSheet";
+
+// SDK
+import {
+  ESPDevice,
+  ESPProvResponse,
+  ESPProvResponseStatus,
+  ESPProvProgressMessages,
+} from "@espressif/rainmaker-base-sdk";
+
+// Hooks
+import { useRouter, useLocalSearchParams } from "expo-router";
+import { useTranslation } from "react-i18next";
+import { useCDF } from "@/hooks/useCDF";
+
+// Icons
+import { Check, X, Circle } from "lucide-react-native";
+
+// Components
+import { Header, ScreenWrapper, Button } from "@/components";
+
+// Utils
+import { useToast } from "@/hooks/useToast";
+
+// Types
+import { ProvisionStatus } from "@/types/global";
+
+type StageStatus = "pending" | "loading" | "success" | "error";
+
+interface ProvisionStage {
+  id: number;
+  title: string;
+  status: StageStatus;
+  description: string;
+}
+
+interface ProvisioningStepProps {
+  description: string;
+  status: ProvisionStatus;
+}
+
+// Map our status to ProvisionStatus
+const mapStageStatusToProvisionStatus = (
+  status: StageStatus
+): ProvisionStatus => {
+  switch (status) {
+    case "pending":
+      return "progress";
+    case "loading":
+      return "progress";
+    case "success":
+      return "succeed";
+    case "error":
+      return "failed";
+    default:
+      return "pending";
+  }
+};
+
+// Fixed stages configuration - will be localized in component
+const getProvisionStages = (t: any): ProvisionStage[] => [
+  {
+    id: 1,
+    title: t("device.provision.sendingCredentialsTitle"),
+    status: "pending",
+    description: t("device.provision.sendingCredentialsDescription"),
+  },
+  {
+    id: 2,
+    title: t("device.provision.confirmingConnectionTitle"),
+    status: "pending",
+    description: t("device.provision.confirmingConnectionDescription"),
+  },
+  {
+    id: 3,
+    title: t("device.provision.configuringDeviceAssociationTitle"),
+    status: "pending",
+    description: t("device.provision.configuringDeviceAssociationDescription"),
+  },
+  {
+    id: 4,
+    title: t("device.provision.verifyingDeviceAssociation"),
+    status: "pending",
+    description: t("device.provision.verifyingDeviceAssociation"),
+  },
+  {
+    id: 5,
+    title: t("device.provision.settingUpNode"),
+    status: "pending",
+    description: t("device.provision.settingUpNodeDescription"),
+  },
+];
+
+// Message to stage mapping
+const MESSAGE_STAGE_MAP: Record<string, number> = {
+  [ESPProvProgressMessages.START_ASSOCIATION]: 1,
+  [ESPProvProgressMessages.SENDING_ASSOCIATION_CONFIG]: 2,
+  [ESPProvProgressMessages.ASSOCIATION_CONFIG_SENT]: 3,
+  [ESPProvProgressMessages.DEVICE_PROVISIONED]: 4,
+  [ESPProvProgressMessages.USER_NODE_MAPPING_SUCCEED]: 5,
+};
+
+/**
+ * Renders a single provisioning step with status indicator
+ * @returns JSX component
+ */
+const ProvisioningStep: React.FC<ProvisioningStepProps> = ({
+  description,
+  status,
+}) => {
+  const getStatusIcon = () => {
+    switch (status) {
+      case "progress":
+        return <ActivityIndicator size="small" color={tokens.colors.primary} />;
+      case "succeed":
+        return <Check size={24} color={tokens.colors.green} />;
+      case "failed":
+        return <X size={24} color={tokens.colors.red} />;
+      default:
+        return <Circle size={24} color={tokens.colors.gray} />;
+    }
+  };
+
+  return (
+    <View
+      style={[styles.stepContainer, { backgroundColor: tokens.colors.bg5 }]}
+    >
+      {getStatusIcon()}
+      <View style={styles.stepContent}>
+        <Text style={styles.stepDescription}>{description}</Text>
+      </View>
+    </View>
+  );
+};
+
+/**
+ * Provision
+ *
+ * Main component for handling device provisioning process
+ * Shows progress steps and handles Node provisioning steps
+ * @returns JSX component
+ */
+const Provision = () => {
+  // Hooks
+  const router = useRouter();
+  const toast = useToast();
+  const { t } = useTranslation();
+  const { store } = useCDF();
+  const stepsScrollViewRef = useRef<ScrollView>(null);
+  // State
+  const [stages, setStages] = useState<ProvisionStage[]>(() =>
+    getProvisionStages(t)
+  );
+  const [isComplete, setIsComplete] = useState(false);
+  const decodedNodeIdRef = useRef<string | null>(null);
+
+  // Params & Data
+  const { ssid, password } = useLocalSearchParams();
+  const device: ESPDevice = store.nodeStore.connectedDevice;
+
+  // Effects
+  useEffect(() => {
+    if (ssid && device) {
+      startProvisioning();
+    }
+  }, [ssid, password, device]);
+
+  // Handlers
+  /**
+   * Scrolls to the bottom of the steps list
+   */
+  const scrollToBottom = () => {
+    setTimeout(() => {
+      stepsScrollViewRef.current?.scrollToEnd({ animated: true });
+    }, 100);
+  };
+
+  /**
+   * Handle successful provisioning completion
+   */
+  const handleProvisionSuccess = async () => {
+    try {
+      if (decodedNodeIdRef.current) {
+        const currentHomeId = store.groupStore.currentHomeId;
+        const currentGroup = store.groupStore._groupsByID[currentHomeId];
+        if (currentGroup) {
+          await currentGroup.addNodes([decodedNodeIdRef.current]);
+          await store.groupStore.syncGroupList();
+        }
+      }
+    } catch (error) {
+      console.error("Error adding node to current group", error);
+    }
+    setIsComplete(true);
+    toast.showSuccess(t("device.provision.success"));
+  };
+
+  /**
+   * Updates the stage status based on the provisioning message
+   */
+  const updateStageStatus = (message: string, isError?: boolean) => {
+    const stageId = MESSAGE_STAGE_MAP[message];
+
+    if (!stageId) return;
+
+    setStages((prevStages) => {
+      const newStages = [...prevStages];
+
+      if (isError) {
+        // If there's an error, mark current and all subsequent stages as error
+        for (let i = stageId - 1; i < newStages.length; i++) {
+          newStages[i].status = "error";
+        }
+      } else {
+        // Update current stage to success
+        const currentStage = newStages[stageId - 1];
+        if (currentStage) {
+          currentStage.status = "success";
+        }
+
+        // Set next stage to loading if exists
+        if (stageId < 5) {
+          const nextStage = newStages[stageId];
+          if (nextStage) {
+            nextStage.status = "loading";
+          }
+        }
+      }
+
+      return newStages;
+    });
+
+    // Scroll to show latest step
+    scrollToBottom();
+  };
+
+  /**
+   * Handles provisioning updates and updates stages accordingly
+   */
+  const handleProvisionUpdate = async (response: ESPProvResponse) => {
+    const message = response.description || "";
+    const data = response.data || {};
+    switch (response.status) {
+      case ESPProvResponseStatus.succeed:
+        // Update stage based on message
+        updateStageStatus(message);
+
+        // Handle specific messages
+        if (message === ESPProvProgressMessages.USER_NODE_MAPPING_SUCCEED) {
+          handleProvisionSuccess();
+        } else if (message === ESPProvProgressMessages.START_ASSOCIATION) {
+          updateStageStatus(message, false);
+        }
+        break;
+
+      case ESPProvResponseStatus.onProgress:
+        if (message === ESPProvProgressMessages.DECODED_NODE_ID) {
+          const { nodeId } = data;
+          decodedNodeIdRef.current = nodeId;
+        }
+        // Handle in progress status
+        updateStageStatus(message, false);
+        break;
+
+      default:
+        // Handle any other status as error
+        handleProvisionError(new Error(message));
+        // Mark all stages from current as failed
+        updateStageStatus(message, true);
+        break;
+    }
+  };
+
+  /**
+   * Handles provisioning error
+   */
+  const handleProvisionError = (error: any) => {
+    console.error("Provision error:", error);
+
+    // Find current loading stage and mark as error
+    const loadingStageIndex = stages.findIndex(
+      (stage) => stage.status === "loading"
+    );
+    if (loadingStageIndex >= 0) {
+      updateStageStatus(
+        Object.keys(MESSAGE_STAGE_MAP)[loadingStageIndex],
+        true
+      );
+    }
+
+    toast.showError(t("device.errors.provisioningFailed"));
+    setIsComplete(true);
+  };
+
+  /**
+   * Start provisioning
+   * SDK function: ESPDevice.provision
+   * this function is implemented in the ESPProvAdapter
+   * @returns void
+   */
+  const startProvisioning = async () => {
+    try {
+      await device?.provision(
+        ssid as string,
+        (password as string) || "",
+        handleProvisionUpdate
+      );
+    } catch (error) {
+      handleProvisionError(error);
+    }
+  };
+
+  const handleContinue = () => {
+    router.dismissTo("/(group)/Home");
+  };
+
+  // Render
+  return (
+    <>
+      <Header label={t("device.provision.title")} showBack />
+      <ScreenWrapper
+        style={{
+          ...globalStyles.screenWrapper,
+          backgroundColor: tokens.colors.bg5,
+        }}
+      >
+        <View
+          style={[globalStyles.flex1, globalStyles.itemCenter, styles.content]}
+        >
+          <View style={[globalStyles.itemCenter, styles.imageContainer]}>
+            <Image
+              source={require("../../assets/images/network.png")}
+              style={styles.networkImage}
+              resizeMode="contain"
+            />
+          </View>
+
+          <ScrollView
+            ref={stepsScrollViewRef}
+            style={[globalStyles.fullWidth, styles.stepsScrollView]}
+            contentContainerStyle={styles.stepsContainer}
+            showsVerticalScrollIndicator={false}
+          >
+            {stages.map((stage) => (
+              <ProvisioningStep
+                key={stage.id}
+                description={`${stage.title}`}
+                status={mapStageStatusToProvisionStatus(stage.status)}
+              />
+            ))}
+          </ScrollView>
+
+          <Button
+            label={t("layout.shared.continue")}
+            onPress={handleContinue}
+            style={{
+              ...globalStyles.btn,
+              ...globalStyles.bgBlue,
+              ...globalStyles.shadowElevationForLightTheme,
+            }}
+            disabled={!isComplete}
+          />
+        </View>
+      </ScreenWrapper>
+    </>
+  );
+};
+
+const styles = StyleSheet.create({
+  content: {
+    maxWidth: 400,
+    width: "100%",
+    alignSelf: "center",
+    padding: tokens.spacing._20,
+  },
+  imageContainer: {
+    width: "100%",
+    height: 160,
+    marginBottom: tokens.spacing._20,
+  },
+  networkImage: {
+    width: 160,
+    height: 160,
+  },
+  stepsScrollView: {
+    maxHeight: 300,
+  },
+  stepsContainer: {
+    gap: tokens.spacing._15,
+    paddingVertical: tokens.spacing._10,
+  },
+  stepContainer: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    backgroundColor: tokens.colors.white,
+    marginBottom: tokens.spacing._5,
+    borderRadius: tokens.radius.md,
+    gap: tokens.spacing._10,
+  },
+  stepContent: {
+    flex: 1,
+  },
+  stepTitle: {
+    fontSize: tokens.fontSize.md,
+    fontFamily: tokens.fonts.medium,
+    color: tokens.colors.text_primary,
+    marginBottom: tokens.spacing._5,
+  },
+  stepDescription: {
+    fontSize: tokens.fontSize.sm,
+    color: tokens.colors.gray,
+  },
+  button: {
+    marginVertical: tokens.spacing._20,
+  },
+});
+
+export default Provision;
