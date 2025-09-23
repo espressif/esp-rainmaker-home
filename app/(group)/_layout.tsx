@@ -22,7 +22,7 @@ export default function GroupLayout() {
       }}
     >
       <Stack.Screen name="Home" />
-      <Stack.Screen name="Room" />
+      <Stack.Screen name="Rooms" />
       <Stack.Screen name="Setting" />
       <Stack.Screen name="CustomizeRoomName" />
       <Stack.Screen name="CreateRoom" />

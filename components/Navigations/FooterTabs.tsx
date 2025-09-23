@@ -126,7 +126,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
   } as ViewStyle,
   label: {
-    fontSize: tokens.fontSize.xs,
+    fontSize: tokens.fontSize.xxs,
     fontFamily: tokens.fonts.regular,
     marginTop: 0,
   } as TextStyle,
