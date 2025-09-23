@@ -5,6 +5,28 @@ All notable changes to the ESP RainMaker Home app will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.1.0]
+
+### Added
+
+**Automation Features:**
+
+- Introduced a comprehensive automation system with support for create, update, delete, and enable/disable operations to automate devices based on event trigger
+
+**Schedule Features:**
+
+- Introduced a comprehensive scheduling system with support for create, edit, delete, and enable/disable operations to automate devices based on time and repeat patterns
+
+### Enhanced
+
+**UI Enhancement:**
+
+- Improved footer navigation layout
+
+**Provisioning Enhancement:**
+
+- Automatically add provisioned nodes to the selected home during the provisioning process
+
 ## [3.0.0]
 
 ### Added
