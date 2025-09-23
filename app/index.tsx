@@ -15,26 +15,25 @@ import { Logo } from "@/components";
 import { createPlatformEndpoint } from "@/utils/notifications";
 // theme
 import { tokens } from "@/theme/tokens";
+import { CDFConfig } from "@/rainmaker.config";
 
 const index = () => {
   const router = useRouter();
   const pathname = usePathname();
-  const { store, isInitialized } = useCDF();
+  const { store, isInitialized, fetchNodesAndGroups } = useCDF();
 
   const authCheck = async () => {
     try {
-      const user = store.userStore.user;
-
-      if (user) {
-        try {
-          const userInfo = await user.getUserInfo();
-          if (userInfo) {
-            router.replace("/(group)/Home");
-            return;
-          }
-        } catch (error) {
-          await store.userStore?.logout();
-        }
+      const userInfo = store.userStore.userInfo;
+      if (userInfo) {
+        /*
+        With CDFConfig.autoSync enabled, CDF will fetch the first page automatically,
+        so we don't need to fetch the first page again
+        */
+        const shouldFetchFirstPage = !CDFConfig.autoSync;
+        await fetchNodesAndGroups(shouldFetchFirstPage);
+        router.replace("/(group)/Home");
+        return;
       }
 
       const validRoutes = ["/ConfirmationCode", "/Forgot", "/Login", "/Signup"];
@@ -43,6 +42,7 @@ const index = () => {
         router.replace("/(auth)/Login");
       }
     } catch (error) {
+      await store.userStore?.logout();
       router.replace("/(auth)/Login");
     }
   };

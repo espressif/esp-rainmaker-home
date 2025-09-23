@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useCallback, useState } from "react";
+import { useCallback, useState, useEffect } from "react";
 import {
   StyleSheet,
   RefreshControl,
@@ -83,7 +83,6 @@ const Schedules = observer(() => {
   const fetchSchedules = async () => {
     try {
       setIsLoading(true);
-      await nodeStore.syncNodeList();
       const currentHome = groupStore?._groupsByID[groupStore?.currentHomeId];
       await scheduleStore.syncSchedulesFromNodes(currentHome.nodes || []);
     } catch (error) {
@@ -103,6 +102,10 @@ const Schedules = observer(() => {
       fetchSchedules();
     }, [])
   );
+
+  useEffect(() => {
+    fetchSchedules();
+  }, [nodeStore.nodeList, groupStore.groupList]);
 
   /**
    * Handles showing the schedule name input dialog

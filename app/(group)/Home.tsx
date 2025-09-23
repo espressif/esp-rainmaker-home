@@ -69,7 +69,11 @@ import { startNodeLocalDiscovery } from "@/utils/localDiscovery";
  */
 const HomeScreen = () => {
   const { t } = useTranslation();
-  const { store, isInitialized: isStoreInitialized } = useCDF();
+  const {
+    store,
+    isInitialized: isStoreInitialized,
+    fetchNodesAndGroups,
+  } = useCDF();
   const { groupStore, nodeStore, userStore } = store;
   const router = useRouter();
 
@@ -130,7 +134,6 @@ const HomeScreen = () => {
       );
     }, [selectedRoom, rooms, nodeStore?.nodeList, devices]);
 
-
   useEffect(() => {
     if (isStoreInitialized) {
       initializeHome();
@@ -173,31 +176,36 @@ const HomeScreen = () => {
     if (hasInitialized.current) {
       return;
     }
-    hasInitialized.current = true;
-    const primaryHome = findPrimaryHome(groupStore?.groupList || []);
-    // CASE I: No primary home found, create a new one
-    // conditions checked
-    // 1. no group with home name ( case -insensitive)
-    // 2. no group with home type
-    // 3. no group with home mutuallyExclusive true
-    if (!primaryHome) {
-      const nodeIds = getUnassignedNodes(nodeStore?.nodeList, []);
-      const primaryHomePayload = createHome(nodeIds) as any;
-      await userStore.user?.createGroup(primaryHomePayload);
+    try {
+      hasInitialized.current = true;
+      const primaryHome = findPrimaryHome(groupStore?.groupList || []);
+      // CASE I: No primary home found, create a new one
+      // conditions checked
+      // 1. no group with home name ( case -insensitive)
+      // 2. no group with home type
+      // 3. no group with home mutuallyExclusive true
+      if (!primaryHome) {
+        const nodeIds = getUnassignedNodes(nodeStore?.nodeList, []);
+        const primaryHomePayload = createHome(nodeIds) as any;
+        await userStore.user?.createGroup(primaryHomePayload);
+      }
+
+      const homeList = groupStore?.groupList.filter(isHome);
+      const currentHomeId = groupStore.currentHomeId;
+      const currentHome =
+        groupStore._groupsByID?.[currentHomeId] || homeList[0];
+
+      if (!groupStore.currentHomeId && currentHome) {
+        groupStore.currentHomeId = currentHome.id;
+      }
+      setHomeList(homeList as ESPRMGroup[]);
+      setSelectedHome(currentHome);
+    } catch (e) {
+      console.log("error", e);
+    } finally {
+      setIsLoading(false);
+      hasInitialized.current = false;
     }
-
-    const homeList = groupStore?.groupList.filter(isHome);
-    const currentHomeId = groupStore.currentHomeId;
-    const currentHome = groupStore._groupsByID?.[currentHomeId] || homeList[0];
-
-    if (!groupStore.currentHomeId && currentHome) {
-      groupStore.currentHomeId = currentHome.id;
-    }
-
-    setHomeList(homeList as ESPRMGroup[]);
-    setSelectedHome(currentHome);
-    setIsLoading(false);
-    hasInitialized.current = false;
   }, [isStoreInitialized]);
 
   useEffect(() => {
@@ -214,18 +222,18 @@ const HomeScreen = () => {
    * Refresh the home screen
    *
    * This function is used to refresh the home screen
-   * It syncs the node list and group list
+   * It syncs the node list and group list with background pagination
    * It initializes the home screen
-   *
-   * CDF function used:
-   * - nodeStore.syncNodeList
-   * - groupStore.syncGroupList
    */
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     try {
-      await nodeStore?.syncNodeList();
-      await groupStore?.syncGroupList();
+      setIsLoading(true);
+      /*
+      For refresh operation, we need to fetch the first page again
+      */
+      const shouldFetchFirstPage = true;
+      await fetchNodesAndGroups(shouldFetchFirstPage);
       initializeHome();
       startNodeLocalDiscovery(store);
     } catch (error) {

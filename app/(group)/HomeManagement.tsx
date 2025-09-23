@@ -54,7 +54,7 @@ import { Header, ScreenWrapper, InputDialog } from "@/components";
 const HomeManagement = () => {
   // Hooks
   const { t } = useTranslation();
-  const { store } = useCDF();
+  const { store, fetchAllGroups } = useCDF();
   const toast = useToast();
 
   // State
@@ -75,7 +75,11 @@ const HomeManagement = () => {
 
     setRefreshing(true);
     try {
-      await store.groupStore.syncGroupList();
+      /*
+      For refresh operation, we need to fetch the first page again
+      */
+      const shouldFetchFirstPage = true;
+      await fetchAllGroups(shouldFetchFirstPage);
     } catch (error) {
       toast.showError(
         t("layout.shared.errorHeader"),

@@ -77,7 +77,7 @@ const Scenes = observer(() => {
   const router = useRouter();
   const toast = useToast();
   const { store } = useCDF();
-  const { sceneStore, nodeStore, groupStore, userStore} = store;
+  const { sceneStore, nodeStore, groupStore, userStore } = store;
   const { setSceneInfo, resetState } = useScene();
 
   const { sceneList } = sceneStore;
@@ -139,7 +139,6 @@ const Scenes = observer(() => {
    */
   const fetchScenes = async () => {
     try {
-      await nodeStore.syncNodeList();
       const currentHome = groupStore?._groupsByID[groupStore?.currentHomeId];
       await sceneStore.syncScenesFromNodes(currentHome.nodes || []);
       setTimeout(() => {
@@ -162,6 +161,9 @@ const Scenes = observer(() => {
       fetchScenes();
     }, [])
   );
+  useEffect(() => {
+    fetchScenes();
+  }, [nodeStore.nodeList, groupStore.groupList]);
 
   const fetchUserCustomData = async () => {
     const userCustomData = await userStore.user?.getCustomData();

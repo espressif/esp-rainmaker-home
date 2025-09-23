@@ -63,7 +63,6 @@ The schedule module flow consists of four main paths:
 
   ```typescript
   // Schedule synchronization with CDF
-  await nodeStore.syncNodeList();
   await scheduleStore.syncSchedulesFromNodes(currentHome.nodes || []);
 
   // Schedule operations
@@ -195,7 +194,6 @@ The schedule module flow consists of four main paths:
 
    ```typescript
    // Synchronize nodes and schedules from cloud
-   await store.nodeStore.syncNodeList();
    await store.scheduleStore.syncSchedulesFromNodes(currentHome.nodes || []);
 
    // Access synchronized data

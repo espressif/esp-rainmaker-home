@@ -52,6 +52,7 @@ const Rooms = observer(() => {
   const { id } = useLocalSearchParams();
   const {
     store: { groupStore },
+    fetchAllGroups
   } = useCDF();
 
   // State
@@ -74,7 +75,11 @@ const Rooms = observer(() => {
 
     state.refreshing = true;
     try {
-      await groupStore?.syncGroupList();
+      /*
+      For page on focus, we need to fetch the first page again
+      */
+      const shouldFetchFirstPage = true;
+      await fetchAllGroups(shouldFetchFirstPage);
       const home =
         groupStore?._groupsByID[groupStore?.currentHomeId || ""] ||
         groupStore?.groupList[0];

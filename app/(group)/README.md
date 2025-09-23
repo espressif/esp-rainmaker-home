@@ -28,8 +28,6 @@ The group module manages homes and rooms within the application, providing funct
 
   // Get and sync devices
   const devices = nodeStore.nodeList;
-  await nodeStore.syncNodeList();
-  await groupStore.syncGroupList();
 
   // Transform nodes to devices
   const devices = transformNodesToDevices(nodes);
@@ -58,7 +56,7 @@ The group module manages homes and rooms within the application, providing funct
   });
 
   // Sync home list
-  await groupStore.syncGroupList();
+  await fetchAllGroups();
   ```
 
 - **SDK Documentation**: [ESPRMUser.createGroup](https://espressif.github.io/esp-rainmaker-app-sdk-ts/classes/ESPRMUser.ESPRMUser.html#creategroup)
@@ -117,7 +115,7 @@ The group module manages homes and rooms within the application, providing funct
   const rooms = home.subGroups as ESPRMGroup[];
 
   // Sync group list to refresh rooms
-  await groupStore.syncGroupList();
+  await fetchAllGroups();
   ```
 
 - **SDK Documentation**: [ESPRMGroup](https://espressif.github.io/esp-rainmaker-app-sdk-ts/classes/ESPRMGroup.ESPRMGroup.html)
@@ -283,13 +281,14 @@ The group module manages homes and rooms within the application, providing funct
 7. **Refresh Pattern with Loading States**:
 
    ```typescript
+   const { store, fetchAllNodes, fetchAllGroups } = useCDF();
    const [refreshing, setRefreshing] = useState(false);
 
    const onRefresh = async () => {
      setRefreshing(true);
      try {
-       await groupStore.syncGroupList();
-       await nodeStore.syncNodeList();
+       fetchAllNodes();
+       fetchAllGroups();
      } catch (error) {
        toast.showError(t("error.refreshFailed"));
      } finally {
