@@ -190,13 +190,6 @@ const HomeScreen = () => {
     const currentHomeId = groupStore.currentHomeId;
     const currentHome = groupStore._groupsByID?.[currentHomeId] || homeList[0];
 
-    // CASE II: after adding primary home, add unassigned nodes to any primary home
-    const unAssignedNodes = getUnassignedNodes(nodeStore?.nodeList, homeList);
-    if (unAssignedNodes?.length) {
-      const primaryHome = findPrimaryHome(groupStore?.groupList || []);
-      await primaryHome?.addNodes(unAssignedNodes);
-    }
-
     if (!groupStore.currentHomeId && currentHome) {
       groupStore.currentHomeId = currentHome.id;
     }
