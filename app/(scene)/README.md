@@ -25,7 +25,7 @@ The scene module provides comprehensive functionality for managing device scenes
   ```typescript
   // Scene synchronization with CDF
   await store.nodeStore.syncNodeList();
-  await store.sceneStore.syncScenesFromNodes();
+  await store.sceneStore.syncScenesFromNodes(['node1']);
 
   // Scene activation
   const selectedScene = sceneStore.scenesByID[sceneId];
@@ -148,7 +148,7 @@ The scene module provides comprehensive functionality for managing device scenes
    ```typescript
    // Synchronize nodes and scenes from cloud
    await store.nodeStore.syncNodeList();
-   await store.sceneStore.syncScenesFromNodes();
+   await store.sceneStore.syncScenesFromNodes(['node1']);
 
    // Access synchronized data
    const { sceneList, scenesByID } = sceneStore;
