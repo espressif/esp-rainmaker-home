@@ -64,6 +64,10 @@ export const ESPRM_UI_DROPDOWN_PARAM_TYPE = "esp.ui.dropdown";
 export const ESPRM_UI_HIDDEN_PARAM_TYPE = "esp.ui.hidden";
 export const ESPRM_UI_TRIGGER_PARAM_TYPE = "esp.ui.trigger";
 
+// SUPPORTED PARAM PROPERTIES
+export const WRITE_PERMISSION = "write";
+export const READ_PERMISSION = "read";
+
 // CODE REDIRECT TYPES
 export const SIGNUP_CODE_TYPE = "SIGNUP";
 export const RESET_PASSWORD_CODE_TYPE = "RESET_PASSWORD";
@@ -71,6 +75,7 @@ export const RESET_PASSWORD_CODE_TYPE = "RESET_PASSWORD";
 // SUPPORTED SERVICES
 export const ESPRM_SYSTEM_SERVICE = "esp.service.system";
 export const ESPRM_SCENES_SERVICE = "esp.service.scenes";
+export const ESPRM_SCHEDULES_SERVICE = "esp.service.schedule";
 
 // DISCOVERY EVENTS
 export const DISCOVERY_UPDATE_EVENT = "DiscoveryUpdate";
@@ -167,3 +172,6 @@ export const ERROR_CODES_MAP = {
 export const CDF_EXTERNAL_PROPERTIES = {
   IS_OAUTH_LOGIN: "isOauthLogin",
 } as const;
+
+export const ESPRM_PARAM_WRITE_PROPERTY = "write";
+export const SCHEDULE_DAYS = ["M", "T", "W", "Th", "F", "S", "Su"];

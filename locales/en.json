@@ -83,7 +83,9 @@
         "home": "Home",
         "rooms": "Rooms",
         "scenes": "Scenes",
-        "user": "User"
+        "automations": "Automations",
+        "user": "User",
+        "schedules": "Schedules"
       }
     },
     "shared": {
@@ -513,6 +515,9 @@
     "validation": {
       "deviceNameCannotBeEmpty": "Device name cannot be empty"
     },
+    "status": {
+      "outOfSync": "Out of sync"
+    },
     "errors": {
       "connectionFailed": "Connection failed",
       "noDeviceSelected": "No device selected",
@@ -593,6 +598,225 @@
       "sceneDeletionFailed": "Scene deletion failed",
       "noScenes": "No scenes found",
       "fallback": "Something went wrong. Please try again later."
+    }
+  },
+  "automation": {
+    "automations": {
+      "title": "Automations",
+      "noAutomationsYet": "No Automations Added Yet",
+      "noAutomationsYetDescription": "Create your first automation\n to automate your devices",
+      "noDevicesForAutomation": "Add Your First Device!",
+      "noDevicesForAutomationDescription": "You need to have at least\n one device to create automations",
+      "addAutomation": "Add Automation",
+      "addFirstDevice": "Add Device",
+      "automationMenuBottomSheetEnabled": "Enabled",
+      "automationMenuBottomSheetDisabled": "Disabled",
+      "edit": "Edit",
+      "delete": "Delete",
+      "createAutomation": "Create Automation",
+      "automationNamePlaceholder": "Automation Name",
+      "automationDeleted": "Automation Deleted",
+      "automationDeletedMessage": "Automation has been deleted successfully",
+      "automationEnabled": "Automation Enabled",
+      "automationEnabledMessage": "Automation has been enabled successfully",
+      "automationDisabled": "Automation Disabled",
+      "automationDisabledMessage": "Automation has been disabled successfully"
+    },
+    "createAutomation": {
+      "title": "Create Automation",
+      "editAutomation": "Edit Automation",
+      "automationName": "Automation Name",
+      "automationNamePlaceholder": "Automation Name",
+      "retrigger": "Allow retrigger",
+      "retriggerDescription": "If enabled, will retrigger the automation for same event",
+      "event": "Event",
+      "actions": "Actions",
+      "noEventSelected": "No Event Selected",
+      "noEventSelectedDescription": "Add event to create your automation. Tap the + button to get started.",
+      "noActionsSelected": "No Actions Selected",
+      "noActionsSelectedDescription": "Add device actions to {{action}} your automation. Tap the + button to get started.",
+      "nameAlreadyExists": "An automation with this name already exists",
+      "automationUpdated": "Automation Updated",
+      "automationUpdatedMessage": "Automation has been updated successfully",
+      "automationDeleted": "Automation Deleted",
+      "automationDeletedMessage": "Automation has been deleted successfully",
+      "automationCreated": "Automation created successfully",
+      "automationCreatedMessage": "Automation has been created successfully"
+    },
+    "eventDeviceSelection": {
+      "title": "Select Device",
+      "selectDevice": "Select a device to create an event trigger",
+      "selectedDevice": "Selected Device",
+      "selectDifferentDevice": "Select a different device"
+    },
+    "eventParamSelection": {
+      "title": "Configure Event",
+      "parameterOn": "ON",
+      "parameterOff": "OFF",
+      "condition": "Trigger Condition"
+    },
+    "actionDeviceSelection": {
+      "title": "Select Devices",
+      "selectedDevices": "Selected Devices",
+      "selectDevices": "Select devices to control when automation triggers",
+      "selectMore": "Select more devices for actions",
+      "eventSummary": "Event Trigger",
+      "when": "When",
+      "createAutomation": "Create Automation"
+    },
+    "actionParamSelection": {
+      "title": "Configure Action",
+      "parameterOn": "ON",
+      "parameterOff": "OFF",
+      "incompatibleParamsTitle": "No compatible parameters \nfound on {{deviceName}}"
+    },
+    "card": {
+      "if": "If",
+      "set": "Set",
+      "on": "ON",
+      "off": "OFF",
+      "noEvents": "No trigger conditions",
+      "noActions": "No actions defined",
+      "unknownEvent": "Unknown trigger",
+      "unknownAction": "Unknown action",
+      "parameters": "parameters",
+      "devices": "devices",
+      "actions": "actions"
+    },
+    "conditions": {
+      "equals": "equals",
+      "notEquals": "not equals",
+      "greaterThan": "greater than",
+      "lessThan": "less than",
+      "greaterThanOrEqual": "greater than or equal",
+      "lessThanOrEqual": "less than or equal",
+      "on": "On",
+      "off": "Off"
+    },
+    "errors": {
+      "fallback": "Something went wrong. Please try again later.",
+      "updateFailedMessage": "Failed to update automation",
+      "deleteFailedMessage": "Failed to delete automation",
+      "pleaseEnterAutomationName": "Please enter an automation name",
+      "refreshFailed": "Failed to refresh automations",
+      "failedToFetchAutomation": "Failed to fetch automation",
+      "failedToActionAutomation": "Failed to {{action}} automation",
+      "failedToCreateAutomation": "Failed to create automation"
+    }
+  },
+  "schedule": {
+    "schedules": {
+      "title": "Schedules",
+      "addSchedule": "Add Schedule",
+      "edit": "Edit",
+      "done": "Done",
+      "enable": "Enable",
+      "disable": "Disable",
+      "delete": "Delete",
+      "noSchedulesYet": "No Schedules Added Yet",
+      "noSchedulesYetDescription": "Create your first schedule to automate your devices",
+      "scheduleEnabledSuccessfully": "Schedule enabled successfully",
+      "scheduleDisabledSuccessfully": "Schedule disabled successfully",
+      "scheduleDeletedSuccessfully": "Schedule deleted successfully",
+      "someDevicesFailedUpdate": "Some devices failed to update schedule",
+      "someDevicesNotConnected": "Some devices are Offline",
+      "createSchedule": "Create Schedule",
+      "scheduleNamePlaceholder": "Schedule Name",
+      "editSchedule": "Edit Schedule"
+    },
+    "deviceSelection": {
+      "title": "Select Devices",
+      "selectDevices": "Select Devices",
+      "selectedDevices": "Selected Devices",
+      "selectedActions": "Selected Actions",
+      "selectMore": "Select More",
+      "noDevicesAvailable": "No devices available to select",
+      "maxScheduleReached": "Max Schedule Reached"
+    },
+    "deviceParamsSelection": {
+      "title": "Select Actions",
+      "noDevicesAvailable": "No devices available",
+      "noActionsSelectedDescription": "Add device actions to create your schedule. Tap the + button to get started.",
+      "noCompatibleParams": "No compatible parameters found on {{deviceName}}",
+      "parameterOn": "On",
+      "parameterOff": "Off",
+      "setTo": "to"
+    },
+    "errors": {
+      "scheduleEnableFailed": "Failed to enable schedule",
+      "scheduleDisableFailed": "Failed to disable schedule",
+      "scheduleCreationFailed": "Failed to create schedule",
+      "scheduleDeletionFailed": "Failed to delete schedule",
+      "noSchedules": "No schedules found",
+      "scheduleSyncFailed": "Schedule sync failed",
+      "fallback": "Something went wrong. Please try again later."
+    },
+    "createSchedule": {
+      "title": "Create Schedule",
+      "editSchedule": "Edit Schedule",
+      "scheduleName": "Schedule Name",
+      "scheduleNamePlaceholder": "Schedule Name",
+      "scheduleActions": "Actions",
+      "noActionsSelected": "No Actions Selected",
+      "noActionsSelectedDescription": "Add device actions to create your schedule. Tap the + button to get started.",
+      "scheduleUpdatedSuccessfully": "Schedule updated successfully",
+      "scheduleCreatedSuccessfully": "Schedule created successfully",
+      "scheduleDeletedSuccessfully": "Schedule deleted successfully",
+      "scheduleSyncSuccessfully": "Schedule synced successfully",
+      "someDevicesFailedUpdate": "Some devices failed to update schedule",
+      "someDevicesFailedDelete": "Some devices failed to delete schedule",
+      "someDevicesNotConnected": "Some devices are Offline",
+      "time": "Time",
+      "repeat": "Repeat",
+      "repeatDays": {
+        "M": "Monday",
+        "T": "Tuesday",
+        "W": "Wednesday",
+        "Th": "Thursday",
+        "F": "Friday",
+        "S": "Saturday",
+        "Su": "Sunday"
+      },
+      "sync": "Sync",
+      "syncing": "Syncing...",
+      "syncSuccess": "Sync completed successfully",
+      "syncFailed": "Sync failed. Please try again."
+    },
+    "days": {
+      "monday": "Monday",
+      "tuesday": "Tuesday",
+      "wednesday": "Wednesday",
+      "thursday": "Thursday",
+      "friday": "Friday",
+      "saturday": "Saturday",
+      "sunday": "Sunday",
+      "shortMonday": "M",
+      "shortTuesday": "T",
+      "shortWednesday": "W",
+      "shortThursday": "Th",
+      "shortFriday": "F",
+      "shortSaturday": "S",
+      "shortSunday": "Su"
+    },
+    "time": {
+      "title": "Time",
+      "setTime": "Set Time",
+      "repeat": "Repeat",
+      "once": "Once",
+      "daily": "Daily",
+      "weekly": "Weekly",
+      "monthly": "Monthly",
+      "yearly": "Yearly",
+      "custom": "Custom",
+      "selectDays": "Select Days",
+      "selectDate": "Select Date",
+      "selectMonths": "Select Months",
+      "am": "AM",
+      "pm": "PM"
+    },
+    "devices": {
+      "one": "{{count}} device",
+      "other": "{{count}} devices"
     }
   }
 }

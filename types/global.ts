@@ -11,13 +11,16 @@ import {
   GestureResponderEvent,
   StyleProp as RNStyleProp,
   ImageSourcePropType,
+  ScrollView,
 } from "react-native";
+import type { ReactNode } from "react";
 import {
   ESPRMDeviceParam,
   ESPRMNode,
   ESPRMDevice,
   ESPRMNodeConfig,
   ESPRMGroup,
+  ESPAutomation,
 } from "@espressif/rainmaker-base-sdk";
 
 // ============================================================================
@@ -108,7 +111,7 @@ export interface ProvisionStep {
 }
 
 export interface ProvisioningStepProps
-  extends Omit<ProvisionStep, "timestamp"> {}
+  extends Omit<ProvisionStep, "timestamp"> { }
 
 export interface DeviceTypeProps {
   label: string;
@@ -159,7 +162,6 @@ export interface NetworkListModalProps {
   onRefresh: () => void;
 }
 
-
 // ============================================================================
 // Home Types
 // ============================================================================
@@ -167,7 +169,7 @@ export interface HomeData {
   roomTabs: RoomTab[];
   rooms: ESPRMGroup[];
   devices: (ESPRMDevice & { node: WeakRef<ESPRMNode> })[];
-} 
+}
 
 // ============================================================================
 // Room Types
@@ -315,7 +317,7 @@ export interface ActionHandlers {
   [key: string]: ActionHandler | undefined;
 }
 
-export interface UserProps {}
+export interface UserProps { }
 
 export interface DebugInfo {
   isDevelopment: boolean;
@@ -330,6 +332,292 @@ export interface UserOperationConfig {
   showBadge?: boolean;
   isDebug?: boolean;
   showSeparator?: boolean;
+}
+
+// ============================================================================
+// Time Picker Types
+// ============================================================================
+
+export type TimePeriod = "AM" | "PM";
+
+export interface TimePickerProps {
+  /** Whether the time picker is visible */
+  visible: boolean;
+  /** Callback when the time picker is closed */
+  onClose: () => void;
+  /** Callback when a time is selected */
+  onTimeSelected: (hours: number, minutes: number, period: TimePeriod) => void;
+  /** Initial hour value (1-12) */
+  initialHour?: number;
+  /** Initial minute value (0-59) */
+  initialMinute?: number;
+  /** Initial period value (AM/PM) */
+  initialPeriod?: TimePeriod;
+}
+
+export interface TimePickerScrollProps {
+  items: number[] | TimePeriod[];
+  selected: number | TimePeriod;
+  paddingZero?: boolean;
+  scrollRef: React.RefObject<ScrollView>;
+  setter: (value: any) => void;
+}
+
+export interface TimePickerScrollHandlerProps {
+  event: any;
+  items: number[] | TimePeriod[];
+  setter: (value: any) => void;
+  scrollRef: React.RefObject<ScrollView>;
+}
+
+// ============================================================================
+// Schedule Types
+// ============================================================================
+
+// Schedule Component Props
+export interface ScheduleDaysProps {
+  selectedDays: number[];
+  onDayPress: (index: number) => void;
+}
+
+export interface ScheduleTimeProps {
+  minutes?: number;
+  onTimePress: () => void;
+}
+
+export interface ScheduleCardProps {
+  name: string;
+  triggers: ScheduleTrigger[];
+  deviceCount: number;
+  enabled: boolean;
+  isEditing?: boolean;
+  onPress?: () => void;
+  onDelete?: () => void;
+  onToggle?: (value: boolean) => void;
+  deleteLoading?: boolean;
+  toggleLoading?: boolean;
+}
+
+export interface ScheduleActionProps {
+  device: ESPRMDevice;
+  displayDeviceName: string;
+  action: Record<string, any>;
+  onActionPress: () => void;
+}
+
+export interface ScheduleDeviceSelectionData {
+  node: ESPRMNode;
+  device: ESPRMDevice;
+  isSelected: boolean;
+  isMaxScheduleReached: boolean;
+}
+
+// Schedule Context Types
+export interface ScheduleContextType {
+  state: ScheduleState;
+  dispatch: React.Dispatch<ScheduleReducerAction>;
+  // Schedule Management
+  initializeSchedule: () => void;
+  handleSaveSchedule: () => Promise<boolean>;
+  handleDeleteSchedule: () => Promise<boolean>;
+  handleScheduleSync: () => Promise<boolean>;
+  checkOfflineNodes: () => boolean;
+  // Helper functions
+  setScheduleInfo: (schedule: any) => void;
+  setScheduleName: (name: string) => void;
+  setScheduleId: (id: string) => void;
+  setScheduleActions: (actions: Record<string, any>) => void;
+  setEditingMode: (isEditing: boolean) => void;
+  setEnabled: (enabled: boolean) => void;
+  setTriggers: (triggers: ScheduleTrigger[]) => void;
+  setActionValue: (nodeId: string, device: string, param: string, value: any) => void;
+  addNode: (node: ScheduleNode) => void;
+  removeNode: (nodeId: string) => void;
+  editNode: (nodeId: string, updates: Partial<ScheduleNode>) => void;
+  setNodes: (nodes: ScheduleNode[]) => void;
+  resetState: () => void;
+  setSelectedDevice: (device: { nodeId: string; deviceName: string; displayName: string; } | null) => void;
+  // getters
+  getScheduleActions: () => ScheduleAction[];
+  getActionValue: (nodeId: string, device: string, param: string) => any;
+  checkActionExists: (nodeId: string, device?: string, param?: string) => { exist: boolean; value?: any };
+  checkActionExistsInPrevActions: (nodeId: string, device?: string, param?: string) => { exist: boolean; value?: any };
+  checkDeviceDisabled: (nodeId: string, deviceName: string | null, isConnected: boolean, hasReachedMax: boolean) => {
+    isDisabled: boolean;
+    reason?: "offline" | "max_reached";
+  };
+  // Node sync status
+  checkNodeOutOfSync: (nodeId: string) => {
+    isOutOfSync: boolean;
+    details?: {
+      action: Record<string, any>;
+      name: string;
+      triggers: ScheduleTrigger[];
+      flags: number;
+    };
+  };
+  // delete
+  deleteActionValue: (nodeId: string, device: string, param: string) => void;
+  deleteAction: (nodeId: string, device: string) => void;
+  deleteNode: (nodeId: string) => void;
+}
+
+export interface ScheduleProviderProps {
+  children: ReactNode;
+}
+
+export type ScheduleReducerAction =
+  | { type: "SET_SCHEDULE_INFO"; payload: { name: string; id: string } }
+  | { type: "SET_EDITING_MODE"; payload: boolean }
+  | { type: "SET_ENABLED"; payload: boolean }
+  | { type: "SET_TRIGGERS"; payload: ScheduleTrigger[] }
+  | { type: "SET_NODES"; payload: ScheduleNode[] }
+  | { type: "ADD_NODE"; payload: ScheduleNode }
+  | { type: "REMOVE_NODE"; payload: string }
+  | { type: "EDIT_NODE"; payload: { nodeId: string; updates: Partial<ScheduleNode> } }
+  | { type: "RESET_STATE" }
+  | { type: "SET_SCHEDULE_NAME"; payload: string }
+  | { type: "SET_SCHEDULE_ID"; payload: string }
+  | { type: "SET_SCHEDULE_ACTIONS"; payload: Record<string, any> }
+  | { type: "SET_PREV_ACTIONS"; payload: Record<string, any> }
+  | { type: "SET_VALIDITY"; payload: { start: number; end: number } | null }
+  | { type: "SET_INFO"; payload: string | null }
+  | { type: "SET_FLAGS"; payload: number | null }
+  | { type: "SET_OUT_OF_SYNC_META"; payload: Record<string, any> }
+  | { type: "SET_SYNCING"; payload: boolean }
+  | { type: "SET_SELECTED_DEVICE"; payload: { nodeId: string; deviceName: string; displayName: string } | null }
+  | { type: "SET_ACTION_VALUE"; payload: { nodeId: string; device: string; param: string; value: any } }
+  | { type: "DELETE_ACTION_VALUE"; payload: { nodeId: string; device: string; param: string } }
+  | { type: "DELETE_ACTION"; payload: { nodeId: string; device: string } }
+  | { type: "DELETE_NODE"; payload: string };
+
+export interface ScheduleNode {
+  id: string;
+  action: Record<string, any>;
+  actionDevices: Record<string, any>;
+}
+
+export interface ScheduleAction {
+  nodeId: string;
+  action: Record<string, any>;
+  device: ESPRMDevice;
+  displayDeviceName: string;
+}
+
+// Schedule Data Types
+export interface ScheduleData {
+  id: string;
+  name: string;
+  description: string;
+  nodes: string[];
+  actions: Record<string, any>;
+  enabled: boolean;
+  triggers: ScheduleTrigger[];
+  validity?: {
+    start: number;
+    end: number;
+  };
+  info?: string;
+  flags?: number;
+  outOfSyncMeta?: Record<string, any>;
+  devicesCount?: number;
+}
+
+export interface ScheduleTrigger {
+  m?: number;
+  d?: number;
+  dd?: number;
+  mm?: number;
+  yy?: number;
+  r?: boolean;
+  rsec?: number;
+}
+
+export interface ScheduleActionProps {
+  device: ESPRMDevice;
+  displayDeviceName: string;
+  action: Record<string, any>;
+  onActionPress: () => void;
+  nodeId: string;
+}
+
+export interface ScheduleState {
+  forceUpdateUI: number;
+  scheduleName: string;
+  scheduleId: string;
+  isEditing: boolean;
+  enabled: boolean;
+  triggers: ScheduleTrigger[];
+  prevActions: Record<string, any>;
+  actions: ScheduleActionMap;
+  nodes: ScheduleNode[];
+  nodesRemoved: string[];
+  nodesAdded: Record<string, ScheduleNode>;
+  nodesEdited: Record<string, ScheduleNode>;
+  selectedDevice: {
+    nodeId: string;
+    deviceName: string;
+    displayName: string;
+  } | null;
+  validity: {
+    start: number;
+    end: number;
+  } | null;
+  info: string | null;
+  flags: number | null;
+  outOfSyncMeta: Record<string, any>;
+  isSyncing: boolean;
+}
+
+export interface ScheduleNode {
+  id: string;
+  action: Record<string, any>;
+  actionDevices: Record<string, any>;
+}
+
+export interface ScheduleActionMap {
+  [nodeId: string]: {
+    [deviceName: string]: {
+      [paramName: string]: any;
+    };
+  };
+}
+
+export interface ScheduleAction {
+  nodeId: string;
+  action: Record<string, any>;
+  device: ESPRMDevice;
+  displayDeviceName: string;
+}
+
+export interface ScheduleCardProps {
+  name: string;
+  triggers: ScheduleTrigger[];
+  deviceCount: number;
+  enabled: boolean;
+  isEditing?: boolean;
+  onPress?: () => void;
+  onDelete?: () => void;
+  onToggle?: (value: boolean) => void;
+  deleteLoading?: boolean;
+  toggleLoading?: boolean;
+}
+
+export interface ScheduleDeviceSelectionData {
+  node: ESPRMNode;
+  device: ESPRMDevice;
+  isSelected: boolean;
+  isMaxScheduleReached: boolean;
+}
+
+export interface ScheduleDaysProps {
+  selectedDays: number[];
+  onDayPress: (index: number) => void;
+}
+
+export interface ScheduleTimeProps {
+  minutes?: number;
+  onTimePress: () => void;
 }
 
 export interface IntegrationConfig {
@@ -362,6 +650,12 @@ export type TypoProps = {
   bold?: boolean;
   addNewLine?: boolean;
 };
+
+export interface ScheduleActionsHeaderProps {
+  onAddPress: () => void;
+  onSyncPress?: () => void;
+  isSyncing?: boolean;
+}
 
 // Define types for the props
 export interface HeaderProps {
@@ -559,4 +853,73 @@ export interface SharingProps {
   onRemoveUser: (userId: string) => void;
   onAddUser: () => void;
   isPrimary: boolean;
+}
+
+// ============================================================================
+// Automations Types
+// ============================================================================
+export interface AutomationCardProps {
+  /** Automation object from ESPAutomation */
+  automation: ESPAutomation;
+  /** Callback when automation is pressed */
+  onPress?: () => void;
+  /** Callback when toggle is changed */
+  onToggle?: (enabled: boolean) => void;
+  /** Whether the toggle is in loading state */
+  toggleLoading?: boolean;
+}
+
+export interface AutomationDeviceCardProps {
+  /** Device object with type and name */
+  device: { type: string; name: string };
+  /** Display device name */
+  displayDeviceName: string;
+  /** Type of automation component (event or action) */
+  type: "event" | "action";
+  /** Action object (for action type) */
+  actions?: Record<string, any>;
+  /** Event conditions object (for event type) */
+  eventConditions?: Record<string, { condition: string; value: any }>;
+  /** Callback when device card is pressed */
+  onPress: () => void;
+}
+
+export interface DeviceSelectionData {
+  /** Node object from ESPRMNode */
+  node: ESPRMNode;
+  /** Device object from ESPRMDevice */
+  device: ESPRMDevice;
+  /** Whether the device is selected */
+  isSelected: boolean;
+}
+
+// Types
+export interface AutomationMenuOption {
+  /** Option ID */
+  id: string;
+  /** Option label */
+  label: string;
+  /** Option icon */
+  icon: React.ReactNode;
+  /** Option onPress */
+  onPress: () => void;
+  /** Whether the option is in loading state */
+  loading?: boolean;
+  /** Whether the option is destructive */
+  destructive?: boolean;
+}
+
+export interface AutomationMenuBottomSheetProps {
+  /** Automation object from ESPAutomation */
+  automation: ESPAutomation | null;
+  /** Whether the bottom sheet is visible */
+  visible: boolean;
+  /** Automation name to display in header */
+  automationName: string;
+  /** Menu options to display */
+  options: AutomationMenuOption[];
+  /** Callback when bottom sheet is closed */
+  onClose: () => void;
+  /** Warning message to display */
+  warning?: string;
 }

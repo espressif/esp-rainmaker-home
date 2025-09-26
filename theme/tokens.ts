@@ -168,6 +168,7 @@ export const tokens = {
   colors: colorsProxy,
 
   fontSize: {
+    xxs: scale(10),
     xs: scale(12),
     sm: scale(14),
     _15: scale(15),

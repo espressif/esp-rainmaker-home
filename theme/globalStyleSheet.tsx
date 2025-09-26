@@ -658,6 +658,66 @@ export const globalStyles = StyleSheet.create({
     marginBottom: tokens.spacing._15,
   },
 
+  // Schedule Card Styles
+  scheduleCard: {
+    backgroundColor: tokens.colors.white,
+    padding: tokens.spacing._10,
+    marginBottom: tokens.spacing._10,
+    borderRadius: tokens.radius.md,
+    borderWidth: 1,
+    borderColor: tokens.colors.borderColor,
+  },
+  scheduleHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: tokens.spacing._10,
+  },
+  scheduleTitle: {
+    fontSize: tokens.fontSize.lg,
+    color: tokens.colors.text_primary,
+    flex: 1,
+  },
+  scheduleTimeContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: tokens.colors.bg1,
+    paddingHorizontal: tokens.spacing._5,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  scheduleTime: {
+    fontSize: tokens.fontSize.sm,
+    color: tokens.colors.text_secondary,
+    marginLeft: tokens.spacing._5,
+  },
+  scheduleRepeatContainer: {
+    marginTop: tokens.spacing._10,
+  },
+  scheduleDaysContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: tokens.spacing._5,
+  },
+  scheduleDayBox: {
+    width: 25,
+    height: 25,
+    borderRadius: 8,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: tokens.colors.bg1,
+    opacity: 0.3,
+  },
+  scheduleDayBoxActive: {
+    opacity: 1,
+  },
+  scheduleDayText: {
+    fontSize: tokens.fontSize.sm,
+    color: tokens.colors.text_secondary,
+  },
+  scheduleDayTextActive: {
+    fontFamily: tokens.fonts.medium,
+  },
+
   cardHeader: {
     flex: 1,
     alignItems: "center",
@@ -1037,6 +1097,137 @@ export const globalStyles = StyleSheet.create({
     marginBottom: tokens.spacing._5,
   },
 
+  // Time Picker Styles
+  timePickerModal: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    justifyContent: "flex-end",
+  },
+  timePickerContainer: {
+    backgroundColor: tokens.colors.white,
+    borderTopLeftRadius: tokens.radius.md,
+    borderTopRightRadius: tokens.radius.md,
+    paddingBottom: 20,
+  },
+  timePickerHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    padding: tokens.spacing._15,
+    borderBottomWidth: 1,
+    borderBottomColor: tokens.colors.borderColor,
+  },
+  timePickerScrollContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    marginVertical: tokens.spacing._20,
+    paddingHorizontal: tokens.spacing._20,
+  },
+  timePickerScrollColumn: {
+    minWidth: 60,
+  },
+  timePickerScrollItem: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: tokens.spacing._5,
+  },
+  timePickerScrollText: {
+    fontSize: 20,
+    color: tokens.colors.text_secondary,
+    fontFamily: tokens.fonts.regular,
+    opacity: 0.3,
+    transform: [{ scale: 0.85 }],
+  },
+  timePickerSelectedText: {
+    color: tokens.colors.text_primary,
+    fontFamily: tokens.fonts.medium,
+    fontSize: 22,
+    opacity: 1,
+    transform: [{ scale: 1 }],
+  },
+  timePickerSeparator: {
+    fontSize: 24,
+    color: tokens.colors.text_primary,
+    fontFamily: tokens.fonts.medium,
+    marginHorizontal: tokens.spacing._5,
+  },
+  timePickerSelectionIndicator: {
+    position: "absolute",
+    left: tokens.spacing._15,
+    right: tokens.spacing._15,
+    borderTopWidth: 1,
+    borderBottomWidth: 1,
+    borderColor: tokens.colors.borderColor,
+    backgroundColor: tokens.colors.bg1,
+    opacity: 0.3,
+  },
+
+  // Schedule Styles
+  scheduleTimeText: {
+    fontSize: tokens.fontSize.sm,
+    fontFamily: tokens.fonts.medium,
+    color: tokens.colors.primary,
+    letterSpacing: 1,
+    fontWeight: "600",
+    padding: tokens.spacing._5,
+    paddingHorizontal: tokens.spacing._15,
+    backgroundColor: tokens.colors.bg1,
+    borderRadius: tokens.radius.sm,
+  },
+  scheduleRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingVertical: tokens.spacing._10,
+    borderBottomWidth: tokens.border.defaultWidth,
+    borderBottomColor: tokens.colors.borderColor,
+  },
+  scheduleDayButton: {
+    width: 25,
+    height: 25,
+    borderRadius: tokens.radius.sm,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: tokens.colors.bg1,
+    opacity: 0.3,
+  },
+  scheduleDayButtonSelected: {
+    opacity: 1,
+  },
+  scheduleDayTextSelected: {
+    fontFamily: tokens.fonts.medium,
+    color: tokens.colors.primary,
+  },
+  scheduleActionsContainer: {
+    flex: 1,
+    marginBottom: tokens.spacing._15,
+  },
+  scheduleActionsHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingBottom: tokens.spacing._10,
+  },
+  scheduleActionsTitle: {
+    fontSize: tokens.fontSize.sm,
+    fontWeight: "500",
+    fontFamily: tokens.fonts.medium,
+    color: tokens.colors.text_primary,
+    paddingLeft: tokens.spacing._5,
+  },
+
+  // Schedule Days and Time Styles
+  scheduleSectionTitle: {
+    fontSize: tokens.fontSize.sm,
+    fontWeight: "500",
+    fontFamily: tokens.fonts.medium,
+    color: tokens.colors.text_primary,
+    paddingLeft: tokens.spacing._5,
+  },
+  scheduleTimeButton: {
+    alignItems: "flex-end",
+  },
+
   // Scene Management Styles
   sceneCard: {
     backgroundColor: tokens.colors.white,
@@ -1137,7 +1328,7 @@ export const globalStyles = StyleSheet.create({
     marginBottom: 24,
   },
 
-  sceneAddButtonContainer: {
+  footerAddButtonContainer: {
     position: "absolute",
     bottom: 70,
     left: 0,
@@ -1145,7 +1336,7 @@ export const globalStyles = StyleSheet.create({
     padding: tokens.spacing._15,
   },
 
-  sceneAddButton: {
+  footerAddButton: {
     backgroundColor: tokens.colors.primary,
     borderRadius: tokens.radius.md,
     paddingVertical: tokens.spacing._15,
@@ -1215,8 +1406,8 @@ export const globalStyles = StyleSheet.create({
   // Scene Empty State Styles
   sceneEmptyStateContainer: {
     alignItems: "center",
-    flex:1,
-    marginBottom: 140
+    flex: 1,
+    marginBottom: 140,
   },
   sceneEmptyStateIconContainer: {
     backgroundColor: tokens.colors.white,
@@ -1285,5 +1476,50 @@ export const globalStyles = StyleSheet.create({
     shadowOpacity: 0.15,
     shadowRadius: 10,
     elevation: 6,
+  },
+
+  // Automation Empty State Styles
+  automationEmptyStateContainer: {
+    alignItems: "center",
+    flex: 1,
+    marginBottom: 140,
+  },
+  automationEmptyStateIconContainer: {
+    backgroundColor: tokens.colors.white,
+    borderRadius: 48,
+    padding: 20,
+    marginBottom: 24,
+  },
+  automationEmptyStateIconContainerTop: {
+    backgroundColor: tokens.colors.white,
+    borderRadius: 48,
+    padding: 20,
+    marginBottom: 24,
+    marginTop: "50%",
+  },
+  automationEmptyStateTitleLarge: {
+    fontSize: tokens.fontSize.sm,
+    fontWeight: "500",
+    color: tokens.colors.text_primary,
+    textAlign: "center",
+    marginBottom: 8,
+  },
+  automationEmptyStateDescription: {
+    fontSize: tokens.fontSize.sm,
+    color: tokens.colors.text_secondary,
+    textAlign: "center",
+    marginBottom: 24,
+  },
+  automationAddButtonContainer: {
+    position: "absolute",
+    bottom: 70,
+    left: 0,
+    right: 0,
+    padding: tokens.spacing._15,
+  },
+  automationAddButton: {
+    backgroundColor: tokens.colors.primary,
+    borderRadius: tokens.radius.md,
+    paddingVertical: tokens.spacing._15,
   },
 });

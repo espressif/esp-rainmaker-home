@@ -175,6 +175,7 @@ const Provision = () => {
   // Params & Data
   const { ssid, password } = useLocalSearchParams();
   const device: ESPDevice = store.nodeStore.connectedDevice;
+  const currentHomeId = store.groupStore.currentHomeId;
 
   // Effects
   useEffect(() => {
@@ -198,14 +199,11 @@ const Provision = () => {
    */
   const handleProvisionSuccess = async () => {
     try {
-      if (decodedNodeIdRef.current) {
-        const currentHomeId = store.groupStore.currentHomeId;
-        const currentGroup = store.groupStore._groupsByID[currentHomeId];
-        if (currentGroup) {
-          await currentGroup.addNodes([decodedNodeIdRef.current]);
-          await store.groupStore.syncGroupList();
-        }
-      }
+      await store.userStore.user?.getGroupById({
+        id: currentHomeId as string,
+        withNodeList: true,
+        withSubGroups: true,
+      });
     } catch (error) {
       console.error("Error adding node to current group", error);
     }
@@ -321,7 +319,8 @@ const Provision = () => {
       await device?.provision(
         ssid as string,
         (password as string) || "",
-        handleProvisionUpdate
+        handleProvisionUpdate,
+        currentHomeId as string
       );
     } catch (error) {
       handleProvisionError(error);

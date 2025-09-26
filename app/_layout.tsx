@@ -31,7 +31,7 @@ import { useTranslation } from "react-i18next";
 import { FooterTabs } from "@/components";
 import { ToastContainer } from "@/components";
 // icons
-import { Home, DoorOpen, Calendar, User } from "lucide-react-native";
+import { Home, Calendar, User, History, Zap } from "lucide-react-native";
 
 const InnerLayout = () => {
   const { t } = useTranslation();
@@ -49,14 +49,19 @@ const InnerLayout = () => {
       Icon: Home,
     },
     {
-      route: "/(group)/Rooms" as RelativePathString,
-      label: t("layout.navigation.footer.rooms"),
-      Icon: DoorOpen,
+      route: "/(schedule)/Schedules" as RelativePathString,
+      label: t("layout.navigation.footer.schedules"),
+      Icon: History,
     },
     {
       route: "/(scene)/Scenes" as RelativePathString,
       label: t("layout.navigation.footer.scenes"),
       Icon: Calendar,
+    },
+    {
+      route: "/(automation)/Automations" as RelativePathString,
+      label: t("layout.navigation.footer.automations"),
+      Icon: Zap,
     },
     {
       route: "/(user)/User" as RelativePathString,
@@ -65,9 +70,13 @@ const InnerLayout = () => {
     },
   ];
 
-  const isUserRoute = ["/Rooms", "/Home", "/User", "/Scenes"].some(
-    (route) => pathname === route
-  );
+  const isUserRoute = [
+    "/Home",
+    "/User",
+    "/Scenes",
+    "/Automations",
+    "/Schedules"
+  ].some((route) => pathname === route);
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>

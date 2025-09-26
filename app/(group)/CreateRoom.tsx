@@ -301,7 +301,7 @@ const CreateRoom = () => {
     try {
       await room?.delete();
       toast.showSuccess(t("group.createRoom.roomRemovedSuccessfully"));
-      router.replace({
+      router.dismissTo({
         pathname: "/(group)/Rooms",
         params: { id: id },
       } as any);
