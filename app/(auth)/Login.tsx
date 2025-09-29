@@ -46,7 +46,7 @@ export default function LoginScreen() {
     signinwithapple: signinwithapple,
   } as Record<string, ImageSourcePropType>;
 
-  const { store, fetchNodesAndGroups } = useCDF();
+  const { store, fetchNodesAndGroups, initUserCustomData } = useCDF();
   const { t } = useTranslation();
   const params = useLocalSearchParams();
   const router = useRouter();
@@ -135,7 +135,6 @@ export default function LoginScreen() {
             await createPlatformEndpoint(store);
           } catch (error) {
             console.warn("Failed to create platform endpoint:", error);
-            // Don't show error to user as login was successful
           }
           /*
           With CDFConfig.autoSync enabled, CDF login method will fetch the first page automatically,
@@ -144,6 +143,7 @@ export default function LoginScreen() {
           const shouldFetchFirstPage = !CDFConfig.autoSync;
           await fetchNodesAndGroups(shouldFetchFirstPage);
           // redirect to home screen
+          await initUserCustomData();
           router.replace("/(group)/Home");
         }
       })
@@ -190,8 +190,8 @@ export default function LoginScreen() {
       await fetchNodesAndGroups(shouldFetchFirstPage);
 
       await createPlatformEndpoint(store);
-
       if (userInstance) {
+        await initUserCustomData();
         router.push("/(group)/Home");
       }
     } catch (error) {

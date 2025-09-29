@@ -20,7 +20,8 @@ import { CDFConfig } from "@/rainmaker.config";
 const index = () => {
   const router = useRouter();
   const pathname = usePathname();
-  const { store, isInitialized, fetchNodesAndGroups } = useCDF();
+  const { store, isInitialized, fetchNodesAndGroups, initUserCustomData } =
+    useCDF();
 
   const authCheck = async () => {
     try {
@@ -32,6 +33,7 @@ const index = () => {
         */
         const shouldFetchFirstPage = !CDFConfig.autoSync;
         await fetchNodesAndGroups(shouldFetchFirstPage);
+        await initUserCustomData();
         router.replace("/(group)/Home");
         return;
       }

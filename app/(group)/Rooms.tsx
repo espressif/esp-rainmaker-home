@@ -52,15 +52,13 @@ const Rooms = observer(() => {
   const { id } = useLocalSearchParams();
   const {
     store: { groupStore },
-    fetchAllGroups
+    fetchAllGroups,
   } = useCDF();
 
   // State
   const state = useLocalObservable(() => ({
     rooms: [] as ESPRMGroup[],
-    home:
-      groupStore?._groupsByID[groupStore?.currentHomeId || ""] ||
-      groupStore?.groupList[0],
+    home: groupStore?._groupsByID[id as string] || null,
     refreshing: false,
   }));
 
@@ -71,7 +69,7 @@ const Rooms = observer(() => {
    * - groupStore.syncGroupList
    */
   const fetchGroup = async () => {
-    if (state.refreshing) return;
+    if (state.refreshing || !id) return;
 
     state.refreshing = true;
     try {
@@ -80,9 +78,7 @@ const Rooms = observer(() => {
       */
       const shouldFetchFirstPage = true;
       await fetchAllGroups(shouldFetchFirstPage);
-      const home =
-        groupStore?._groupsByID[groupStore?.currentHomeId || ""] ||
-        groupStore?.groupList[0];
+      const home = groupStore?._groupsByID[id as string];
       state.home = home;
       if (home) {
         const rooms = (home.subGroups as ESPRMGroup[]) || [];
@@ -147,7 +143,7 @@ const Rooms = observer(() => {
     router.push({
       pathname: "/(group)/CreateRoom",
       params: {
-        id: state.home?.id || id,
+        id: id,
       },
     } as any);
   };

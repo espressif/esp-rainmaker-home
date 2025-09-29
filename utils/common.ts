@@ -5,6 +5,9 @@
  */
 
 import * as WebBrowser from "expo-web-browser";
+import { CDF } from "@espressif/rainmaker-base-cdf";
+import { SUCESS, USER_PERMISSION } from "./constants";
+import { UserCustomDataRequest } from "@espressif/rainmaker-base-sdk";
 
 export const openUrl = (url: string) => {
     WebBrowser.openBrowserAsync(url);
@@ -216,3 +219,36 @@ export const getSceneCardDimensions = ({
         };
     }
 };
+
+
+export const updateLastSelectedHome = async (userStore: CDF["userStore"], lastSelectedHomeId: string) => {
+  try {
+    if (userStore.user && userStore.userInfo) {
+      const updatePayload: UserCustomDataRequest = {
+        lastSelectedHomeId: {
+          value: lastSelectedHomeId,
+          perms: [
+            {
+              read: [USER_PERMISSION],
+            },
+            {
+              write: [USER_PERMISSION],
+            },
+          ],
+        },
+      }
+      const response = await userStore.user.setCustomData(updatePayload);
+      if (response.status === SUCESS) {
+      // on successful setCustomData call, 
+      // update the custom data in the userInfo store to reflect the changes
+      userStore.userInfo.customData = {
+        // Ensure not get an error if userStore.userInfo.customData is undefined
+          ...(userStore.userInfo.customData ?? {}),
+          ...updatePayload,
+        }
+      }
+    }
+  } catch (error) {
+    console.error("Failed to update last selected home:", error);
+  }
+}
