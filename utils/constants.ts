@@ -67,6 +67,7 @@ export const ESPRM_UI_TRIGGER_PARAM_TYPE = "esp.ui.trigger";
 // SUPPORTED PARAM PROPERTIES
 export const WRITE_PERMISSION = "write";
 export const READ_PERMISSION = "read";
+export const USER_PERMISSION = "user";
 
 // CODE REDIRECT TYPES
 export const SIGNUP_CODE_TYPE = "SIGNUP";

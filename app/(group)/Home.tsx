@@ -57,6 +57,7 @@ import {
 // types
 import { RoomTab, HomeData } from "@/types/global";
 import { startNodeLocalDiscovery } from "@/utils/localDiscovery";
+import { updateLastSelectedHome } from "@/utils/common";
 
 /**
  * HomeScreen component first screen after login
@@ -69,7 +70,11 @@ import { startNodeLocalDiscovery } from "@/utils/localDiscovery";
  */
 const HomeScreen = () => {
   const { t } = useTranslation();
-  const { store, isInitialized: isStoreInitialized } = useCDF();
+  const {
+    store,
+    isInitialized: isStoreInitialized,
+    fetchNodesAndGroups,
+  } = useCDF();
   const { groupStore, nodeStore, userStore } = store;
   const router = useRouter();
 
@@ -130,7 +135,6 @@ const HomeScreen = () => {
       );
     }, [selectedRoom, rooms, nodeStore?.nodeList, devices]);
 
-
   useEffect(() => {
     if (isStoreInitialized) {
       initializeHome();
@@ -158,53 +162,86 @@ const HomeScreen = () => {
   };
 
   /**
-   * Initialize the home screen
+   * Initializes the home screen by preparing user homes, handling device assignments,
+   * and updating preferences and UI state.
    *
-   * This function is used to initialize the home screen
-   * It gets the group list, selected home and nodes for the selected home
-   * It stores the group list, selected home and nodes in local useStates
+   * Flow of operations:
+   * 1. Gathers initial data from stores
+   *    - Last selected home from user preferences
+   *    - Valid homes from group list
+   *    - Nodes not assigned to any home
+   * 2. Ensures a primary home exists
+   *    - Finds existing primary home
+   *    - Creates one if none exists and assigns unassigned nodes
+   * 3. Determines the current home
+   *    - Uses primary home ID
+   *    - Falls back to current home ID or first home in list
+   * 4. Updates user preferences
+   *    - Saves the current home selection if changed
    *
-   * CDF function used:
+   * CDF functions and stores used:
    * - groupStore.groupList
    * - groupStore.currentHomeId
    * - nodeStore.nodeList
+   * - userStore.userInfo.customData
+   * - userStore.user.createGroup
+   *
+   * @returns {Promise<void>}
    */
   const initializeHome = useCallback(async () => {
-    if (hasInitialized.current) {
-      return;
-    }
-    hasInitialized.current = true;
-    const primaryHome = findPrimaryHome(groupStore?.groupList || []);
-    // CASE I: No primary home found, create a new one
-    // conditions checked
-    // 1. no group with home name ( case -insensitive)
-    // 2. no group with home type
-    // 3. no group with home mutuallyExclusive true
-    if (!primaryHome) {
-      const nodeIds = getUnassignedNodes(nodeStore?.nodeList, []);
-      const primaryHomePayload = createHome(nodeIds) as any;
-      await userStore.user?.createGroup(primaryHomePayload);
-    }
+    try {
+      // Prevent multiple simultaneous initializations
+      if (hasInitialized.current) {
+        return;
+      }
+      hasInitialized.current = true;
 
-    const homeList = groupStore?.groupList.filter(isHome);
-    const currentHomeId = groupStore.currentHomeId;
-    const currentHome = groupStore._groupsByID?.[currentHomeId] || homeList[0];
+      // Step 1: Gather initial data from stores
+      // - Get last selected home from user preferences
+      // - Filter valid homes from group list
+      // - Get list of devices not assigned to any home
+      const lastSelectedHomeId =
+        userStore.userInfo?.customData?.lastSelectedHomeId?.value || null;
+      const homeList = groupStore?.groupList.filter(isHome);
+      const unAssignedNodes = getUnassignedNodes(nodeStore?.nodeList, homeList);
 
-    // CASE II: after adding primary home, add unassigned nodes to any primary home
-    const unAssignedNodes = getUnassignedNodes(nodeStore?.nodeList, homeList);
-    if (unAssignedNodes?.length) {
-      const primaryHome = findPrimaryHome(groupStore?.groupList || []);
-      await primaryHome?.addNodes(unAssignedNodes);
-    }
+      // Step 2: Ensure primary home exists
+      // If no primary home is found, create one and assign unassigned devices to it
+      let primaryHome = findPrimaryHome(
+        groupStore?.groupList,
+        lastSelectedHomeId
+      );
+      if (!primaryHome) {
+        const primaryHomePayload = createHome(unAssignedNodes) as any;
+        primaryHome =
+          (await userStore.user?.createGroup(primaryHomePayload)) || null;
+      }
 
-    if (!groupStore.currentHomeId && currentHome) {
+      // Step 3: Determine current home selection
+      // Use primary home ID if available, fallback to current home ID or first home
+      const currentHomeId = primaryHome?.id || groupStore.currentHomeId;
+      const currentHome =
+        groupStore._groupsByID?.[currentHomeId] || homeList[0];
+
       groupStore.currentHomeId = currentHome.id;
-    }
 
-    setHomeList(homeList as ESPRMGroup[]);
-    setSelectedHome(currentHome);
-    setIsLoading(false);
-    hasInitialized.current = false;
+      // Step 4: Update user preferences
+      // Save the current home selection if it changed
+      if (lastSelectedHomeId !== currentHome.id) {
+        updateLastSelectedHome(userStore, currentHome.id);
+      }
+
+      // Step 5: Update UI state
+      // Set the home list and selected home in component state
+      setHomeList(homeList as ESPRMGroup[]);
+      setSelectedHome(currentHome);
+    } catch (error) {
+      console.error("Failed to initialize home:", error);
+    } finally {
+      // Reset loading and initialization states
+      setIsLoading(false);
+      hasInitialized.current = false;
+    }
   }, [isStoreInitialized]);
 
   useEffect(() => {
@@ -221,18 +258,18 @@ const HomeScreen = () => {
    * Refresh the home screen
    *
    * This function is used to refresh the home screen
-   * It syncs the node list and group list
+   * It syncs the node list and group list with background pagination
    * It initializes the home screen
-   *
-   * CDF function used:
-   * - nodeStore.syncNodeList
-   * - groupStore.syncGroupList
    */
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     try {
-      await nodeStore?.syncNodeList();
-      await groupStore?.syncGroupList();
+      setIsLoading(true);
+      /*
+      For refresh operation, we need to fetch the first page again
+      */
+      const shouldFetchFirstPage = true;
+      await fetchNodesAndGroups(shouldFetchFirstPage);
       initializeHome();
       startNodeLocalDiscovery(store);
     } catch (error) {
@@ -251,6 +288,7 @@ const HomeScreen = () => {
   const handleHomeSelect = (home: ESPRMGroup) => {
     if (home?.id) {
       groupStore.currentHomeId = home.id;
+      updateLastSelectedHome(userStore, home.id);
       setSelectedHome(home);
       setTooltipVisible(false);
     }

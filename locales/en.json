@@ -396,7 +396,10 @@
       "qrOption": "Scan QR Code",
       "qrDescription": "Quickly add device by scanning its QR code",
       "softAPOption": "SoftAP",
-      "softAPDescription": "Add device using SoftAP connection"
+      "softAPDescription": "Add device using SoftAP connection",
+      "sharedHomeRestriction": "Device Addition Not Allowed",
+      "sharedHomeMessage": "You don't have permission to add devices to '{{homeName}}' because it's a shared home.",
+      "defaultHomeName": "this home"
     },
     "control": {
       "title": "Device Control",

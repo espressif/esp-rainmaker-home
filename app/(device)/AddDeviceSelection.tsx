@@ -12,8 +12,13 @@ import {
   QrCode,
   ChevronRight,
   HouseWifi,
+  AlertCircle,
 } from "lucide-react-native";
 import { useTranslation } from "react-i18next";
+
+// CDF
+import { useCDF } from "@/hooks/useCDF";
+import { observer } from "mobx-react-lite";
 
 // Theme and Styles
 import { tokens } from "@/theme/tokens";
@@ -38,6 +43,9 @@ interface DeviceOption {
 const AddDeviceSelection = () => {
   const router = useRouter();
   const { t } = useTranslation();
+  const { store } = useCDF();
+  const currentHome =
+    store.groupStore._groupsByID[store.groupStore.currentHomeId];
 
   const deviceOptions: DeviceOption[] = [
     {
@@ -80,15 +88,45 @@ const AddDeviceSelection = () => {
     </TouchableOpacity>
   );
 
+  const renderNonPrimaryUserCard = () => {
+    const homeName = currentHome?.name || t("device.addDeviceSelection.defaultHomeName");
+
+    return (
+      <View
+        style={[
+          globalStyles.emptyStateContainer,
+          { borderRadius: tokens.radius.md },
+        ]}
+      >
+        <View style={globalStyles.emptyStateIconContainer}>
+          <AlertCircle size={48} color={tokens.colors.primary} />
+        </View>
+        <View>
+          <Typo variant="h2" style={globalStyles.emptyStateTitle}>
+            {t("device.addDeviceSelection.sharedHomeRestriction")}
+          </Typo>
+          <Typo variant="body" style={globalStyles.emptyStateDescription}>
+            {t("device.addDeviceSelection.sharedHomeMessage", { homeName })}
+          </Typo>
+        </View>
+      </View>
+    );
+  };
+
   return (
     <>
       <Header label={t("device.addDeviceSelection.title")} />
       <ScreenWrapper style={styles.container}>
-        <Typo variant="body" style={styles.noteText}>
-          {t("device.addDeviceSelection.note")}
-        </Typo>
-
-        {deviceOptions.map(renderOptionCard)}
+        {currentHome.isPrimaryUser ? (
+          <>
+            <Typo variant="body" style={styles.noteText}>
+              {t("device.addDeviceSelection.note")}
+            </Typo>
+            {deviceOptions.map(renderOptionCard)}
+          </>
+        ) : (
+          renderNonPrimaryUserCard()
+        )}
       </ScreenWrapper>
     </>
   );
@@ -136,4 +174,4 @@ const styles = StyleSheet.create({
   },
 });
 
-export default AddDeviceSelection;
+export default observer(AddDeviceSelection);

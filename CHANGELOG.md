@@ -5,6 +5,36 @@ All notable changes to the ESP RainMaker Home app will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.1.1]
+
+### Enhanced
+
+**Scene Management:**
+
+- Scenes are now synced only from nodes in the currently selected home.
+
+**Data Fetching:**
+
+- Added support for paginated fetching of groups and nodes for improved scalability.
+
+**Home Management:**
+
+- Persisted the selected home across user sessions for better continuity.
+
+### Fixed
+
+**Shared Homes Permissions:**
+
+- Blocked non-primary users from adding devices to shared homes.
+
+**Node Assignment:**
+
+- Disabled automatic group assignment for unassigned nodes when no primary home is available.
+
+**Rooms List:**
+
+- Rooms are now displayed based on the selected home in the Home Management screen instead of the Home screen.
+
 ## [3.1.0]
 
 ### Added
