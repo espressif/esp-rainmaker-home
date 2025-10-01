@@ -284,7 +284,6 @@ const Setting = () => {
    * Navigates to room management screen
    */
   const handleRoom = () => {
-    store.groupStore.currentHomeId = id;
     router.push({
       pathname: "/(group)/Rooms",
       params: { id },

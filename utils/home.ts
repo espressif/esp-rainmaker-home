@@ -1,4 +1,4 @@
-import { ESPRMGroup, ESPRMNode, ESPRMDevice,CreateGroupRequest } from "@espressif/rainmaker-base-sdk";
+import { ESPRMGroup, ESPRMNode, ESPRMDevice, CreateGroupRequest } from "@espressif/rainmaker-base-sdk";
 import { RoomTab } from "@/types/global";
 import { transformNodesToDevices } from "./device";
 import { DEFAULT_HOME_GROUP_NAME, GROUP_TYPE_HOME } from "./constants";
@@ -103,10 +103,7 @@ export const getFilteredDevices = (
  * @returns boolean indicating if the group is a valid home group
  */
 export const isHome = (group: ESPRMGroup): boolean => {
-    return (
-        (group.type === GROUP_TYPE_HOME && group.mutuallyExclusive === true)
-        || group.name.toLowerCase() === DEFAULT_HOME_GROUP_NAME.toLowerCase()
-    );
+    return group.type === GROUP_TYPE_HOME && group.mutuallyExclusive === true;
 };
 
 /**
@@ -114,17 +111,15 @@ export const isHome = (group: ESPRMGroup): boolean => {
  * @param groups List of all groups
  * @returns The primary home or null if none found
  */
-export const findPrimaryHome = (groups: ESPRMGroup[]): ESPRMGroup | null => {
-    // First, look for a group named "Home" (case-insensitive)
-    const homeByName = groups.find(group =>
-        group.name.toLowerCase() === DEFAULT_HOME_GROUP_NAME.toLowerCase()
-    );
+export const findPrimaryHome = (groups: ESPRMGroup[], lastSelectedHomeId: string | null): ESPRMGroup | null => {
 
-    if (homeByName) {
-        return homeByName;
+    // First, look for a group with the id of lastSelectedHomeId
+    const lastSelectedHomeInfo = groups.find(group => group.id === lastSelectedHomeId);
+
+    if(lastSelectedHomeInfo) {
+        return lastSelectedHomeInfo;
     }
 
-    // Then, look for any group with type 'home' and mutuallyExclusive true
     return groups.find(isHome) || null;
 };
 

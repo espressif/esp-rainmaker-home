@@ -31,6 +31,7 @@ interface StoreContextType {
     nodes: ESPRMNode[];
     groups: ESPRMGroup[];
   }>;
+  initUserCustomData: () => Promise<void>;
 }
 
 interface StoreProviderProps {
@@ -132,6 +133,20 @@ export const StoreProvider: React.FC<StoreProviderProps> = ({ children }) => {
     }
   };
 
+  const initUserCustomData = async () => {
+    const store = storeRef.current;
+
+    if (!store) {
+      console.warn("Custom data not initialized");
+      return;
+    }
+
+    const customData = await store.userStore.user?.getCustomData();
+    if (customData && store.userStore.userInfo) {
+      store.userStore.userInfo.customData = customData;
+    }
+  };
+
   useEffect(() => {
     initApp();
   }, []);
@@ -144,6 +159,7 @@ export const StoreProvider: React.FC<StoreProviderProps> = ({ children }) => {
         fetchAllNodes,
         fetchAllGroups,
         fetchNodesAndGroups,
+        initUserCustomData,
       }}
     >
       {children}
