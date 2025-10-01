@@ -77,7 +77,7 @@ const Scenes = observer(() => {
   const router = useRouter();
   const toast = useToast();
   const { store } = useCDF();
-  const { sceneStore, nodeStore } = store;
+  const { sceneStore, nodeStore, groupStore, userStore} = store;
   const { setSceneInfo, resetState } = useScene();
 
   const { sceneList } = sceneStore;
@@ -139,8 +139,9 @@ const Scenes = observer(() => {
    */
   const fetchScenes = async () => {
     try {
-      await store.nodeStore.syncNodeList();
-      await store.sceneStore.syncScenesFromNodes();
+      await nodeStore.syncNodeList();
+      const currentHome = groupStore?._groupsByID[groupStore?.currentHomeId];
+      await sceneStore.syncScenesFromNodes(currentHome.nodes || []);
       setTimeout(() => {
         setForceUpdate((prev) => prev + 1);
       }, 100);
@@ -158,14 +159,12 @@ const Scenes = observer(() => {
    */
   useFocusEffect(
     useCallback(() => {
-      sceneStore.syncScenesFromNodes().then(() => {
-        setIsLoading(false);
-      });
+      fetchScenes();
     }, [])
   );
 
   const fetchUserCustomData = async () => {
-    const userCustomData = await store.userStore.user?.getCustomData();
+    const userCustomData = await userStore.user?.getCustomData();
     if (userCustomData?.favoritesScenes) {
       setFavoritesceneIds(userCustomData.favoritesScenes.value as string[]);
     }
@@ -185,7 +184,7 @@ const Scenes = observer(() => {
       const updatedFavorites = favoritesceneIds.includes(sceneId)
         ? favoritesceneIds.filter((id) => id !== sceneId)
         : [...favoritesceneIds, sceneId];
-      await store.userStore.user?.setCustomData({
+      await userStore.user?.setCustomData({
         favoritesScenes: {
           value: updatedFavorites,
           perms: [
