@@ -31,6 +31,7 @@ import APP_CONFIG from "@/app.json";
 import { validateEmail } from "@/utils/validations";
 import { createPlatformEndpoint } from "@/utils/notifications";
 import { CDF_EXTERNAL_PROPERTIES } from "@/utils/constants";
+import { CDFConfig } from "@/rainmaker.config";
 
 /**
  * LoginScreen component that displays the login screen.
@@ -45,7 +46,7 @@ export default function LoginScreen() {
     signinwithapple: signinwithapple,
   } as Record<string, ImageSourcePropType>;
 
-  const { store } = useCDF();
+  const { store, fetchNodesAndGroups } = useCDF();
   const { t } = useTranslation();
   const params = useLocalSearchParams();
   const router = useRouter();
@@ -136,6 +137,12 @@ export default function LoginScreen() {
             console.warn("Failed to create platform endpoint:", error);
             // Don't show error to user as login was successful
           }
+          /*
+          With CDFConfig.autoSync enabled, CDF login method will fetch the first page automatically,
+          so we don't need to fetch the first page again
+          */
+          const shouldFetchFirstPage = !CDFConfig.autoSync;
+          await fetchNodesAndGroups(shouldFetchFirstPage);
           // redirect to home screen
           router.replace("/(group)/Home");
         }
@@ -175,7 +182,13 @@ export default function LoginScreen() {
 
       const userInstance = await authInstance.loginWithOauth(provider);
       store.userStore[CDF_EXTERNAL_PROPERTIES.IS_OAUTH_LOGIN] = true;
-      store.userStore.setUserInstance(userInstance);
+      await store.userStore.setUserInstance(userInstance);
+
+      // With CDFConfig.autoSync enabled, CDF setUserInstance method will fetch the first page automatically,
+      // so we don't need to fetch the first page again
+      const shouldFetchFirstPage = !CDFConfig.autoSync;
+      await fetchNodesAndGroups(shouldFetchFirstPage);
+
       await createPlatformEndpoint(store);
 
       if (userInstance) {

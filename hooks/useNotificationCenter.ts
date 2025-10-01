@@ -12,7 +12,7 @@ import { useToast } from '@/hooks/useToast';
 
 export const useNotificationCenter = () => {
 
-  const { store } = useCDF();
+  const { store , fetchNodesAndGroups} = useCDF();
   const toast = useToast();
 
   // States
@@ -109,9 +109,11 @@ export const useNotificationCenter = () => {
             : item
         )
       );
-
-      await store.nodeStore.syncNodeList();
-      await store.groupStore.syncGroupList();
+      /*
+      For notification center, we need to fetch the first page again
+      */
+      const shouldFetchFirstPage = true;
+      fetchNodesAndGroups(shouldFetchFirstPage);
 
       if(request.type === 'group') {
         // make invited group as selected home when user accepts the invitation
