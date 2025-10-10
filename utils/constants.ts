@@ -6,6 +6,7 @@
 
 // CONSTANTS
 export const TOAST_ANIMATION_DURATION = "200ms";
+export const REJECTED_STATUS = "rejected";
 
 // PLATFORMS
 export const PLATFORM_IOS = "ios";
@@ -167,6 +168,7 @@ export const ERROR_CODES = {
 export const ERROR_CODES_MAP = {
   USER_NOT_FOUND: "108052",
   ADDING_SELF_NOT_ALLOWED: "108046",
+  GROUP_NAME_ALREADY_EXISTS_ERROR_CODE: 108007,
 } as const;
 
 // CDF EXTERNAL PROPERTIES
