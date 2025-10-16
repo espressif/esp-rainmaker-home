@@ -5,6 +5,17 @@ All notable changes to the ESP RainMaker Home app will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.1.2]
+
+### Enhanced
+
+**Home Management:**
+
+- Ensure home groups are marked as mutually exclusive if not already.
+- Improved unassigned nodes filtering and assignment logic.
+- Improved candidate home lookup logic.
+- Improved error handling for home creation.
+
 ## [3.1.1]
 
 ### Enhanced
