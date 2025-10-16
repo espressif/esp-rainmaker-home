@@ -17,4 +17,14 @@
     <item name="windowSplashScreenAnimatedIcon">@mipmap/ic_esp_icon_round</item>
     <item name="postSplashScreenTheme">@style/AppTheme</item>
   </style>
+  
+  <!-- Transparent AppCompat theme for Matter Commissioning Activity -->
+  <style name="AppTheme.Transparent" parent="Theme.AppCompat.Light.NoActionBar">
+    <item name="android:windowBackground">@android:color/transparent</item>
+    <item name="android:windowIsTranslucent">true</item>
+    <item name="android:windowAnimationStyle">@android:style/Animation</item>
+    <item name="android:windowNoTitle">true</item>
+    <item name="android:windowActionBar">false</item>
+    <item name="android:colorBackgroundCacheHint">@null</item>
+  </style>
 </resources>

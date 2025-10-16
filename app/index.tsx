@@ -7,6 +7,8 @@
 import "../i18n";
 import { StyleSheet, View } from "react-native";
 import { useCallback, useEffect } from "react";
+// Initialize Matter adapter early
+import "@/adaptors/implementations/ESPMatterAdapter";
 // hooks
 import { useCDF } from "@/hooks/useCDF";
 import { useRouter, usePathname, useFocusEffect } from "expo-router";

@@ -91,7 +91,7 @@ const Header: React.FC<HeaderProps> = ({
       <View style={styles.contentContainer}>
         {showBack && (
           <Pressable {...testProps("button_back")} onPress={goBack} style={styles.backIcon}>
-            <Ionicons name="chevron-back" size={24} color={tokens.colors.bg3} />
+            <Ionicons name="chevron-back" size={24} color={tokens.colors.primary} />
           </Pressable>
         )}
 

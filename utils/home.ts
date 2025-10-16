@@ -13,6 +13,7 @@ import {
   REJECTED_STATUS,
   GROUP_TYPE_HOME,
   NODE_TYPE,
+  FULFILLED_STATUS,
 } from "./constants";
 import { getRandom4DigitString } from "./common";
 
@@ -285,10 +286,12 @@ export const getHomesNeedingMutualExclusiveUpdate = (
  * due to MobX observable and CDF interceptor pattern.
  *
  * @param groups List of primary groups to check and update
+ * @param needManualUpdate Whether to manually update the groups necessary fields after the promise.allSettled is resolved
  * @returns Promise that resolves when all updates complete (success or failure)
  */
 export const ensureHomesAreMutuallyExclusive = async (
-  groups: ESPRMGroup[]
+  groups: ESPRMGroup[],
+  needManualUpdate: boolean = false
 ): Promise<void> => {
   // Find groups that need mutuallyExclusive update
   const homesNeedingUpdate = getHomesNeedingMutualExclusiveUpdate(groups);
@@ -315,6 +318,10 @@ export const ensureHomesAreMutuallyExclusive = async (
         `Failed to update group with id ${homesNeedingUpdate[index].id}`,
         result.reason
       );
+    }
+    if (needManualUpdate && result.status === FULFILLED_STATUS) {
+      // Update the group necessary fields manually
+      homesNeedingUpdate[index].mutuallyExclusive = true;
     }
   });
 };

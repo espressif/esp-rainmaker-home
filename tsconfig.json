@@ -7,7 +7,9 @@
       "@/*": ["./*"]
     },
     "noUnusedParameters": true,
-    "noUnusedLocals": true
+    "noUnusedLocals": true,
+    "module": "ESNext",
+    "moduleResolution": "bundler"
   },
   "include": ["**/*.ts", "**/*.tsx", ".expo/types/**/*.ts", "expo-env.d.ts"]
 }
