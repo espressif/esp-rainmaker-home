@@ -48,16 +48,20 @@ import {
   getHomeNodes,
   createRoomTabs,
   getFilteredDevices,
-  findPrimaryHome,
-  getUnassignedNodes,
-  createHome,
+  findHomeGroup,
   isHome,
+  categorizeGroupsByOwnership,
+  ensureHomesAreMutuallyExclusive,
+  assignUnassignedNodesToHome,
+  createDefaultHomeGroup,
+  getValidHomes,
 } from "@/utils/home";
 
 // types
 import { RoomTab, HomeData } from "@/types/global";
 import { startNodeLocalDiscovery } from "@/utils/localDiscovery";
 import { updateLastSelectedHome } from "@/utils/common";
+import { useToast } from "@/hooks/useToast";
 
 /**
  * HomeScreen component first screen after login
@@ -77,6 +81,7 @@ const HomeScreen = () => {
   } = useCDF();
   const { groupStore, nodeStore, userStore } = store;
   const router = useRouter();
+  const toast = useToast();
 
   const DEFAULT_TABS = [
     { label: t("group.home.commonTab"), id: "common" }, // common devices
@@ -135,12 +140,6 @@ const HomeScreen = () => {
       );
     }, [selectedRoom, rooms, nodeStore?.nodeList, devices]);
 
-  useEffect(() => {
-    if (isStoreInitialized) {
-      initializeHome();
-    }
-  }, [isStoreInitialized]);
-
   useFocusEffect(
     useCallback(() => {
       initializeHome();
@@ -165,26 +164,43 @@ const HomeScreen = () => {
    * Initializes the home screen by preparing user homes, handling device assignments,
    * and updating preferences and UI state.
    *
-   * Flow of operations:
-   * 1. Gathers initial data from stores
-   *    - Last selected home from user preferences
-   *    - Valid homes from group list
-   *    - Nodes not assigned to any home
-   * 2. Ensures a primary home exists
-   *    - Finds existing primary home
-   *    - Creates one if none exists and assigns unassigned nodes
-   * 3. Determines the current home
-   *    - Uses primary home ID
-   *    - Falls back to current home ID or first home in list
-   * 4. Updates user preferences
-   *    - Saves the current home selection if changed
+   * Step-wise Flow:
+   * Step 1: Handle initial setup
+   *          - If no groups exist: create a new default home with all nodes
+   *          - If groups exist: proceed to Steps 2-3
    *
-   * CDF functions and stores used:
-   * - groupStore.groupList
-   * - groupStore.currentHomeId
-   * - nodeStore.nodeList
-   * - userStore.userInfo.customData
-   * - userStore.user.createGroup
+   * Step 2: Ensure all primary home groups have correct mutuallyExclusive flag
+   *          - Categorize groups into primaryGroups and sharedGroups (by isPrimaryUser flag)
+   *          - Update all primary home groups to have mutuallyExclusive: true in parallel
+   *          - CDF interceptor updates groups in place, changes reflected in all references
+   *
+   * Step 3: Assign unassigned nodes to a home
+   *          - Filter valid primary homes (type: "home" && mutuallyExclusive: true)
+   *          - Get unassigned nodes (not in any valid primary home or shared home)
+   *          - Assign to existing home (preferring one named "Home") OR create new home
+   *          - Handle name collision (errorCode 108007) by retrying with random suffix
+   *
+   * Step 4: Determine the current home to display
+   *          - Retrieve lastSelectedHomeId from user preferences (userStore.userInfo.customData)
+   *          - Use findHomeGroup() with preferredId (lastSelectedHomeId) if available
+   *          - Fallback to first valid home if lastSelectedHomeId not found
+   *          - Set currentHomeId in groupStore
+   *
+   * Step 5: Update user preferences
+   *          - Save currentHomeId to user preferences if different from lastSelectedHomeId
+   *
+   * Step 6: Update UI state
+   *          - Filter and set homeList (all valid homes with isHome() check)
+   *          - Set selectedHome for display
+   *
+   * Helper Functions Used:
+   * - createDefaultHomeGroup() - creates new home group with nodes
+   * - categorizeGroupsByOwnership() - separates primary vs shared groups
+   * - ensureHomesAreMutuallyExclusive() - updates home groups in parallel
+   * - isHome() - validates home group (type: "home" && mutuallyExclusive: true)
+   * - assignUnassignedNodesToHome() - assigns nodes to existing/new home
+   * - findHomeGroup() - finds home by ID, name, or first valid
+   * - updateLastSelectedHome() - persists user's home selection
    *
    * @returns {Promise<void>}
    */
@@ -196,47 +212,71 @@ const HomeScreen = () => {
       }
       hasInitialized.current = true;
 
-      // Step 1: Gather initial data from stores
-      // - Get last selected home from user preferences
-      // - Filter valid homes from group list
-      // - Get list of devices not assigned to any home
-      const lastSelectedHomeId =
-        userStore.userInfo?.customData?.lastSelectedHomeId?.value || null;
-      const homeList = groupStore?.groupList.filter(isHome);
-      const unAssignedNodes = getUnassignedNodes(nodeStore?.nodeList, homeList);
+      // Step 1: Handle initial setup
+      // If no groups exist, create a new default home with all nodes
+      if (groupStore?.groupList.length === 0) {
+        const unAssignedNodes = nodeStore?.nodeList.map((node) => node.id);
+        await createDefaultHomeGroup(userStore.user, unAssignedNodes);
+      } else {
+        // Step 2: Ensure all primary home groups have correct mutuallyExclusive flag
+        // Categorize groups by ownership (primary vs shared based on isPrimaryUser flag)
+        const { primaryGroups, sharedGroups: sharedHomes } =
+          categorizeGroupsByOwnership(groupStore?.groupList);
 
-      // Step 2: Ensure primary home exists
-      // If no primary home is found, create one and assign unassigned devices to it
-      let primaryHome = findPrimaryHome(
-        groupStore?.groupList,
-        lastSelectedHomeId
-      );
-      if (!primaryHome) {
-        const primaryHomePayload = createHome(unAssignedNodes) as any;
-        primaryHome =
-          (await userStore.user?.createGroup(primaryHomePayload)) || null;
+        // Update all primary home groups to have mutuallyExclusive: true in parallel
+        // CDF interceptor updates groups in place
+        await ensureHomesAreMutuallyExclusive(primaryGroups);
+
+        // Step 3: Assign unassigned nodes to a home
+        // Filter valid primary homes (type: "home" && mutuallyExclusive: true)
+        // The interceptor has already updated mutuallyExclusive in place
+        const validPrimaryHomes = getValidHomes(primaryGroups);
+
+        // Assign unassigned nodes to existing home (preferring "Home") or create new home
+        // Considers both valid primary homes and shared homes when determining unassigned nodes
+        await assignUnassignedNodesToHome(
+          userStore.user,
+          nodeStore?.nodeList,
+          validPrimaryHomes,
+          sharedHomes
+        );
       }
 
-      // Step 3: Determine current home selection
-      // Use primary home ID if available, fallback to current home ID or first home
-      const currentHomeId = primaryHome?.id || groupStore.currentHomeId;
-      const currentHome =
-        groupStore._groupsByID?.[currentHomeId] || homeList[0];
+      // Step 4: Determine the current home to display
+      // Retrieve lastSelectedHomeId from user preferences (userStore.userInfo.customData)
+      const lastSelectedHomeId =
+        userStore.userInfo?.customData?.lastSelectedHomeId?.value || null;
 
+      // Find home by preferredId (lastSelectedHomeId) or fallback to first valid home
+      const primaryHome = findHomeGroup(groupStore?.groupList, {
+        preferredId: lastSelectedHomeId,
+      });
+
+      const currentHomeId = primaryHome?.id || groupStore.currentHomeId;
+      const currentHome = groupStore._groupsByID?.[currentHomeId];
+
+      // Set current home ID in group store
       groupStore.currentHomeId = currentHome.id;
 
-      // Step 4: Update user preferences
-      // Save the current home selection if it changed
+      // Step 5: Update user preferences
+      // Persist the current home selection if it changed
       if (lastSelectedHomeId !== currentHome.id) {
         updateLastSelectedHome(userStore, currentHome.id);
       }
 
-      // Step 5: Update UI state
-      // Set the home list and selected home in component state
-      setHomeList(homeList as ESPRMGroup[]);
-      setSelectedHome(currentHome);
+      // Step 6: Update UI state
+      // Filter valid homes and update component state
+      const updatedHomeList = getValidHomes(groupStore?.groupList);
+      setHomeList(updatedHomeList as ESPRMGroup[]);
+      // Spread to create new reference and trigger memoization recomputation
+      // CDF interceptor has already updated the group object in place
+      setSelectedHome({ ...currentHome });
     } catch (error) {
       console.error("Failed to initialize home:", error);
+      toast.showError(
+        t("group.errors.failedToInitializeHome"),
+        t("layout.shared.manualRefreshHelperText")
+      );
     } finally {
       // Reset loading and initialization states
       setIsLoading(false);

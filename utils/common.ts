@@ -252,3 +252,14 @@ export const updateLastSelectedHome = async (userStore: CDF["userStore"], lastSe
     console.error("Failed to update last selected home:", error);
   }
 }
+
+/**
+ * Generates a 4-character random ID
+ * Uses numbers and pads with '0' to make it 4 characters
+ * @returns {string} 4-character identifier [0000-9999]
+ */
+export const getRandom4DigitString = () => {
+  return Math.floor(Math.random() * 10000)
+  .toString()
+  .padStart(4, "0");
+};
