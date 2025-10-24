@@ -1,7 +1,7 @@
 {
   "name": "NOVA",
   "main": "expo-router/entry",
-  "version": "3.1.1",
+  "version": "3.1.2",
   "scripts": {
     "start": "expo start",
     "android": "expo run:android",
@@ -12,7 +12,7 @@
   },
   "dependencies": {
     "@espressif/rainmaker-base-cdf": "1.2.1",
-    "@espressif/rainmaker-base-sdk": "2.0.4",
+    "@espressif/rainmaker-base-sdk": "2.0.5",
     "@expo/vector-icons": "^14.0.2",
     "@react-native-async-storage/async-storage": "^2.1.2",
     "@react-native-community/checkbox": "^0.5.17",

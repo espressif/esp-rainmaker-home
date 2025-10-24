@@ -1,8 +1,19 @@
-import { ESPRMGroup, ESPRMNode, ESPRMDevice, CreateGroupRequest } from "@espressif/rainmaker-base-sdk";
+import {
+  ESPRMGroup,
+  ESPRMNode,
+  ESPRMDevice,
+  CreateGroupRequest,
+  ESPRMUser,
+} from "@espressif/rainmaker-base-sdk";
 import { RoomTab } from "@/types/global";
 import { transformNodesToDevices } from "./device";
-import { DEFAULT_HOME_GROUP_NAME, GROUP_TYPE_HOME } from "./constants";
-
+import {
+  DEFAULT_HOME_GROUP_NAME,
+  ERROR_CODES_MAP,
+  REJECTED_STATUS,
+  GROUP_TYPE_HOME,
+} from "./constants";
+import { getRandom4DigitString } from "./common";
 
 /**
  * Validates and sanitizes home data
@@ -107,20 +118,47 @@ export const isHome = (group: ESPRMGroup): boolean => {
 };
 
 /**
- * Finds the primary home from a list of groups
- * @param groups List of all groups
- * @returns The primary home or null if none found
+ * Finds a home group based on different selection strategies
+ * @param groups List of all groups to search through
+ * @param options Selection options
+ * @param options.preferredId Optional ID to prioritize (e.g., lastSelectedHomeId)
+ * @param options.preferredName Optional name to prioritize (e.g., "Home")
+ * @returns The matching home group or null if none found
+ *
+ * Priority order:
+ * 1. Group with preferredId (if provided)
+ * 2. Group with preferredName (case-insensitive, if provided)
+ * 3. First valid home group (type: "home" && mutuallyExclusive: true)
  */
-export const findPrimaryHome = (groups: ESPRMGroup[], lastSelectedHomeId: string | null): ESPRMGroup | null => {
-
-    // First, look for a group with the id of lastSelectedHomeId
-    const lastSelectedHomeInfo = groups.find(group => group.id === lastSelectedHomeId);
-
-    if(lastSelectedHomeInfo) {
-        return lastSelectedHomeInfo;
+export const findHomeGroup = (
+  groups: ESPRMGroup[],
+  options?: {
+    preferredId?: string | null;
+    preferredName?: string | null;
+  }
+): ESPRMGroup | null => {
+  // Priority 1: Find by preferred ID (e.g., lastSelectedHomeId)
+  if (options?.preferredId) {
+    const groupById = groups.find((group) => group.id === options.preferredId);
+    if (groupById) {
+      return groupById;
     }
+  }
 
-    return groups.find(isHome) || null;
+  // Priority 2: Find by preferred name (case-insensitive, e.g., "Home")
+  if (options?.preferredName) {
+    const groupByName = groups.find(
+      (group) =>
+        group.name.trim().toLowerCase() ===
+        options.preferredName?.trim().toLowerCase()
+    );
+    if (groupByName) {
+      return groupByName;
+    }
+  }
+
+  // Priority 3: Fallback to first valid home
+  return groups.find(isHome) || null;
 };
 
 /**
@@ -128,7 +166,7 @@ export const findPrimaryHome = (groups: ESPRMGroup[], lastSelectedHomeId: string
  * @param nodeIds List of node IDs to include in the home
  * @returns New home configuration
  */
-export const createHome = (nodeIds: string[] = []): Partial<CreateGroupRequest> => {
+export const createHome = (nodeIds: string[] = []): CreateGroupRequest => {
     return {
         name: DEFAULT_HOME_GROUP_NAME,
         type: GROUP_TYPE_HOME,
@@ -179,4 +217,184 @@ export const getUnassignedNodes = (
  */
 export const getValidHomes = (groups: ESPRMGroup[]): ESPRMGroup[] => {
     return groups.filter(isHome);
+};
+
+/**
+ * Categorizes groups by ownership - primary user groups vs shared groups
+ * @param groups List of all groups
+ * @returns Object containing primaryGroups and sharedGroups arrays
+ */
+export const categorizeGroupsByOwnership = (
+  groups: ESPRMGroup[]
+): {
+  primaryGroups: ESPRMGroup[];
+  sharedGroups: ESPRMGroup[];
+} => {
+  return groups.reduce(
+    (acc, group) => {
+      if (group.isPrimaryUser === true) {
+        acc.primaryGroups.push(group);
+      } else {
+        acc.sharedGroups.push(group);
+      }
+      return acc;
+    },
+    { primaryGroups: [], sharedGroups: [] } as {
+      primaryGroups: ESPRMGroup[];
+      sharedGroups: ESPRMGroup[];
+    }
+  );
+};
+
+/**
+ * Finds home groups that need mutuallyExclusive flag updated
+ * Identifies groups with type "home" but mutuallyExclusive set to false
+ *
+ * @param groups List of groups to check
+ * @returns Array of groups that need mutuallyExclusive updated to true
+ */
+export const getHomesNeedingMutualExclusiveUpdate = (
+  groups: ESPRMGroup[]
+): ESPRMGroup[] => {
+  return groups.filter(
+    (group) =>
+      group.type === GROUP_TYPE_HOME && group.mutuallyExclusive === false
+  );
+};
+
+/**
+ * Ensures all home groups have mutuallyExclusive flag set to true
+ *
+ * This function:
+ * - Identifies home groups with mutuallyExclusive: false
+ * - Updates them in parallel using Promise.allSettled for optimal performance
+ * - Logs failures without throwing (graceful degradation)
+ * - Uses CDF interceptor pattern which updates group objects in place
+ *
+ * Note: Updates are reflected immediately in all references to these groups
+ * due to MobX observable and CDF interceptor pattern.
+ *
+ * @param groups List of primary groups to check and update
+ * @returns Promise that resolves when all updates complete (success or failure)
+ */
+export const ensureHomesAreMutuallyExclusive = async (
+  groups: ESPRMGroup[]
+): Promise<void> => {
+  // Find groups that need mutuallyExclusive update
+  const homesNeedingUpdate = getHomesNeedingMutualExclusiveUpdate(groups);
+
+  if (homesNeedingUpdate.length === 0) {
+    return;
+  }
+
+  // Update all groups in parallel using Promise.allSettled
+  // CDF interceptor pattern updates the group objects in place, so changes are
+  // automatically reflected in the original groups array references
+  const updateResults = await Promise.allSettled(
+    homesNeedingUpdate.map((group) =>
+      group?.updateGroupInfo({
+        mutuallyExclusive: true,
+      })
+    )
+  );
+
+  // Log any update failures
+  updateResults.forEach((result, index) => {
+    if (result.status === REJECTED_STATUS) {
+      console.error(
+        `Failed to update group with id ${homesNeedingUpdate[index].id}`,
+        result.reason
+      );
+    }
+  });
+};
+
+/**
+ * Creates and submits a new home group with the given nodes
+ *
+ * Creates a default home group with:
+ * - Name: "Home" (or "Home_XXXX" if withRandomSuffix is true)
+ * - Type: "home"
+ * - MutuallyExclusive: true
+ * - Includes all specified node IDs
+ *
+ * @param user The user object to create the group with
+ * @param nodeIds Array of node IDs to include in the home
+ * @param withRandomSuffix Whether to append a random 4-digit suffix to avoid name collisions
+ * @returns Promise that resolves when the group is created
+ */
+export const createDefaultHomeGroup = async (
+  user: ESPRMUser | null,
+  nodeIds: string[],
+  withRandomSuffix: boolean = false
+): Promise<void> => {
+  const newHomePayload = createHome(nodeIds);
+  if (withRandomSuffix) {
+    newHomePayload.name = `${DEFAULT_HOME_GROUP_NAME}_${getRandom4DigitString()}`;
+  }
+  await user?.createGroup(newHomePayload);
+};
+
+/**
+ * Ensures all unassigned nodes are added to a home group
+ *
+ * This function handles the complete flow of node assignment:
+ * 1. Identifies unassigned nodes (not in any valid primary home or shared home)
+ * 2. If no unassigned nodes exist, returns early
+ * 3. Finds candidate home group (preferring one named "Home")
+ * 4. If candidate exists: adds nodes to it
+ * 5. If no candidate: creates new home with nodes
+ * 6. Handles name collision (errorCode 108007) by retrying with random suffix
+ *
+ * @param user The user object to create groups with
+ * @param nodeList List of all nodes in the account
+ * @param validPrimaryHomes List of valid primary home groups (type: "home" && mutuallyExclusive: true)
+ * @param sharedHomes List of shared home groups (isPrimaryUser: false)
+ * @returns Promise that resolves when all nodes are assigned to a home
+ * @throws Re-throws errors other than name collision (errorCode 108007)
+ */
+export const assignUnassignedNodesToHome = async (
+  user: ESPRMUser | null,
+  nodeList: ESPRMNode[],
+  validPrimaryHomes: ESPRMGroup[],
+  sharedHomes: ESPRMGroup[]
+): Promise<void> => {
+  // Get nodes that are not assigned to any valid primary home or shared home
+  const unAssignedNodes: string[] = getUnassignedNodes(nodeList, [
+    ...validPrimaryHomes,
+    ...sharedHomes,
+  ]);
+
+  // Find a candidate group to add nodes to (preferring one named "Home")
+  const candidateGroup = findHomeGroup(validPrimaryHomes, {
+    preferredName: DEFAULT_HOME_GROUP_NAME,
+  });
+
+  if (candidateGroup) {
+    // If candidate group exists, add unassigned nodes to it if any
+    if (unAssignedNodes.length > 0) {
+      await candidateGroup.addNodes(unAssignedNodes);
+    }
+  } else {
+    // If no candidate group found, create a new home with the unassigned nodes
+    // Create a new home even if unassigned nodes are empty 
+    // to ensure at least one valid home exists
+    try {
+      await createDefaultHomeGroup(user, unAssignedNodes);
+    } catch (error: any) {
+      console.error("Failed to create home:", error);
+      // Fallback: If failed due to name already exists (errorCode 108007),
+      // create home with a randomized name to ensure at least one valid home exists
+      if (
+        error.errorCode &&
+        error.errorCode === ERROR_CODES_MAP.GROUP_NAME_ALREADY_EXISTS_ERROR_CODE
+      ) {
+        const withRandomSuffix = true;
+        await createDefaultHomeGroup(user, unAssignedNodes, withRandomSuffix);
+      } else {
+        // Re-throw other errors
+        throw error;
+      }
+    }
+  }
 };

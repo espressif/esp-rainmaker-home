@@ -108,7 +108,8 @@
       "refresh": "Refresh",
       "continue": "Continue",
       "copiedToClipboard": "Copied to clipboard",
-      "copyFailed": "Failed to copy"
+      "copyFailed": "Failed to copy",
+      "manualRefreshHelperText": "Please try refreshing the page."
     }
   },
   "auth": {
@@ -377,6 +378,7 @@
       "failedToRefreshHomes": "Failed to refresh homes",
       "failedToRemoveRoom": "Failed to remove room",
       "failedToCreateHome": "Failed to create home",
+      "failedToInitializeHome": "Failed to initialize home",
       "fallback": "Something went wrong. Please try again later.",
       "errorGettingSharedUsers": "Error getting shared users",
       "errorRemovingUser": "Failed to remove user sharing",
