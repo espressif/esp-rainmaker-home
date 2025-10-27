@@ -55,6 +55,7 @@ import {
   assignUnassignedNodesToHome,
   createDefaultHomeGroup,
   getValidHomes,
+  getUnassignedNodes,
 } from "@/utils/home";
 
 // types
@@ -194,6 +195,7 @@ const HomeScreen = () => {
    *          - Set selectedHome for display
    *
    * Helper Functions Used:
+   * - getUnassignedNodes() - gets nodes that are not assigned to any passed groups and not of type pure_matter or rainmaker_matter
    * - createDefaultHomeGroup() - creates new home group with nodes
    * - categorizeGroupsByOwnership() - separates primary vs shared groups
    * - ensureHomesAreMutuallyExclusive() - updates home groups in parallel
@@ -215,7 +217,7 @@ const HomeScreen = () => {
       // Step 1: Handle initial setup
       // If no groups exist, create a new default home with all nodes
       if (groupStore?.groupList.length === 0) {
-        const unAssignedNodes = nodeStore?.nodeList.map((node) => node.id);
+        const unAssignedNodes = getUnassignedNodes(nodeStore?.nodeList, []);
         await createDefaultHomeGroup(userStore.user, unAssignedNodes);
       } else {
         // Step 2: Ensure all primary home groups have correct mutuallyExclusive flag

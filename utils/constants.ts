@@ -178,3 +178,8 @@ export const CDF_EXTERNAL_PROPERTIES = {
 
 export const ESPRM_PARAM_WRITE_PROPERTY = "write";
 export const SCHEDULE_DAYS = ["M", "T", "W", "Th", "F", "S", "Su"];
+
+export const NODE_TYPE = {
+  PURE_MATTER: "pure_matter",
+  RAINMAKER_MATTER: "rainmaker_matter",
+};
