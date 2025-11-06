@@ -25,6 +25,7 @@ import { Input, Button, ScreenWrapper, Logo, Typo, Header } from "@/components";
 import { Checkbox } from "react-native-paper";
 // expo
 import * as WebBrowser from "expo-web-browser";
+import { testProps } from "@/utils/testProps";
 
 import APP_CONFIG from "@/app.json";
 import { validateEmail } from "@/utils/validations";
@@ -205,12 +206,12 @@ export default function SignupScreen() {
 
   return (
     <>
-      <Header showBack label={t("auth.signup.title")} />
-      <ScreenWrapper style={globalStyles.screenWrapper}>
-        <View style={globalStyles.scrollViewContent}>
-          <Logo />
+      <Header showBack label={t("auth.signup.title")} qaId="header_signup" />
+      <ScreenWrapper style={globalStyles.screenWrapper} qaId="screen_wrapper_signup">
+        <View {...testProps("view_signup")} style={globalStyles.scrollViewContent}>
+          <Logo qaId="logo_signup" />
 
-          <View style={globalStyles.inputContainer}>
+          <View {...testProps("view_input_signup")} style={globalStyles.inputContainer}>
             {/* Email Input */}
             <Input
               icon="mail-open"
@@ -220,6 +221,7 @@ export default function SignupScreen() {
               validateOnChange={true}
               debounceDelay={500}
               inputMode="email"
+              qaId="email"
             />
 
             {/* Password Input */}
@@ -231,6 +233,7 @@ export default function SignupScreen() {
               validator={passwordValidator}
               validateOnChange={true}
               debounceDelay={500}
+              qaId="password"
             />
 
             {/* Confirm Password Input */}
@@ -242,24 +245,26 @@ export default function SignupScreen() {
               validator={confirmPasswordValidator}
               validateOnChange={true}
               debounceDelay={500}
+              qaId="confirm_password"
             />
 
             {/* Consent Section */}
-            <View style={styles.consentContainer}>
+            <View {...testProps("view_consent")} style={styles.consentContainer}>
               <Checkbox.Android
                 status={consentChecked ? "checked" : "unchecked"}
                 onPress={() => setConsentChecked(!consentChecked)}
                 color={tokens.colors.primary}
                 uncheckedColor={tokens.colors.gray}
+                {...testProps("checkbox_terms_consent")}
               />
-              <View style={styles.consentTextContainer}>
-                <Typo style={styles.consentText}>
+              <View {...testProps("view_consent_text")} style={styles.consentTextContainer}>
+                <Typo style={styles.consentText} qaId="typo_consent">
                   {t("auth.signup.consentText")}{" "}
-                  <Typo style={styles.linkText} onPress={showTerms}>
+                  <Typo style={styles.linkText} onPress={showTerms} qaId="typo_terms_of_use">
                     {t("layout.shared.termsOfUse")}
                   </Typo>{" "}
                   {t("auth.signup.consentAnd")}{" "}
-                  <Typo style={styles.linkText} onPress={showPrivacy}>
+                  <Typo style={styles.linkText} onPress={showPrivacy} qaId="typo_privacy_policy">
                     {t("layout.shared.privacyPolicy")}
                   </Typo>
                 </Typo>
@@ -282,17 +287,18 @@ export default function SignupScreen() {
               onPress={signup}
               style={globalStyles.signInButton}
               isLoading={isLoading}
+              qaId="button_signup"
             />
           </View>
 
-          <TouchableOpacity onPress={() => router.dismissTo("/(auth)/Login")}>
-            <Text style={globalStyles.linkText}>
+          <TouchableOpacity {...testProps("button_signin")} onPress={() => router.dismissTo("/(auth)/Login")}>
+            <Text {...testProps("text_navigate_to_signin")} style={globalStyles.linkText}>
               {t("auth.signup.navigateToSignIn")}
             </Text>
           </TouchableOpacity>
         </View>
         {/* App Version Text */}
-        <Text style={globalStyles.versionText}>
+        <Text {...testProps("text_app_version_signup")} style={globalStyles.versionText}>
           {t("layout.shared.version")} {appVersion}
         </Text>
       </ScreenWrapper>

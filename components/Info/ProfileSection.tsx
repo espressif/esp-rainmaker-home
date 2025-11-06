@@ -15,6 +15,7 @@ import { ChevronRight } from "lucide-react-native";
 import { tokens } from "@/theme/tokens";
 import { globalStyles } from "@/theme/globalStyleSheet";
 
+import { testProps } from "../../utils/testProps";
 // Types
 interface UserInfo {
   /** User's display name */
@@ -37,6 +38,8 @@ interface ProfileSectionProps {
   onPress: () => void;
   /** Debug information */
   debugInfo?: DebugInfo;
+  /** QA automation identifier */
+  qaId?: string;
 }
 
 const getAvatarLetter = (userInfo?: UserInfo): string => {
@@ -66,9 +69,10 @@ const ProfileSection: React.FC<ProfileSectionProps> = ({
   userInfo,
   onPress,
   debugInfo,
+  qaId,
 }) => {
   return (
-    <Pressable
+    <Pressable {...(qaId ? testProps(qaId) : {})}
       onPress={onPress}
       style={[globalStyles.settingsSection, styles.profileContainer]}
     >

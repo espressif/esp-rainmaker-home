@@ -77,7 +77,7 @@ const index = () => {
 
   return (
     <View style={styles.splashScreen}>
-      <Logo />
+      <Logo qaId="logo_index" />
     </View>
   );
 };

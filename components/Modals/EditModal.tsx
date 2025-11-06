@@ -15,6 +15,7 @@ import Input from "../Form/Input";
 import { tokens } from "@/theme/tokens";
 import { globalStyles } from "@/theme/globalStyleSheet";
 
+import { testProps } from "../../utils/testProps";
 // Types
 interface EditModalProps {
   /** Whether the modal is visible */
@@ -35,6 +36,8 @@ interface EditModalProps {
   maxLength?: number;
   /** Show loading spinner */
   isLoading?: boolean;
+  /** QA automation identifier */
+  qaId?: string;
 }
 
 /**
@@ -57,10 +60,12 @@ const EditModal: React.FC<EditModalProps> = ({
   placeholder,
   maxLength,
   isLoading = false,
+  qaId,
 }) => {
   // Render helpers
   const renderConfirmButton = () => (
     <Button
+      qaId="button_confirm"
       label="Confirm"
       onPress={onConfirm}
       disabled={isLoading}
@@ -72,6 +77,7 @@ const EditModal: React.FC<EditModalProps> = ({
 
   const renderCancelButton = () => (
     <Button
+      qaId="button_cancel"
       label="Cancel"
       onPress={onCancel}
       disabled={isLoading}
@@ -82,12 +88,13 @@ const EditModal: React.FC<EditModalProps> = ({
   );
 
   return (
-    <Modal visible={visible} transparent animationType="fade">
-      <View style={[globalStyles.modalOverlay]}>
+    <Modal {...(qaId ? testProps(`edit_modal_${qaId}`) : {})}  visible={visible} transparent animationType="fade">
+      <View style={[globalStyles.modalOverlay]} {...(qaId ? testProps(`view_${qaId}`) : {})}>
         <View style={[globalStyles.modalContent]}>
-          <Text style={[globalStyles.modalTitle]}>{title}</Text>
+          <Text {...(qaId ? testProps(`text_modal_title_${qaId}`) : {})} style={[globalStyles.modalTitle]}>{title}</Text>
 
           <Input
+            qaId={qaId}
             initialValue={value}
             onFieldChange={(value) => onValueChange(value)}
             placeholder={placeholder}

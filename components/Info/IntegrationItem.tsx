@@ -17,6 +17,7 @@ import {
 import { tokens } from "@/theme/tokens";
 import { globalStyles } from "@/theme/globalStyleSheet";
 
+import { testProps } from "../../utils/testProps";
 // Types
 interface IntegrationItemProps {
   /** Icon source for the integration */
@@ -25,6 +26,8 @@ interface IntegrationItemProps {
   title: string;
   /** Press handler */
   onPress: () => void;
+  /** QA automation identifier */
+  qaId?: string;
 }
 
 /**
@@ -41,9 +44,10 @@ const IntegrationItem: React.FC<IntegrationItemProps> = ({
   icon,
   title,
   onPress,
+  qaId,
 }) => {
   return (
-    <Pressable style={styles.container} onPress={onPress}>
+    <Pressable {...(qaId ? testProps(qaId) : {})}  style={styles.container} onPress={onPress}>
       <Image source={icon} style={styles.icon} resizeMode="contain" />
       <Text style={[globalStyles.fontRegular, styles.text]}>{title}</Text>
     </Pressable>

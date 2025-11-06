@@ -27,6 +27,9 @@ import {
   SettingsSection,
   DangerButton,
 } from "@/components";
+
+// Utils
+import { testProps } from "@/utils/testProps";
 import { CDF_EXTERNAL_PROPERTIES } from "@/utils/constants";
 
 /**
@@ -65,12 +68,12 @@ const AccountSecurity: React.FC = () => {
   // Render
   return (
     <>
-      <Header label={t("user.accountSecurity.title")} showBack={true} />
+      <Header label={t("user.accountSecurity.title")} showBack={true} qaId="header_account_security" />
       <ScreenWrapper
         style={{
           ...globalStyles.container,
-          backgroundColor: tokens.colors.bg5,
-        }}
+          backgroundColor: tokens.colors.bg5
+        }} qaId="screen_wrapper_account_security"
       >
         {!isThirdPartyLogin && (
           <SettingsSection>
@@ -80,15 +83,17 @@ const AccountSecurity: React.FC = () => {
               type="navigation"
               onPress={handleChangePassword}
               showSeparator={false}
+              qaId="change_password"
             />
           </SettingsSection>
         )}
 
-        <View style={styles.deleteSection}>
+        <View {...testProps("view_account_security")} style={styles.deleteSection}>
           <DangerButton
             icon={<Trash2 size={20} color={tokens.colors.red} />}
             title={t("user.accountSecurity.deleteAccount")}
             onPress={handleDeleteAccount}
+            qaId="delete_account"
           />
         </View>
       </ScreenWrapper>

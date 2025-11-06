@@ -25,6 +25,7 @@ import { useToast } from "@/hooks/useToast";
 
 // Constants
 import { SUCESS } from "@/utils/constants";
+import { testProps } from "@/utils/testProps";
 
 /**
  * DeleteAccount
@@ -159,12 +160,13 @@ const DeleteAccount: React.FC = () => {
 
   // Render helpers
   const renderVerificationContent = () => (
-    <View style={[globalStyles.flex1, globalStyles.itemCenter]}>
-      <View style={[globalStyles.inputContainer, styles.verificationContent]}>
-        <Text style={[globalStyles.heading, globalStyles.textCenter]}>
+    <View {...testProps("view_verification_delete_account")} style={[globalStyles.flex1, globalStyles.itemCenter]}>
+      <View {...testProps("view_content_delete_account")} style={[globalStyles.inputContainer, styles.verificationContent]}>
+        <Text {...testProps("text_title_delete_account")} style={[globalStyles.heading, globalStyles.textCenter]}>
           {t("user.deleteAccount.verificationCodeSent")}
         </Text>
         <Text
+          {...testProps("text_subtitle_delete_account")}
           style={[
             globalStyles.subHeading,
             globalStyles.textCenter,
@@ -176,7 +178,7 @@ const DeleteAccount: React.FC = () => {
           })}
         </Text>
 
-        <View style={globalStyles.inputWrapper}>
+        <View {...testProps("view_input_delete_account")} style={globalStyles.inputWrapper}>
           {/* code input */}
           <Input
             initialValue={code}
@@ -188,10 +190,11 @@ const DeleteAccount: React.FC = () => {
             keyboardType="numeric"
             maxLength={6}
             autoFocus
+            qaId="delete_account"
           />
         </View>
 
-        <View style={[globalStyles.btnWrap, styles.buttonContainer]}>
+        <View {...testProps("view_buttons_delete_account")} style={[globalStyles.btnWrap, styles.buttonContainer]}>
           {/* verify button */}
           <Button
             label={t("user.deleteAccount.verifyButton")}
@@ -199,14 +202,17 @@ const DeleteAccount: React.FC = () => {
             style={globalStyles.buttonPrimary}
             disabled={!isCodeValid || !code || code.length !== 6 || isLoading}
             isLoading={isLoading}
+            qaId="button_verify_delete_account"
           />
           {/* resend code button */}
           <TouchableOpacity
+            {...testProps("button_resend_delete_account")}
             onPress={handleProceed}
             disabled={countdown > 0 || isLoading}
             style={styles.resendButton}
           >
             <Text
+              {...testProps("text_counter_delete_account")}
               style={[
                 globalStyles.linkText,
                 countdown > 0 && globalStyles.btnDisabled,
@@ -228,9 +234,10 @@ const DeleteAccount: React.FC = () => {
    * @returns {React.ReactNode} - The initial content
    */
   const renderInitialContent = () => (
-    <View style={[globalStyles.flex1, globalStyles.itemCenter]}>
-      <View style={styles.contentContainer}>
+    <View {...testProps("view_initial_delete_account")} style={[globalStyles.flex1, globalStyles.itemCenter]}>
+      <View {...testProps("view_notice_delete_account")} style={styles.contentContainer}>
         <Text
+          {...testProps("text_title_notice")}
           style={[
             globalStyles.heading,
             globalStyles.textCenter,
@@ -240,6 +247,7 @@ const DeleteAccount: React.FC = () => {
           ⚠️ {t("user.deleteAccount.notice")}
         </Text>
         <Text
+          {...testProps("text_subtitle_notice")}
           style={[
             globalStyles.subHeading,
             globalStyles.textCenter,
@@ -248,13 +256,14 @@ const DeleteAccount: React.FC = () => {
         >
           {t("user.deleteAccount.description")}
         </Text>
-        <View style={styles.buttonContainer}>
+        <View {...testProps("view_action_delete_account")} style={styles.buttonContainer}>
           <Button
             label={t("user.deleteAccount.title")}
             onPress={handleProceed}
             style={globalStyles.buttonDanger}
             isLoading={isLoading}
             textStyle={globalStyles.buttonTextDanger}
+            qaId="button_delete_account"
           />
         </View>
       </View>
@@ -271,8 +280,9 @@ const DeleteAccount: React.FC = () => {
             : t("user.deleteAccount.title")
         }
         showBack
+        qaId="header_delete_account"
       />
-      <ScreenWrapper style={globalStyles.screenWrapper}>
+      <ScreenWrapper style={globalStyles.screenWrapper} qaId="screen_wrapper_delete_account">
         {showVerification
           ? renderVerificationContent()
           : renderInitialContent()}

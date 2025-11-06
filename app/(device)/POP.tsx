@@ -27,6 +27,7 @@ import { ScreenWrapper, Header, Input, Button } from "@/components";
 import { provisionAdapter } from "@/adaptors/implementations/ESPProvAdapter";
 
 import POPCODE_Image from "@/assets/images/popcode.png";
+import { testProps } from "@/utils/testProps";
 
 /**
  * POPScreen component for device Proof of Possession code input.
@@ -100,32 +101,34 @@ const POPScreen = () => {
 
   return (
     <>
-      <Header showBack label={t("device.pop.title")} />
+      <Header showBack label={t("device.pop.title")} qaId="header_pop" />
       <ScreenWrapper
         style={{
           ...globalStyles.screenWrapper,
           backgroundColor: tokens.colors.bg5,
-        }}
+        }} qaId="screen_wrapper_pop"
       >
-        <ScrollView contentContainerStyle={globalStyles.scrollViewContent}>
-          <View style={styles.imageContainer}>
+        <ScrollView {...testProps("scroll_pop")} contentContainerStyle={globalStyles.scrollViewContent}>
+          <View {...testProps("view_image_pop")} style={styles.imageContainer}>
             <Image
+              {...testProps("image_pop")}
               source={POPCODE_Image}
               style={styles.popcodeImage}
               resizeMode="contain"
             />
           </View>
 
-          <Text style={[globalStyles.heading, globalStyles.verificationTitle]}>
+          <Text {...testProps("text_title_pop")} style={[globalStyles.heading, globalStyles.verificationTitle]}>
             {t("device.pop.enterCode")}
           </Text>
           <Text
+            {...testProps("text_subtitle_pop")}
             style={[globalStyles.subHeading, globalStyles.verificationSubtitle]}
           >
             {t("device.pop.description")}
           </Text>
 
-          <View style={globalStyles.verificationContainer}>
+          <View {...testProps("view_verification_pop")} style={globalStyles.verificationContainer}>
             {/* POP Code Input */}
             <Input
               initialValue={popCode}
@@ -136,6 +139,7 @@ const POPScreen = () => {
               ]}
               placeholder={t("device.pop.placeholder")}
               maxLength={8}
+              qaId="pop_code"
             />
           </View>
 
@@ -150,6 +154,7 @@ const POPScreen = () => {
             }}
             disabled={isLoading}
             isLoading={isLoading}
+            qaId="button_verify_pop"
           />
         </ScrollView>
       </ScreenWrapper>

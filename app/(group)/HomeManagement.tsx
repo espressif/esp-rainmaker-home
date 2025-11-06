@@ -41,6 +41,7 @@ import { ChevronRight, Plus } from "lucide-react-native";
 
 // Components
 import { Header, ScreenWrapper, InputDialog } from "@/components";
+import { testProps } from "@/utils/testProps";
 
 /**
  * HomeManagement Component
@@ -208,13 +209,14 @@ const HomeManagement = () => {
             pathname: "/(group)/Settings",
             params: { id: home.id },
           } as any)
-        }
+        } {...testProps("button_home_management")}
       >
-        <View>
-          <Text style={[globalStyles.fontRegular, globalStyles.fontMd]}>
+        <View {...testProps("view_home_management")}>
+          <Text {...testProps("text_name_home")} style={[globalStyles.fontRegular, globalStyles.fontMd]}>
             {home.name}
           </Text>
           <Text
+            {...testProps("text_description_home")}
             style={[
               globalStyles.fontRegular,
               globalStyles.fontSm,
@@ -237,10 +239,10 @@ const HomeManagement = () => {
         label={t("group.homeManagement.title")}
         showBack={true}
         rightSlot={
-          <Pressable onPress={() => setShowDialog(true)}>
+          <Pressable {...testProps("button_add_home")} onPress={() => setShowDialog(true)}>
             <Plus color={tokens.colors.primary} />
           </Pressable>
-        }
+        } qaId="header_home_management"
       />
       <ScreenWrapper style={styles.screenWrapper}>
         <View style={styles.homeHeader}>
@@ -269,6 +271,7 @@ const HomeManagement = () => {
       </ScreenWrapper>
 
       <InputDialog
+        qaId="add_home"
         open={showDialog}
         title={t("group.homeManagement.addNewHomeInputDialogTitle")}
         inputPlaceholder={t(

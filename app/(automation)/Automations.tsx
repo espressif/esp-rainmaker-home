@@ -36,6 +36,9 @@ import {
   AutomationCard,
   AutomationMenuBottomSheet,
 } from "@/components";
+
+// Utils
+import { testProps } from "@/utils/testProps";
 // CDF
 import { ESPAPIError, ESPAutomation } from "@espressif/rainmaker-base-cdf";
 
@@ -313,7 +316,7 @@ const Automations = observer(() => {
     const hasDevices = nodeList.length > 0;
 
     return (
-      <View style={[globalStyles.automationEmptyStateContainer]}>
+      <View {...testProps("view_empty_automations")} style={[globalStyles.automationEmptyStateContainer]}>
         {isLoading ? (
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color={tokens.colors.primary} />
@@ -323,12 +326,12 @@ const Automations = observer(() => {
             <View style={globalStyles.automationEmptyStateIconContainerTop}>
               <Zap size={35} color={tokens.colors.primary} />
             </View>
-            <Text style={globalStyles.emptyStateTitle}>
+            <Text {...testProps("text_title_empty")} style={globalStyles.emptyStateTitle}>
               {hasDevices
                 ? t("automation.automations.noAutomationsYet")
                 : t("automation.automations.noDevicesForAutomation")}
             </Text>
-            <Text style={globalStyles.emptyStateDescription}>
+            <Text {...testProps("text_description_empty")} style={globalStyles.emptyStateDescription}>
               {hasDevices
                 ? t("automation.automations.noAutomationsYetDescription")
                 : t("automation.automations.noDevicesForAutomationDescription")}
@@ -356,6 +359,7 @@ const Automations = observer(() => {
                 handleAutomationToggle(automation, enabled)
               }
               toggleLoading={toggleLoadingStates[automationId] || false}
+              qaId={`card_automation`}
             />
           );
         })}
@@ -374,6 +378,7 @@ const Automations = observer(() => {
         rightSlot={
           showHeaderPlusButton ? (
             <Plus
+              {...testProps("button_add_automation_header")}
               size={24}
               color={tokens.colors.primary}
               onPress={handleAddAutomation}
@@ -383,6 +388,7 @@ const Automations = observer(() => {
       />
       <ScreenWrapper style={styles.container}>
         <ScrollView
+          {...testProps("scroll_automations")}
           style={styles.scrollView}
           showsVerticalScrollIndicator={false}
           contentContainerStyle={{
@@ -418,6 +424,7 @@ const Automations = observer(() => {
                   : () => router.push("/(device)/AddDeviceSelection")
               }
               style={globalStyles.footerAddButton}
+              qaId="button_add_automation"
             />
           </View>
         )}
@@ -434,6 +441,7 @@ const Automations = observer(() => {
 
       {/* Automation Name Input Dialog */}
       <InputDialog
+        qaId="create_automation"
         open={isAutomationNameDialogVisible}
         title={t("automation.automations.createAutomation")}
         inputPlaceholder={t("automation.automations.automationNamePlaceholder")}

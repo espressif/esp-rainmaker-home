@@ -7,6 +7,7 @@
 import { useState, useCallback, useMemo, useEffect, useRef } from "react";
 import {
   StyleSheet,
+  View,
   FlatList,
   RefreshControl,
   ActivityIndicator,
@@ -42,6 +43,7 @@ import {
   HomeTooltip,
 } from "@/components";
 // utils
+import { testProps } from "@/utils/testProps";
 import { transformNodesToDevices } from "@/utils/device";
 import {
   validateHomeData,
@@ -357,15 +359,17 @@ const HomeScreen = () => {
         rightSlot={
           <>
             <Plus
+              {...testProps("button_add_device_header")}
               size={24}
               color={tokens.colors.primary}
               onPress={() => router.push("/(device)/AddDeviceSelection")}
             />
           </>
         }
+        qaId="header_home"
       ></Header>
 
-      <ScreenWrapper style={styles.screenContainer} excludeTop={true}>
+      <ScreenWrapper style={styles.screenContainer} qaId="screen_wrapper_home" excludeTop={true}>
         {/* Home Banner */}
         <Banner
           activeGroup={selectedHome}
@@ -380,6 +384,7 @@ const HomeScreen = () => {
         />
         {isLoading ? (
           <ActivityIndicator
+            {...testProps("activity_indicator_home")}
             style={{ marginTop: tokens.spacing._10 }}
             size="large"
             color={tokens.colors.primary}
@@ -388,32 +393,36 @@ const HomeScreen = () => {
           <>
             {roomDevices?.length > 0 ? (
               // Show devices list if devices are added
-              <FlatList
-                data={roomDevices}
-                keyExtractor={(_, index) => index.toString()}
-                renderItem={({ item }) => {
-                  const nodeRef = item.node.deref();
-                  return nodeRef ? (
-                    <DeviceCard
-                      node={nodeRef}
-                      device={item}
-                      key={nodeRef.id + item.name}
+              <View {...testProps("view_devices_list_home")} style={{ flex: 1 }}>
+                <FlatList
+                  {...testProps("list_devices_home")}
+                  data={roomDevices}
+                  keyExtractor={(_, index) => index.toString()}
+                  renderItem={({ item }) => {
+                    const nodeRef = item.node.deref();
+                    return nodeRef ? (
+                      <DeviceCard
+                        node={nodeRef}
+                        device={item}
+                        key={nodeRef.id + item.name}
+                        qaId="device_card_home"
+                      />
+                    ) : null;
+                  }}
+                  contentContainerStyle={styles.deviceList}
+                  showsVerticalScrollIndicator={false}
+                  numColumns={1}
+                  refreshControl={
+                    <RefreshControl
+                      refreshing={refreshing}
+                      onRefresh={onRefresh}
+                      colors={[tokens.colors.primary]}
+                      tintColor={tokens.colors.primary}
+                      progressViewOffset={10}
                     />
-                  ) : null;
-                }}
-                contentContainerStyle={styles.deviceList}
-                showsVerticalScrollIndicator={false}
-                numColumns={1}
-                refreshControl={
-                  <RefreshControl
-                    refreshing={refreshing}
-                    onRefresh={onRefresh}
-                    colors={[tokens.colors.primary]}
-                    tintColor={tokens.colors.primary}
-                    progressViewOffset={10}
-                  />
-                }
-              />
+                  }
+                />
+              </View>
             ) : (
               // Show add your first device banner if no devices are added
               <ScrollView
@@ -425,10 +434,11 @@ const HomeScreen = () => {
                     tintColor={tokens.colors.primary}
                     progressViewOffset={10}
                   />
-                }
+                } {...testProps("scroll_home")}
               >
                 <AddYourFirstDeviceBanner
                   redirectOperations={redirectOperations}
+                  qaId="banner_add_first_device"
                 />
               </ScrollView>
             )}

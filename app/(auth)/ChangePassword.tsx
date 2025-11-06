@@ -16,6 +16,7 @@ import { useRouter } from "expo-router";
 // components
 import { ScreenWrapper, Header, Input, Button, Logo } from "@/components";
 import { ESPAPIError } from "@espressif/rainmaker-base-sdk";
+import { testProps } from "@/utils/testProps";
 
 const ChangePasswordScreen = () => {
   const { store } = useCDF();
@@ -170,11 +171,11 @@ const ChangePasswordScreen = () => {
 
   return (
     <>
-      <Header label={t("auth.changePassword.title")} showBack />
-      <ScreenWrapper style={globalStyles.screenWrapper}>
-        <View style={[globalStyles.scrollViewContent, { paddingBottom: 100 }]}>
-          <Logo />
-          <View style={globalStyles.inputContainer}>
+      <Header label={t("auth.changePassword.title")} showBack qaId="header_change_password" />
+      <ScreenWrapper style={globalStyles.screenWrapper} qaId="screen_wrapper_change_password">
+        <View {...testProps("view_change_password")} style={[globalStyles.scrollViewContent, { paddingBottom: 100 }]}>
+          <Logo qaId="logo_change_password" />
+          <View {...testProps("view_input_change_password")} style={globalStyles.inputContainer}>
             {/* Old Password */}
             <Input
               isPassword
@@ -184,6 +185,7 @@ const ChangePasswordScreen = () => {
               validator={oldPasswordValidator}
               validateOnChange={true}
               debounceDelay={500}
+              qaId="current_password"
             />
             {/* New Password */}
             <Input
@@ -194,6 +196,7 @@ const ChangePasswordScreen = () => {
               validator={newPasswordValidator}
               validateOnChange={true}
               debounceDelay={500}
+              qaId="new_password"
             />
             {/* Confirm Password */}
             <Input
@@ -206,6 +209,7 @@ const ChangePasswordScreen = () => {
               validator={confirmPasswordValidator}
               validateOnChange={true}
               debounceDelay={50}
+              qaId="confirm_password"
             />
             {/* Submit Button */}
             <Button
@@ -222,6 +226,7 @@ const ChangePasswordScreen = () => {
               }
               style={globalStyles.signInButton}
               isLoading={isLoading}
+              qaId="button_update_change_password"
             />
           </View>
         </View>

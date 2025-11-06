@@ -35,6 +35,9 @@ import { Clock, Trash2 } from "lucide-react-native";
 // Hooks
 import { useTranslation } from "react-i18next";
 
+// Utils
+import { testProps } from "@/utils/testProps";
+
 /**
  * ScheduleCard Component
  *
@@ -57,7 +60,8 @@ const ScheduleCard = ({
   onToggle,
   deleteLoading = false,
   toggleLoading = false,
-}: ScheduleCardProps) => {
+  qaId,
+}: ScheduleCardProps & { qaId?: string }) => {
   const { t } = useTranslation();
 
   const { timeText } = useMemo(() => {
@@ -76,6 +80,7 @@ const ScheduleCard = ({
 
   return (
     <TouchableOpacity
+      {...(qaId ? testProps(qaId) : {})}
       style={[globalStyles.scheduleCard]}
       onPress={onPress}
       disabled={isEditing}
@@ -90,6 +95,7 @@ const ScheduleCard = ({
         </View>
         {!isEditing ? (
           <Switch
+            {...testProps("switch_enable_schedule")}
             size="$2.5"
             borderColor={tokens.colors.bg1}
             borderWidth={0}
@@ -109,6 +115,7 @@ const ScheduleCard = ({
           </Switch>
         ) : (
           <TouchableOpacity
+            {...testProps("button_delete_schedule")}
             style={[styles.actionButton]}
             onPress={onDelete}
             disabled={deleteLoading}

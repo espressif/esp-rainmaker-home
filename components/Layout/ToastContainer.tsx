@@ -22,6 +22,7 @@ import {
   TOAST_TYPE_WARNING,
 } from "@/utils/constants";
 
+import { testProps } from "../../utils/testProps";
 // Types
 interface ToastCustomData {
   type?: "success" | "error" | "warning" | "info";
@@ -166,6 +167,7 @@ export const ToastContainer: React.FC = () => {
             fontWeight="600"
             fontSize={tokens.fontSize.md}
             style={styles.title}
+            {...testProps("toast_title")}
           >
             {currentToast.title}
           </Text>
@@ -174,6 +176,7 @@ export const ToastContainer: React.FC = () => {
               color={toastTheme.messageColor}
               fontSize={tokens.fontSize.sm}
               style={styles.message}
+              {...testProps("toast_message")}
             >
               {currentToast.message}
             </Text>

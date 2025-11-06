@@ -46,6 +46,7 @@ import {
 import DeviceAction from "@/components/ParamControls/DeviceAction";
 
 import { generateRandomId } from "@/utils/common";
+import { testProps } from "@/utils/testProps";
 
 import { LoadingState, SceneActionsProps } from "@/types/global";
 import { SUCESS } from "@/utils/constants";
@@ -207,16 +208,18 @@ const CreateScene = () => {
             style={[globalStyles.warningContainer, { marginHorizontal: 0 }]}
           >
             <ShieldAlert size={tokens.fontSize.xs} color={tokens.colors.warn} />
-            <Text style={globalStyles.warningText}>{warning}</Text>
+            <Text {...testProps("text_warning")} style={globalStyles.warningText}>{warning}</Text>
           </View>
         )}
         {/* SCENE NAME */}
         <ContentWrapper
+          qaId="scene_name"
           title={t("scene.createScene.sceneName")}
           style={styles.contentWrapper}
         >
           <View style={[styles.inputContainer]}>
             <Input
+              qaId="scene_name"
               placeholder={t("scene.createScene.sceneNamePlaceholder")}
               value={state.sceneName}
               onFieldChange={setSceneName}
@@ -226,7 +229,7 @@ const CreateScene = () => {
               marginBottom={false}
             />
             <View style={[styles.editIcon]}>
-              <Edit3 size={20} color={tokens.colors.text_secondary} />
+              <Edit3 {...testProps("icon_edit_scene_name")} size={20} color={tokens.colors.text_secondary} />
             </View>
           </View>
         </ContentWrapper>
@@ -235,16 +238,17 @@ const CreateScene = () => {
         <View style={[styles.section, styles.sceneActionsContainer]}>
           {/* Header with title and add button */}
           <View style={styles.sceneActionsHeader}>
-            <Text style={styles.sceneActionsTitle}>
+            <Text {...testProps("text_label_actions")} style={styles.sceneActionsTitle}>
               {t("scene.createScene.sceneActions")}
             </Text>
-            <Pressable onPress={handleAddDeviceAction}>
-              <Plus size={20} color={tokens.colors.text_secondary} />
+            <Pressable {...testProps("button_add_action")} onPress={handleAddDeviceAction}>
+              <Plus {...testProps("icon_add_action")} size={20} color={tokens.colors.text_secondary} />
             </Pressable>
           </View>
 
           {/* Device actions list */}
           <ScrollView
+            {...testProps("scroll_actions_scenes")}
             style={styles.deviceList}
             showsVerticalScrollIndicator={false}
             contentContainerStyle={styles.deviceListContent}
@@ -253,6 +257,7 @@ const CreateScene = () => {
               getSceneActions().map((action: any) => (
                 // RENDER SCENE ACTIONS
                 <SceneActions
+                  qaId={`scene_action_${action.device.name}`}
                   key={action.nodeId + action.device.name}
                   device={action.device}
                   displayDeviceName={action.displayDeviceName}
@@ -261,14 +266,14 @@ const CreateScene = () => {
                 />
               ))
             ) : (
-              <View style={styles.emptyStateContainer}>
+              <View {...testProps("view_empty_actions_scenes")} style={styles.emptyStateContainer}>
                 <View style={styles.emptyStateIconContainer}>
                   <Settings size={35} color={tokens.colors.primary} />
                 </View>
-                <Text style={globalStyles.emptyStateTitle}>
+                <Text {...testProps("text_title_empty_scenes")} style={globalStyles.emptyStateTitle}>
                   {t("scene.createScene.noActionsSelected")}
                 </Text>
-                <Text style={globalStyles.emptyStateDescription}>
+                <Text {...testProps("text_description_empty_scenes")} style={globalStyles.emptyStateDescription}>
                   {t("scene.createScene.noActionsSelectedDescription")}
                 </Text>
               </View>
@@ -282,6 +287,7 @@ const CreateScene = () => {
         >
           {/* SAVE ACTION */}
           <ActionButton
+            qaId="button_save_scene"
             onPress={handleSave}
             disabled={disableActionButton}
             variant="primary"
@@ -291,7 +297,7 @@ const CreateScene = () => {
             ) : (
               <View style={styles.buttonContent}>
                 <Check size={16} color={tokens.colors.white} />
-                <Text style={[globalStyles.fontMedium, globalStyles.textWhite]}>
+                <Text {...testProps("text_save_scene")} style={[globalStyles.fontMedium, globalStyles.textWhite]}>
                   {state.isEditing
                     ? t("layout.shared.update")
                     : t("layout.shared.save")}
@@ -303,6 +309,7 @@ const CreateScene = () => {
           {/* DELETE ACTION */}
           {state.isEditing && (
             <ActionButton
+              qaId="button_delete_scene"
               onPress={handleDelete}
               disabled={disableActionButton}
               variant="danger"
@@ -312,7 +319,7 @@ const CreateScene = () => {
               ) : (
                 <View style={styles.buttonContent}>
                   <Trash2 size={16} color={tokens.colors.white} />
-                  <Text
+                  <Text {...testProps("text_delete_scene")}
                     style={[globalStyles.fontMedium, globalStyles.textWhite]}
                   >
                     {t("layout.shared.delete")}
@@ -343,9 +350,11 @@ const SceneActions = ({
   displayDeviceName,
   action,
   onActionPress,
-}: SceneActionsProps) => {
+  qaId,
+}: SceneActionsProps & { qaId?: string }) => {
   return (
     <DeviceAction
+      qaId={qaId}
       displayDeviceName={displayDeviceName}
       device={device.type}
       actions={action}

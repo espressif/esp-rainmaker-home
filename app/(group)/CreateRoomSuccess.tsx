@@ -17,6 +17,9 @@ import { useTranslation } from "react-i18next";
 // Components
 import { ScreenWrapper } from "@/components";
 
+// Utils
+import { testProps } from "@/utils/testProps";
+
 /**
  * CreateRoomSuccess Component
  *
@@ -46,22 +49,24 @@ const CreateRoomSuccess = () => {
   // Render
   return (
     <>
-      <ScreenWrapper style={styles.container}>
-        <View style={styles.content}>
+      <ScreenWrapper style={styles.container} qaId="screen_wrapper_create_room_success">
+        <View {...testProps("view_create_room_success")} style={styles.content}>
           <Image
+            {...testProps("image_create_room_success")}
             source={require("@/assets/images/success.png")}
             style={styles.illustration}
             resizeMode="contain"
           />
 
-          <Text style={styles.title}>{t("group.createRoomSuccess.title")}</Text>
+          <Text {...testProps("text_create_room_success_title")} style={styles.title}>{t("group.createRoomSuccess.title")}</Text>
           {updated && (
-            <Text style={styles.subtitle}>
+          <Text {...testProps("text_create_room_success_subtitle")} style={styles.subtitle}>
               {t("group.createRoomSuccess.roomUpdatedSuccessfully")}
             </Text>
           )}
           {/* Done button */}
           <Pressable
+            {...testProps("button_create_room_success")}
             style={[
               globalStyles.btn,
               globalStyles.bgBlue,
@@ -70,7 +75,7 @@ const CreateRoomSuccess = () => {
             ]}
             onPress={handleDone}
           >
-            <Text style={[globalStyles.fontMedium, globalStyles.textWhite]}>
+            <Text {...testProps("text_done_create_room_success")} style={[globalStyles.fontMedium, globalStyles.textWhite]}>
               {t("group.createRoomSuccess.done")}
             </Text>
           </Pressable>

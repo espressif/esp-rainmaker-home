@@ -21,6 +21,9 @@ import { AutomationCardProps } from "@/types/global";
 // Mobx observer
 import { observer } from "mobx-react-lite";
 
+// Utils
+import { testProps } from "@/utils/testProps";
+
 /**
  * AutomationCard
  *
@@ -33,11 +36,12 @@ import { observer } from "mobx-react-lite";
  *   - Shows summary for 3+ actions (device count and action count)
  * - Touch interaction for editing
  */
-const AutomationCard: React.FC<AutomationCardProps> = ({
+const AutomationCard: React.FC<AutomationCardProps & { qaId?: string }> = ({
   automation,
   onPress,
   onToggle,
   toggleLoading = false,
+  qaId,
 }) => {
   const { t } = useTranslation();
   const { store } = useCDF();
@@ -184,6 +188,7 @@ const AutomationCard: React.FC<AutomationCardProps> = ({
 
   return (
     <Pressable
+      {...(qaId ? testProps(qaId) : {})}
       style={[styles.card, toggleLoading && styles.cardLoading]}
       onPress={onPress}
       disabled={toggleLoading}
@@ -194,6 +199,7 @@ const AutomationCard: React.FC<AutomationCardProps> = ({
           {automationName}
         </Text>
         <Switch
+          {...testProps("switch_automation_enabled")}
           size="$2.5"
           borderColor={tokens.colors.bg1}
           borderWidth={0}

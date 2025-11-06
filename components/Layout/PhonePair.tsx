@@ -12,6 +12,7 @@ import { View, StyleSheet, Image, Pressable, Dimensions } from 'react-native';
 import { tokens } from '@/theme/tokens';
 import { globalStyles } from '@/theme/globalStyleSheet';
 
+import { testProps } from "../../utils/testProps";
 const { width: screenWidth } = Dimensions.get('window');
 
 // Types
@@ -24,6 +25,8 @@ interface PhonePairProps {
   onLeftImagePress?: () => void;
   /** Press handler for right phone */
   onRightImagePress?: () => void;
+  /** QA automation identifier */
+  qaId?: string;
 }
 
 /**
@@ -42,13 +45,15 @@ const PhonePair: React.FC<PhonePairProps> = ({
   rightImage,
   onLeftImagePress,
   onRightImagePress,
+  qaId,
 }) => {
   return (
-    <View style={styles.container}>
+    <View {...(qaId ? testProps(qaId) : {})}  style={styles.container}>
       <View style={styles.phoneContainer}>
         <Pressable style={styles.phoneWrapper} onPress={onLeftImagePress}>
           <View style={styles.phoneFrame}>
             <Image 
+              {...testProps("image_left")}
               source={leftImage}
               style={styles.phoneImage}
               resizeMode="contain"
@@ -59,6 +64,7 @@ const PhonePair: React.FC<PhonePairProps> = ({
         <Pressable style={styles.phoneWrapper} onPress={onRightImagePress}>
           <View style={styles.phoneFrame}>
             <Image 
+              {...testProps("image_right")}
               source={rightImage}
               style={styles.phoneImage}
               resizeMode="contain"

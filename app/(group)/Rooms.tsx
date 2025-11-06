@@ -37,6 +37,9 @@ import { Plus } from "lucide-react-native";
 // Components
 import { Header, RoomCard } from "@/components";
 
+// Utils
+import { testProps } from "@/utils/testProps";
+
 /**
  * Room
  *
@@ -114,7 +117,7 @@ const Rooms = observer(() => {
    */
   const memoizedRooms = useMemo(() => {
     if (!state.home?.subGroups) return [];
-    
+
     const rooms = state.home.subGroups as ESPRMGroup[];
     const uniqueRooms = rooms.reduce((acc, room) => {
       if (!acc.find((existingRoom) => existingRoom.id === room.id)) {
@@ -122,7 +125,7 @@ const Rooms = observer(() => {
       }
       return acc;
     }, [] as ESPRMGroup[]);
-    
+
     return uniqueRooms;
   }, [state.home?.subGroups, state.home?.id]);
 
@@ -165,20 +168,23 @@ const Rooms = observer(() => {
             progressViewOffset={10}
           />
         }
+        {...testProps("scroll_rooms")}
       >
-        <Pressable style={styles.emptyRoomContent}>
-          <Text style={styles.title}>{t("group.rooms.addYourFirstRoom")}</Text>
-          <Text style={styles.subtitle}>
+        <Pressable {...testProps("button_rooms")} style={styles.emptyRoomContent}>
+          <Text {...testProps("text_add_your_first_room_title")} style={styles.title}>{t("group.rooms.addYourFirstRoom")}</Text>
+          <Text {...testProps("text_add_your_first_room_subtitle")} style={styles.subtitle}>
             {t("group.rooms.addRoomDescription")}
           </Text>
           <Image
+            {...testProps("image_rooms")}
             source={require("@/assets/images/room.png")}
             style={styles.illustration}
             resizeMode="contain"
           />
           {/* Add room button */}
-          <Pressable style={styles.addButton} onPress={handleAddRoom}>
+          <Pressable {...testProps("button_add_room")} style={styles.addButton} onPress={handleAddRoom}>
             <Plus
+              {...testProps("icon_plus")}
               size={24}
               color={tokens.colors.white}
               onPress={handleAddRoom}
@@ -230,6 +236,7 @@ const Rooms = observer(() => {
       room={item}
       onPressRoom={handlePressRoom}
       enableSwipeActions={false}
+      qaId="card_room"
     />
   ), [handlePressRoom]);
 
@@ -237,7 +244,7 @@ const Rooms = observer(() => {
    * Memoized keyExtractor for FlatList
    * Provides stable keys for better performance
    */
-  const keyExtractor = useCallback((item: ESPRMGroup, index: number) => 
+  const keyExtractor = useCallback((item: ESPRMGroup, index: number) =>
     `room-${item.id}-${index}`, []
   );
 
@@ -251,9 +258,9 @@ const Rooms = observer(() => {
         showBack={router.canGoBack()}
         rightSlot={
           <Plus size={24} color={tokens.colors.primary} onPress={handleAddRoom} />
-        }
+        } qaId="header_rooms"
       />
-      <View style={{ ...styles.container, backgroundColor: tokens.colors.bg5 }}>
+      <View {...testProps("view_rooms")} style={{ ...styles.container, backgroundColor: tokens.colors.bg5 }}>
         {memoizedRooms && memoizedRooms.length > 0 ? (
           <FlatList
             data={memoizedRooms}
@@ -284,7 +291,7 @@ const Rooms = observer(() => {
             bounces={true}
           />
         ) : (
-          <View style={styles.emptyRoomContainer}>
+          <View {...testProps("view_rooms_empty")} style={styles.emptyRoomContainer}>
             {renderEmptyRoomContent()}
           </View>
         )}

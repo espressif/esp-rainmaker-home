@@ -22,6 +22,7 @@ import { Button } from "tamagui";
 import { tokens } from "@/theme/tokens";
 import { globalStyles } from "@/theme/globalStyleSheet";
 
+import { testProps } from "../../utils/testProps";
 // Types
 interface ConfirmationDialogProps {
   /** Element that triggers the dialog */
@@ -44,6 +45,8 @@ interface ConfirmationDialogProps {
   confirmColor?: string;
   /** Show loading spinner */
   isLoading?: boolean;
+  /** QA automation identifier */
+  qaId?: string;
 }
 
 const ConfirmationDialog: React.FC<ConfirmationDialogProps> = ({
@@ -57,6 +60,7 @@ const ConfirmationDialog: React.FC<ConfirmationDialogProps> = ({
   onCancel,
   confirmColor = tokens.colors.primary,
   isLoading = false,
+  qaId,
 }) => {
   const [internalOpen, setInternalOpen] = useState(false);
   const isVisible = open ?? internalOpen;
@@ -77,6 +81,7 @@ const ConfirmationDialog: React.FC<ConfirmationDialogProps> = ({
         <Pressable onPress={() => setInternalOpen(true)}>{trigger}</Pressable>
       )}
       <Modal
+        {...(qaId ? testProps(`dialog_${qaId}`) : {})}
         visible={isVisible}
         transparent={true}
         animationType="fade"
@@ -84,24 +89,27 @@ const ConfirmationDialog: React.FC<ConfirmationDialogProps> = ({
       >
         <View style={globalStyles.modalOverlay}>
           <View style={globalStyles.modalContent}>
-            {title && <Text style={globalStyles.modalTitle}>{title}</Text>}
-            <Text style={globalStyles.modalDescription}>{description}</Text>
+            {title && <Text {...testProps(`text_title_${qaId}`)} style={globalStyles.modalTitle}>{title}</Text>}
+            <Text {...testProps(`text_description_${qaId}`)} style={globalStyles.modalDescription}>{description}</Text>
 
             <View style={globalStyles.modalActions}>
               <Button
+                {...testProps("button_cancel_dialog")}
                 style={[styles.button, styles.cancelButton]}
                 onPress={handleCancel}
               >
-                <Text style={styles.buttonText}>{cancelText}</Text>
+                <Text {...testProps("text_label_cancel")} style={styles.buttonText}>{cancelText}</Text>
               </Button>
 
               <View style={{ width: 10 }} />
 
               <Button
+                {...testProps("button_confirm_dialog")}
                 style={[styles.button, { backgroundColor: confirmColor }]}
                 onPress={handleConfirm}
               >
                 <Text
+                  {...testProps("text_label_confirm")} 
                   style={[styles.buttonText, { color: tokens.colors.white }]}
                 >
                   {isLoading ? (

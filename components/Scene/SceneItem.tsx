@@ -24,6 +24,7 @@ import { Heart, Trash2 } from "lucide-react-native";
 
 import { SceneItemProps } from "@/types/global";
 
+import { testProps } from "../../utils/testProps";
 interface SceneCardProps extends SceneItemProps {
   variant?: "horizontal" | "vertical";
   index?: number;
@@ -38,6 +39,7 @@ interface SceneCardProps extends SceneItemProps {
   onDelete?: () => void;
   deleteLoading?: boolean;
   isEditing?: boolean;
+  qaId?: string;
 }
 
 /**
@@ -61,10 +63,12 @@ const SceneItem: React.FC<SceneCardProps> = ({
   deleteLoading,
   sceneCardDimensions,
   isEditing = false,
+  qaId,
 }) => {
   const { t } = useTranslation();
   return (
     <Pressable
+      {...(qaId ? testProps(qaId) : {})}
       style={[
         globalStyles.sceneCard,
         index % (sceneCardDimensions?.cardsPerRow ?? 1) != 0 &&
@@ -79,6 +83,7 @@ const SceneItem: React.FC<SceneCardProps> = ({
       <View style={globalStyles.sceneCardHeader}>
         {isEditing ? (
           <TouchableOpacity
+            {...testProps("button_delete_scene_item")}
             style={globalStyles.sceneCardButton}
             onPress={onDelete}
           >
@@ -90,6 +95,7 @@ const SceneItem: React.FC<SceneCardProps> = ({
           </TouchableOpacity>
         ) : (
           <TouchableOpacity
+            {...testProps("button_favorite_scene")}
             style={globalStyles.sceneCardButton}
             onPress={onFavoriteToggle}
           >
@@ -105,8 +111,9 @@ const SceneItem: React.FC<SceneCardProps> = ({
           </TouchableOpacity>
         )}
       </View>
-      <View style={globalStyles.sceneCardContent}>
+      <View {...testProps("view_scene_card_content")} style={globalStyles.sceneCardContent}>
         <Text
+          {...testProps(`text_${name}_scene_name`)}
           style={[globalStyles.sceneCardName, { color: tokens.colors.black }]}
           numberOfLines={2}
         >
@@ -115,7 +122,7 @@ const SceneItem: React.FC<SceneCardProps> = ({
 
         {/* Device Count Tag */}
         <View style={styles.deviceCountTag}>
-          <Text style={styles.deviceCountText}>
+          <Text {...testProps("text_device_count")} style={styles.deviceCountText}>
             {deviceCount}{" "}
             {deviceCount > 1
               ? t("scene.scenes.multipleDeviceCountPostfix")

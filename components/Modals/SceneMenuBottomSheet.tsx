@@ -24,6 +24,7 @@ import { globalStyles } from "@/theme/globalStyleSheet";
 import { ShieldAlert, X } from "lucide-react-native";
 import { Scene } from "@espressif/rainmaker-base-cdf";
 
+import { testProps } from "../../utils/testProps";
 // Types
 interface SceneMenuOption {
   id: string;
@@ -46,6 +47,8 @@ interface SceneMenuBottomSheetProps {
   onClose: () => void;
   /** Warning message to display */
   warning?: string;
+  /** QA automation identifier */
+  qaId?: string;
 }
 
 /**
@@ -66,6 +69,7 @@ const SceneMenuBottomSheet: React.FC<SceneMenuBottomSheetProps> = ({
   options,
   onClose,
   warning,
+  qaId,
 }) => {
   const { t } = useTranslation();
   const handleBackdropPress = () => {
@@ -80,6 +84,7 @@ const SceneMenuBottomSheet: React.FC<SceneMenuBottomSheetProps> = ({
   const renderOption = (option: SceneMenuOption) => (
     <TouchableOpacity
       key={option.id}
+      {...testProps(`button_${option.id}_scene_menu`)}
       style={[styles.option, option.destructive && styles.destructiveOption]}
       onPress={() => {
         if (!option.loading) {
@@ -103,6 +108,7 @@ const SceneMenuBottomSheet: React.FC<SceneMenuBottomSheetProps> = ({
         </View>
 
         <Text
+          {...testProps(`text_${option.id}_scene_menu`)}
           style={[
             styles.optionLabel,
             option.destructive && styles.destructiveText,
@@ -117,7 +123,7 @@ const SceneMenuBottomSheet: React.FC<SceneMenuBottomSheetProps> = ({
   if (!scene) return null;
 
   return (
-    <Modal
+    <Modal {...(qaId ? testProps(qaId) : {})}
       visible={visible}
       transparent
       animationType="slide"
@@ -130,11 +136,11 @@ const SceneMenuBottomSheet: React.FC<SceneMenuBottomSheetProps> = ({
 
           {/* Header */}
           <View style={styles.header}>
-            <Text style={styles.sceneName} numberOfLines={1}>
+            <Text {...testProps("text_scene_name_menu")} style={styles.sceneName} numberOfLines={1}>
               {sceneName}
             </Text>
             <View style={styles.deviceCountTag}>
-              <Text style={styles.deviceCountText}>
+              <Text {...testProps("text_device_count_scene_menu")} style={styles.deviceCountText}>
                 {scene.devicesCount}{" "}
                 {scene.devicesCount > 1
                   ? t("scene.scenes.multipleDeviceCountPostfix")
@@ -142,6 +148,7 @@ const SceneMenuBottomSheet: React.FC<SceneMenuBottomSheetProps> = ({
               </Text>
             </View>
             <TouchableOpacity
+              {...testProps("button_close_scene_menu")}
               style={styles.closeButton}
               onPress={onClose}
               hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
@@ -157,7 +164,7 @@ const SceneMenuBottomSheet: React.FC<SceneMenuBottomSheetProps> = ({
                 size={tokens.fontSize.xs}
                 color={tokens.colors.warn}
               />
-              <Text style={globalStyles.warningText}>{warning}</Text>
+              <Text {...testProps("text_warning_scene_menu")} style={globalStyles.warningText}>{warning}</Text>
             </View>
           )}
 

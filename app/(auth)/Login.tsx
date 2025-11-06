@@ -32,6 +32,7 @@ import { validateEmail } from "@/utils/validations";
 import { createPlatformEndpoint } from "@/utils/notifications";
 import { CDF_EXTERNAL_PROPERTIES } from "@/utils/constants";
 import { CDFConfig } from "@/rainmaker.config";
+import { testProps } from "@/utils/testProps";
 
 /**
  * LoginScreen component that displays the login screen.
@@ -229,9 +230,9 @@ export default function LoginScreen() {
 
   return (
     <ScreenWrapper style={globalStyles.screenWrapper} excludeTop={false}>
-      <View style={globalStyles.scrollViewContent}>
-        <Logo />
-        <View style={globalStyles.inputContainer}>
+      <View style={globalStyles.scrollViewContent} {...testProps("view_login")}>
+        <Logo qaId="logo_login" />
+        <View style={globalStyles.inputContainer} {...testProps("view_input_login")}>
           {/* Email Input */}
           <Input
             key={emailParam || "email-input"}
@@ -243,6 +244,7 @@ export default function LoginScreen() {
             validateOnChange={true}
             debounceDelay={500}
             inputMode="email"
+            qaId="email"
           />
 
           {/* Password Input */}
@@ -253,6 +255,7 @@ export default function LoginScreen() {
             onFieldChange={handlePasswordChange}
             validator={passwordValidator}
             validateOnChange={true}
+            qaId="password"
           />
 
           {/* Sign In Button */}
@@ -262,11 +265,12 @@ export default function LoginScreen() {
             onPress={login}
             style={globalStyles.signInButton}
             isLoading={isLoading}
+            qaId="button_login"
           />
 
           {/* Forgot Password Button */}
-          <TouchableOpacity onPress={forgotPwd}>
-            <Text style={globalStyles.forgotPasswordText}>
+          <TouchableOpacity {...testProps("button_forgot_password")} onPress={forgotPwd}>
+            <Text {...testProps("text_forgotpassword")} style={globalStyles.forgotPasswordText}>
               {t("auth.login.forgotPassword")}
             </Text>
           </TouchableOpacity>
@@ -275,18 +279,20 @@ export default function LoginScreen() {
         {/* OAuth Buttons */}
         {ENABLED_OAUTH_PROVIDERS.length > 0 && (
           <>
-            <Text style={globalStyles.thirdLoginText}>
+            <Text {...testProps("text_3plogin")} style={globalStyles.thirdLoginText}>
               {t("auth.login.thirdPartyLogin")}
             </Text>
-            <View style={globalStyles.oauthContainer}>
+            <View {...testProps("view_3plogin")} style={globalStyles.oauthContainer}>
               {/* Enabled OAuth Providers */}
               {ENABLED_OAUTH_PROVIDERS.map((provider) => (
                 <TouchableOpacity
                   key={provider}
                   onPress={() => oauthLogin(provider)}
                   style={globalStyles.oauthButton}
+                  {...testProps(`button_3p_${provider}`)}
                 >
                   <Image
+                    {...testProps(`image_3p_${provider}`)}
                     source={OAUTH_PROVIDER_IMAGES[provider.toLocaleLowerCase()]}
                     style={globalStyles.oauthImage}
                   />
@@ -297,15 +303,15 @@ export default function LoginScreen() {
         )}
 
         {/* Sign Up Button */}
-        <TouchableOpacity onPress={() => router.push("/(auth)/Signup")}>
-          <Text style={globalStyles.linkText}>
+        <TouchableOpacity {...testProps("button_signup")} onPress={() => router.push("/(auth)/Signup")}>
+          <Text {...testProps("text_signup")} style={globalStyles.linkText}>
             {t("auth.login.navigateToSignUp")}
           </Text>
         </TouchableOpacity>
       </View>
 
       {/* App Version Text */}
-      <Text style={globalStyles.versionText}>
+      <Text {...testProps("text_app_version_login")} style={globalStyles.versionText}>
         {t("layout.shared.version")} {appVersion}
       </Text>
     </ScreenWrapper>

@@ -52,6 +52,7 @@ import { PARAM_CONTROLS } from "@/config/params.config";
 
 import { DeviceParamGroup } from "@/types/global";
 import { useRouter } from "expo-router";
+import { testProps } from "@/utils/testProps";
 
 /**
  * UI Control Map for parameter types
@@ -241,12 +242,14 @@ const ScheduleDeviceParamsSelection = observer(() => {
       <Header
         label={t("schedule.deviceParamsSelection.title")}
         showBack={true}
+        qaId="header_schedule_device_params_selection"
       />
       <ScreenWrapper
         style={{
           ...globalStyles.container,
           padding: tokens.spacing._15,
         }}
+        qaId="screen_wrapper_schedule_device_params_selection"
       >
         {/* Main Content */}
         {params.length === 0 ? (
@@ -274,6 +277,7 @@ const ScheduleDeviceParamsSelection = observer(() => {
               style={{ flex: 1 }}
               renderItem={({ item }) => (
                 <ContentWrapper
+                  qaId={`schedule_device_param_${item.name}_selection`}
                   title={item.name}
                   style={{
                     marginBottom: tokens.spacing._10,
@@ -282,7 +286,7 @@ const ScheduleDeviceParamsSelection = observer(() => {
                     borderColor: tokens.colors.borderColor,
                   }}
                   leftSlot={
-                    <Text style={globalStyles.fontMedium}>
+                    <Text {...testProps(`text_${item.name}_params_value`)} style={globalStyles.fontMedium}>
                       {renderParamValue(item)}
                     </Text>
                   }
@@ -302,12 +306,13 @@ const ScheduleDeviceParamsSelection = observer(() => {
             style={[globalStyles.actionButtonContainer, styles.buttonContainer]}
           >
             <ActionButton
+              qaId="button_done_schedule_params"
               onPress={handleSave}
               disabled={disableActionButton}
               variant="secondary"
             >
               <View style={styles.buttonContent}>
-                <Text style={[globalStyles.fontMedium]}>
+                <Text {...testProps("text_done_schedule_device_params_selection")} style={[globalStyles.fontMedium]}>
                   {t("layout.shared.done")}
                 </Text>
               </View>
@@ -318,12 +323,14 @@ const ScheduleDeviceParamsSelection = observer(() => {
 
       {/* Parameter Configuration Bottom Sheet */}
       <Modal
+        {...testProps("modal_schedule_device_params_selection")}
         visible={paramSheetVisible}
         transparent
         animationType="slide"
         onRequestClose={handleParamSheetClose}
       >
         <Pressable
+          {...testProps("button_close_schedule_device_params")}
           style={styles.modalContainer}
           onPress={handleParamSheetClose}
         >
@@ -332,10 +339,10 @@ const ScheduleDeviceParamsSelection = observer(() => {
             onPress={(e) => e.stopPropagation()}
           >
             {/* Handle */}
-            <View style={styles.handle} />
+            <View style={styles.handle} {...testProps("view_schedule_device_params_selection")} />
 
             {/* Parameter UI */}
-            <View style={styles.paramUIContainer}>
+            <View {...testProps("view_schedule_device_param_ui_selection")} style={styles.paramUIContainer}>
               {selectedParam && (
                 <ParamWrap
                   key={`${selectedParam.name}-modal`}
@@ -343,6 +350,7 @@ const ScheduleDeviceParamsSelection = observer(() => {
                   disabled={false}
                   setUpdating={() => {}}
                   onValueChange={(value) => handleParamValueChange(value)}
+                  qaId={`schedule_param_${selectedParam.name}_selection`}
                 >
                   {renderParamControl(selectedParam)}
                 </ParamWrap>
@@ -350,7 +358,7 @@ const ScheduleDeviceParamsSelection = observer(() => {
             </View>
 
             {/* Action Buttons */}
-            <View style={styles.actionButtonsContainer}>
+            <View style={styles.actionButtonsContainer} {...testProps("view_schedule_device_params_selection")}>
               {checkActionExists(
                 nodeId,
                 selectedDevice?.name || "",
@@ -360,8 +368,10 @@ const ScheduleDeviceParamsSelection = observer(() => {
                   onPress={handleParamDelete}
                   variant="danger"
                   style={styles.actionButton}
+                  qaId="button_delete_schedule_device_params_selection"
                 >
                   <Text
+                    {...testProps("text_delete_schedule_device_params_selection")}
                     style={[globalStyles.fontMedium, globalStyles.textWhite]}
                   >
                     {t("layout.shared.delete")}
@@ -372,8 +382,9 @@ const ScheduleDeviceParamsSelection = observer(() => {
                 onPress={handleParamSave}
                 variant="primary"
                 style={styles.actionButton}
+                qaId="button_save_schedule_device_params_selection"
               >
-                <Text style={[globalStyles.fontMedium, globalStyles.textWhite]}>
+                <Text {...testProps("text_save_schedule_device_params_selection")} style={[globalStyles.fontMedium, globalStyles.textWhite]}>
                   {t("layout.shared.save")}
                 </Text>
               </ActionButton>

@@ -25,6 +25,7 @@ import { globalStyles } from "@/theme/globalStyleSheet";
 
 // type
 import { HomeNameProps } from "@/types/global";
+import { testProps } from "@/utils/testProps";
 
 /**
  * HomeName Component
@@ -72,13 +73,16 @@ const HomeName: React.FC<HomeNameProps> = ({
     <ContentWrapper
       title={t("group.homeManagement.homeName")}
       style={styles.contentWrapper}
+      qaId="home_name"
     >
       <Pressable
+        {...testProps("button_edit_home_name")}
         style={[globalStyles.nameInputContainer]}
         onPress={() => inputRef.current?.focus()}
         disabled={disabled}
       >
         <Input
+          qaId="home_name"
           ref={inputRef}
           value={homeName}
           onFieldChange={(value) => setHomeName(value)}

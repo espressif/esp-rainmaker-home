@@ -15,6 +15,7 @@ import { ChevronRight } from 'lucide-react-native';
 import { tokens } from '@/theme/tokens';
 import { globalStyles } from '@/theme/globalStyleSheet';
 
+import { testProps } from "../../utils/testProps";
 // Types
 interface InfoItemProps {
   /** Label text to display */
@@ -25,6 +26,8 @@ interface InfoItemProps {
   onPress?: () => void;
   /** Whether to show bottom separator */
   showSeparator?: boolean;
+  /** QA automation identifier */
+  qaId?: string;
 }
 
 /**
@@ -42,12 +45,14 @@ const InfoItem: React.FC<InfoItemProps> = ({
   value,
   onPress,
   showSeparator = true,
+  qaId,
 }) => {
   const Component = onPress ? Pressable : View;
 
   return (
     <>
       <Component 
+        {...(qaId ? testProps(qaId) : {})}
         style={[
           globalStyles.flex,
           globalStyles.alignCenter,
@@ -56,15 +61,15 @@ const InfoItem: React.FC<InfoItemProps> = ({
         ]} 
         onPress={onPress}
       >
-        <Text style={[globalStyles.fontRegular, styles.label]}>
+        <Text {...testProps(`label_${qaId}`)} style={[globalStyles.fontRegular, styles.label]}>
           {label}
         </Text>
         <View style={[globalStyles.flex, globalStyles.alignCenter]}>
-          <Text style={[globalStyles.fontRegular, styles.value]}>
+          <Text {...testProps(`text_${qaId}`)} style={[globalStyles.fontRegular, styles.value]}>
             {value}
           </Text>
           {onPress && (
-            <ChevronRight size={16} color={tokens.colors.primary} />
+            <ChevronRight {...(qaId ? testProps(`${qaId}_chevron`) : {})} size={16} color={tokens.colors.primary} />
           )}
         </View>
       </Component>

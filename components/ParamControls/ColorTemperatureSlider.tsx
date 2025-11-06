@@ -16,7 +16,7 @@ import { tokens } from "@/theme/tokens";
 
 // Types
 import { ParamControlChildProps } from "./lib/types";
-import { paramControlStyles as styles } from "./lib/styles";
+import { paramControlStyles as styles } from "./lib/styles"; 
 
 /**
  * ColorTemperatureSlider

@@ -42,6 +42,7 @@ import {
 // Config & Utils
 import { PARAM_CONTROLS } from "@/config/params.config";
 import { ESPRM_PARAM_WRITE_PROPERTY } from "@/utils/constants";
+import { testProps } from "@/utils/testProps";
 
 /**
  * UI Control Map for parameter types
@@ -208,19 +209,21 @@ const ActionDeviceParamSelection = observer(() => {
       <Header
         label={t("automation.actionParamSelection.title")}
         showBack={true}
+        qaId="header_action_device_params_selection"
       />
       <ScreenWrapper
         style={{
           ...globalStyles.container,
           padding: tokens.spacing._15,
         }}
+        qaId="screen_wrapper_action_device_params_selection"
       >
         {params.length === 0 ? (
-          <View style={styles.incompatibleParamsContainer}>
-            <View style={styles.incompatibleParamsIconContainer}>
-              <TriangleAlert size={35} color={tokens.colors.primary} />
+          <View {...testProps("view_action_params_selection")} style={styles.incompatibleParamsContainer}>
+            <View {...testProps("view_action_params_selection")} style={styles.incompatibleParamsIconContainer}>
+              <TriangleAlert {...testProps("alert_icon_action_params_selection")} size={35} color={tokens.colors.primary} />
             </View>
-            <Text style={styles.incompatibleParamsTitle}>
+            <Text {...testProps("text_title_no_compatible_params")} style={styles.incompatibleParamsTitle}>
               {t("automation.actionParamSelection.incompatibleParamsTitle", {
                 deviceName: selectedDevice?.displayName,
               })}
@@ -229,10 +232,12 @@ const ActionDeviceParamSelection = observer(() => {
         ) : (
           <View style={{ flex: 1 }}>
             <FlatList
+              {...testProps("list_action_params")}
               data={params}
               style={{ flex: 1 }}
               renderItem={({ item }) => (
                 <ContentWrapper
+                  qaId={`action_device_param_${item.name}_selection`}
                   title={item.name}
                   style={{
                     marginBottom: tokens.spacing._10,
@@ -241,7 +246,7 @@ const ActionDeviceParamSelection = observer(() => {
                     borderColor: tokens.colors.borderColor,
                   }}
                   leftSlot={
-                    <Text style={globalStyles.fontMedium}>
+                    <Text {...testProps(`text_${item.name}_params_value`)} style={globalStyles.fontMedium}>
                       {renderParamValue(item)}
                     </Text>
                   }
@@ -261,12 +266,13 @@ const ActionDeviceParamSelection = observer(() => {
             style={[globalStyles.actionButtonContainer, styles.buttonContainer]}
           >
             <ActionButton
+              qaId="button_done_action_params"
               onPress={handleSave}
               disabled={disableActionButton}
               variant="secondary"
             >
               <View style={styles.buttonContent}>
-                <Text style={[globalStyles.fontMedium]}>
+                <Text {...testProps("text_done_action_device_params_selection")} style={[globalStyles.fontMedium]}>
                   {t("layout.shared.done")}
                 </Text>
               </View>
@@ -277,12 +283,14 @@ const ActionDeviceParamSelection = observer(() => {
 
       {/* Parameter Configuration Bottom Sheet */}
       <Modal
+        {...testProps("modal_action_device_params_selection")}
         visible={paramSheetVisible}
         transparent
         animationType="slide"
         onRequestClose={handleParamSheetClose}
       >
         <Pressable
+          {...testProps("button_close_action_device_params")}
           style={styles.modalContainer}
           onPress={handleParamSheetClose}
         >
@@ -291,10 +299,10 @@ const ActionDeviceParamSelection = observer(() => {
             onPress={(e) => e.stopPropagation()}
           >
             {/* Handle */}
-            <View style={styles.handle} />
+            <View style={styles.handle} {...testProps("view_action_device_params_selection")} />
 
             {/* Parameter UI */}
-            <View style={styles.paramUIContainer}>
+            <View style={styles.paramUIContainer} {...testProps("view_action_device_param_ui_selection")}>
               {selectedParam && (
                 <ParamWrap
                   key={`${selectedParam.name}-modal`}
@@ -302,6 +310,7 @@ const ActionDeviceParamSelection = observer(() => {
                   disabled={false}
                   setUpdating={() => {}}
                   onValueChange={(value) => handleParamValueChange(value)}
+                  qaId={`action_device_param_${selectedParam.name}_selection`}
                 >
                   {renderParamControl(selectedParam)}
                 </ParamWrap>
@@ -309,37 +318,40 @@ const ActionDeviceParamSelection = observer(() => {
             </View>
 
             {/* Action Buttons */}
-            <View style={styles.actionButtonsContainer}>
+            <View style={styles.actionButtonsContainer} {...testProps("view_action_device_params_selection")}>
               {checkActionExists(
                 nodeId,
                 selectedDevice?.name || "",
                 selectedParam?.name || ""
               ).exist && (
                 <ActionButton
+                  qaId="button_delete_action_device_params_selection"
                   onPress={handleParamDelete}
                   variant="danger"
                   style={styles.actionButton}
                 >
                   <Text
                     style={[globalStyles.fontMedium, globalStyles.textWhite]}
+                    {...testProps("text_delete_action_device_params_selection")}
                   >
                     {t("layout.shared.delete")}
                   </Text>
                 </ActionButton>
               )}
               <ActionButton
+                qaId="button_save_action_device_params_selection"
                 onPress={handleParamSave}
                 variant="primary"
                 style={styles.actionButton}
               >
-                <Text style={[globalStyles.fontMedium, globalStyles.textWhite]}>
+                <Text style={[globalStyles.fontMedium, globalStyles.textWhite]} {...testProps("text_save_action_device_params_selection")}>
                   {t("layout.shared.save")}
                 </Text>
               </ActionButton>
             </View>
 
             {/* Bottom safe area */}
-            <View style={styles.bottomSafeArea} />
+            <View style={styles.bottomSafeArea} {...testProps("view_action_device_params_selection")} />
           </Pressable>
         </Pressable>
       </Modal>

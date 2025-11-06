@@ -15,12 +15,15 @@ import { Search } from 'lucide-react-native';
 import { tokens } from '@/theme/tokens';
 import { globalStyles } from '@/theme/globalStyleSheet';
 
+import { testProps } from "../../utils/testProps";
 // Types
 interface EmptyStateProps {
   /** Custom icon element */
   icon?: React.ReactNode;
   /** Message to display */
   message?: string;
+  /** QA automation identifier */
+  qaId?: string;
 }
 
 /**
@@ -35,9 +38,10 @@ interface EmptyStateProps {
 const EmptyState: React.FC<EmptyStateProps> = ({
   icon = <Search size={60} color={tokens.colors.bg2} />,
   message = 'No Data',
+  qaId,
 }) => {
   return (
-    <View style={[
+    <View {...(qaId ? testProps(qaId) : {})}  style={[
       globalStyles.flex1,
       globalStyles.justifyCenter,
       globalStyles.alignCenter,

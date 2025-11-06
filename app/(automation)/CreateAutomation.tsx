@@ -48,6 +48,9 @@ import { ESPAPIError, ESPAutomationEvent } from "@espressif/rainmaker-base-cdf";
 // Types
 import { LoadingState } from "@/types/global";
 
+// Utils
+import { testProps } from "@/utils/testProps";
+
 /**
  * CreateAutomation Component
  *
@@ -377,6 +380,7 @@ const CreateAutomation = () => {
   const renderAutomationName = () => {
     return (
       <ContentWrapper
+        qaId="automation_name"
         title={t("automation.createAutomation.automationName")}
         style={{
           ...styles.contentWrapper,
@@ -386,6 +390,7 @@ const CreateAutomation = () => {
       >
         <View style={[styles.inputContainer]}>
           <Input
+            qaId="automation_name"
             placeholder={t(
               "automation.createAutomation.automationNamePlaceholder"
             )}
@@ -397,12 +402,12 @@ const CreateAutomation = () => {
             marginBottom={false}
           />
           <View style={[styles.editIcon]}>
-            <Edit3 size={20} color={tokens.colors.text_secondary} />
+            <Edit3 {...testProps("icon_edit_automation_name")} size={20} color={tokens.colors.text_secondary} />
           </View>
         </View>
         {nameValidationError && (
           <View style={styles.errorContainer}>
-            <Text style={styles.errorText}>{nameValidationError}</Text>
+            <Text {...testProps("text_error_automation_name")} style={styles.errorText}>{nameValidationError}</Text>
           </View>
         )}
       </ContentWrapper>
@@ -417,14 +422,15 @@ const CreateAutomation = () => {
       <View style={styles.section}>
         <View style={styles.toggleContainer}>
           <View style={styles.toggleInfo}>
-            <Text style={styles.toggleLabel}>
+            <Text {...testProps("text_retrigger")} style={styles.toggleLabel}>
               {t("automation.createAutomation.retrigger")}
             </Text>
-            <Text style={styles.toggleDescription}>
+            <Text {...testProps("text_retrigger_description")} style={styles.toggleDescription}>
               {t("automation.createAutomation.retriggerDescription")}
             </Text>
           </View>
           <Switch
+            {...testProps("switch_retrigger")}
             size="$2.5"
             borderColor={tokens.colors.bg1}
             borderWidth={0}
@@ -459,10 +465,11 @@ const CreateAutomation = () => {
         style={[styles.section, { flex: state.events.length !== 0 ? 0.5 : 1 }]}
       >
         <View style={styles.sectionHeader}>
-          <Text style={styles.sectionLabel}>
+          <Text {...testProps("text_label_event")} style={styles.sectionLabel}>
             {t("automation.createAutomation.event")}
           </Text>
           <Pressable
+            {...testProps("button_add_event")}
             onPress={nameValidationError ? undefined : handleAddEvent}
             style={[
               styles.addButton,
@@ -493,14 +500,14 @@ const CreateAutomation = () => {
         </View>
         <View style={styles.eventContainer}>
           {state.events.length === 0 ? (
-            <View style={styles.emptyStateContainer}>
+            <View {...testProps("view_empty_event")} style={styles.emptyStateContainer}>
               <View style={styles.emptyStateIconContainer}>
                 <Settings size={35} color={tokens.colors.primary} />
               </View>
-              <Text style={globalStyles.emptyStateTitle}>
+              <Text {...testProps("text_title_empty_event")} style={globalStyles.emptyStateTitle}>
                 {t("automation.createAutomation.noEventSelected")}
               </Text>
-              <Text style={globalStyles.emptyStateDescription}>
+              <Text {...testProps("text_description_empty_event")} style={globalStyles.emptyStateDescription}>
                 {t("automation.createAutomation.noEventSelectedDescription")}
               </Text>
             </View>
@@ -527,6 +534,7 @@ const CreateAutomation = () => {
                     },
                   }}
                   onPress={nameValidationError ? () => {} : handleAddEvent}
+                  qaId={`automation_event_${eventInfo.deviceName}`}
                 />
               )}
             </View>
@@ -548,10 +556,11 @@ const CreateAutomation = () => {
     return (
       <View style={[styles.section, styles.actionsSection]}>
         <View style={styles.sectionHeader}>
-          <Text style={styles.sectionLabel}>
+          <Text {...testProps("text_label_actions")} style={styles.sectionLabel}>
             {t("automation.createAutomation.actions")}
           </Text>
           <Pressable
+            {...testProps("button_add_action")}
             onPress={nameValidationError ? undefined : handleAddAction}
             style={[
               styles.addButton,
@@ -570,14 +579,14 @@ const CreateAutomation = () => {
           </Pressable>
         </View>
         {Object.keys(state.actions).length === 0 ? (
-          <View style={styles.emptyStateContainer}>
+          <View {...testProps("view_empty_actions")} style={styles.emptyStateContainer}>
             <View style={styles.emptyStateIconContainer}>
               <Settings size={35} color={tokens.colors.primary} />
             </View>
-            <Text style={globalStyles.emptyStateTitle}>
+              <Text {...testProps("text_title_empty_automations")} style={globalStyles.emptyStateTitle}>
               {t("automation.createAutomation.noActionsSelected")}
             </Text>
-            <Text style={globalStyles.emptyStateDescription}>
+            <Text {...testProps("text_description_empty_automations")} style={globalStyles.emptyStateDescription}>
               {t("automation.createAutomation.noActionsSelectedDescription", {
                 action: state.isEditing ? "update" : "create",
               })}
@@ -585,6 +594,7 @@ const CreateAutomation = () => {
           </View>
         ) : (
           <ScrollView
+            {...testProps("scroll_actions_automations")}
             style={styles.actionScrollView}
             showsVerticalScrollIndicator={false}
             contentContainerStyle={styles.actionScrollContent}
@@ -598,6 +608,7 @@ const CreateAutomation = () => {
                   type="action"
                   actions={actionCard.actions}
                   onPress={nameValidationError ? () => {} : handleAddAction}
+                  qaId={`automation_action_${actionCard.device.name}`}
                 />
               ))}
             </View>
@@ -633,6 +644,7 @@ const CreateAutomation = () => {
           {/* CREATE ACTION (for new automations) */}
           {!state.isEditing && (
             <ActionButton
+              qaId="button_create_automation"
               onPress={handleCreateAutomation}
               disabled={
                 loading.save || !!nameValidationError || !isValidAutomation
@@ -644,7 +656,7 @@ const CreateAutomation = () => {
               ) : (
                 <View style={styles.buttonContent}>
                   <Check size={16} color={tokens.colors.white} />
-                  <Text
+                  <Text {...testProps("text_create_automation")}
                     style={[globalStyles.fontMedium, globalStyles.textWhite]}
                   >
                     {t("automation.actionDeviceSelection.createAutomation")}
@@ -657,6 +669,7 @@ const CreateAutomation = () => {
           {/* UPDATE ACTION */}
           {state.isEditing && (
             <ActionButton
+              qaId="button_update_automation"
               onPress={handleUpdateAutomation}
               disabled={
                 loading.save || !!nameValidationError || !isValidAutomation
@@ -668,7 +681,7 @@ const CreateAutomation = () => {
               ) : (
                 <View style={styles.buttonContent}>
                   <Check size={16} color={tokens.colors.white} />
-                  <Text
+                  <Text {...testProps("text_update_automation")}
                     style={[globalStyles.fontMedium, globalStyles.textWhite]}
                   >
                     {t("layout.shared.update")}
@@ -681,6 +694,7 @@ const CreateAutomation = () => {
           {/* DELETE ACTION */}
           {state.isEditing && (
             <ActionButton
+              qaId="button_delete_automation"
               onPress={handleDeleteAutomation}
               disabled={loading.delete || !!nameValidationError}
               variant="danger"
@@ -690,7 +704,7 @@ const CreateAutomation = () => {
               ) : (
                 <View style={styles.buttonContent}>
                   <Trash2 size={16} color={tokens.colors.white} />
-                  <Text
+                  <Text {...testProps("text_delete_automation")}
                     style={[globalStyles.fontMedium, globalStyles.textWhite]}
                   >
                     {t("layout.shared.delete")}

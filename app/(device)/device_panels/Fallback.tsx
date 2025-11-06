@@ -20,6 +20,9 @@ import { observer, useLocalObservable } from "mobx-react-lite";
 // components
 import { ParamControlWrap } from "@/components";
 
+// Utils
+import { testProps } from "@/utils/testProps";
+
 // Types
 import { DeviceFallbackProps } from "@/types/global";
 
@@ -77,7 +80,7 @@ const DeviceFallback = observer(
             tintColor={tokens.colors.primary}
             onRefresh={() => device.getParams()}
           />
-        }
+        } {...testProps("scroll_fallback")}
       >
         {params.map((param) => {
           let control = _paramsMap[param.uiType];

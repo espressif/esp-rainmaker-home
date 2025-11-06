@@ -55,27 +55,29 @@ const AboutUs: React.FC = () => {
   // Render
   return (
     <>
-      <Header label={t("user.aboutUs.title")} showBack={true} />
+      <Header label={t("user.aboutUs.title")} showBack={true} qaId="header_about_us" />
       <ScreenWrapper
         style={{
           ...globalStyles.container,
           backgroundColor: tokens.colors.bg5,
         }}
+        qaId="screen_wrapper_about_us"
       >
         <View style={styles.logoContainer}>
-          <Logo />
+          <Logo qaId="logo_about_us" />
         </View>
 
         <ContentWrapper
           style={{
             ...globalStyles.shadowElevationForLightTheme,
-          }}
+          }} qaId="about_us"
         >
           {/* version */}
           <InfoItem
             label={t("layout.shared.version")}
             value={appVersion}
             showSeparator={true}
+            qaId="app_version_about_us"
           />
 
           {/* website */}
@@ -84,6 +86,7 @@ const AboutUs: React.FC = () => {
             value="rainmaker.espressif.com"
             onPress={handleWebsiteClick}
             showSeparator={false}
+            qaId="website"
           />
         </ContentWrapper>
       </ScreenWrapper>

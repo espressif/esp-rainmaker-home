@@ -127,20 +127,21 @@ const Settings: React.FC = () => {
           : undefined
       }
       showSeparator={item.showSeparator}
+      qaId={`item_${item.id}_settings`}
     />
   );
 
   // Render
   return (
     <>
-      <Header label={t("user.settings.title")} showBack={true} />
+      <Header label={t("user.settings.title")} showBack={true} qaId="header_settings" />
       <ScreenWrapper
         style={{
           ...globalStyles.container,
           backgroundColor: tokens.colors.bg5,
-        }}
+        }} qaId="screen_wrapper_settings"
       >
-        <SettingsSection>
+        <SettingsSection qaId="section_settings">
           {settingsItems.map(renderSettingsItem)}
         </SettingsSection>
       </ScreenWrapper>

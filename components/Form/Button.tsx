@@ -21,6 +21,7 @@ import {
 import { globalStyles } from "@/theme/globalStyleSheet";
 import { tokens } from "@/theme/tokens";
 
+import { testProps } from "../../utils/testProps";
 // Types
 interface ESPButtonProps {
   /** Button label text */
@@ -39,6 +40,8 @@ interface ESPButtonProps {
   wrapperStyle?: ViewStyle;
   /** Additional text style overrides */
   textStyle?: TextStyle;
+  /** QA automation identifier */
+  qaId?: string;
 }
 
 /**
@@ -60,10 +63,12 @@ const ESPButton: React.FC<ESPButtonProps> = ({
   style,
   wrapperStyle,
   textStyle,
+  qaId,
 }) => {
   return (
     <View style={[globalStyles.btnWrap, wrapperStyle]}>
       <TouchableOpacity
+        {...(qaId ? testProps(qaId) : {})}
         onPress={onPress}
         disabled={disabled || isLoading}
         style={[
@@ -76,7 +81,7 @@ const ESPButton: React.FC<ESPButtonProps> = ({
         {isLoading ? (
           <ActivityIndicator color={tokens.colors.white} size="small" />
         ) : (
-          <Text style={[styles.text, globalStyles.fontMd, textStyle]}>
+          <Text {...testProps("text_label")} style={[styles.text, globalStyles.fontMd, textStyle]}>
             {label}
           </Text>
         )}

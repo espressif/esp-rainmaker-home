@@ -17,6 +17,7 @@ import { StatusBar } from "expo-status-bar";
 // Styles
 import { globalStyles } from "@/theme/globalStyleSheet";
 
+import { testProps } from "../../utils/testProps";
 // Types
 interface ScreenWrapperProps {
   /** Additional style overrides */
@@ -27,6 +28,8 @@ interface ScreenWrapperProps {
   dismissKeyboard?: boolean;
   /** Whether to exclude top safe area (when Header is used separately). Default: false */
   excludeTop?: boolean;
+  /** QA automation identifier */
+  qaId?: string;
 }
 
 /**
@@ -44,6 +47,7 @@ const ScreenWrapper: React.FC<ScreenWrapperProps> = ({
   children,
   dismissKeyboard = true,
   excludeTop = true,
+  qaId,
 }) => {
   const handleDismissKeyboard = () => {
     if (dismissKeyboard) {
@@ -58,7 +62,7 @@ const ScreenWrapper: React.FC<ScreenWrapperProps> = ({
   return (
     <SafeAreaView style={[globalStyles.container, style]} edges={safeAreaEdges}>
       <StatusBar style="dark" backgroundColor="#ffffff" translucent={false} />
-      <TouchableWithoutFeedback onPress={handleDismissKeyboard}>
+      <TouchableWithoutFeedback {...(qaId ? testProps(qaId) : {})} onPress={handleDismissKeyboard}>
         <View style={{ flex: 1 }}>{children}</View>
       </TouchableWithoutFeedback>
     </SafeAreaView>

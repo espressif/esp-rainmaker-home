@@ -16,9 +16,13 @@ import {
 
 // Styles
 import { tokens } from "@/theme/tokens";
+
 // Hooks
 import { useToast } from "@/hooks/useToast";
 import { useTranslation } from "react-i18next";
+
+// Utils
+import { testProps } from "@/utils/testProps";
 
 // State Management
 import { observer } from "mobx-react-lite";
@@ -122,6 +126,7 @@ const Light: React.FC<ControlPanelProps> = ({ node, device }) => {
     <TouchableOpacity
       key={tab}
       style={[styles.tab, activeTab === tab && styles.activeTab]}
+      {...testProps("button_light")}
       onPress={() => setActiveTab(tab)}
     >
       <Text style={[styles.tabText, activeTab === tab && styles.activeTabText]}>
@@ -139,11 +144,11 @@ const Light: React.FC<ControlPanelProps> = ({ node, device }) => {
         styles.container,
         { opacity: isConnected ? 1 : 0.5 },
         { backgroundColor: tokens.colors.bg5 },
-      ]}
+      ]} {...testProps("view_light")}
     >
       {/* Only show tabs if there are multiple modes available */}
       {supportsColor && (
-        <View style={styles.tabContainer}>
+        <View style={styles.tabContainer} {...testProps("view_tabs_light")}>
           {([WHITE_TAB, COLOR_TAB] as Tab[]).map(renderTab)}
         </View>
       )}
@@ -159,11 +164,11 @@ const Light: React.FC<ControlPanelProps> = ({ node, device }) => {
             onRefresh={handleRefresh}
             enabled={isConnected}
           />
-        }
+        } {...testProps("scroll_light")}
       >
         {/* Power Control */}
         {powerParam && (
-          <View style={styles.powerButtonContainer}>
+          <View style={styles.powerButtonContainer} {...testProps("view_power_light")}>
             <ParamControlWrap
               key={powerParam.name}
               param={powerParam}

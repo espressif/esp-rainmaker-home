@@ -32,6 +32,10 @@ import { ESPRM_TEMPERATURE_PARAM_TYPE } from "@/utils/constants";
 
 // Components
 import { RoundedSlider } from "@/components/Layout/RoundedSlider";
+
+// Utils
+import { testProps } from "@/utils/testProps";
+
 /**
  * Temperature Sensor Control Panel
  *
@@ -146,7 +150,7 @@ const Temperature: React.FC<ControlPanelProps> = ({ node, device }) => {
 
   // Render
   return (
-    <View style={[styles.container, { opacity: isConnected ? 1 : 0.5 }]}>
+    <View style={[styles.container, { opacity: isConnected ? 1 : 0.5 }]} {...testProps("view_temperature")}>
       <ScrollView
         style={styles.content}
         contentContainerStyle={styles.contentContainer}
@@ -158,10 +162,10 @@ const Temperature: React.FC<ControlPanelProps> = ({ node, device }) => {
             onRefresh={handleRefresh}
             enabled={isConnected}
           />
-        }
+        } {...testProps("scroll_temperature")}
       >
         {/* Temperature Display */}
-        <View style={styles.temperatureContainer}>
+        <View style={styles.temperatureContainer} {...testProps("view_temperature")}>
           <RoundedSlider
             progress={getTemperaturePercentage(temperature)}
             progressLabel={temperature}
@@ -191,14 +195,14 @@ const Temperature: React.FC<ControlPanelProps> = ({ node, device }) => {
               style={[
                 styles.centerContent,
                 { width: centerContentSize, height: centerContentSize },
-              ]}
+              ]} {...testProps("view_temperature")}
             >
-              <View style={styles.temperatureDisplay}>
-                <Text style={styles.temperatureLabel}>{temperature}</Text>
-                <Text style={styles.degreeSymbol}>°</Text>
-                <Text style={styles.temperatureUnit}>C</Text>
+              <View style={styles.temperatureDisplay} {...testProps("view_temperature")}>
+                <Text style={styles.temperatureLabel} {...testProps("text_temperature")}>{temperature}</Text>
+                <Text style={styles.degreeSymbol} {...testProps("text_degree")}>°</Text>
+                <Text style={styles.temperatureUnit} {...testProps("text_unit")}>C</Text>
               </View>
-              <Text style={styles.temperatureTitle}>
+              <Text style={styles.temperatureTitle} {...testProps("text_temperature_title")}>
                 {t("device.panels.temperature.title")}
               </Text>
             </View>

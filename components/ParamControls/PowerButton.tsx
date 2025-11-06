@@ -16,6 +16,7 @@ import { Power } from "lucide-react-native";
 // Types
 import { ParamControlChildProps } from "./lib/types";
 import { observer } from "mobx-react-lite";
+import { testProps } from "../../utils/testProps";
 
 /**
  * PowerButton
@@ -56,6 +57,7 @@ const PowerButton = observer(
 
         {/* Main button container */}
         <TouchableOpacity
+          {...testProps("button_power_control")}
           style={[
             styles.powerButton,
             {
@@ -84,6 +86,7 @@ const PowerButton = observer(
           >
             {/* Power icon */}
             <Power
+              {...testProps("icon_power_control")}
               size={size * 0.4}
               color={isOn ? tokens.colors.white : tokens.colors.gray}
               strokeWidth={3}

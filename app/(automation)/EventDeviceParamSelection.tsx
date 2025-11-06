@@ -49,6 +49,7 @@ import {
 // Config & Utils
 import { PARAM_CONTROLS } from "@/config/params.config";
 import { useAutomation } from "@/context/automation.context";
+import { testProps } from "@/utils/testProps";
 
 /**
  * UI Control Map for parameter types
@@ -345,6 +346,7 @@ const EventDeviceParamSelection = observer(() => {
             style={{ flex: 1 }}
             renderItem={({ item }: { item: ESPRMDeviceParam }) => (
               <ContentWrapper
+                qaId={`event_device_param_${item.name}_selection`}
                 title={item.name}
                 style={{
                   marginBottom: tokens.spacing._10,
@@ -361,6 +363,7 @@ const EventDeviceParamSelection = observer(() => {
                 }}
                 leftSlot={
                   <Text
+                  {...testProps(`text_${item.name}_params_value`)}
                     style={[
                       globalStyles.fontMedium,
                       activeEventParam === item.name && {
@@ -385,12 +388,13 @@ const EventDeviceParamSelection = observer(() => {
           style={[globalStyles.actionButtonContainer, styles.buttonContainer]}
         >
           <ActionButton
+            qaId="button_create_event"
             onPress={handleCreateEvent}
             disabled={disableActionButton}
             variant="secondary"
           >
             <View style={styles.buttonContent}>
-              <Text style={[globalStyles.fontMedium]}>
+              <Text {...testProps("text_done_event_device_param_selection")} style={[globalStyles.fontMedium]}>
                 {t("layout.shared.done")}
               </Text>
             </View>
@@ -417,7 +421,7 @@ const EventDeviceParamSelection = observer(() => {
             <View style={styles.handle} />
 
             {/* Parameter UI */}
-            <View style={styles.paramUIContainer}>
+            <View {...testProps("view_event_device_param_selection")} style={styles.paramUIContainer}>
               {selectedParam && (
                 <ParamWrap
                   key={`${selectedParam.name}-modal`}
@@ -425,6 +429,7 @@ const EventDeviceParamSelection = observer(() => {
                   disabled={false}
                   setUpdating={() => {}}
                   onValueChange={(value) => handleParamValueChange(value)}
+                  qaId={`event_device_param_${selectedParam.name}_selection`}
                 >
                   {renderParamControl(selectedParam)}
                 </ParamWrap>
@@ -469,11 +474,12 @@ const EventDeviceParamSelection = observer(() => {
             {/* Action Buttons */}
             <View style={styles.actionButtonsContainer}>
               <ActionButton
+                qaId="button_save_event_device_param_selection"
                 onPress={handleEventConditionSave}
                 variant="primary"
                 style={styles.actionButton}
               >
-                <Text style={[globalStyles.fontMedium, globalStyles.textWhite]}>
+                <Text {...testProps("text_save_event_device_param_selection")} style={[globalStyles.fontMedium, globalStyles.textWhite]}>
                   {t("layout.shared.save")}
                 </Text>
               </ActionButton>

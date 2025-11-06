@@ -63,6 +63,7 @@ const HomeRemove: React.FC<HomeRemoveProps> = ({
         }
         title={buttonTitle}
         onPress={() => setShowDelete(true)}
+        qaId="remove_home" 
       />
 
       <ConfirmationDialog
@@ -79,6 +80,7 @@ const HomeRemove: React.FC<HomeRemoveProps> = ({
         }}
         confirmColor={tokens.colors.red}
         isLoading={isLoading}
+        qaId="remove_home"
       />
     </>
   );

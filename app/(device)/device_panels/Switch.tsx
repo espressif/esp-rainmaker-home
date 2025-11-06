@@ -27,6 +27,9 @@ import { observer } from "mobx-react-lite";
 import { PowerButton } from "@/components/ParamControls";
 import { ParamControlWrap } from "@/components";
 
+// Utils
+import { testProps } from "@/utils/testProps";
+
 // Types
 import { ControlPanelProps } from "@/types/global";
 
@@ -97,7 +100,7 @@ const Switch: React.FC<ControlPanelProps> = ({ node, device }) => {
         styles.container,
         { opacity: isConnected ? 1 : 0.5 },
         { backgroundColor: tokens.colors.bg5 },
-      ]}
+      ]}  {...testProps("view_switch")}
     >
       <ScrollView
         style={styles.content}
@@ -110,11 +113,11 @@ const Switch: React.FC<ControlPanelProps> = ({ node, device }) => {
             onRefresh={handleRefresh}
             enabled={isConnected}
           />
-        }
+        } {...testProps("scroll_refresh_switch")}
       >
         {/* Power Control */}
         {powerParam && (
-          <View style={styles.powerButtonContainer}>
+          <View {...testProps("view_switch")} style={styles.powerButtonContainer}>
             <ParamControlWrap
               key={powerParam.name}
               param={powerParam}
@@ -127,12 +130,12 @@ const Switch: React.FC<ControlPanelProps> = ({ node, device }) => {
             </ParamControlWrap>
 
             {/* ON/OFF Status Label */}
-            <View style={styles.statusContainer}>
+            <View style={styles.statusContainer} {...testProps("view_status_switch")}>
               <Text
                 style={[
                   styles.statusText,
                   isPowerOn ? styles.statusTextOn : styles.statusTextOff,
-                ]}
+                ]} {...testProps("text_status_switch")}
               >
                 {isPowerOn
                   ? t("device.panels.switch.on")

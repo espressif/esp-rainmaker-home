@@ -11,6 +11,7 @@ import { Svg, Path, G, Defs, LinearGradient, Stop } from "react-native-svg";
 // Styles
 import { tokens } from "@/theme/tokens";
 
+import { testProps } from "../../utils/testProps";
 interface RoundedSliderProps {
   /** Current progress value (0-100) */
   progress: number;
@@ -53,6 +54,8 @@ interface RoundedSliderProps {
   /** Array of colors for gradient */
   gradientColors?: string[];
   children?: React.ReactNode;
+  /** QA automation identifier */
+  qaId?: string;
 }
 
 export function RoundedSlider({
@@ -70,6 +73,7 @@ export function RoundedSlider({
   radius = 80,
   startAngle = 135, // Start from bottom-left (speedometer style)
   arcAngle = 270, // 270 degrees creates a gap at the bottom
+  qaId,
   size = 200,
   unit = "%",
   label = "PROGRESS",
@@ -199,7 +203,7 @@ export function RoundedSlider({
     };
 
     return (
-      <View style={[styles.container, { width: size, height: size }]}>
+      <View {...(qaId ? testProps(qaId) : {})}  style={[styles.container, { width: size, height: size }]}>
         <View style={styles.svgContainer}>
           <Svg width={svgSize} height={svgSize}>
             {/* Define gradient if enabled */}
@@ -289,7 +293,7 @@ export function RoundedSlider({
                 }
 
                 return (
-                  <G key={index}>
+                  <G {...(qaId ? testProps(qaId) : {})}  key={index}>
                     {/* Background line segment */}
                     <Path
                       d={linePath}
@@ -366,7 +370,7 @@ export function RoundedSlider({
 
   // Linear progress bar (React Native version)
   return (
-    <View style={styles.linearContainer}>
+    <View {...(qaId ? testProps(qaId) : {})}  style={styles.linearContainer}>
       <View style={[styles.linearBar, { gap: gap }]}>
         {Array.from({ length: segments }, (_, index) => {
           let segmentFillPercentage = 0;
@@ -394,7 +398,7 @@ export function RoundedSlider({
           }
 
           return (
-            <View
+            <View {...(qaId ? testProps(qaId) : {})}
               key={index}
               style={[
                 styles.segment,

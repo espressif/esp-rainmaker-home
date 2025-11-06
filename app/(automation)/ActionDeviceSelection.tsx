@@ -32,6 +32,7 @@ import {
 } from "@/components";
 // Utils
 import { deepClone } from "@/utils/common";
+import { testProps } from "@/utils/testProps";
 // Types
 import { DeviceSelectionData } from "@/types/global";
 
@@ -217,9 +218,9 @@ const ActionDeviceSelection = observer(() => {
     };
 
     return (
-      <View style={styles.eventSummaryCard}>
+      <View {...testProps("view_event_summary_action")} style={styles.eventSummaryCard}>
         <View style={styles.eventSummaryHeader}>
-          <Text style={styles.eventSummaryTitle}>
+          <Text {...testProps("text_event_summary_title")} style={styles.eventSummaryTitle}>
             {t("automation.actionDeviceSelection.eventSummary")}
           </Text>
         </View>
@@ -263,6 +264,7 @@ const ActionDeviceSelection = observer(() => {
 
     return (
       <View
+        {...testProps("view_action_device_item")}
         key={`${device.node.id}-${deviceIndex}`}
         style={[
           globalStyles.sceneDeviceSection,
@@ -271,6 +273,7 @@ const ActionDeviceSelection = observer(() => {
         ]}
       >
         <DeviceAction
+          qaId="action_device_action_item"
           device={device.device.type}
           displayDeviceName={device.device.displayName}
           actions={
@@ -298,18 +301,19 @@ const ActionDeviceSelection = observer(() => {
           rightSlot={
             device.isSelected && (
               <Pressable
+                {...testProps("button_delete_selected_action_device")}
                 style={{
                   padding: tokens.spacing._10,
                 }}
                 onPress={() => !isDeviceDisabled && handleDeviceDelete(device)}
               >
-                <X size={16} color={tokens.colors.red} />
+                <X {...testProps("icon_delete_selected_action_device")} size={16} color={tokens.colors.red} />
               </Pressable>
             )
           }
           badgeLable={
             !isDeviceOnline && (
-              <Text style={[globalStyles.fontXs, globalStyles.textGray]}>
+              <Text {...testProps("text_offline_action")} style={[globalStyles.fontXs, globalStyles.textGray]}>
                 {t("layout.shared.offline")}
               </Text>
             )
@@ -324,12 +328,14 @@ const ActionDeviceSelection = observer(() => {
       <Header
         label={t("automation.actionDeviceSelection.title")}
         showBack={true}
+        qaId="header_action_device_selection"
       />
       <ScreenWrapper
         style={{
           ...globalStyles.container,
           padding: 0,
         }}
+        qaId="screen_wrapper_action_device_selection"
       >
         {/* Event Summary */}
         {renderEventSummary()}
@@ -337,6 +343,7 @@ const ActionDeviceSelection = observer(() => {
         {/* Main Content */}
 
         <ScrollView
+          {...testProps("scroll_action_devices")}
           style={{
             flex: 1,
             marginBottom: 80,
@@ -352,6 +359,7 @@ const ActionDeviceSelection = observer(() => {
             >
               <View style={{ marginBottom: tokens.spacing._10 }}>
                 <Text
+                  {...testProps("text_selected_devices_action")}
                   style={[
                     globalStyles.fontSm,
                     globalStyles.fontMedium,
@@ -371,6 +379,7 @@ const ActionDeviceSelection = observer(() => {
             <View style={{ flex: 1, padding: tokens.spacing._15 }}>
               <View style={{ marginBottom: tokens.spacing._10 }}>
                 <Text
+                  {...testProps("text_select_devices_action")}
                   style={[
                     globalStyles.fontSm,
                     globalStyles.fontMedium,
@@ -394,6 +403,7 @@ const ActionDeviceSelection = observer(() => {
         {devices.length > 0 && (
           <View style={[globalStyles.sceneFooter]}>
             <ActionButton
+              {...testProps("button_done_action_selection")}
               onPress={() => router.dismissTo("/(automation)/CreateAutomation")}
               variant="secondary"
             >

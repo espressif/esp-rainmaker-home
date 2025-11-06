@@ -10,6 +10,7 @@ import { View, StyleSheet, Text, ScrollView, Pressable } from "react-native";
 // Styles
 import { tokens } from "@/theme/tokens";
 
+import { testProps } from "../../utils/testProps";
 // Types
 interface ContentWrapperProps {
   children?: React.ReactNode;
@@ -19,6 +20,8 @@ interface ContentWrapperProps {
   contentStyle?: any;
   scrollContent?: boolean;
   onPress?: () => void;
+  /** QA automation identifier */
+  qaId?: string;
 }
 
 /**
@@ -38,12 +41,13 @@ const ContentWrapper: React.FC<ContentWrapperProps> = ({
   contentStyle,
   scrollContent,
   onPress,
+  qaId,
 }) => {
   return (
-    <Pressable style={[styles.container, style]} onPress={onPress}>
+    <Pressable {...(qaId ? testProps(`button_${qaId}`) : {})}  style={[styles.container, style]} onPress={onPress}>
       {title && (
         <View style={styles.header}>
-          <Text style={styles.title}>{title}</Text>
+          <Text {...(qaId ? testProps(`text_title_${qaId}`) : {})} style={styles.title}>{title}</Text>
           {leftSlot}
         </View>
       )}

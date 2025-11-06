@@ -12,6 +12,7 @@ import { Text, Pressable, StyleSheet } from 'react-native';
 import { tokens } from '@/theme/tokens';
 import { globalStyles } from '@/theme/globalStyleSheet';
 
+import { testProps } from "../../utils/testProps";
 // Types
 interface DangerButtonProps {
   /** Icon element to display */
@@ -20,6 +21,8 @@ interface DangerButtonProps {
   title: string;
   /** Press event handler */
   onPress: () => void;
+  /** QA automation identifier */
+  qaId?: string;
 }
 
 /**
@@ -35,9 +38,10 @@ const DangerButton: React.FC<DangerButtonProps> = ({
   icon,
   title,
   onPress,
+  qaId,
 }) => {
   return (
-    <Pressable 
+    <Pressable {...(qaId ? testProps(`button_danger_${qaId}`) : {})}
       style={[
         globalStyles.settingsSection,
         globalStyles.flex,
@@ -48,7 +52,7 @@ const DangerButton: React.FC<DangerButtonProps> = ({
       onPress={onPress}
     >
       {icon}
-      <Text style={[globalStyles.fontMedium, styles.text]}>
+      <Text {...testProps(`text_danger_button_${qaId}`)} style={[globalStyles.fontMedium, styles.text]}>
         {title}
       </Text>
     </Pressable>

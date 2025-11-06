@@ -41,6 +41,7 @@ import {
 // Utils
 import { deepClone } from "@/utils/common";
 import { ESPRM_SCENES_SERVICE } from "@/utils/constants";
+import { testProps } from "@/utils/testProps";
 
 interface DeviceSelectionData {
   node: ESPRMNode;
@@ -184,6 +185,7 @@ const DeviceSelection = observer(() => {
 
     return (
       <View
+        {...testProps("view_device_item")}
         key={`${device.node.id}-${deviceIndex}`}
         style={[
           globalStyles.sceneDeviceSection,
@@ -192,6 +194,7 @@ const DeviceSelection = observer(() => {
         ]}
       >
         <DeviceAction
+          qaId="device_action_item"
           device={device.device.type}
           displayDeviceName={device.device.displayName}
           actions={
@@ -219,24 +222,25 @@ const DeviceSelection = observer(() => {
           rightSlot={
             device.isSelected && (
               <Pressable
+                {...testProps("button_delete_selected_device")}
                 style={{
                   padding: tokens.spacing._10,
                 }}
                 onPress={() => !isDeviceDisabled && handleDeviceDelete(device)}
               >
-                <X size={16} color={tokens.colors.red} />
+                <X {...testProps("icon_delete_selected_device")} size={16} color={tokens.colors.red} />
               </Pressable>
             )
           }
           badgeLable={
             isDeviceDisabled &&
             (isDeviceOnline ? (
-              <Text style={[globalStyles.fontXs, globalStyles.textWarning]}>
+              <Text {...testProps("text_max_scene_reached")} style={[globalStyles.fontXs, globalStyles.textWarning]}>
                 {t("scene.deviceSelection.maxSceneReached")}
               </Text>
             ) : (
               !isDeviceOnline && (
-                <Text style={[globalStyles.fontXs, globalStyles.textGray]}>
+                <Text {...testProps("text_offline")} style={[globalStyles.fontXs, globalStyles.textGray]}>
                   {t("layout.shared.offline")}
                 </Text>
               )
@@ -249,12 +253,13 @@ const DeviceSelection = observer(() => {
 
   return (
     <>
-      <Header label={t("scene.deviceSelection.title")} showBack={true} />
+      <Header label={t("scene.deviceSelection.title")} showBack={true} qaId="header_scene_device_selection" />
       <ScreenWrapper
         style={{
           ...globalStyles.container,
           padding: 0,
         }}
+        qaId="screen_wrapper_scene_device_selection"
       >
         {/* Main Content */}
         {devices.length === 0 ? (
@@ -266,17 +271,18 @@ const DeviceSelection = observer(() => {
               },
             ]}
           >
-            <View style={globalStyles.sceneEmptyStateIconContainer}>
-              <Pressable onPress={() => router.push("/(device)/AddDeviceSelection")}>
+            <View {...testProps("view_empty_devices_selection")} style={globalStyles.sceneEmptyStateIconContainer}>
+              <Pressable {...testProps("button_add_device_selection")} onPress={() => router.push("/(device)/AddDeviceSelection")}>
                 <Plus size={35} color={tokens.colors.primary} />
               </Pressable>
             </View>
-            <Text style={globalStyles.emptyStateTitle}>
+            <Text {...testProps("text_no_devices_available")} style={globalStyles.emptyStateTitle}>
               {t("scene.deviceSelection.noDevicesAvailable")}
             </Text>
           </View>
         ) : (
           <ScrollView
+            {...testProps("scroll_scene_devices")}
             style={{
               flex: 1,
               marginBottom: 80
@@ -285,6 +291,7 @@ const DeviceSelection = observer(() => {
             {/* Device List */}
             {selectedDevices.length > 0 && (
               <View
+                {...testProps("view_selected_devices")}
                 style={{
                   padding: tokens.spacing._15,
                   paddingBottom: 0,
@@ -292,6 +299,7 @@ const DeviceSelection = observer(() => {
               >
                 <View style={{ marginBottom: tokens.spacing._10 }}>
                   <Text
+                    {...testProps("text_selected_devices")}
                     style={[
                       globalStyles.fontSm,
                       globalStyles.fontMedium,
@@ -308,9 +316,10 @@ const DeviceSelection = observer(() => {
             )}
 
             {nonSelectedDevices.length > 0 && (
-              <View style={{ flex: 1, padding: tokens.spacing._15 }}>
+              <View {...testProps("view_non_selected_devices")} style={{ flex: 1, padding: tokens.spacing._15 }}>
                 <View style={{ marginBottom: tokens.spacing._10 }}>
                   <Text
+                    {...testProps("text_select_devices")}
                     style={[
                       globalStyles.fontSm,
                       globalStyles.fontMedium,
@@ -335,6 +344,7 @@ const DeviceSelection = observer(() => {
         {devices.length > 0 && (
           <View style={[globalStyles.sceneFooter]}>
             <ActionButton
+              qaId="button_done_scene_selection"
               onPress={() => router.back()}
               disabled={selectedDevices.length === 0}
               variant="secondary"

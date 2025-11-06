@@ -52,6 +52,7 @@ import { tokens } from "@/theme/tokens";
 // Icons
 import { Lock } from "lucide-react-native";
 
+import { testProps } from "../../utils/testProps";
 // Types
 interface DeviceCardProps {
   /** Node containing the device */
@@ -60,6 +61,8 @@ interface DeviceCardProps {
   device: ESPRMDevice;
   /** Whether to use compact layout */
   compact?: boolean;
+  /** QA automation identifier */
+  qaId?: string;
 }
 
 interface ParamTypeMap {
@@ -81,6 +84,7 @@ const DeviceCard: React.FC<DeviceCardProps> = ({
   node,
   device,
   compact = false,
+  qaId,
 }) => {
   const toast = useToast();
   const { t } = useTranslation();
@@ -169,13 +173,15 @@ const DeviceCard: React.FC<DeviceCardProps> = ({
   // Render compact card
   if (compact) {
     return (
-      <View style={styles.compactCard} key={device.name}>
+      <View {...(qaId ? testProps(qaId) : {})}  style={styles.compactCard} key={device.name}>
         <Image
+          {...testProps("icon_device_card")}
           source={getDeviceImage(device.type, isConnected)}
           style={[styles.image, { marginBottom: 5 }]}
         />
 
         <Text
+          {...testProps("text_device_name")}
           style={[
             styles.name,
             { marginBottom: 5, paddingRight: 0, textAlign: "center" },
@@ -186,6 +192,7 @@ const DeviceCard: React.FC<DeviceCardProps> = ({
 
         {isPowerParamExisit && (
           <Switch
+            {...testProps("switch_device_power")}
             size="$2.5"
             borderColor={tokens.colors.bg1}
             borderWidth={0}
@@ -220,7 +227,7 @@ const DeviceCard: React.FC<DeviceCardProps> = ({
 
   // Render full card
   return (
-    <TouchableOpacity
+    <TouchableOpacity {...(qaId ? testProps(qaId) : {})}
       key={device.name}
       style={[
         styles.card,
@@ -237,11 +244,13 @@ const DeviceCard: React.FC<DeviceCardProps> = ({
     >
       <View style={styles.flexWrap}>
         <Image
+          {...testProps("icon_device_card")}
           source={getDeviceImage(device.type, getOnValue())}
           style={styles.image}
         />
         {isPowerParamExisit && (
           <Switch
+            {...testProps("switch_device_power")}
             size="$2.5"
             borderColor={tokens.colors.bg1}
             borderWidth={0}
@@ -267,13 +276,13 @@ const DeviceCard: React.FC<DeviceCardProps> = ({
           <Text style={styles.textValue} numberOfLines={1}>
             {paramTypeMap[ESPRM_TEMPERATURE_PARAM_TYPE]?.value.toFixed(1)}
             °C
-          </Text>
+          </Text> 
         )}
       </View>
 
       <View style={{ width: "100%", paddingLeft: 5 }}>
         <View>
-          <Text style={styles.name} numberOfLines={1}>
+          <Text {...testProps("text_device_name")} style={styles.name} numberOfLines={1}>
             {paramTypeMap[ESPRM_NAME_PARAM_TYPE]?.value || device.displayName}
           </Text>
         </View>
@@ -282,7 +291,7 @@ const DeviceCard: React.FC<DeviceCardProps> = ({
             isAvailableLocally ? (
               <View style={styles.wlanIndicator}>
                 <Lock size={12} color={tokens.colors.primary} />
-                <Text style={styles.wlanText}>
+                <Text {...testProps("text_local_control_device_card")} style={styles.wlanText}>
                   {t("device.availableOnWLAN")}
                 </Text>
               </View>
@@ -290,7 +299,7 @@ const DeviceCard: React.FC<DeviceCardProps> = ({
               <Text style={styles.status}></Text>
             )
           ) : (
-            <Text style={styles.status}>{t("layout.shared.offline")}</Text>
+            <Text {...testProps("text_offline_device_card")} style={styles.status}>{t("layout.shared.offline")}</Text>
           )}
         </View>
       </View>

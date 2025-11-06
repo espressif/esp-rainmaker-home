@@ -50,6 +50,9 @@ import {
 
 import { LoadingState } from "@/types/global";
 
+// Utils
+import { testProps } from "@/utils/testProps";
+
 /**
  * CreateSchedule Component
  *
@@ -206,6 +209,7 @@ const CreateSchedule = () => {
         >
           <View style={[styles.inputContainer]}>
             <Input
+              qaId="schedule_name"
               placeholder={t("schedule.createSchedule.scheduleNamePlaceholder")}
               value={state.scheduleName}
               onFieldChange={setScheduleName}
@@ -254,6 +258,7 @@ const CreateSchedule = () => {
 
           {/* Device actions list */}
           <ScrollView
+            {...testProps("scroll_schedule_actions")}
             style={styles.deviceList}
             showsVerticalScrollIndicator={false}
             contentContainerStyle={styles.deviceListContent}
@@ -270,14 +275,14 @@ const CreateSchedule = () => {
                 />
               ))
             ) : (
-              <View style={styles.emptyStateContainer}>
+              <View {...testProps("view_empty_actions")} style={styles.emptyStateContainer}>
                 <View style={styles.emptyStateIconContainer}>
                   <Settings size={35} color={tokens.colors.primary} />
                 </View>
-                <Text style={globalStyles.emptyStateTitle}>
+                <Text {...testProps("text_title_empty_schedule")} style={globalStyles.emptyStateTitle}>
                   {t("schedule.createSchedule.noActionsSelected")}
                 </Text>
-                <Text style={globalStyles.emptyStateDescription}>
+                <Text {...testProps("text_description_empty_schedule")} style={globalStyles.emptyStateDescription}>
                   {t("schedule.createSchedule.noActionsSelectedDescription")}
                 </Text>
               </View>
@@ -291,6 +296,7 @@ const CreateSchedule = () => {
         >
           {/* SAVE ACTION */}
           <ActionButton
+            qaId="button_save_schedule"
             onPress={handleSave}
             disabled={disableActionButton}
             variant="primary"
@@ -300,7 +306,7 @@ const CreateSchedule = () => {
             ) : (
               <View style={styles.buttonContent}>
                 <Check size={16} color={tokens.colors.white} />
-                <Text style={[globalStyles.fontMedium, globalStyles.textWhite]}>
+                <Text {...testProps("text_save_schedule")} style={[globalStyles.fontMedium, globalStyles.textWhite]}>
                   {state.isEditing
                     ? t("layout.shared.update")
                     : t("layout.shared.save")}
@@ -312,6 +318,7 @@ const CreateSchedule = () => {
           {/* DELETE ACTION */}
           {state.isEditing && (
             <ActionButton
+              qaId="button_delete_schedule"
               onPress={handleDelete}
               disabled={disableActionButton}
               variant="danger"

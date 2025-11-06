@@ -41,6 +41,7 @@ import {
 // Utils
 import { deepClone } from "@/utils/common";
 import { ESPRM_SCHEDULES_SERVICE } from "@/utils/constants";
+import { testProps } from "@/utils/testProps";
 
 /**
  * ScheduleDeviceSelection Component
@@ -276,6 +277,7 @@ const ScheduleDeviceSelection = observer(() => {
           </View>
         ) : (
           <ScrollView
+            {...testProps("scroll_schedule_devices")}
             style={{
               flex: 1,
               marginBottom: 80,
@@ -334,6 +336,7 @@ const ScheduleDeviceSelection = observer(() => {
         {devices.length > 0 && (
           <View style={[globalStyles.sceneFooter]}>
             <ActionButton
+              qaId="button_done_schedule_selection"
               onPress={() => router.back()}
               disabled={selectedDevices.length === 0}
               variant="secondary"

@@ -16,6 +16,7 @@ import { useTranslation } from "react-i18next";
 // Styles
 import { tokens } from "@/theme/tokens";
 
+import { testProps } from "../../utils/testProps";
 interface DeviceActionProps {
   device: string;
   displayDeviceName: string;
@@ -31,6 +32,8 @@ interface DeviceActionProps {
   /** Whether this is displaying event conditions instead of actions */
   isEventMode?: boolean;
   isOutOfSync?: boolean;
+  /** QA automation identifier */
+  qaId?: string;
 }
 
 /**
@@ -52,6 +55,7 @@ const DeviceAction: React.FC<DeviceActionProps> = ({
   eventConditions,
   isEventMode = false,
   isOutOfSync = false,
+  qaId,
 }) => {
   const { t } = useTranslation();
 
@@ -86,15 +90,16 @@ const DeviceAction: React.FC<DeviceActionProps> = ({
   };
 
   return (
-    <View style={styles.containerWrapper}>
-      <Pressable style={[styles.container]} onPress={onPress}>
+    <View {...(qaId ? testProps(`view_${qaId}`) : {})}  style={styles.containerWrapper}>
+      <Pressable {...(qaId ? testProps(`button_${qaId}`) : {})} style={[styles.container]} onPress={onPress}>
         <View style={styles.deviceInfo}>
           <Image
+            {...(qaId ? testProps(`image_${displayDeviceName}`) : {})}
             source={getDeviceImage(device, true)}
             style={styles.deviceIcon}
           />
           <View style={styles.textContainer}>
-            <Text style={[styles.deviceName]} numberOfLines={1}>
+            <Text {...(qaId ? testProps(`text_${displayDeviceName}_device_name`) : {})} style={[styles.deviceName]} numberOfLines={1}>
               {displayDeviceName}
             </Text>
             <View style={styles.actionContainer}>

@@ -33,6 +33,7 @@ import {
 } from "@/components";
 
 // Utils
+import { testProps } from "@/utils/testProps";
 import { getDeviceName } from "@/utils/device";
 
 // Types
@@ -326,18 +327,21 @@ const CreateRoom = () => {
             : t("group.createRoom.createRoom")
         }
         showBack={true}
+        qaId="header_create_room"
       />
       <ScreenWrapper
-        style={{ ...globalStyles.container, ...styles.screenContainer }}
+        style={{ ...globalStyles.container, ...styles.screenContainer }} qaId="screen_wrapper_create_room"
       >
         <ScrollView
           style={styles.scrollContainer}
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
+          {...testProps("scroll_create_room")}
         >
           {/* Room Name Section */}
-          <View style={styles.section}>
+          <View {...testProps("view_create_room")} style={styles.section}>
             <Pressable
+              {...testProps("button_create_room")}
               style={[
                 globalStyles.flex,
                 globalStyles.alignCenter,
@@ -346,11 +350,11 @@ const CreateRoom = () => {
               ]}
               onPress={handleCustomRoomName}
             >
-              <Text style={styles.roomNameTitle}>
+              <Text {...testProps("text_title_room")} style={styles.roomNameTitle}>
                 {t("group.createRoom.roomName")}
               </Text>
-              <View style={[globalStyles.flex, globalStyles.alignCenter]}>
-                <Text style={styles.customizeText}>
+              <View style={[globalStyles.flex, globalStyles.alignCenter]} {...testProps("view_create_room")}>
+                <Text style={styles.customizeText} {...testProps("text_name_customized_room")}>
                   {roomName
                     ? roomName
                     : t("group.createRoom.addCustomizedRoom")}
@@ -361,12 +365,13 @@ const CreateRoom = () => {
           </View>
 
           {/* Existing Device Section */}
-          <View style={styles.section}>
+          <View style={styles.section} {...testProps("view_existing_devices_create_room")}>
             <ContentWrapper
               title={t("group.createRoom.existingDevice")}
               style={styles.contentWrapperOverride}
+              qaId="existing_devices_create_room"
             >
-              <View style={styles.deviceList}>
+              <View style={styles.deviceList} {...testProps("view_list_device_create_room")}>
                 {selectedNodes.map((device, index) => (
                   <DeviceItem
                     key={`selected-${device.id}-${index}`}
@@ -377,7 +382,7 @@ const CreateRoom = () => {
                 ))}
 
                 {!selectedNodes?.length && (
-                  <Text style={styles.placeholderText}>
+                  <Text style={styles.placeholderText} {...testProps("text_select_devices_create_room")}>
                     {t("group.createRoom.pleaseSelectDevices")}
                   </Text>
                 )}
@@ -386,12 +391,13 @@ const CreateRoom = () => {
           </View>
 
           {/* Add Device Section */}
-          <View style={styles.section}>
+          <View style={styles.section} {...testProps("view_add_devices_create_room")}>
             <ContentWrapper
               title={t("group.createRoom.addDevice")}
               style={styles.contentWrapperOverride}
+              qaId="add_devices_create_room"
             >
-              <View style={styles.deviceList}>
+              <View style={styles.deviceList} {...testProps("view_create_room")}>
                 {availableNodes?.length > 0 ? (
                   availableNodes.map((device, index) => (
                     <DeviceItem
@@ -402,7 +408,7 @@ const CreateRoom = () => {
                     />
                   ))
                 ) : (
-                  <Text style={styles.placeholderText}>
+                  <Text style={styles.placeholderText} {...testProps("text_create_room")}>
                     {t("group.createRoom.noMoreDevicesAvailable")}
                   </Text>
                 )}
@@ -411,22 +417,24 @@ const CreateRoom = () => {
           </View>
 
           {/* Save Button */}
-          <View style={styles.footer}>
+          <View style={styles.footer} {...testProps("view_create_room")}>
             <Button
               label={t("layout.shared.save")}
               disabled={isLoading.save || !roomName}
               onPress={room ? handleUpdate : handleSave}
               style={{ ...globalStyles.btn, ...globalStyles.bgBlue }}
               isLoading={isLoading.save}
+              qaId="button_save_create_room"
             />
             {room && (
-              <Button
-                label={t("layout.shared.delete")}
-                disabled={isLoading.delete}
-                isLoading={isLoading.delete}
-                onPress={handleDelete}
-                style={{ ...globalStyles.btn, ...globalStyles.buttonDanger }}
-              />
+            <Button
+              label={t("layout.shared.delete")}
+              disabled={isLoading.delete}
+              isLoading={isLoading.delete}
+              onPress={handleDelete}
+              style={{ ...globalStyles.btn, ...globalStyles.buttonDanger }}
+              qaId="button_delete_create_room"
+            />
             )}
           </View>
         </ScrollView>
@@ -442,6 +450,7 @@ const CreateRoom = () => {
         onCancel={() => setShowDeleteDialog(false)}
         confirmColor={tokens.colors.red}
         isLoading={isLoading.delete}
+        qaId="remove_room"
       />
     </>
   );

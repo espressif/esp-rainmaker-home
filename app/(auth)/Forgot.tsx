@@ -19,8 +19,8 @@ import { Input, Button, ScreenWrapper, Header, Logo } from "@/components";
 
 // validations
 import { validateEmail } from "@/utils/validations";
-
 import APP_CONFIG from "@/app.json";
+import { testProps } from "@/utils/testProps";
 
 /**
  * ForgotPasswordScreen component that displays the forgot password screen.
@@ -117,26 +117,26 @@ export default function ForgotPasswordScreen() {
 
   return (
     <>
-      <Header showBack label={t("auth.forgotPassword.title")} />
-      <ScreenWrapper style={globalStyles.screenWrapper}>
+      <Header showBack label={t("auth.forgotPassword.title")} qaId="header_forgot_password" />
+      <ScreenWrapper style={globalStyles.screenWrapper} qaId="screen_wrapper_forgot">
         <KeyboardAvoidingView
           behavior={Platform.OS === "ios" ? "padding" : "height"}
           style={{ flex: 1 }}
           keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 20}
         >
-          <View style={[globalStyles.scrollViewContent, { paddingBottom: 100 }]}>
-            <Logo />
+          <View {...testProps("view_forgot")} style={[globalStyles.scrollViewContent, { paddingBottom: 100 }]}>
+            <Logo qaId="logo_forgot_password" />
             
-            <Text style={[globalStyles.heading, globalStyles.verificationTitle]}>
+            <Text {...testProps("text_forgot_heading")} style={[globalStyles.heading, globalStyles.verificationTitle]}>
               {t("auth.forgotPassword.heading")}
             </Text>
             <Text
+              {...testProps("text_forgot_subtitle")}
               style={[globalStyles.subHeading, globalStyles.verificationSubtitle]}
             >
               {t("auth.forgotPassword.subtitle")}
             </Text>
-
-            <View style={globalStyles.inputContainer}>
+            <View {...testProps("view_input_forgot")} style={globalStyles.inputContainer}>
               {/* Email Input */}
               <Input
                 icon="mail-open"
@@ -147,6 +147,7 @@ export default function ForgotPasswordScreen() {
                 debounceDelay={500}
                 inputMode="email"
                 autoFocus
+                qaId="email_forgot"
               />
 
               {/* Send Code Button */}
@@ -156,13 +157,14 @@ export default function ForgotPasswordScreen() {
                 onPress={sendVerificationCode}
                 style={globalStyles.signInButton}
                 isLoading={isLoading}
+                qaId="button_send_code"
               />
             </View>
           </View>
         </KeyboardAvoidingView>
 
         {/* App Version Text */}
-        <Text style={globalStyles.versionText}>
+        <Text {...testProps("text_app_version_forgot_password")} style={globalStyles.versionText}>
           {t("layout.shared.version")} {appVersion}
         </Text>
       </ScreenWrapper>
