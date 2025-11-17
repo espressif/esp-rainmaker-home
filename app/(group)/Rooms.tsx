@@ -250,7 +250,7 @@ const Rooms = observer(() => {
         label={state.home?.name || ""}
         showBack={router.canGoBack()}
         rightSlot={
-          <Plus size={24} color={tokens.colors.bg3} onPress={handleAddRoom} />
+          <Plus size={24} color={tokens.colors.primary} onPress={handleAddRoom} />
         }
       />
       <View style={{ ...styles.container, backgroundColor: tokens.colors.bg5 }}>

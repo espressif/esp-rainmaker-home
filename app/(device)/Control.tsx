@@ -106,7 +106,7 @@ const Control = () => {
         showBack={true}
         rightSlot={
           <Pressable onPress={handleMorePress}>
-            <Settings size={24} color={tokens.colors.bg3} />
+            <Settings size={24} color={tokens.colors.primary} />
           </Pressable>
         }
       />

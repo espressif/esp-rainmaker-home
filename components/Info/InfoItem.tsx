@@ -64,7 +64,7 @@ const InfoItem: React.FC<InfoItemProps> = ({
             {value}
           </Text>
           {onPress && (
-            <ChevronRight size={16} color={tokens.colors.bg3} />
+            <ChevronRight size={16} color={tokens.colors.primary} />
           )}
         </View>
       </Component>

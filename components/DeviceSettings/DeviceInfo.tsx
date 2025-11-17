@@ -66,7 +66,7 @@ const DeviceInfo: React.FC<DeviceInfoProps> = ({ node, nodeConfig }) => {
             <Text>{node.id}</Text>
             <Copy
               size={20}
-              color={tokens.colors.bg3}
+              color={tokens.colors.primary}
               onPress={handleCopyNodeId}
             />
           </View>
