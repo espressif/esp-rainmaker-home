@@ -142,6 +142,11 @@
     },
     "forgotPassword": {
       "title": "Forgot Password",
+      "heading": "Reset Your Password",
+      "subtitle": "Enter your email address and we'll send you a verification code",
+      "sendCodeButton": "Send Code",
+      "resetTitle": "Reset Password",
+      "resetHeading": "Create New Password",
       "confirmButton": "Confirm",
       "resetSuccess": "Password reset successfully"
     },
