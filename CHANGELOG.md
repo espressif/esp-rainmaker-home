@@ -5,6 +5,30 @@ All notable changes to the ESP RainMaker Home app will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.1.3]
+
+### Enhanced
+
+**Password Recovery:**
+
+- Rectified forgot password flow to require OTP verification before presenting new password fields.
+
+**Device Control:**
+
+- Added brightness slider to the color tab for enhanced control.
+- Implemented logic to toggle color mode based on supported device features.
+
+**UI Improvements:**
+
+- Corrected Temperature Sensor label for better clarity.
+- Unified Automation screen button placement for better user experience.
+
+### Fixed
+
+**Home Initialization:**
+
+- Filtered out unsupported matter nodes while adding nodes to Home group during initialization.
+
 ## [3.1.2]
 
 ### Enhanced

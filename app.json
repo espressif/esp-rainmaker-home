@@ -2,7 +2,7 @@
   "expo": {
     "name": "NOVA",
     "slug": "NOVA",
-    "version": "3.1.2",
+    "version": "3.1.3",
     "orientation": "portrait",
     "icon": "./assets/images/logo.png",
     "scheme": "Nova",
