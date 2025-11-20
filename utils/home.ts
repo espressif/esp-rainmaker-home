@@ -12,6 +12,7 @@ import {
   ERROR_CODES_MAP,
   REJECTED_STATUS,
   GROUP_TYPE_HOME,
+  NODE_TYPE,
 } from "./constants";
 import { getRandom4DigitString } from "./common";
 
@@ -190,24 +191,33 @@ export const updateToHome = (): Partial<ESPRMGroup> => {
 };
 
 /**
- * Gets nodes that don't belong to any group
+ * Gets nodes that don't belong to any group and not of type pure_matter or rainmaker_matter
  * @param allNodes List of all nodes
  * @param groups List of all groups
  * @returns Array of unassigned node IDs
  */
 export const getUnassignedNodes = (
-    allNodes: ESPRMNode[],
-    groups: ESPRMGroup[]
+  allNodes: ESPRMNode[],
+  groups: ESPRMGroup[]
 ): string[] => {
-    // Get all node IDs that are assigned to any group
-    const assignedNodeIds = new Set(
-        groups.flatMap(group => group.nodes || [])
-    );
+  // Get all node IDs that are assigned to any group
+  const assignedNodeIds = new Set(groups.flatMap((group) => group.nodes || []));
 
-    // Return nodes that aren't in the assigned set
-    return allNodes
-        .filter(node => !assignedNodeIds.has(node.id))
-        .map(node => node.id);
+  // Exclude pure matter and rainmaker matter nodes
+  const nodeTypesToExclude = [
+    NODE_TYPE.PURE_MATTER,
+    NODE_TYPE.RAINMAKER_MATTER,
+  ];
+
+  // Return nodes that aren't in the assigned set
+  // and not of type pure_matter or rainmaker_matter
+  return allNodes
+    .filter(
+      (node) =>
+        !assignedNodeIds.has(node.id) &&
+        !nodeTypesToExclude.includes(node.type || "")
+    )
+    .map((node) => node.id);
 };
 
 /**
