@@ -12,7 +12,6 @@ import {
   View,
   Text,
   ActivityIndicator,
-  Pressable,
 } from "react-native";
 // Styles
 import { tokens } from "@/theme/tokens";
@@ -334,19 +333,6 @@ const Automations = observer(() => {
                 ? t("automation.automations.noAutomationsYetDescription")
                 : t("automation.automations.noDevicesForAutomationDescription")}
             </Text>
-            {!hasDevices && (
-              <View style={styles.emptyStateButtonContainer}>
-                <Pressable
-                  style={styles.emptyStateButton}
-                  onPress={() => router.push("/(device)/AddDeviceSelection")}
-                >
-                  <Plus size={24} color={tokens.colors.white} />
-                  <Text style={styles.emptyStateButtonText}>
-                    {t("automation.automations.addFirstDevice")}
-                  </Text>
-                </Pressable>
-              </View>
-            )}
           </>
         )}
       </View>
@@ -389,23 +375,19 @@ const Automations = observer(() => {
           showHeaderPlusButton ? (
             <Plus
               size={24}
-              color={tokens.colors.bg3}
+              color={tokens.colors.primary}
               onPress={handleAddAutomation}
             />
           ) : undefined
         }
       />
-      <ScreenWrapper
-        style={{
-          ...globalStyles.container,
-          padding: 0,
-        }}
-      >
+      <ScreenWrapper style={styles.container}>
         <ScrollView
           style={styles.scrollView}
           showsVerticalScrollIndicator={false}
           contentContainerStyle={{
             flexGrow: 1,
+            paddingBottom: 150,
           }}
           refreshControl={
             <RefreshControl
@@ -421,14 +403,21 @@ const Automations = observer(() => {
             ? renderEmptyState()
             : renderAutomationList()}
         </ScrollView>
-        {/* Fixed Add Scene Button */}
-        {nodeList.length > 0 && (
-          <View style={globalStyles.automationAddButtonContainer}>
+        {/* Fixed Add Automation Button */}
+        {!isLoading && (
+          <View style={globalStyles.footerAddButtonContainer}>
             <Button
-              label={t("automation.automations.addAutomation")}
-              onPress={handleAddAutomation}
-              style={globalStyles.automationAddButton}
-              disabled={isLoading}
+              label={
+                nodeList.length > 0
+                  ? t("automation.automations.addAutomation")
+                  : t("automation.automations.addFirstDevice")
+              }
+              onPress={
+                nodeList.length > 0
+                  ? handleAddAutomation
+                  : () => router.push("/(device)/AddDeviceSelection")
+              }
+              style={globalStyles.footerAddButton}
             />
           </View>
         )}
@@ -460,10 +449,13 @@ const Automations = observer(() => {
 
 /* ------------------------------ Styles ------------------------------- */
 const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: tokens.colors.bg5,
+  },
   scrollView: {
     flex: 1,
-    maxHeight: "80%",
-    overflow: "hidden",
+    paddingBottom: 100,
   },
   scrollContent: {
     padding: tokens.spacing._15,
@@ -472,26 +464,6 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-  },
-  emptyStateButtonContainer: {
-    marginTop: tokens.spacing._20,
-    width: "100%",
-    paddingHorizontal: tokens.spacing._20,
-  },
-  emptyStateButton: {
-    backgroundColor: tokens.colors.primary,
-    borderRadius: tokens.radius.md,
-    paddingVertical: tokens.spacing._15,
-    paddingHorizontal: tokens.spacing._20,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: tokens.spacing._10,
-  },
-  emptyStateButtonText: {
-    fontSize: tokens.fontSize.md,
-    fontFamily: tokens.fonts.medium,
-    color: tokens.colors.white,
   },
 });
 

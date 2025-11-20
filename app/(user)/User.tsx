@@ -91,20 +91,20 @@ const User: React.FC<UserProps> = () => {
   const userOperations: UserOperationConfig[] = [
     {
       id: "notifications",
-      icon: <Bell size={20} color={tokens.colors.bg3} />,
+      icon: <Bell size={20} color={tokens.colors.primary} />,
       title: t("user.notifications.title"),
       action: "handleNotificationCenter",
       showBadge: false,
     },
     {
       id: "privacy",
-      icon: <Shield size={20} color={tokens.colors.bg3} />,
+      icon: <Shield size={20} color={tokens.colors.primary} />,
       title: t("layout.shared.privacyPolicy"),
       action: "handlePrivacyPolicy",
     },
     {
       id: "terms",
-      icon: <FileText size={20} color={tokens.colors.bg3} />,
+      icon: <FileText size={20} color={tokens.colors.primary} />,
       title: t("layout.shared.termsOfUse"),
       action: "handleTermsOfUse",
     },
@@ -263,7 +263,7 @@ const User: React.FC<UserProps> = () => {
    */
   const renderHeaderRight = () => (
     <Pressable onPress={() => handleNavigation("handleSettings")}>
-      <Settings size={24} color={tokens.colors.bg3} />
+      <Settings size={24} color={tokens.colors.primary} />
     </Pressable>
   );
 

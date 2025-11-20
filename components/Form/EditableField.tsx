@@ -61,9 +61,9 @@ const EditableField: React.FC<EditableFieldProps> = ({
 
   const renderIcon = () => {
     if (mode === "copy") {
-      return <Copy size={20} color={tokens.colors.bg3} />;
+      return <Copy size={20} color={tokens.colors.primary} />;
     }
-    return <Edit3 size={20} color={tokens.colors.bg3} />;
+    return <Edit3 size={20} color={tokens.colors.primary} />;
   };
 
   const handlePress = () => {

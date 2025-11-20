@@ -75,7 +75,7 @@ const AccountSecurity: React.FC = () => {
         {!isThirdPartyLogin && (
           <SettingsSection>
             <SettingsItem
-              icon={<Key size={20} color={tokens.colors.bg3} />}
+              icon={<Key size={20} color={tokens.colors.primary} />}
               title={t("user.accountSecurity.changePassword")}
               type="navigation"
               onPress={handleChangePassword}

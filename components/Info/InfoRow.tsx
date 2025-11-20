@@ -48,7 +48,7 @@ const InfoRow: React.FC<InfoRowProps> = ({
       <View style={globalStyles.infoValue}>
         <Text>{value}</Text>
         {isCopyable && (
-          <Copy size={20} color={tokens.colors.bg3} onPress={handleCopy} />
+          <Copy size={20} color={tokens.colors.primary} onPress={handleCopy} />
         )}
       </View>
     </View>

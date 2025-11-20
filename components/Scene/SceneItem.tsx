@@ -98,8 +98,8 @@ const SceneItem: React.FC<SceneCardProps> = ({
             ) : (
               <Heart
                 size={16}
-                color={isFavorite ? tokens.colors.bg3 : tokens.colors.bg3}
-                fill={isFavorite ? tokens.colors.bg3 : "none"}
+                color={tokens.colors.primary}
+                fill={isFavorite ? tokens.colors.primary : "none"}
               />
             )}
           </TouchableOpacity>

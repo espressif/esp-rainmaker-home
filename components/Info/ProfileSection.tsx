@@ -101,7 +101,7 @@ const ProfileSection: React.FC<ProfileSectionProps> = ({
         )}
       </View>
 
-      <ChevronRight size={20} color={tokens.colors.bg3} />
+      <ChevronRight size={20} color={tokens.colors.primary} />
     </Pressable>
   );
 };

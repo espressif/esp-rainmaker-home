@@ -224,7 +224,7 @@ const HomeManagement = () => {
             {getDescription(home)}
           </Text>
         </View>
-        <ChevronRight color={tokens.colors.bg3} />
+        <ChevronRight color={tokens.colors.primary} />
       </TouchableOpacity>
     ),
     []
@@ -238,7 +238,7 @@ const HomeManagement = () => {
         showBack={true}
         rightSlot={
           <Pressable onPress={() => setShowDialog(true)}>
-            <Plus color={tokens.colors.bg3} />
+            <Plus color={tokens.colors.primary} />
           </Pressable>
         }
       />

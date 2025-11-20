@@ -358,7 +358,7 @@ const HomeScreen = () => {
           <>
             <Plus
               size={24}
-              color={tokens.colors.bg3}
+              color={tokens.colors.primary}
               onPress={() => router.push("/(device)/AddDeviceSelection")}
             />
           </>

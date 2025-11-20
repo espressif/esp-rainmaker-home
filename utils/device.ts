@@ -145,7 +145,10 @@ const getDeviceName = (node: ESPRMNode): string => {
   if (nameParam) {
     return nameParam.value;
   } else {
-    return `Light`;
+    // Fallback to device config name based on device type
+    const deviceType = extractDeviceType(device?.type);
+    const deviceConfig = findDeviceConfig(deviceType);
+    return deviceConfig?.name || "Light";
   }
 };
 

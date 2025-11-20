@@ -48,7 +48,7 @@ const CustomizeRoomName = () => {
     if (isSelected) {
       return <Check size={20} color={tokens.colors.blue} strokeWidth={3} />;
     } else {
-      return <Circle size={20} color={tokens.colors.bg3} fill="transparent" />;
+      return <Circle size={20} color={tokens.colors.primary} fill="transparent" />;
     }
   };
 

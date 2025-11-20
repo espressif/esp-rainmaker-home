@@ -464,7 +464,7 @@ const Setting = () => {
         {isPrimary && (
           <ContentWrapper
             title={t("group.settings.roomManagement")}
-            leftSlot={<ChevronRight size={20} color={tokens.colors.bg3} />}
+            leftSlot={<ChevronRight size={20} color={tokens.colors.primary} />}
             style={styles.contentWrapper}
             onPress={handleRoom}
           />
