@@ -38,33 +38,44 @@ The authentication module provides a complete user authentication flow including
 
 ### 3. Confirmation Code Screen (`ConfirmationCode.tsx`)
 
-- **Purpose**: Handles email verification codes for both signup and password reset
+- **Purpose**: Handles email verification codes for signup only
 - **CDF Functions**:
   - `store.userStore.authInstance.confirmSignUp(email, code)`
-  - `store.userStore.authInstance.setNewPassword(email, password, code)`
   - `store.userStore.authInstance.sendSignUpCode()` (for resend)
-  - `store.userStore.authInstance.forgotPassword()` (for resend)
   - `store.userStore.login(email, password)` (auto-login after signup)
 - **Features**:
   - 6-digit numeric code input with auto-focus
   - Resend functionality with 60-second countdown timer
-  - Multi-purpose handling (signup vs password reset)
   - Auto-login after successful signup verification
-  - Error handling for different verification scenarios
+  - Error handling for signup verification scenarios
 
 ### 4. Forgot Password Screen (`Forgot.tsx`)
 
-- **Purpose**: Password reset flow with new password setup
+- **Purpose**: Initial step in password reset - collects user email to send OTP
 - **CDF Functions**:
   - `store.userStore.authInstance.forgotPassword(email)`
 - **Features**:
   - Email input with validation
-  - New password and confirm password fields
-  - Real-time password matching validation
-  - Redirects to confirmation code screen for verification
+  - Sends verification code to user's email
+  - Redirects to reset password screen for OTP and password entry
   - Error handling with toast notifications
 
-### 5. Change Password Screen (`ChangePassword.tsx`)
+### 5. Reset Password Screen (`ResetPassword.tsx`)
+
+- **Purpose**: Complete password reset with OTP verification and new password setup
+- **CDF Functions**:
+  - `store.userStore.authInstance.setNewPassword(email, password, code)`
+  - `store.userStore.authInstance.forgotPassword()` (for resend OTP)
+- **Features**:
+  - 6-digit OTP code input with auto-focus
+  - New password and confirm password fields
+  - Real-time password matching validation
+  - Resend OTP functionality with 60-second countdown timer
+  - Combined OTP verification and password reset in single step
+  - Redirects to login screen after successful reset
+  - Error handling with toast notifications
+
+### 6. Change Password Screen (`ChangePassword.tsx`)
 
 - **Purpose**: Password change for authenticated users
 - **CDF Functions**:
@@ -150,7 +161,7 @@ The authentication module provides a complete user authentication flow including
    // Push to new screen with params
    router.push({
      pathname: "/(auth)/ConfirmationCode",
-     params: { email, type: SIGNUP_CODE_TYPE, password },
+     params: { email, password },
    });
 
    // Replace current screen
@@ -169,9 +180,9 @@ graph TD
     A[Login] -->|Success| B[Home]
     A -->|OAuth Login| B
 
-    A -->|Forgot Password| C[Forgot Password]
-    C -->|Submit New Password| D[Confirmation Code]
-    D -->|Verify Code| A
+    A -->|Forgot Password| C[Forgot Password - Email Entry]
+    C -->|Send OTP| D[Reset Password - OTP + New Password]
+    D -->|Verify & Reset| A
 
     A -->|Sign Up| E[Sign Up]
     E -->|Accept Terms & Submit| F[Confirmation Code]
@@ -184,15 +195,34 @@ graph TD
     classDef primary fill:#5db9f8,stroke:#333,stroke-width:2px;
     classDef success fill:#5ce712,stroke:#333,stroke-width:2px;
     classDef secondary fill:#f9f,stroke:#333,stroke-width:2px;
+    classDef reset fill:#ffa500,stroke:#333,stroke-width:2px;
 
     class A primary;
     class B success;
     class H secondary;
+    class D reset;
 ```
 
 The authentication flow consists of four main paths:
 
 1. **Login Path**: Direct login (email/password or OAuth) → Home
 2. **Registration Path**: Login → Sign Up (with consent) → Confirmation Code → Auto Login → Home
-3. **Password Reset Path**: Login → Forgot Password → Confirmation Code → Login
+3. **Password Reset Path** (Updated): Login → Forgot Password (email only) → Reset Password (OTP + new password) → Login
 4. **Password Change Path**: Change Password → Auto Logout → Login
+
+### Password Reset Flow Details
+
+The password reset flow has been improved to prevent users from getting stuck with invalid passwords:
+
+**Old Flow** (❌ Problem):
+- User enters email + new password + confirm password
+- OTP is sent
+- User verifies OTP
+- If password was invalid, user gets stuck
+
+**New Flow** (✅ Solution):
+- User enters email only
+- OTP is sent to email
+- User enters OTP + new password + confirm password together
+- Password validation happens at the same step as OTP verification
+- User can correct password if validation fails without resending OTP

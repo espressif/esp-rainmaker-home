@@ -4,8 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useState, useCallback } from "react";
-import { View } from "react-native";
+import { useState } from "react";
+import { View, Text, KeyboardAvoidingView, Platform } from "react-native";
 
 // styles
 import { globalStyles } from "@/theme/globalStyleSheet";
@@ -20,13 +20,13 @@ import { Input, Button, ScreenWrapper, Header, Logo } from "@/components";
 // validations
 import { validateEmail } from "@/utils/validations";
 
-// constants
-import { RESET_PASSWORD_CODE_TYPE } from "@/utils/constants";
+import APP_CONFIG from "@/app.json";
 
 /**
  * ForgotPasswordScreen component that displays the forgot password screen.
  *
- * This component displays the forgot password screen with a logo, input fields, and buttons.
+ * This component displays the forgot password screen where user enters their email
+ * to receive a password reset verification code.
  *
  */
 export default function ForgotPasswordScreen() {
@@ -35,13 +35,11 @@ export default function ForgotPasswordScreen() {
   const router = useRouter();
   const toast = useToast();
 
+  const appVersion = APP_CONFIG.expo.version;
+
   // Form state
   const [email, setEmail] = useState("");
-  const [newPassword, setNewPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
   const [isEmailValid, setIsEmailValid] = useState(false);
-  const [isPasswordValid, setIsPasswordValid] = useState(false);
-  const [isConfirmPasswordValid, setIsConfirmPasswordValid] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
 
   /**
@@ -62,41 +60,6 @@ export default function ForgotPasswordScreen() {
   };
 
   /**
-   * Validates password input
-   * @param {string} password - The password to validate
-   * @returns {{ isValid: boolean }} - Validation result
-   */
-  const passwordValidator = (
-    password: string
-  ): { isValid: boolean; error?: string } => {
-    if (!password.trim()) {
-      return { isValid: false };
-    }
-    return { isValid: true };
-  };
-
-  /**
-   * Validates confirm password input
-   * @param {string} confirmPwd - The confirm password to validate
-   * @returns {{ isValid: boolean, error?: string }} - Validation result with error message
-   */
-  const confirmPasswordValidator = useCallback(
-    (confirmPwd: string): { isValid: boolean; error?: string } => {
-      if (!confirmPwd.trim()) {
-        return { isValid: false };
-      }
-      if (confirmPwd !== newPassword) {
-        return {
-          isValid: false,
-          error: t("auth.validation.passwordsDoNotMatch"),
-        };
-      }
-      return { isValid: true };
-    },
-    [newPassword, t]
-  );
-
-  /**
    * Handles email change
    */
   const handleEmailChange = (value: string, isValid: boolean) => {
@@ -105,50 +68,17 @@ export default function ForgotPasswordScreen() {
   };
 
   /**
-   * Handles password change
-   */
-  const handlePasswordChange = (value: string, isValid: boolean) => {
-    const newPwd = value.trim();
-    setNewPassword(newPwd);
-    setIsPasswordValid(isValid);
-
-    // Re-validate confirm password when new password changes
-    if (confirmPassword.trim()) {
-      const isConfirmValid = confirmPassword.trim() === newPwd;
-      setIsConfirmPasswordValid(isConfirmValid);
-    }
-  };
-
-  /**
-   * Handles confirm password change
-   */
-  const handleConfirmPasswordChange = (value: string) => {
-    const confirmPwd = value.trim();
-    setConfirmPassword(confirmPwd);
-
-    // Validate if passwords match
-    const isConfirmValid = confirmPwd === newPassword;
-    setIsConfirmPasswordValid(isConfirmValid);
-  };
-
-  /**
-   * Resets the password for the user.
+   * Sends verification code to user's email for password reset.
    *
-   * This function sends a verification code to the user's email address.
+   * This function sends a verification code to the user's email address
+   * and navigates to the reset password screen where user can enter OTP and new password.
    *
    * SDK function used:
    * 1. forgotPassword
    */
-  const resetPassword = () => {
-    // Check if all fields are valid before submitting
-    if (
-      !isEmailValid ||
-      !isPasswordValid ||
-      !isConfirmPasswordValid ||
-      !email ||
-      !newPassword ||
-      !confirmPassword
-    ) {
+  const sendVerificationCode = () => {
+    // Check if email is valid before submitting
+    if (!isEmailValid || !email) {
       return;
     }
 
@@ -158,14 +88,13 @@ export default function ForgotPasswordScreen() {
     store.userStore.authInstance
       ?.forgotPassword(email)
       .then((res) => {
-        // if success, redirect to code screen
+        // if success, redirect to reset password screen
         if (res.status === "success") {
+          toast.showSuccess(t("auth.verification.heading"));
           router.push({
-            pathname: "/(auth)/ConfirmationCode",
+            pathname: "/(auth)/ResetPassword",
             params: {
               email: email,
-              password: newPassword,
-              type: RESET_PASSWORD_CODE_TYPE,
             },
           });
         } else {
@@ -190,62 +119,52 @@ export default function ForgotPasswordScreen() {
     <>
       <Header showBack label={t("auth.forgotPassword.title")} />
       <ScreenWrapper style={globalStyles.screenWrapper}>
-        <View style={[globalStyles.scrollViewContent, { paddingBottom: 100 }]}>
-          <Logo />
-          <View style={globalStyles.inputContainer}>
-            {/* Email Input */}
-            <Input
-              icon="mail-open"
-              placeholder={t("auth.shared.emailPlaceholder")}
-              onFieldChange={handleEmailChange}
-              validator={emailValidator}
-              validateOnChange={true}
-              debounceDelay={500}
-              inputMode="email"
-            />
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          style={{ flex: 1 }}
+          keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 20}
+        >
+          <View style={[globalStyles.scrollViewContent, { paddingBottom: 100 }]}>
+            <Logo />
+            
+            <Text style={[globalStyles.heading, globalStyles.verificationTitle]}>
+              {t("auth.forgotPassword.heading")}
+            </Text>
+            <Text
+              style={[globalStyles.subHeading, globalStyles.verificationSubtitle]}
+            >
+              {t("auth.forgotPassword.subtitle")}
+            </Text>
 
-            {/* New Password Input */}
-            <Input
-              isPassword
-              icon="lock-closed"
-              placeholder={t("auth.shared.newPasswordPlaceholder")}
-              onFieldChange={handlePasswordChange}
-              validator={passwordValidator}
-              validateOnChange={true}
-              debounceDelay={500}
-            />
+            <View style={globalStyles.inputContainer}>
+              {/* Email Input */}
+              <Input
+                icon="mail-open"
+                placeholder={t("auth.shared.emailPlaceholder")}
+                onFieldChange={handleEmailChange}
+                validator={emailValidator}
+                validateOnChange={true}
+                debounceDelay={500}
+                inputMode="email"
+                autoFocus
+              />
 
-            {/* Confirm Password Input */}
-            <Input
-              key={newPassword}
-              isPassword
-              icon="lock-closed"
-              placeholder={t("auth.shared.confirmPasswordPlaceholder")}
-              initialValue={confirmPassword}
-              onFieldChange={handleConfirmPasswordChange}
-              validator={confirmPasswordValidator}
-              validateOnChange={true}
-              debounceDelay={50}
-            />
-
-            {/* Reset Password Button */}
-            <Button
-              label={t("auth.forgotPassword.confirmButton")}
-              disabled={
-                !isEmailValid ||
-                !isPasswordValid ||
-                !isConfirmPasswordValid ||
-                !email ||
-                !newPassword ||
-                !confirmPassword ||
-                isLoading
-              }
-              onPress={resetPassword}
-              style={globalStyles.signInButton}
-              isLoading={isLoading}
-            />
+              {/* Send Code Button */}
+              <Button
+                label={t("auth.forgotPassword.sendCodeButton")}
+                disabled={!isEmailValid || !email || isLoading}
+                onPress={sendVerificationCode}
+                style={globalStyles.signInButton}
+                isLoading={isLoading}
+              />
+            </View>
           </View>
-        </View>
+        </KeyboardAvoidingView>
+
+        {/* App Version Text */}
+        <Text style={globalStyles.versionText}>
+          {t("layout.shared.version")} {appVersion}
+        </Text>
       </ScreenWrapper>
     </>
   );

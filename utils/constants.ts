@@ -70,10 +70,6 @@ export const WRITE_PERMISSION = "write";
 export const READ_PERMISSION = "read";
 export const USER_PERMISSION = "user";
 
-// CODE REDIRECT TYPES
-export const SIGNUP_CODE_TYPE = "SIGNUP";
-export const RESET_PASSWORD_CODE_TYPE = "RESET_PASSWORD";
-
 // SUPPORTED SERVICES
 export const ESPRM_SYSTEM_SERVICE = "esp.service.system";
 export const ESPRM_SCENES_SERVICE = "esp.service.scenes";
