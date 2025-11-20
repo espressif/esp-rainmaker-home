@@ -64,14 +64,6 @@ const Light: React.FC<ControlPanelProps> = ({ node, device }) => {
   const toast = useToast();
   const { t } = useTranslation();
 
-  // State
-  const [activeTab, setActiveTab] = useState<Tab>(COLOR_TAB);
-  const [refreshing, setRefreshing] = useState(false);
-  const [scrollEnabled, setScrollEnabled] = useState(true);
-
-  // Computed Values
-  const isConnected = node.connectivityStatus?.isConnected || false;
-
   // Device Parameters
   const powerParam = device?.params?.find(
     (param) =>
@@ -94,6 +86,19 @@ const Light: React.FC<ControlPanelProps> = ({ node, device }) => {
   const temperatureParam = device?.params?.find(
     (param) => param.type === ESPRM_TEMPERATURE_PARAM_TYPE
   );
+
+  // Check if device supports color (has both hue and saturation)
+  const supportsColor = !!(hueParam && saturationParam);
+
+  // Computed Values
+  const isConnected = node.connectivityStatus?.isConnected || false;
+
+  // State - Set default tab based on device capabilities
+  const [activeTab, setActiveTab] = useState<Tab>(
+    supportsColor ? COLOR_TAB : WHITE_TAB
+  );
+  const [refreshing, setRefreshing] = useState(false);
+  const [scrollEnabled, setScrollEnabled] = useState(true);
 
   // Handlers
   const handleRefresh = async () => {
@@ -136,9 +141,12 @@ const Light: React.FC<ControlPanelProps> = ({ node, device }) => {
         { backgroundColor: tokens.colors.bg5 },
       ]}
     >
-      <View style={styles.tabContainer}>
-        {([WHITE_TAB, COLOR_TAB] as Tab[]).map(renderTab)}
-      </View>
+      {/* Only show tabs if there are multiple modes available */}
+      {supportsColor && (
+        <View style={styles.tabContainer}>
+          {([WHITE_TAB, COLOR_TAB] as Tab[]).map(renderTab)}
+        </View>
+      )}
 
       <ScrollView
         style={styles.content}
@@ -154,7 +162,7 @@ const Light: React.FC<ControlPanelProps> = ({ node, device }) => {
         }
       >
         {/* Power Control */}
-        {(activeTab === WHITE_TAB || activeTab === COLOR_TAB) && powerParam && (
+        {powerParam && (
           <View style={styles.powerButtonContainer}>
             <ParamControlWrap
               key={powerParam.name}
@@ -170,7 +178,7 @@ const Light: React.FC<ControlPanelProps> = ({ node, device }) => {
         )}
 
         {/* White Mode Controls */}
-        {activeTab === WHITE_TAB && (
+        {(activeTab === WHITE_TAB || !supportsColor) && (
           <>
             {brightnessParam && (
               <ParamControlWrap
@@ -202,8 +210,21 @@ const Light: React.FC<ControlPanelProps> = ({ node, device }) => {
         )}
 
         {/* Color Mode Controls */}
-        {activeTab === COLOR_TAB && (
+        {supportsColor && activeTab === COLOR_TAB && (
           <>
+            {brightnessParam && (
+              <ParamControlWrap
+                key={brightnessParam.name}
+                param={brightnessParam}
+                disabled={!isConnected || !powerParam?.value}
+                setUpdating={(s) => {
+                  setScrollEnabled(!s);
+                }}
+                style={styles.paramControlWrap}
+              >
+                <BrightnessSlider />
+              </ParamControlWrap>
+            )}
             {hueParam && (
               <ParamControlWrap
                 key={hueParam.name}

@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -93,6 +93,18 @@ export default function LoginScreen() {
 
     return { isValid: true };
   };
+
+  /**
+   * Updates email state when email param changes (e.g., when navigating from ResetPassword)
+   */
+  useEffect(() => {
+    if (emailParam) {
+      setEmail(emailParam);
+      // Validate the email when it's set from params
+      const validation = emailValidator(emailParam);
+      setIsEmailValid(validation.isValid);
+    }
+  }, [emailParam]);
 
   /**
    * Handles email field changes
@@ -222,6 +234,7 @@ export default function LoginScreen() {
         <View style={globalStyles.inputContainer}>
           {/* Email Input */}
           <Input
+            key={emailParam || "email-input"}
             icon="mail-open"
             placeholder={t("auth.shared.emailPlaceholder")}
             initialValue={emailParam}

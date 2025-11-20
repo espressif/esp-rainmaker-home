@@ -57,21 +57,21 @@ const Settings: React.FC = () => {
   const settingsItems: SettingItemConfig[] = [
     {
       id: "personal-info",
-      icon: <User size={20} color={tokens.colors.bg3} />,
+      icon: <User size={20} color={tokens.colors.primary} />,
       title: t("user.settings.personalInformation"),
       type: "navigation",
       action: "handlePersonalInfo",
     },
     {
       id: "account-security",
-      icon: <Shield size={20} color={tokens.colors.bg3} />,
+      icon: <Shield size={20} color={tokens.colors.primary} />,
       title: t("user.settings.accountSecurity"),
       type: "navigation",
       action: "handleAccountSecurity",
     },
     {
       id: "about-us",
-      icon: <Info size={20} color={tokens.colors.bg3} />,
+      icon: <Info size={20} color={tokens.colors.primary} />,
       title: t("user.settings.aboutUs"),
       type: "navigation",
       action: "handleAboutUs",

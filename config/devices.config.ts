@@ -102,7 +102,7 @@ export const DEVICE_TYPE_LIST = [
     label: "Temperature",
     groupLabel: "Temperature",
     type: ["temperature-sensor"],
-    name: "Temperature",
+    name: "Temperature Sensor",
     param: "Temperature",
     deviceType: 5,
     icon: {

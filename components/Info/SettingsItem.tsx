@@ -69,7 +69,7 @@ const SettingsItem: React.FC<SettingsItemProps> = ({
       );
     }
 
-    return <ChevronRight size={20} color={tokens.colors.bg3} />;
+    return <ChevronRight size={20} color={tokens.colors.primary} />;
   };
 
   const ItemContent = () => (

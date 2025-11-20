@@ -9,7 +9,6 @@ import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
 
 // constants
 import {
-  SIGNUP_CODE_TYPE,
   TERMS_OF_USE_LINK,
   PRIVACY_POLICY_LINK,
 } from "@/utils/constants";
@@ -160,7 +159,6 @@ export default function SignupScreen() {
             pathname: "/(auth)/ConfirmationCode",
             params: {
               email: email,
-              type: SIGNUP_CODE_TYPE,
               password: password,
             },
           });

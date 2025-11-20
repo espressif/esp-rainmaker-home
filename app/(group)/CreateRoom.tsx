@@ -355,7 +355,7 @@ const CreateRoom = () => {
                     ? roomName
                     : t("group.createRoom.addCustomizedRoom")}
                 </Text>
-                <ChevronRight size={20} color={tokens.colors.bg3} />
+                <ChevronRight size={20} color={tokens.colors.primary} />
               </View>
             </Pressable>
           </View>

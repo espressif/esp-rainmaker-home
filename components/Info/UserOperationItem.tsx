@@ -62,7 +62,7 @@ const UserOperationItem: React.FC<UserOperationItemProps> = ({
         {showBadge && <View style={styles.badge} />}
         <ChevronRight
           size={20}
-          color={isDebug ? tokens.colors.blue : tokens.colors.bg3}
+          color={isDebug ? tokens.colors.blue : tokens.colors.primary}
         />
       </View>
     </Pressable>

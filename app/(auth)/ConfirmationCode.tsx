@@ -18,13 +18,12 @@ import { useTranslation } from "react-i18next";
 import { ScreenWrapper, Header, Input, Button } from "@/components";
 
 import APP_CONFIG from "@/app.json";
-import { SIGNUP_CODE_TYPE, RESET_PASSWORD_CODE_TYPE } from "@/utils/constants";
 
 /**
- * ConfirmationCodeScreen component that displays the confirmation code screen.
+ * ConfirmationCodeScreen component that displays the confirmation code screen for signup.
  *
  * This component displays the confirmation code screen with a code input, a verify button, and a resend code button.
- * It also displays the countdown timer for the code verification process.
+ * It handles email verification for new user signup only.
  *
  */
 const ConfirmationCodeScreen = () => {
@@ -32,7 +31,7 @@ const ConfirmationCodeScreen = () => {
 
   const { t } = useTranslation();
   const { store } = useCDF();
-  const { email, password = "", type } = useLocalSearchParams();
+  const { email, password = "" } = useLocalSearchParams();
   const toast = useToast();
 
   const [code, setCode] = useState("");
@@ -92,22 +91,20 @@ const ConfirmationCodeScreen = () => {
   /**
    * Handles the resend code functionality.
    *
-   * This function sends a verification code to the user's email address.
+   * This function sends a verification code to the user's email address for signup.
    * It checks if a countdown is active and prevents resending if it is.
    *
    * SDK function used:
    * 1. sendSignUpCode
-   * 2. forgotPassword
    */
   const handleResendCode = () => {
     if (countdown > 0) return;
 
     setIsLoading(true);
 
-    // Send verification code - if signup, send signup code, if reset password, send forgot password code
-    store.userStore.authInstance?.[
-      type === SIGNUP_CODE_TYPE ? "sendSignUpCode" : "forgotPassword"
-    ](email as string, password as string)
+    // Send verification code for signup
+    store.userStore.authInstance
+      ?.sendSignUpCode(email as string, password as string)
       .then((res) => {
         if (res.status === "success") {
           toast.showSuccess(t("auth.verification.heading"));
@@ -133,13 +130,12 @@ const ConfirmationCodeScreen = () => {
   };
 
   /**
-   * Handles the code verification functionality.
+   * Handles the code verification functionality for signup.
    *
-   * This function verifies the code input and redirects to the login page if successful.
+   * This function verifies the signup code and auto-logs in the user.
    *
    * SDK function used:
    * 1. confirmSignUp
-   * 2. setNewPassword
    */
   const handleVerify = () => {
     // Check if the code is valid before submitting
@@ -147,66 +143,26 @@ const ConfirmationCodeScreen = () => {
       return;
     }
 
-    let successMessage: string = "";
-
     setIsLoading(true);
 
-    // confirm method - if signup - confirm signup, if reset password, set new password
-    const confirmMethod = () => {
-      if (type === SIGNUP_CODE_TYPE) {
-        successMessage = t("auth.signup.registrationSuccess");
-        return store.userStore.authInstance?.confirmSignUp(
-          email as string,
-          code
-        );
-      } else if (type === RESET_PASSWORD_CODE_TYPE) {
-        successMessage = t("auth.forgotPassword.resetSuccess");
-        return store.userStore.authInstance?.setNewPassword(
-          email as string,
-          password as string,
-          code
-        );
-      }
-    };
-
-    const result = confirmMethod();
-    if (!result) {
-      toast.showError(t("auth.errors.authInstanceNotInitialized"));
-      setIsLoading(false);
-      return;
-    }
-
-    result
+    // Confirm signup
+    store.userStore.authInstance
+      ?.confirmSignUp(email as string, code)
       .then((res) => {
         if (res.status === "success") {
-          toast.showSuccess(successMessage);
-          // redirect to login page
-          if (type === SIGNUP_CODE_TYPE) {
-            loginUser();
-          } else {
-            router.dismissTo({
-              pathname: "/(auth)/Login",
-              params: { email: email },
-            });
-          }
+          toast.showSuccess(t("auth.signup.registrationSuccess"));
+          // Auto-login after successful signup verification
+          loginUser();
         } else {
-          const errorMessage =
-            type === SIGNUP_CODE_TYPE
-              ? t("auth.errors.signupConfirmationFailed")
-              : t("auth.errors.passwordResetFailed");
           toast.showError(
-            errorMessage,
+            t("auth.errors.signupConfirmationFailed"),
             res.description || t("auth.errors.fallback")
           );
         }
       })
       .catch((error) => {
-        const errorMessage =
-          type === SIGNUP_CODE_TYPE
-            ? t("auth.errors.signupConfirmationFailed")
-            : t("auth.errors.passwordResetFailed");
         toast.showError(
-          errorMessage,
+          t("auth.errors.signupConfirmationFailed"),
           error.description || t("auth.errors.fallback")
         );
       })
