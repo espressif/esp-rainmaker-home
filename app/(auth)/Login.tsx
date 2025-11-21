@@ -22,7 +22,6 @@ import { useTranslation } from "react-i18next";
 import { useToast } from "@/hooks/useToast";
 // components
 import { Input, Button, ScreenWrapper, Logo } from "@/components";
-
 // images
 import google from "@/assets/images/google.png";
 import signinwithapple from "@/assets/images/apple.png";
@@ -48,7 +47,8 @@ export default function LoginScreen() {
     signinwithapple: signinwithapple,
   } as Record<string, ImageSourcePropType>;
 
-  const { store, fetchNodesAndGroups, initUserCustomData } = useCDF();
+  const { store, fetchNodesAndGroups, initUserCustomData, refreshESPRMUser } =
+    useCDF();
   const { t } = useTranslation();
   const params = useLocalSearchParams();
   const router = useRouter();
@@ -144,6 +144,9 @@ export default function LoginScreen() {
       .login(email, password)
       .then(async (res) => {
         if (res) {
+          // Refresh ESPRMUser from stored tokens (for Matter SDK)
+          await refreshESPRMUser();
+
           // Set user timezone
           try {
             await setUserTimeZone(store.userStore.user);
@@ -204,6 +207,9 @@ export default function LoginScreen() {
       const userInstance = await authInstance.loginWithOauth(provider);
       store.userStore[CDF_EXTERNAL_PROPERTIES.IS_OAUTH_LOGIN] = true;
       await store.userStore.setUserInstance(userInstance);
+
+      // Create ESPRMUser instance from stored tokens (for Matter SDK)
+      await refreshESPRMUser();
 
       // Set user timezone
       try {

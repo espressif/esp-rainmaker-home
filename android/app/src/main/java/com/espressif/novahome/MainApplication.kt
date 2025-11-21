@@ -11,6 +11,9 @@ import android.content.res.Configuration
 import com.espressif.novahome.utils.ESPAppUtilityModule
 import com.espressif.novahome.discovery.ESPDiscoveryModule
 import com.espressif.novahome.local_control.ESPLocalControlModule
+import com.espressif.novahome.matter.ESPMatterModule
+import com.espressif.novahome.matter.ESPMatterUtilityModule
+import com.espressif.novahome.matter.FabricSessionManager
 import com.espressif.novahome.notification.ESPNotificationModule
 import com.espressif.novahome.oauth.ESPOauthModule
 import com.espressif.novahome.provisioning.ESPProvModule
@@ -91,6 +94,24 @@ class MainApplication : Application(), ReactApplication {
                         return emptyList()
                     }
                 })
+                packages.add(object : ReactPackage {
+                    override fun createNativeModules(reactContext: ReactApplicationContext): List<NativeModule?> {
+                        return listOf(ESPMatterModule(reactContext))
+                    }
+
+                    override fun createViewManagers(p0: ReactApplicationContext): List<ViewManager<*, *>?> {
+                        return emptyList()
+                    }
+                })
+                packages.add(object : ReactPackage {
+                    override fun createNativeModules(reactContext: ReactApplicationContext): List<NativeModule?> {
+                        return listOf(ESPMatterUtilityModule(reactContext))
+                    }
+
+                    override fun createViewManagers(p0: ReactApplicationContext): List<ViewManager<*, *>?> {
+                        return emptyList()
+                    }
+                })
                 return packages
             }
 
@@ -124,5 +145,11 @@ class MainApplication : Application(), ReactApplication {
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
         ApplicationLifecycleDispatcher.onConfigurationChanged(this, newConfig)
+    }
+
+    override fun onTerminate() {
+        super.onTerminate()
+        // Clear Matter fabric session when app is terminated
+        FabricSessionManager.clearCurrentFabric()
     }
 }

@@ -121,7 +121,7 @@ const AddDeviceSelection = () => {
     <>
       <Header label={t("device.addDeviceSelection.title")} qaId="header_add_device_selection" />
       <ScreenWrapper style={styles.container} qaId="screen_wrapper_add_device_selection">
-        {currentHome.isPrimaryUser ? (
+        {currentHome?.isPrimaryUser ? (
           <>
             <Typo variant="body" style={styles.noteText} qaId="text_add_device_selection_note">
               {t("device.addDeviceSelection.note")}

@@ -83,7 +83,7 @@ const User: React.FC<UserProps> = () => {
   // Hooks
   const router = useRouter();
   const { t } = useTranslation();
-  const { store } = useCDF();
+  const { store, setESPRMUser } = useCDF();
   const toast = useToast();
 
   // State
@@ -176,6 +176,8 @@ const User: React.FC<UserProps> = () => {
         store.userStore.userInfo = null;
         store.userStore[CDF_EXTERNAL_PROPERTIES.IS_OAUTH_LOGIN] = false;
       }
+      // Clear ESPRMUser from context created for Matter SDK functionality usage
+      setESPRMUser(null);
 
       await AsyncStorage.clear();
       router.replace("/(auth)/Login");

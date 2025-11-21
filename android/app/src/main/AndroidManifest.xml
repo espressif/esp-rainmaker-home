@@ -78,7 +78,7 @@
                 <data android:scheme="com.espressif.novahome" />
             </intent-filter>
         </activity>
-        
+
         <!-- Dedicated OAuth Redirect Activity -->
         <activity
             android:name=".oauth.OAuthRedirectActivity"
@@ -92,10 +92,20 @@
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
 
-                <data android:scheme="rainmaker" 
-                      android:host="com.espressif.novahome" />
+                <data
+                    android:host="com.espressif.novahome"
+                    android:scheme="rainmaker" />
             </intent-filter>
         </activity>
+
+        <!-- Matter Commissioning Activity for Google Play Services -->
+        <activity
+            android:name=".matter.MatterCommissioningActivity"
+            android:exported="false"
+            android:launchMode="singleTop"
+            android:noHistory="true"
+            android:theme="@style/AppTheme.Transparent" />
+
         <service
             android:name=".notification.FCMService"
             android:exported="false">
@@ -103,5 +113,10 @@
                 <action android:name="com.google.firebase.MESSAGING_EVENT" />
             </intent-filter>
         </service>
+
+        <!-- ESP Matter Commissioning Service for Google Play Services -->
+        <service
+            android:name=".matter.ESPMatterCommissioningService"
+            android:exported="true" />
     </application>
 </manifest>

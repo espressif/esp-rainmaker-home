@@ -42,15 +42,13 @@ class MainActivity : ReactActivity() {
     private var appUtilityModule: ESPAppUtilityModule? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        // Enable edge-to-edge for Android 15+ support
-        // This ensures proper handling of system window insets (status bar, navigation bar, cutouts)
+
         WindowCompat.setDecorFitsSystemWindows(window, false)
-        
+
         SplashScreenManager.registerOnActivity(this)
         super.onCreate(null)
         ESPNotificationHelper.createNotificationChannels(this)
 
-        // Try to initialize ESPAppUtilityModule immediately if React Native context is available
         initializeESPAppUtilityModule()
 
         FirebaseApp.initializeApp(this)
@@ -59,11 +57,12 @@ class MainActivity : ReactActivity() {
         checkPermissions()
         enableBluetoothIfNeeded()
         checkLocationServicesEnabled()
+
+//        handleIntent(intent)
     }
 
     override fun onResume() {
         super.onResume()
-        // Try to initialize ESPAppUtilityModule if it's not already initialized
         if (appUtilityModule == null) {
             initializeESPAppUtilityModule()
         }
@@ -82,7 +81,7 @@ class MainActivity : ReactActivity() {
             val reactApplication = application as? ReactApplication
             if (reactApplication != null) {
                 val reactNativeHost = reactApplication.reactNativeHost
-                
+
                 try {
                     val reactInstanceManager = reactNativeHost.reactInstanceManager
                     val reactContext = reactInstanceManager.currentReactContext
@@ -90,7 +89,7 @@ class MainActivity : ReactActivity() {
                         val appContext = reactContext as ReactApplicationContext
                         ESPNotificationQueue.setReactContext(appContext)
                         appUtilityModule = ESPAppUtilityModule(appContext)
-                        
+
                         runOnUiThread {
                             checkPermissions()
                             checkLocationServicesEnabled()
@@ -113,47 +112,60 @@ class MainActivity : ReactActivity() {
         val bleGranted = if (appUtilityModule != null) {
             appUtilityModule!!.isBlePermissionGrantedSync()
         } else {
-            // Fallback to direct permission check using the same logic as ESPAppUtilityModule
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_SCAN) == PackageManager.PERMISSION_GRANTED &&
-                ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED
+                ContextCompat.checkSelfPermission(
+                    this, Manifest.permission.BLUETOOTH_SCAN
+                ) == PackageManager.PERMISSION_GRANTED && ContextCompat.checkSelfPermission(
+                    this, Manifest.permission.BLUETOOTH_CONNECT
+                ) == PackageManager.PERMISSION_GRANTED
             } else {
-                ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
-                ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
+                ContextCompat.checkSelfPermission(
+                    this, Manifest.permission.ACCESS_FINE_LOCATION
+                ) == PackageManager.PERMISSION_GRANTED || ContextCompat.checkSelfPermission(
+                    this, Manifest.permission.ACCESS_COARSE_LOCATION
+                ) == PackageManager.PERMISSION_GRANTED
             }
         }
-        
+
         val locationGranted = if (appUtilityModule != null) {
             appUtilityModule!!.isLocationPermissionGrantedSync()
         } else {
-            // Fallback to direct permission check
-            ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
-                    ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
+            ContextCompat.checkSelfPermission(
+                this, Manifest.permission.ACCESS_FINE_LOCATION
+            ) == PackageManager.PERMISSION_GRANTED || ContextCompat.checkSelfPermission(
+                this, Manifest.permission.ACCESS_COARSE_LOCATION
+            ) == PackageManager.PERMISSION_GRANTED
         }
-        
+
         onComplete(bleGranted, locationGranted)
     }
 
-    override fun onNewIntent(intent: Intent?) {
-        super.onNewIntent(intent)
-        intent?.let { handleIntent(it) }
-    }
-
-    private fun handleIntent(intent: Intent) {
-        if (intent.action == Intent.ACTION_VIEW && intent.data != null) {
-            val url = intent.data.toString()
-
-        }
-    }
+//    override fun onNewIntent(intent: Intent?) {
+//        super.onNewIntent(intent)
+//        intent?.let { handleIntent(it) }
+//    }
+//
+//    private fun handleIntent(intent: Intent) {
+//
+//        handleNocGenerationStep(intent)
+//
+//        if (intent.action == Intent.ACTION_VIEW && intent.data != null) {
+//            val url = intent.data.toString()
+//        }
+//    }
+//
+//    // NOC generation step handler
+//    private fun handleNocGenerationStep(intent: Intent) {
+//        val nocGenerationStep = intent.getBooleanExtra("NOC_GENERATION_STEP", false)
+//    }
 
     private fun checkPermissions() {
         val permissionsToRequest = mutableListOf<String>()
 
-        // Check notification permissions directly (not handled by utility module)
+        // Check notification permissions directly
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             if (ContextCompat.checkSelfPermission(
-                    this,
-                    Manifest.permission.POST_NOTIFICATIONS
+                    this, Manifest.permission.POST_NOTIFICATIONS
                 ) != PackageManager.PERMISSION_GRANTED
             ) {
                 permissionsToRequest.add(Manifest.permission.POST_NOTIFICATIONS)
@@ -180,9 +192,7 @@ class MainActivity : ReactActivity() {
 
             if (permissionsToRequest.isNotEmpty()) {
                 ActivityCompat.requestPermissions(
-                    this,
-                    permissionsToRequest.toTypedArray(),
-                    REQUEST_ACCESS_FINE_LOCATION
+                    this, permissionsToRequest.toTypedArray(), REQUEST_ACCESS_FINE_LOCATION
                 )
             }
         }
@@ -196,11 +206,11 @@ class MainActivity : ReactActivity() {
         } else {
             ESPPermissionUtils.isBlePermissionGranted(this)
         }
-        
+
         if (!hasBluetoothPermissions) {
             return
         }
-        
+
         val bluetoothAdapter = BluetoothAdapter.getDefaultAdapter()
         if (bluetoothAdapter != null && !bluetoothAdapter.isEnabled) {
             val enableBtIntent = Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE)
@@ -209,43 +219,30 @@ class MainActivity : ReactActivity() {
     }
 
     private fun checkLocationServicesEnabled() {
-        // Use the actual ESPAppUtilityModule to check location services
         val isEnabled = if (appUtilityModule != null) {
             appUtilityModule!!.isLocationServicesEnabledSync()
         } else {
-            // Fallback to direct check using the same logic as ESPAppUtilityModule
             try {
                 val locationManager = getSystemService(Context.LOCATION_SERVICE) as LocationManager
-                locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER) ||
-                        locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER)
+                locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER) || locationManager.isProviderEnabled(
+                    LocationManager.NETWORK_PROVIDER
+                )
             } catch (_: Throwable) {
                 false
             }
         }
-        
-        // Note: We're not showing location services dialog anymore
-        // The app will handle permission requests when needed for specific features
     }
 
     override fun onRequestPermissionsResult(
-        requestCode: Int,
-        permissions: Array<out String>,
-        grantResults: IntArray
+        requestCode: Int, permissions: Array<out String>, grantResults: IntArray
     ) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
 
         if (requestCode == REQUEST_ACCESS_FINE_LOCATION) {
             val deniedPermissions = permissions.zip(grantResults.toTypedArray())
-                .filter { it.second != PackageManager.PERMISSION_GRANTED }
-                .map { it.first }
-
-            // Permissions denied - app will request them when needed for specific features
+                .filter { it.second != PackageManager.PERMISSION_GRANTED }.map { it.first }
         }
     }
-
-    // Note: Removed showPermissionDeniedAlert method
-    // The app now allows users to proceed without all permissions granted
-    // Individual features will handle permission requests when needed
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
@@ -263,12 +260,8 @@ class MainActivity : ReactActivity() {
 
     override fun createReactActivityDelegate(): ReactActivityDelegate {
         return ReactActivityDelegateWrapper(
-            this,
-            BuildConfig.IS_NEW_ARCHITECTURE_ENABLED,
-            object : DefaultReactActivityDelegate(
-                this,
-                mainComponentName,
-                fabricEnabled
+            this, BuildConfig.IS_NEW_ARCHITECTURE_ENABLED, object : DefaultReactActivityDelegate(
+                this, mainComponentName, fabricEnabled
             ) {})
     }
 
@@ -281,4 +274,5 @@ class MainActivity : ReactActivity() {
         }
         super.invokeDefaultOnBackPressed()
     }
+
 }

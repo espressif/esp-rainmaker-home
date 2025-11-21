@@ -21,9 +21,13 @@ import {
   ESPTransportMode,
 } from "@espressif/rainmaker-base-sdk";
 
+import { ESPRMUser } from "@espressif/rainmaker-matter-sdk";
 import { CDF_EXTERNAL_PROPERTIES } from "@/utils/constants";
 interface StoreContextType {
   store: CDF;
+  esprmUser: ESPRMUser | null;
+  setESPRMUser: (user: ESPRMUser | null) => void;
+  refreshESPRMUser: () => Promise<void>;
   isInitialized: boolean;
   fetchAllNodes: (shouldFetchFirstPage?: boolean) => Promise<ESPRMNode[]>;
   fetchAllGroups: (shouldFetchFirstPage?: boolean) => Promise<ESPRMGroup[]>;
@@ -45,6 +49,7 @@ export const StoreContext = createContext<StoreContextType | undefined>(
 export const StoreProvider: React.FC<StoreProviderProps> = ({ children }) => {
   const storeRef = useRef<CDF | null>(null);
   const [isInitialized, setIsInitialized] = useState(false);
+  const [esprmUser, setESPRMUser] = useState<ESPRMUser | null>(null);
 
   const initApp = async () => {
     try {
@@ -57,8 +62,20 @@ export const StoreProvider: React.FC<StoreProviderProps> = ({ children }) => {
         CDF_EXTERNAL_PROPERTIES.IS_OAUTH_LOGIN,
         false
       );
-      setIsInitialized(true);
       storeRef.current = store;
+
+      // Try to restore ESPRMUser from stored tokens (for Matter SDK)
+      try {
+        const authInstance = ESPRMBase.getAuthInstance();
+        const esprmUser = await authInstance.getLoggedInUser();
+        if (esprmUser) {
+          setESPRMUser(esprmUser);
+        }
+      } catch (error) {
+        console.warn("Failed to restore ESPRMUser:", error);
+      }
+
+      setIsInitialized(true);
     } catch (error) {
       console.error("Failed to initialize CDF:", error);
       setIsInitialized(true);
@@ -147,6 +164,22 @@ export const StoreProvider: React.FC<StoreProviderProps> = ({ children }) => {
     }
   };
 
+  /**
+   * Manually refresh ESPRMUser from stored tokens
+   * Useful after login to immediately set the user for Matter SDK
+   */
+  const refreshESPRMUser = async () => {
+    try {
+      const authInstance = ESPRMBase.getAuthInstance();
+      const esprmUser = await authInstance.getLoggedInUser();
+      if (esprmUser) {
+        setESPRMUser(esprmUser);
+      }
+    } catch (error) {
+      console.warn("Failed to refresh ESPRMUser:", error);
+    }
+  };
+
   useEffect(() => {
     initApp();
   }, []);
@@ -156,6 +189,9 @@ export const StoreProvider: React.FC<StoreProviderProps> = ({ children }) => {
       value={{
         store: storeRef.current!,
         isInitialized,
+        esprmUser,
+        setESPRMUser,
+        refreshESPRMUser,
         fetchAllNodes,
         fetchAllGroups,
         fetchNodesAndGroups,

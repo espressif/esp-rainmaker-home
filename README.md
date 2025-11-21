@@ -46,6 +46,7 @@ npm run ios -- --device
 ## Key Features
 
 - **Easy Device Provisioning** - Seamlessly add new ESP devices via QR code scanning, BLE discovery, or SoftAP connection
+- **Matter Device Commissioning** - Commission Matter devices to custom fabrics with support for RainMaker + Matter devices
 - **Room Management** - Organize devices by Homes and Rooms with intuitive controls
 - **Local & Cloud Control** - Control devices both locally and through the ESP RainMaker cloud
 - **Secure Authentication** - AWS Cognito-based authentication with OAuth providers (Google, Apple) and account management
@@ -223,7 +224,7 @@ This command properly bundles the JavaScript code and builds a complete release 
 
 ### Supports
 
-- **iOS**: Version **15.1** or greater
+- **iOS**: Version **16.6** or greater (required for Matter support)
 - **Xcode**: Version **16.3** and above
 - **Android Studio**: Narwhal | 2025.1.1 Patch 1
 - **Android**: Version **9** & higher
@@ -240,6 +241,8 @@ The app includes several native modules and adapters that provide platform-speci
 - **ESPOauthModule** - OAuth integration
 - **ESPProvModule** - Provisioning capabilities
 - **ESPAppUtilityModule** - Utility functions and permissions
+- **ESPMatterModule** - Matter device commissioning and ecosystem integration
+- **ESPMatterUtilityModule** - Matter utility functions for certificate management and pre-commissioning storage
 
 #### TypeScript Adapters
 
@@ -251,6 +254,8 @@ Located in the `/adaptors` directory, these provide the bridge between React Nat
 - `ESPOauthAdapter.ts`
 - `ESPProvAdapter.ts`
 - `ESPAppUtilityAdapter.ts`
+- `ESPMatterAdapter.ts`
+- `ESPMatterUtilityAdapter.ts`
 
 ### Troubleshooting
 
@@ -276,8 +281,10 @@ This guide includes solutions for:
 ### SDK Documentation
 
 - [ESP RainMaker SDK API Documentation](https://espressif.github.io/esp-rainmaker-app-sdk-ts/)
+- [ESP RainMaker Matter SDK API Documentation](https://espressif.github.io/esp-rainmaker-matter-app-sdk-ts/)
 - [ESP RainMaker CDF API Documentation](https://espressif.github.io/esp-rainmaker-app-cdf-ts/)
 - [SDK GitHub Repository](https://github.com/espressif/esp-rainmaker-app-sdk-ts)
+- [Matter SDK GitHub Repository](https://github.com/espressif/esp-rainmaker-matter-app-sdk-ts)
 - [CDF GitHub Repository](https://github.com/espressif/esp-rainmaker-app-cdf-ts)
 
 ## License
