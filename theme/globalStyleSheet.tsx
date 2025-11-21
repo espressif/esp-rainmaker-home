@@ -1478,6 +1478,71 @@ export const globalStyles = StyleSheet.create({
     elevation: 6,
   },
 
+  // Dropdown/List Styles
+  dropdownOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    justifyContent: "flex-end",
+  },
+  dropdownModal: {
+    backgroundColor: tokens.colors.white,
+    borderTopLeftRadius: tokens.radius.md,
+    borderTopRightRadius: tokens.radius.md,
+    maxHeight: "80%",
+  },
+  dropdownSearchContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: tokens.spacing._15,
+    borderBottomWidth: 1,
+    borderBottomColor: tokens.colors.bg5,
+    gap: tokens.spacing._10,
+  },
+  dropdownSearchInput: {
+    flex: 1,
+    fontSize: tokens.fontSize.sm,
+    fontFamily: tokens.fonts.medium,
+    color: tokens.colors.text_primary,
+    paddingVertical: tokens.spacing._5,
+  },
+  dropdownClearButton: {
+    fontSize: tokens.fontSize.md,
+    color: tokens.colors.text_secondary,
+    fontWeight: "300",
+  },
+  dropdownList: {
+    maxHeight: "100%",
+  },
+  dropdownItem: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    padding: tokens.spacing._15,
+    borderBottomWidth: 1,
+    borderBottomColor: tokens.colors.bg5,
+  },
+  dropdownItemSelected: {
+    backgroundColor: tokens.colors.bg5,
+  },
+  dropdownItemText: {
+    fontSize: tokens.fontSize.sm,
+    fontFamily: tokens.fonts.medium,
+    color: tokens.colors.black,
+  },
+  dropdownItemTextSelected: {
+    color: tokens.colors.primary,
+    fontWeight: "600",
+  },
+  dropdownEmptyState: {
+    padding: tokens.spacing._30,
+    alignItems: "center",
+  },
+  dropdownEmptyStateText: {
+    fontSize: tokens.fontSize.sm,
+    color: tokens.colors.text_secondary,
+    textAlign: "center",
+  },
+
   // Automation Empty State Styles
   automationEmptyStateContainer: {
     alignItems: "center",

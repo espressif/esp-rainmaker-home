@@ -827,6 +827,7 @@ export interface DeviceInfoProps {
   nodeConfig: ESPRMNodeConfig | undefined;
   device: any;
   otaInfo: OTAInfo;
+  disabled?: boolean;
 }
 
 export interface DeviceNameProps {
