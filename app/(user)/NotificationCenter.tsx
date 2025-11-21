@@ -58,6 +58,7 @@ const NotificationCenter: React.FC = () => {
       loading={item.loading}
       acceptLoading={item.acceptLoading}
       declineLoading={item.declineLoading}
+      qaId="notification_item_notification_center"
     />
   );
 
@@ -68,7 +69,7 @@ const NotificationCenter: React.FC = () => {
     }
 
     if (!sharingList?.length) {
-      return <EmptyState message={t("user.notifications.noNotification")} />;
+      return <EmptyState message={t("user.notifications.noNotification")} qaId="empty_state_notification_center" />;
     }
 
     return (
@@ -85,12 +86,12 @@ const NotificationCenter: React.FC = () => {
   // Render
   return (
     <>
-      <Header label={t("user.notifications.title")} showBack={true} />
+      <Header label={t("user.notifications.title")} showBack={true} qaId="header_notification_center" />
       <ScreenWrapper
         style={{
           ...globalStyles.container,
           backgroundColor: tokens.colors.bg5,
-        }}
+        }} qaId="screen_wrapper_notification_center"
       >
         {renderContent()}
       </ScreenWrapper>

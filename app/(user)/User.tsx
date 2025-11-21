@@ -24,6 +24,9 @@ import {
   ConfirmationDialog,
 } from "@/components";
 
+// Utils
+import { testProps } from "@/utils/testProps";
+
 // Styles
 import { tokens } from "@/theme/tokens";
 import { globalStyles } from "@/theme/globalStyleSheet";
@@ -157,7 +160,7 @@ const User: React.FC<UserProps> = () => {
       setIsLoading(true);
 
       store.groupStore.currentHomeId = null;
-      
+
       // Try to delete platform endpoint, but don't block logout if it fails
       try {
         await deletePlatformEndpoint(store);
@@ -165,7 +168,7 @@ const User: React.FC<UserProps> = () => {
         console.warn("Failed to delete platform endpoint:", error);
         // Don't show error to user as logout should proceed
       }
-      
+
       await store.userStore?.logout();
 
       if (store.userStore) {
@@ -223,10 +226,12 @@ const User: React.FC<UserProps> = () => {
    */
   const renderThirdPartyIntegration = () => (
     <View
+      {...testProps("view_user_integration")}
       style={[styles.section, { ...globalStyles.shadowElevationForLightTheme }]}
     >
-      <ContentWrapper title={t("user.profile.thirdPartyIntegration.title")}>
+      <ContentWrapper title={t("user.profile.thirdPartyIntegration.title")} qaId="3p_integration">
         <View
+          {...testProps("view_3p_integration")}
           style={[
             globalStyles.flex,
             globalStyles.alignCenter,
@@ -249,7 +254,7 @@ const User: React.FC<UserProps> = () => {
    * - Debug mode (Component Showcase)
    */
   const renderUserOperations = () => (
-    <View style={styles.section}>
+    <View {...testProps("view_user_operations")} style={styles.section}>
       <SettingsSection>
         {userOperations.map(renderUserOperationItem)}
       </SettingsSection>
@@ -262,7 +267,7 @@ const User: React.FC<UserProps> = () => {
    * - Settings
    */
   const renderHeaderRight = () => (
-    <Pressable onPress={() => handleNavigation("handleSettings")}>
+    <Pressable {...testProps("button_settings")} onPress={() => handleNavigation("handleSettings")}>
       <Settings size={24} color={tokens.colors.primary} />
     </Pressable>
   );
@@ -274,6 +279,7 @@ const User: React.FC<UserProps> = () => {
         label={t("user.profile.title")}
         showBack={false}
         rightSlot={renderHeaderRight()}
+        qaId="header_user"
       />
       <ScreenWrapper
         style={{
@@ -281,6 +287,7 @@ const User: React.FC<UserProps> = () => {
           backgroundColor: tokens.colors.bg5,
         }}
         excludeTop={true}
+        qaId="screen_wrapper_user"
       >
         <ProfileSection
           userInfo={store?.userStore?.userInfo || undefined}
@@ -291,6 +298,7 @@ const User: React.FC<UserProps> = () => {
         {renderUserOperations()}
 
         <View
+          {...testProps("view_user_logout")}
           style={[
             styles.section,
             { ...globalStyles.shadowElevationForLightTheme },
@@ -309,6 +317,7 @@ const User: React.FC<UserProps> = () => {
         onCancel={() => setShowLogoutDialog(false)}
         confirmColor={tokens.colors.red}
         isLoading={isLoading}
+        qaId="logout_user"
       />
     </>
   );

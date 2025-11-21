@@ -49,6 +49,7 @@ import {
 
 // Types
 import { OTAInfo } from "@/types/global";
+import { testProps } from "@/utils/testProps";
 
 /**
  * Settings Component
@@ -251,10 +252,10 @@ const Settings = observer(() => {
    */
   const renderError = () => (
     <>
-      <Header label={t("device.settings.title")} showBack={true} />
-      <ScreenWrapper style={globalStyles.container} excludeTop={true}>
-        <View style={globalStyles.errorContainer}>
-          <Text style={globalStyles.errorText}>
+      <Header label={t("device.settings.title")} showBack={true} qaId="header_settings" />
+      <ScreenWrapper style={globalStyles.container} excludeTop={true} qaId="screen_wrapper_settings">
+        <View {...testProps("view_settings")} style={globalStyles.errorContainer}>
+          <Text {...testProps("text_error_settings")} style={globalStyles.errorText}>
             {t("device.settings.deviceNotFound")}
           </Text>
         </View>
@@ -268,13 +269,14 @@ const Settings = observer(() => {
 
   return (
     <>
-      <Header label={t("device.settings.title")} showBack={true} />
+      <Header label={t("device.settings.title")} showBack={true} qaId="header_settings" />
       <ScreenWrapper
         style={{
           ...globalStyles.container,
           backgroundColor: tokens.colors.bg5,
         }}
         excludeTop={true}
+        qaId="screen_wrapper_settings"
       >
         <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false}>
           {/* Device Name Section */}
@@ -313,9 +315,10 @@ const Settings = observer(() => {
               style={{
                 ...globalStyles.shadowElevationForLightTheme,
               }}
+              qaId="button_settings"
             >
               <Trash2 size={16} color={tokens.colors.white} />
-              <Text style={[globalStyles.buttonTextDanger, { marginLeft: 8 }]}>
+              <Text {...testProps("text_remove_device_settings")} style={[globalStyles.buttonTextDanger, { marginLeft: 8 }]}>
                 {isRemovingDevice ? (
                   <ActivityIndicator size="small" color={tokens.colors.white} />
                 ) : (
@@ -337,6 +340,7 @@ const Settings = observer(() => {
         onCancel={() => setShowRemoveDeviceDialog(false)}
         confirmColor={tokens.colors.red}
         isLoading={isRemovingDevice}
+        qaId="remove_device"
       />
     </>
   );

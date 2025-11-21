@@ -23,6 +23,7 @@ import { ChevronDown } from "lucide-react-native";
 import { tokens } from "@/theme/tokens";
 import { globalStyles } from "@/theme/globalStyleSheet";
 
+import { testProps } from "../../utils/testProps";
 // Platform Setup
 if (
   Platform.OS === "android" &&
@@ -57,6 +58,8 @@ interface CollapsibleCardProps {
   animationDuration?: number;
   /** Whether the card is expandable */
   isExpandable?: boolean;
+  /** QA automation identifier */
+  qaId?: string;
 }
 
 /**
@@ -82,6 +85,7 @@ const CollapsibleCard: React.FC<CollapsibleCardProps> = ({
   contentStyle,
   animationDuration = 300,
   isExpandable = true,
+  qaId,
 }) => {
   const [isExpanded, setIsExpanded] = useState(defaultExpanded);
   const animatedRotation = useRef(
@@ -136,7 +140,7 @@ const CollapsibleCard: React.FC<CollapsibleCardProps> = ({
   };
 
   return (
-    <View style={[styles.card, style]}>
+    <View {...(qaId ? testProps(qaId) : {})}  style={[styles.card, style]}>
       <TouchableOpacity
         style={[styles.header, headerStyle]}
         onPress={toggleExpanded}

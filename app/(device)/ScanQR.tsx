@@ -42,6 +42,7 @@ import { Header, ScreenWrapper } from "@/components";
 import { provisionAdapter } from "@/adaptors/implementations/ESPProvAdapter";
 
 // Utils
+import { testProps } from "@/utils/testProps";
 import { useToast } from "@/hooks/useToast";
 
 const { width, height } = Dimensions.get("window");
@@ -75,17 +76,19 @@ const AnimatedGuide = () => {
 
   return (
     <Animated.View
+      {...testProps("view_scan_qr")}
       style={[
         globalStyles.guideContainer,
         { opacity: fadeAnim, position: "absolute", top: height * 0.15 },
       ]}
     >
       <QrCode
+        {...testProps("icon_qr_code")}
         size={32}
         color={tokens.colors.white}
         style={globalStyles.guideIcon}
       />
-      <Text style={globalStyles.guideText}>
+      <Text {...testProps("text_qr_guide")} style={globalStyles.guideText}>
         {t("device.scan.qr.holdSteady")}
       </Text>
     </Animated.View>
@@ -112,14 +115,14 @@ const ScannerOverlay = ({ isProcessing }: { isProcessing: boolean }) => {
   }, []);
 
   return (
-    <View style={globalStyles.scannerOverlay}>
-      <View style={globalStyles.scannerFrameContainer}>
-        <View style={styles.scannerFrame}>
+    <View {...testProps("view_scanner_overlay")} style={globalStyles.scannerOverlay}>
+      <View {...testProps("view_scanner_frame_container")} style={globalStyles.scannerFrameContainer}>
+        <View {...testProps("view_scanner_frame")} style={styles.scannerFrame}>
           {/* Corner markers */}
-          <View style={[styles.cornerMarker, styles.topLeft]} />
-          <View style={[styles.cornerMarker, styles.topRight]} />
-          <View style={[styles.cornerMarker, styles.bottomLeft]} />
-          <View style={[styles.cornerMarker, styles.bottomRight]} />
+          <View {...testProps("view_corner_top_left")} style={[styles.cornerMarker, styles.topLeft]} />
+          <View {...testProps("view_corner_top_right")} style={[styles.cornerMarker, styles.topRight]} />
+          <View {...testProps("view_corner_bottom_left")} style={[styles.cornerMarker, styles.bottomLeft]} />
+          <View {...testProps("view_corner_bottom_right")} style={[styles.cornerMarker, styles.bottomRight]} />
 
           {isProcessing ? (
             <ActivityIndicator
@@ -135,6 +138,7 @@ const ScannerOverlay = ({ isProcessing }: { isProcessing: boolean }) => {
             />
           ) : (
             <Animated.View
+              {...testProps("view_scan_line")}
               style={[
                 styles.scanLine,
                 {
@@ -151,7 +155,7 @@ const ScannerOverlay = ({ isProcessing }: { isProcessing: boolean }) => {
             />
           )}
         </View>
-        <Text style={globalStyles.scannerText}>
+        <Text {...testProps("text_align_qr")} style={globalStyles.scannerText}>
           {t("device.scan.qr.alignQRCode")}
         </Text>
       </View>
@@ -174,6 +178,7 @@ const PermissionScreen = ({
 
   return (
     <View
+      {...testProps("view_permission_screen")}
       style={[
         globalStyles.container,
         globalStyles.itemCenter,
@@ -181,6 +186,7 @@ const PermissionScreen = ({
       ]}
     >
       <View
+        {...testProps("view_permission_content")}
         style={[
           globalStyles.permissionContent,
           {
@@ -189,21 +195,23 @@ const PermissionScreen = ({
           },
         ]}
       >
-        <View style={globalStyles.permissionIconContainer}>
+        <View {...testProps("view_permission_icon")} style={globalStyles.permissionIconContainer}>
           <CameraOff size={40} color={tokens.colors.gray} />
         </View>
-        <Text style={[globalStyles.heading, globalStyles.permissionTitle]}>
+        <Text {...testProps("text_permission_title_scan_qr")} style={[globalStyles.heading, globalStyles.permissionTitle]}>
           {status === "requesting"
             ? t("device.scan.qr.requestingPermission")
             : t("device.scan.qr.noCameraPermission")}
         </Text>
         <Text
+          {...testProps("text_permission_msg_scan_qr_")}
           style={[globalStyles.textGray, globalStyles.permissionDescription]}
         >
           {t("device.scan.qr.cameraPermissionRequired")}
         </Text>
         {status === "denied" && (
           <TouchableOpacity
+            {...testProps("button_permission")}
             style={[
               globalStyles.actionButton,
               globalStyles.actionButtonPrimary,
@@ -216,7 +224,7 @@ const PermissionScreen = ({
               color={tokens.colors.white}
               style={styles.buttonIcon}
             />
-            <Text style={globalStyles.actionButtonTextPrimary}>
+            <Text {...testProps("text_grant_permission_scan_qr")} style={globalStyles.actionButtonTextPrimary}>
               {t("device.scan.qr.grantPermission")}
             </Text>
           </TouchableOpacity>
@@ -390,14 +398,15 @@ const ScanQR = () => {
   };
 
   return (
-    <ScreenWrapper style={{ ...globalStyles.screenWrapper, padding: 0 }}>
+    <ScreenWrapper style={{ ...globalStyles.screenWrapper, padding: 0 }} qaId="screen_wrapper_scan_qr">
       <Header
         label={t("device.scan.qr.title")}
-        rightSlot={<QrCode size={24} color={tokens.colors.primary} />}
+        rightSlot={<QrCode {...testProps("icon_qr_code")} size={24} color={tokens.colors.primary} />}
+        qaId="header_scan_qr"
       />
 
-      <View style={styles.container}>
-        <View style={styles.content}>
+      <View {...testProps("view_scan_qr_container")} style={styles.container}>
+        <View {...testProps("view_scan_qr_content")} style={styles.content}>
           {!permission ? (
             <PermissionScreen
               status="requesting"
@@ -421,8 +430,9 @@ const ScanQR = () => {
               />
               <ScannerOverlay isProcessing={isProcessing} />
 
-              <View style={globalStyles.cameraControlsContainer}>
+              <View {...testProps("view_camera_controls")} style={globalStyles.cameraControlsContainer}>
                 <TouchableOpacity
+                  {...testProps("button_toggle")}
                   style={globalStyles.cameraToggle}
                   onPress={toggleCamera}
                   disabled={isProcessing}
@@ -432,6 +442,7 @@ const ScanQR = () => {
 
                 {scanned && (
                   <TouchableOpacity
+                    {...testProps("button_rescan")}
                     style={[
                       globalStyles.actionButton,
                       globalStyles.actionButtonPrimary,
@@ -441,11 +452,12 @@ const ScanQR = () => {
                     onPress={handleScanAgain}
                   >
                     <QrCode
+                      {...testProps("icon_button")}
                       size={20}
                       color={tokens.colors.white}
                       style={styles.buttonIcon}
                     />
-                    <Text style={globalStyles.actionButtonTextPrimary}>
+                    <Text {...testProps("text_scan_again")} style={globalStyles.actionButtonTextPrimary}>
                       {t("device.scan.qr.scanAgain")}
                     </Text>
                   </TouchableOpacity>

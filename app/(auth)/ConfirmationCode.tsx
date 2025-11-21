@@ -18,6 +18,7 @@ import { useTranslation } from "react-i18next";
 import { ScreenWrapper, Header, Input, Button } from "@/components";
 
 import APP_CONFIG from "@/app.json";
+import { testProps } from "@/utils/testProps";
 
 /**
  * ConfirmationCodeScreen component that displays the confirmation code screen for signup.
@@ -207,19 +208,20 @@ const ConfirmationCodeScreen = () => {
 
   return (
     <>
-      <Header showBack label={t("auth.verification.title")} />
-      <ScreenWrapper style={globalStyles.screenWrapper}>
-        <ScrollView contentContainerStyle={globalStyles.scrollViewContent}>
-          <Text style={[globalStyles.heading, globalStyles.verificationTitle]}>
+      <Header showBack label={t("auth.verification.title")} qaId="header_confirmation_code" />
+      <ScreenWrapper style={globalStyles.screenWrapper} qaId="screen_wrapper_confirmation_code">
+        <ScrollView {...testProps("scroll_confirmation_code")} contentContainerStyle={globalStyles.scrollViewContent}>
+          <Text {...testProps("text_title_confirmation_code")} style={[globalStyles.heading, globalStyles.verificationTitle]}>
             {t("auth.verification.heading")}
           </Text>
           <Text
+            {...testProps("text_subtitle_confirmation_code")}
             style={[globalStyles.subHeading, globalStyles.verificationSubtitle]}
           >
             {t("auth.verification.subtitle", { email: email as string })}
           </Text>
 
-          <View style={globalStyles.verificationContainer}>
+          <View {...testProps("view_confirmation_code")} style={globalStyles.verificationContainer}>
             {/* Code Input */}
             <Input
               initialValue={code}
@@ -231,6 +233,7 @@ const ConfirmationCodeScreen = () => {
               keyboardType="numeric"
               maxLength={6}
               autoFocus
+              qaId="confirmation_code"
             />
           </View>
 
@@ -241,14 +244,17 @@ const ConfirmationCodeScreen = () => {
             style={globalStyles.verificationButton}
             disabled={!isCodeValid || isLoading}
             isLoading={isLoading}
+            qaId="button_verify_confirmation_code"
           />
 
           {/* Resend Code Button with countdown */}
           <TouchableOpacity
+            {...testProps("button_resend_confirmation_code")}
             onPress={handleResendCode}
             disabled={countdown > 0 || isLoading}
           >
             <Text
+              {...testProps("text_confirmation_code")}
               style={[globalStyles.linkText, countdown > 0 && { opacity: 0.5 }]}
             >
               {countdown > 0
@@ -258,7 +264,7 @@ const ConfirmationCodeScreen = () => {
           </TouchableOpacity>
         </ScrollView>
         {/* App Version Text */}
-        <Text style={globalStyles.versionText}>
+        <Text {...testProps("text_app_version_settings")} style={globalStyles.versionText}>
           {t("layout.shared.version")} {appVersion}
         </Text>
       </ScreenWrapper>

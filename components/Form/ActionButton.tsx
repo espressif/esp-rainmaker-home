@@ -11,6 +11,7 @@ import { Pressable } from "react-native";
 // Styles
 import { globalStyles } from "@/theme/globalStyleSheet";
 
+import { testProps } from "../../utils/testProps";
 // Types
 interface ActionButtonProps {
   /** Children elements to render */
@@ -23,6 +24,8 @@ interface ActionButtonProps {
   variant?: "primary" | "secondary" | "danger";
   /** Additional style overrides */
   style?: any;
+  /** QA automation identifier */
+  qaId?: string;
 }
 
 /**
@@ -36,9 +39,11 @@ const ActionButton: React.FC<ActionButtonProps> = ({
   onPress, 
   disabled = false, 
   variant = "primary",
-  style = {}
+  style = {},
+  qaId
 }) => (
   <Pressable
+    {...(qaId ? testProps(qaId) : {})}
     style={[
       globalStyles.button,
       variant === "primary" && globalStyles.buttonPrimary,

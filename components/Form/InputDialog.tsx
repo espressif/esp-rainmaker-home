@@ -22,6 +22,7 @@ import Input from "./Input";
 import { tokens } from "@/theme/tokens";
 import { globalStyles } from "@/theme/globalStyleSheet";
 
+import { testProps } from "../../utils/testProps";
 // Types
 interface InputDialogProps {
   /** Whether the dialog is open */
@@ -42,6 +43,8 @@ interface InputDialogProps {
   onCancel: () => void;
   /** Loading state */
   loading?: boolean;
+  /** QA automation identifier */
+  qaId?: string;
 }
 
 /**
@@ -65,6 +68,7 @@ const InputDialog: React.FC<InputDialogProps> = ({
   onSubmit,
   onCancel,
   loading = false,
+  qaId,
 }) => {
   // State
   const [value, setValue] = useState(initialValue);
@@ -75,7 +79,7 @@ const InputDialog: React.FC<InputDialogProps> = ({
   }, [initialValue, open]);
 
   return (
-    <Modal
+    <Modal {...(qaId ? testProps(`dialog_${qaId}`) : {})}
       visible={open}
       transparent={true}
       animationType="fade"
@@ -92,10 +96,11 @@ const InputDialog: React.FC<InputDialogProps> = ({
           onPress={() => {}}
         >
           <YStack alignItems="center" width="100%">
-            <Text style={[globalStyles.fontMedium, styles.dialogTitle]}>
+            <Text {...testProps(`text_title_${qaId}`)} style={[globalStyles.fontMedium, styles.dialogTitle]}>
               {title}
             </Text>
             <Input
+              qaId="name"
               placeholder={inputPlaceholder}
               initialValue={value}
               onFieldChange={(value) => {
@@ -107,16 +112,18 @@ const InputDialog: React.FC<InputDialogProps> = ({
             />
             <View style={styles.dialogButtonRow}>
               <TouchableOpacity
+                {...testProps("button_cancel_dialog")}
                 onPress={onCancel}
                 style={[styles.dialogButton, styles.cancelButton]}
               >
                 <Text
-                  style={[globalStyles.fontMedium, styles.cancelButtonText]}
+                  {...testProps("text_label_cancel")} style={[globalStyles.fontMedium, styles.cancelButtonText]}
                 >
                   {cancelLabel}
                 </Text>
               </TouchableOpacity>
               <TouchableOpacity
+                {...testProps("button_confirm_dialog")}
                 onPress={() => onSubmit(value)}
                 disabled={!value.trim()}
                 style={[
@@ -126,6 +133,7 @@ const InputDialog: React.FC<InputDialogProps> = ({
                 ]}
               >
                 <Text
+                  {...testProps("text_label_confirm")}
                   style={[globalStyles.fontMedium, styles.confirmButtonText]}
                 >
                   {loading ? <ActivityIndicator /> : confirmLabel}

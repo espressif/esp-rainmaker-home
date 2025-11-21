@@ -16,6 +16,7 @@ import {
 
 // Styles
 import { tokens } from "@/theme/tokens";
+import { testProps } from "../../utils/testProps";
 
 // Types
 interface Tab {
@@ -45,15 +46,17 @@ interface TabsProps {
  * - Touch interaction
  */
 const Tabs: React.FC<TabsProps> = ({ tabs, activeTab, onSelectTab }) => (
-  <View style={styles.tabs}>
-    <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+  <View {...testProps("view_room_tabs")} style={styles.tabs}>
+    <ScrollView horizontal showsHorizontalScrollIndicator={false} >
       {tabs.map((tab) => (
         <TouchableOpacity 
+          {...testProps(`button_room_tab_${tab.label}`)}
           style={styles.tabContainer} 
           key={tab.id} 
           onPress={() => onSelectTab(tab)}
         >
           <Text 
+            {...testProps(`text_room_tab_${tab.label}`)}
             style={[
               styles.tab, 
               activeTab?.id === tab.id && styles.activeTab

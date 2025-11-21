@@ -32,10 +32,13 @@ import { useTranslation } from "react-i18next";
 // Icons
 import { Plus } from "lucide-react-native";
 
+import { testProps } from "../../utils/testProps";
 // Types
 interface AddYourFirstDeviceBannerProps {
   /** Navigation callback for different operations */
   redirectOperations: (operation: string) => void;
+  /** QA automation identifier */
+  qaId?: string;
 }
 
 /**
@@ -47,6 +50,7 @@ interface AddYourFirstDeviceBannerProps {
  */
 const AddYourFirstDeviceBanner: React.FC<AddYourFirstDeviceBannerProps> = ({
   redirectOperations,
+  qaId,
 }) => {
   const { t } = useTranslation();
   const availableDevices = DEVICE_TYPE_LIST.filter(
@@ -54,7 +58,7 @@ const AddYourFirstDeviceBanner: React.FC<AddYourFirstDeviceBannerProps> = ({
   );
 
   return (
-    <Pressable
+    <Pressable {...(qaId ? testProps(qaId) : {})}
       style={[
         {
           width: "100%",
@@ -64,7 +68,7 @@ const AddYourFirstDeviceBanner: React.FC<AddYourFirstDeviceBannerProps> = ({
         globalStyles.radiusMd,
       ]}
     >
-      <Text style={[globalStyles.heading, globalStyles.textCenter]}>
+      <Text {...testProps("text_add_first_device_title")} style={[globalStyles.heading, globalStyles.textCenter]}>
         {t("group.home.addYourFirstDeviceBannerTitle")}
       </Text>
       <Text
@@ -96,10 +100,11 @@ const AddYourFirstDeviceBanner: React.FC<AddYourFirstDeviceBannerProps> = ({
       </View>
 
       <TouchableOpacity
+        {...testProps("button_add_device_banner")}
         style={styles.addButton}
         onPress={() => redirectOperations("AddDevice")}
       >
-        <Plus size={24} color={tokens.colors.white} />
+        <Plus {...testProps("icon_add_device")} size={24} color={tokens.colors.white} />
       </TouchableOpacity>
     </Pressable>
   );

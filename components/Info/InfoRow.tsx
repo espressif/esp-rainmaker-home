@@ -15,6 +15,7 @@ import { tokens } from "@/theme/tokens";
 // Icons
 import { Copy } from "lucide-react-native";
 
+import { testProps } from "../../utils/testProps";
 // Types
 interface InfoRowProps {
   /** Label text to display */
@@ -23,6 +24,8 @@ interface InfoRowProps {
   value: string;
   /** Whether to show copy icon */
   isCopyable?: boolean;
+  /** QA automation identifier */
+  qaId?: string;
 }
 
 /**
@@ -38,12 +41,13 @@ const InfoRow: React.FC<InfoRowProps> = ({
   label,
   value,
   isCopyable = false,
+  qaId,
 }) => {
   const handleCopy = () => {
     Clipboard.setStringAsync(value);
   };
   return (
-    <View style={globalStyles.infoRow}>
+    <View {...(qaId ? testProps(qaId) : {})}  style={globalStyles.infoRow}>
       <Text style={globalStyles.infoLabel}>{label}:</Text>
       <View style={globalStyles.infoValue}>
         <Text>{value}</Text>

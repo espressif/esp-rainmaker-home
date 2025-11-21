@@ -20,6 +20,7 @@ import { AutomationDeviceCardProps } from "@/types/global";
  * @param {Record<string, any>} actions - Action object (for action type)
  * @param {Record<string, { condition: string; value: any }>} eventConditions - Event conditions (for event type)
  * @param {Function} onPress - Handler for press events
+ * @param {string} qaId - QA identifier
  */
 const AutomationDeviceCard = ({
   device,
@@ -28,9 +29,11 @@ const AutomationDeviceCard = ({
   actions = {},
   eventConditions,
   onPress,
-}: AutomationDeviceCardProps) => {
+  qaId,
+}: AutomationDeviceCardProps & { qaId?: string }) => {
   return (
     <DeviceAction
+      qaId={qaId}
       displayDeviceName={displayDeviceName}
       device={device.type}
       actions={type === "action" ? actions : {}}

@@ -15,12 +15,15 @@ import { LogOut } from 'lucide-react-native';
 import { tokens } from '@/theme/tokens';
 import { globalStyles } from '@/theme/globalStyleSheet';
 
+import { testProps } from "../../utils/testProps";
 // Types
 interface LogoutButtonProps {
   /** Press handler */
   onPress: () => void;
   /** Loading state */
   isLoading?: boolean;
+  /** QA automation identifier */
+  qaId?: string;
 }
 
 /**
@@ -36,10 +39,11 @@ interface LogoutButtonProps {
 const LogoutButton: React.FC<LogoutButtonProps> = ({
   onPress,
   isLoading = false,
+  qaId,
 }) => {
   return (
-    <Pressable 
-      style={[globalStyles.settingsSection, styles.container]} 
+    <Pressable {...(qaId ? testProps(qaId) : {})}
+      style={[globalStyles.settingsSection, styles.container]}
       onPress={onPress} 
       disabled={isLoading}
     >
@@ -48,7 +52,7 @@ const LogoutButton: React.FC<LogoutButtonProps> = ({
       ) : (
         <>
           <LogOut size={20} color={tokens.colors.red} />
-          <Text style={[globalStyles.fontMedium, styles.text]}>
+          <Text {...testProps("text_logout_button")} style={[globalStyles.fontMedium, styles.text]}>
             Log Out
           </Text>
         </>

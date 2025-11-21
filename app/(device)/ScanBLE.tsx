@@ -35,6 +35,7 @@ import { Bluetooth, RotateCcw } from "lucide-react-native";
 import { Header, ScreenWrapper, ContentWrapper } from "@/components";
 
 // Utils
+import { testProps } from "@/utils/testProps";
 import { deviceImages } from "@/utils/device";
 import { useToast } from "@/hooks/useToast";
 
@@ -69,16 +70,18 @@ const ScannedDeviceCard: React.FC<ScannedDeviceProps> = ({
   onPress,
 }) => (
   <TouchableOpacity
+    {...testProps("button_scanned_device_ble")}
     style={[globalStyles.deviceCard, { padding: 0 }]}
     onPress={onPress}
   >
     <Image
+      {...testProps("image_icon_device")}
       source={deviceImages[`${type}-online`]}
       style={globalStyles.deviceIcon}
       resizeMode="contain"
     />
-    <View style={globalStyles.deviceInfo}>
-      <Text style={globalStyles.deviceName}>{name}</Text>
+    <View {...testProps("view_info_device")} style={globalStyles.deviceInfo}>
+      <Text {...testProps("text_device_name")} style={globalStyles.deviceName}>{name}</Text>
     </View>
   </TouchableOpacity>
 );
@@ -98,6 +101,7 @@ const DeviceTypeCard: React.FC<DeviceTypeProps> = ({
   style,
 }) => (
   <TouchableOpacity
+    {...testProps(`button_device_type_${label}`)}
     style={[
       globalStyles.deviceCard,
       disabled && globalStyles.deviceCardDisabled,
@@ -109,12 +113,13 @@ const DeviceTypeCard: React.FC<DeviceTypeProps> = ({
   >
     <View style={globalStyles.deviceIconContainer}>
       <Image
+        {...testProps(`image_device_type_${label}`)}
         source={deviceImages[`${defaultIcon}-online`]}
         style={globalStyles.deviceIcon}
         resizeMode="contain"
       />
     </View>
-    <Text style={[globalStyles.deviceLabel, disabled && globalStyles.textGray]}>
+    <Text {...testProps("text_label")} style={[globalStyles.deviceLabel, disabled && globalStyles.textGray]}>
       {label}
     </Text>
   </TouchableOpacity>
@@ -153,13 +158,14 @@ const ScanningAnimation = () => {
 
   // Render
   return (
-    <View style={globalStyles.scanningContainer}>
+    <View {...testProps("view_scan_ble")} style={globalStyles.scanningContainer}>
       <Animated.View
+        {...testProps("view_animated")}
         style={[globalStyles.scanningIcon, { transform: [{ rotate: spin }] }]}
       >
         <ActivityIndicator size="large" color={tokens.colors.primary} />
       </Animated.View>
-      <Text style={globalStyles.scanningText}>
+      <Text {...testProps("text_scanning_devices_ble")} style={globalStyles.scanningText}>
         {t("device.scan.ble.scanningDevices")}
       </Text>
     </View>
@@ -186,10 +192,11 @@ const NoDevicesFound = ({
       title={t("device.scan.ble.noDevicesFound")}
       style={style}
       leftSlot={
-        <TouchableOpacity onPress={onScanAgain} style={styles.rescanButton}>
+        <TouchableOpacity {...testProps("button_rescan")} onPress={onScanAgain} style={styles.rescanButton}>
           <RotateCcw size={20} color={tokens.colors.primary} />
         </TouchableOpacity>
       }
+      qaId="no_devices_found_scan_ble"
     >
       <View style={styles.emptyContainer} />
     </ContentWrapper>
@@ -314,13 +321,15 @@ const Scan = () => {
     <>
       <Header
         label={t("device.scan.ble.title")}
-        rightSlot={<Bluetooth size={24} color={tokens.colors.bluetooth} />}
+        rightSlot={<Bluetooth {...testProps("icon_bluetooth_scan_ble")} size={24} color={tokens.colors.bluetooth} />}
+        qaId="header_scan_ble"
       />
-      <ScreenWrapper style={globalStyles.scanContainer}>
+      <ScreenWrapper style={globalStyles.scanContainer} qaId="screen_wrapper_scan_ble">
         {isScanning ? (
           <ContentWrapper
             title={t("device.scan.ble.scanningDevices")}
             style={globalStyles.shadowElevationForLightTheme}
+            qaId="scanning_devices_scan_ble"
           >
             <ScanningAnimation />
           </ContentWrapper>
@@ -335,9 +344,9 @@ const Scan = () => {
                         count: scannedDevices.length,
                       })
                 }
-                style={globalStyles.shadowElevationForLightTheme}
+                style={globalStyles.shadowElevationForLightTheme} qaId="devices_found_scan_ble"
               >
-                <ScrollView style={globalStyles.scannedDevicesList}>
+                <ScrollView {...testProps("scroll_scan_ble")} style={globalStyles.scannedDevicesList}>
                   {scannedDevices.map((device, index) => (
                     <ScannedDeviceCard
                       key={index}
@@ -357,11 +366,12 @@ const Scan = () => {
           </>
         )}
 
-        <Text style={globalStyles.sectionTitle}>
+        <Text {...testProps("text_all_devices_title")} style={globalStyles.sectionTitle}>
           {t("device.scan.ble.allDevices")}
         </Text>
 
         <ScrollView
+          {...testProps("scroll_scan_ble")}
           style={globalStyles.deviceListContainer}
           showsVerticalScrollIndicator={false}
         >

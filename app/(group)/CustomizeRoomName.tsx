@@ -21,6 +21,9 @@ import { Circle, Check } from "lucide-react-native";
 // Components
 import { Header, ContentWrapper, ScreenWrapper, Input } from "@/components";
 
+// Utils
+import { testProps } from "@/utils/testProps";
+
 // Types
 import { RoomType } from "@/types/global";
 
@@ -157,9 +160,10 @@ const CustomizeRoomName = () => {
    */
   const renderRoomNameList = () => {
     return (
-      <ScrollView style={styles.scrollView}>
+      <ScrollView {...testProps("scroll_room_names")} style={styles.scrollView}>
         {predefinedRooms.map((room, index) => (
           <Pressable
+            {...testProps(`button_room_${room.key}`)}
             key={`room-${room.key}-${index}`}
             style={[
               styles.roomItem,
@@ -214,6 +218,7 @@ const CustomizeRoomName = () => {
         {/* Confirm Button */}
         <View style={styles.buttonContainer}>
           <Pressable
+            {...testProps("button_confirm_room_name")}
             style={[
               globalStyles.btn,
               globalStyles.bgBlue,

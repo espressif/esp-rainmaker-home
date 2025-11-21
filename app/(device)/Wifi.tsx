@@ -50,6 +50,7 @@ import {
 // Components
 import { Header, ScreenWrapper, Button } from "@/components";
 import { Checkbox } from "react-native-paper";
+import { testProps } from "@/utils/testProps";
 
 // Helpers
 const createNetworkKey = (
@@ -107,10 +108,12 @@ const WifiItem: React.FC<WifiItemProps> = ({ item, onSelect }) => {
   return (
     <TouchableOpacity
       style={[globalStyles.settingsItem]}
+      {...testProps("wifi_item")}
       onPress={() => onSelect(item.ssid)}
     >
-      <View style={globalStyles.settingsItemLeft}>
+      <View style={globalStyles.settingsItemLeft} {...testProps("view_wifi")}>
         <WifiIcon
+          {...testProps("icon_wifi_strength")}
           size={20}
           color={signalInfo.color}
           style={{
@@ -118,10 +121,10 @@ const WifiItem: React.FC<WifiItemProps> = ({ item, onSelect }) => {
             opacity: getOpacityFromStrength(signalInfo.strength),
           }}
         />
-        <View style={{ flex: 1 }}>
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-            {item.secure && <Lock size={14} color={tokens.colors.gray} />}
-            <Text style={globalStyles.settingsItemText}>{item.ssid}</Text>
+        <View style={{ flex: 1 }} {...testProps("view_wifi")}>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }} {...testProps("view_wifi")}>
+            {item.secure && <Lock {...testProps("icon_lock")} size={14} color={tokens.colors.gray} />}
+            <Text style={globalStyles.settingsItemText} {...testProps("text_ssid")}>{item.ssid}</Text>
           </View>
         </View>
       </View>
@@ -144,29 +147,32 @@ const NetworkListModal: React.FC<NetworkListModalProps> = ({
       animationType="slide"
       transparent
       onRequestClose={onClose}
+      {...testProps("modal_wifi")}
     >
       <TouchableOpacity
         style={styles.modalOverlay}
         activeOpacity={1}
+        {...testProps("button_close_wifi")}
         onPress={onClose}
       >
-        <View style={styles.modalContent}>
-          <View style={styles.modalHandle} />
+        <View style={styles.modalContent} {...testProps("view_wifi")}>
+          <View style={styles.modalHandle} {...testProps("view_wifi")} />
 
-          <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>
+          <View style={styles.modalHeader} {...testProps("view_wifi")}>
+            <Text style={styles.modalTitle} {...testProps("text_title_wifi")}>
               {t("device.wifi.availableNetworks")}
             </Text>
-            <View style={styles.modalActions}>
+            <View style={styles.modalActions} {...testProps("view_wifi")}>
               {isLoading ? (
                 <ActivityIndicator color={tokens.colors.primary} />
               ) : (
                 <TouchableOpacity
                   onPress={onRefresh}
+                  {...testProps("button_refresh_wifi")}
                   style={styles.refreshButton}
                 >
                   <RotateCcw size={16} color={tokens.colors.primary} />
-                  <Text style={styles.refreshText}>
+                  <Text style={styles.refreshText} {...testProps("text_refresh_wifi")}>
                     {t("layout.shared.refresh")}
                   </Text>
                 </TouchableOpacity>
@@ -183,7 +189,7 @@ const NetworkListModal: React.FC<NetworkListModalProps> = ({
               createNetworkKey(item.ssid, item.rssi, index)
             }
             ItemSeparatorComponent={() => (
-              <View style={globalStyles.settingsItemSeparator} />
+              <View style={globalStyles.settingsItemSeparator} {...testProps("view_wifi")}/>
             )}
             style={styles.wifiList}
             contentContainerStyle={styles.wifiListContent}
@@ -313,12 +319,14 @@ const Wifi = () => {
         { borderRadius: tokens.radius.md },
         globalStyles.shadowElevationForLightTheme,
       ]}
+      {...testProps("button_select_network_wifi")}
       onPress={() => setIsModalVisible(true)}
     >
       <Text
         style={
           selectedWifi ? globalStyles.settingsItemText : globalStyles.textGray
         }
+        {...testProps("text_selected_wifi")}
       >
         {selectedWifi || t("device.wifi.selectNetwork")}
       </Text>
@@ -342,7 +350,7 @@ const Wifi = () => {
     if (!isSecureNetwork) return null;
 
     return (
-      <View style={styles.passwordSection}>
+      <View style={styles.passwordSection} {...testProps("view_wifi")}>
         <TextInput
           style={[
             styles.input,
@@ -353,9 +361,11 @@ const Wifi = () => {
           value={password}
           onChangeText={setPassword}
           secureTextEntry={!showPassword}
+          {...testProps("input_password")}
         />
         <TouchableOpacity
           style={styles.eyeIcon}
+          {...testProps("button_show_password_wifi")}
           onPress={() => setShowPassword(!showPassword)}
         >
           {showPassword ? (
@@ -390,42 +400,46 @@ const Wifi = () => {
           ...globalStyles.bgBlue,
           ...globalStyles.shadowElevationForLightTheme,
         }}
+        qaId="button_connect_wifi"
       />
     );
   };
 
   return (
     <>
-      <Header label={t("device.wifi.title")} showBack />
+      <Header label={t("device.wifi.title")} showBack qaId="header_wifi" />
       <ScreenWrapper
         style={{
           ...globalStyles.screenWrapper,
           backgroundColor: tokens.colors.bg5,
         }}
+        qaId="screen_wrapper_wifi"
       >
-        <View style={styles.content}>
-          <View style={styles.imageContainer}>
+        <View style={styles.content} {...testProps("view_wifi")}>
+          <View style={styles.imageContainer} {...testProps("view_wifi")}>
             <Image
               source={require("../../assets/images/wifi.png")}
               style={styles.networkImage}
               resizeMode="contain"
+              {...testProps("image_wifi")}
             />
           </View>
 
-          <View style={styles.formContainer}>
+          <View style={styles.formContainer} {...testProps("view_wifi")}>
             {renderNetworkSelection()}
             {renderPasswordInput()}
             {/* Only show save option for secure networks with passwords */}
             {selectedWifi &&
               wifiList.find((n) => n.ssid === selectedWifi)?.secure && (
-                <View style={styles.saveWifi}>
+                <View style={styles.saveWifi} {...testProps("view_wifi")}>
                   <Checkbox.Android
+                    {...testProps("checkbox_save_network_wifi")}
                     status={shouldSave ? "checked" : "unchecked"}
                     onPress={() => setShouldSave(!shouldSave)}
                     color={tokens.colors.primary}
                     uncheckedColor={tokens.colors.gray}
                   />
-                  <Text style={styles.saveText}>
+                  <Text style={styles.saveText} {...testProps("text_save_network_wifi")}>
                     {t("device.wifi.saveNetwork")}
                   </Text>
                 </View>

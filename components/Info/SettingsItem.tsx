@@ -16,6 +16,7 @@ import { Switch } from "tamagui";
 import { tokens } from "@/theme/tokens";
 import { globalStyles } from "@/theme/globalStyleSheet";
 
+import { testProps } from "../../utils/testProps";
 // Types
 interface SettingsItemProps {
   /** Icon component to display */
@@ -32,6 +33,8 @@ interface SettingsItemProps {
   onToggle?: (value: boolean) => void;
   /** Whether to show bottom separator */
   showSeparator?: boolean;
+  /** QA automation identifier */
+  qaId?: string;
 }
 
 /**
@@ -52,11 +55,12 @@ const SettingsItem: React.FC<SettingsItemProps> = ({
   isToggled = false,
   onToggle,
   showSeparator = true,
+  qaId,
 }) => {
   const renderRightElement = () => {
     if (type === "toggle") {
       return (
-        <Switch size="$2.5" checked={isToggled} onCheckedChange={onToggle}>
+        <Switch {...(qaId ? testProps(`${qaId}_toggle`) : {})}  size="$2.5" checked={isToggled} onCheckedChange={onToggle}>
           <Switch.Thumb
             animation="quicker"
             style={
@@ -69,7 +73,7 @@ const SettingsItem: React.FC<SettingsItemProps> = ({
       );
     }
 
-    return <ChevronRight size={20} color={tokens.colors.primary} />;
+    return <ChevronRight {...(qaId ? testProps(`${qaId}_chevron`) : {})} size={20} color={tokens.colors.primary} />;
   };
 
   const ItemContent = () => (
@@ -87,13 +91,13 @@ const SettingsItem: React.FC<SettingsItemProps> = ({
 
   if (type === "navigation" && onPress) {
     return (
-      <Pressable onPress={onPress}>
+      <Pressable {...(qaId ? testProps(qaId) : {})}  onPress={onPress}>
         <ItemContent />
       </Pressable>
     );
   }
 
-  return <ItemContent />;
+  return <ItemContent {...(qaId ? testProps(qaId) : {})}  />;
 };
 
 export default SettingsItem;

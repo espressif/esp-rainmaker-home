@@ -15,10 +15,13 @@ import ContentWrapper from '../Layout/ContentWrapper';
 import { globalStyles } from '@/theme/globalStyleSheet';
 import { tokens } from "@/theme/tokens";
 
+import { testProps } from "../../utils/testProps";
 // Types
 interface SettingsSectionProps {
   /** Child components to render */
   children: React.ReactNode;
+  /** QA automation identifier */
+  qaId?: string;
 }
 
 /**
@@ -30,9 +33,11 @@ interface SettingsSectionProps {
  * - Content wrapping
  * - Section grouping
  */
-const SettingsSection: React.FC<SettingsSectionProps> = ({ children }) => {
+const SettingsSection: React.FC<SettingsSectionProps> = ({ children,
+  qaId}) => {
   return (
     <ContentWrapper
+      qaId={qaId}
       style={{
         ...globalStyles.shadowElevationForLightTheme,
         backgroundColor: tokens.colors.white,

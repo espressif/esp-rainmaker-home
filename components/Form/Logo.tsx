@@ -11,10 +11,13 @@ import { Image, StyleSheet } from "react-native";
 // Styles
 import { tokens } from "@/theme/tokens";
 
+import { testProps } from "../../utils/testProps";
 // Types
 interface LogoProps {
   /** Size of the logo in pixels */
   size?: number;
+  /** QA automation identifier */
+  qaId?: string;
 }
 
 /**
@@ -26,9 +29,10 @@ interface LogoProps {
  * - Maintains aspect ratio
  * - Consistent bottom margin
  */
-const Logo: React.FC<LogoProps> = ({ size = 180 }) => {
+const Logo: React.FC<LogoProps> = ({ size = 180,
+  qaId}) => {
   return (
-    <Image
+    <Image {...(qaId ? testProps(qaId) : {})}
       style={styles(size).logo}
       resizeMethod="scale"
       source={require("@/assets/images/logo.png")}

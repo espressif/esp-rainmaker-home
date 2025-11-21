@@ -15,6 +15,7 @@ import { Check, Clock, X } from "lucide-react-native";
 import { tokens } from "@/theme/tokens";
 import { globalStyles } from "@/theme/globalStyleSheet";
 
+import { testProps } from "../../utils/testProps";
 // Types
 type NotificationStatus = "pending" | "accepted" | "declined";
 
@@ -37,6 +38,8 @@ interface NotificationItemProps {
   acceptLoading?: boolean;
   /** Decline action loading state */
   declineLoading?: boolean;
+  /** QA automation identifier */
+  qaId?: string;
 }
 
 /**
@@ -60,19 +63,19 @@ const NotificationItem: React.FC<NotificationItemProps> = ({
   loading,
   acceptLoading,
   declineLoading,
-
+  qaId,
 }) => {
   // Helpers
   const getStatusIcon = (status: NotificationStatus) => {
     switch (status) {
       case "pending":
-        return <Clock size={20} color={tokens.colors.white} />;
+        return <Clock {...(qaId ? testProps(qaId) : {})}  size={20} color={tokens.colors.white} />;
       case "accepted":
-        return <Check size={20} color={tokens.colors.white} />;
+        return <Check {...(qaId ? testProps(qaId) : {})}  size={20} color={tokens.colors.white} />;
       case "declined":
-        return <X size={20} color={tokens.colors.white} />;
+        return <X {...(qaId ? testProps(qaId) : {})}  size={20} color={tokens.colors.white} />;
       default:
-        return <Clock size={20} color={tokens.colors.white} />;
+        return <Clock {...(qaId ? testProps(qaId) : {})}  size={20} color={tokens.colors.white} />;
     }
   };
 
@@ -90,7 +93,7 @@ const NotificationItem: React.FC<NotificationItemProps> = ({
   };
 
   return (
-    <View
+    <View {...(qaId ? testProps(qaId) : {})}
       style={[
         styles.container,
         {

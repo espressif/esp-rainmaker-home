@@ -36,6 +36,7 @@ import { useCDF } from "@/hooks/useCDF";
 import { globalStyles } from "@/theme/globalStyleSheet";
 import { tokens } from "@/theme/tokens";
 
+import { testProps } from "../../utils/testProps";
 // Types
 interface ExtendedESPRMDevice extends ESPRMDevice {
   node: ESPRMNode;
@@ -52,6 +53,8 @@ interface RoomCardProps {
   onDeleteRoom?: (room: ESPRMGroup) => void;
   /** Whether to enable swipe actions (default: false) */
   enableSwipeActions?: boolean;
+  /** QA automation identifier */
+  qaId?: string;
 }
 
 /**
@@ -71,6 +74,7 @@ const RoomCard: React.FC<RoomCardProps> = React.memo(({
   onEditRoom,
   onDeleteRoom,
   enableSwipeActions = false,
+  qaId,
 }) => {
   // Hooks
   const { t } = useTranslation();
@@ -170,6 +174,7 @@ const renderRightActions = (
         {/* Edit button */}
         <Animated.View style={[styles.actionButtonWrapper, { opacity }]}>
           <TouchableOpacity
+            {...(qaId ? testProps(`button_edit_${qaId}`) : {})}
             style={[styles.actionButton, styles.editButton]}
             onPress={handleEdit}
           >
@@ -184,6 +189,7 @@ const renderRightActions = (
 
         <Animated.View style={[styles.actionButtonWrapper, { opacity }]}>
           <TouchableOpacity
+            {...(qaId ? testProps(`button_delete_${qaId}`) : {})}
             style={[styles.actionButton, styles.deleteButton]}
             onPress={handleDeletePress}
           >
@@ -201,6 +207,7 @@ const renderRightActions = (
 
   const cardContent = (
     <TouchableOpacity 
+      {...(qaId ? testProps(qaId) : {})}
       style={styles.card}
       onPress={handlePress}
       activeOpacity={0.7}

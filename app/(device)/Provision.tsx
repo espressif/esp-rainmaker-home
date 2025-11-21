@@ -38,6 +38,7 @@ import { Check, X, Circle } from "lucide-react-native";
 import { Header, ScreenWrapper, Button } from "@/components";
 
 // Utils
+import { testProps } from "@/utils/testProps";
 import { useToast } from "@/hooks/useToast";
 
 // Types
@@ -129,23 +130,24 @@ const ProvisioningStep: React.FC<ProvisioningStepProps> = ({
   const getStatusIcon = () => {
     switch (status) {
       case "progress":
-        return <ActivityIndicator size="small" color={tokens.colors.primary} />;
+        return <ActivityIndicator {...testProps("activity_indicator_in_progress_provision")} size="small" color={tokens.colors.primary} />;
       case "succeed":
-        return <Check size={24} color={tokens.colors.green} />;
+        return <Check {...testProps("icon_succeed_provision")} size={24} color={tokens.colors.green} />;
       case "failed":
-        return <X size={24} color={tokens.colors.red} />;
+        return <X {...testProps("icon_failed_provision")} size={24} color={tokens.colors.red} />;
       default:
-        return <Circle size={24} color={tokens.colors.gray} />;
+        return <Circle {...testProps("icon_pending_provision")} size={24} color={tokens.colors.gray} />;
     }
   };
 
   return (
     <View
+      {...testProps("view_status_provision")}
       style={[styles.stepContainer, { backgroundColor: tokens.colors.bg5 }]}
     >
       {getStatusIcon()}
-      <View style={styles.stepContent}>
-        <Text style={styles.stepDescription}>{description}</Text>
+      <View {...testProps("view_content_provision")} style={styles.stepContent}>
+        <Text {...testProps("text_description_provision")} style={styles.stepDescription}>{description}</Text>
       </View>
     </View>
   );
@@ -334,18 +336,21 @@ const Provision = () => {
   // Render
   return (
     <>
-      <Header label={t("device.provision.title")} showBack />
+      <Header label={t("device.provision.title")} showBack qaId="header_provision" />
       <ScreenWrapper
         style={{
           ...globalStyles.screenWrapper,
           backgroundColor: tokens.colors.bg5,
         }}
+        qaId="screen_wrapper_provision"
       >
         <View
+          {...testProps("view_provision")}
           style={[globalStyles.flex1, globalStyles.itemCenter, styles.content]}
         >
-          <View style={[globalStyles.itemCenter, styles.imageContainer]}>
+          <View {...testProps("view_image_container_provision")} style={[globalStyles.itemCenter, styles.imageContainer]}>
             <Image
+              {...testProps("image_provision")}
               source={require("../../assets/images/network.png")}
               style={styles.networkImage}
               resizeMode="contain"
@@ -356,6 +361,7 @@ const Provision = () => {
             ref={stepsScrollViewRef}
             style={[globalStyles.fullWidth, styles.stepsScrollView]}
             contentContainerStyle={styles.stepsContainer}
+            {...testProps("scroll_provision")}
             showsVerticalScrollIndicator={false}
           >
             {stages.map((stage) => (
@@ -376,6 +382,7 @@ const Provision = () => {
               ...globalStyles.shadowElevationForLightTheme,
             }}
             disabled={!isComplete}
+            qaId="button_continue_provision"
           />
         </View>
       </ScreenWrapper>

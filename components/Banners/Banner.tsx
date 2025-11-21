@@ -20,6 +20,7 @@ import { ESPRMGroup } from "@espressif/rainmaker-base-sdk";
 // Hooks
 import { observer } from "mobx-react-lite";
 import { useTranslation } from "react-i18next";
+import { testProps } from "../../utils/testProps";
 
 // Types
 interface BannerProps {
@@ -68,11 +69,12 @@ const Banner: React.FC<BannerProps> = ({
   };
 
   return (
-    <View style={styles.banner}>
+    <View style={styles.banner} {...testProps("view_home_banner")}>
       <View style={styles.messageContainer}>
-        <Text>{t("group.home.homeBannerTitle")}</Text>
+        <Text {...testProps("text_title_home_banner")}>{t("group.home.homeBannerTitle")}</Text>
         <TouchableOpacity
           ref={buttonRef}
+          {...testProps("button_dropdown_home_banner")}
           style={styles.smartHomeButton}
           onPress={handlePress}
         >
@@ -81,7 +83,7 @@ const Banner: React.FC<BannerProps> = ({
         </TouchableOpacity>
       </View>
 
-      <Image source={image} style={styles.image} />
+      <Image {...testProps("image_home_banner")} source={image} style={styles.image} />
     </View>
   );
 };

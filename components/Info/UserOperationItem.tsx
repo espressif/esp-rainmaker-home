@@ -15,6 +15,8 @@ import { globalStyles } from "@/theme/globalStyleSheet";
 // Icons
 import { ChevronRight } from "lucide-react-native";
 
+import { testProps } from "../../utils/testProps";
+
 // Types
 interface UserOperationItemProps {
   /** Icon to display on the left */
@@ -29,6 +31,8 @@ interface UserOperationItemProps {
   isDebug?: boolean;
   /** Show bottom separator */
   showSeparator?: boolean;
+  /** QA automation identifier */
+  qaId?: string;
 }
 
 /**
@@ -44,9 +48,14 @@ const UserOperationItem: React.FC<UserOperationItemProps> = ({
   showBadge = false,
   isDebug = false,
   showSeparator = true,
+  qaId,
 }) => (
   <>
-    <Pressable style={globalStyles.settingsItem} onPress={onPress}>
+    <Pressable 
+      {...(qaId ? testProps(qaId) : {})}
+      style={globalStyles.settingsItem} 
+      onPress={onPress}
+    >
       {/* Left Section */}
       <View style={globalStyles.settingsItemLeft}>
         <View style={globalStyles.settingsItemIcon}>{icon}</View>

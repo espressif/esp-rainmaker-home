@@ -19,6 +19,7 @@ import { globalStyles } from "@/theme/globalStyleSheet";
 import { useToast } from "@/hooks/useToast";
 import { useTranslation } from "react-i18next";
 
+import { testProps } from "../../utils/testProps";
 // Types
 interface EditableFieldProps {
   /** Current field value */
@@ -29,6 +30,8 @@ interface EditableFieldProps {
   onEdit: () => void;
   /** Mode of the field - 'edit' or 'copy' */
   mode?: "edit" | "copy";
+  /** QA automation identifier */
+  qaId?: string;
 }
 
 /**
@@ -45,6 +48,7 @@ const EditableField: React.FC<EditableFieldProps> = ({
   placeholder = "Not set",
   onEdit,
   mode = "edit",
+  qaId,
 }) => {
   const { t } = useTranslation();
   const toast = useToast();
@@ -61,9 +65,9 @@ const EditableField: React.FC<EditableFieldProps> = ({
 
   const renderIcon = () => {
     if (mode === "copy") {
-      return <Copy size={20} color={tokens.colors.primary} />;
+      return <Copy {...(qaId ? testProps(`${qaId}_copy`) : {})} size={20} color={tokens.colors.primary} />;
     }
-    return <Edit3 size={20} color={tokens.colors.primary} />;
+    return <Edit3 {...(qaId ? testProps(`${qaId}_edit`) : {})} size={20} color={tokens.colors.primary} />;
   };
 
   const handlePress = () => {
@@ -75,7 +79,7 @@ const EditableField: React.FC<EditableFieldProps> = ({
   };
 
   return (
-    <View
+    <View {...(qaId ? testProps(`view_${qaId}`) : {})}
       style={[
         globalStyles.flex,
         globalStyles.alignCenter,
@@ -84,6 +88,7 @@ const EditableField: React.FC<EditableFieldProps> = ({
       ]}
     >
       <Text
+        {...testProps(`text_${qaId}`)}
         style={[
           globalStyles.fontRegular,
           styles.text,
@@ -93,7 +98,7 @@ const EditableField: React.FC<EditableFieldProps> = ({
       >
         {value || placeholder}
       </Text>
-      <Pressable style={styles.editButton} onPress={handlePress}>
+      <Pressable {...(qaId ? testProps(`button_${qaId}`) : {})} style={styles.editButton} onPress={handlePress}>
         {renderIcon()}
       </Pressable>
     </View>

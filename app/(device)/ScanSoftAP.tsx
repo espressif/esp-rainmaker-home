@@ -37,6 +37,7 @@ import { Header, ScreenWrapper, ContentWrapper, Typo } from "@/components";
 import ActionButton from "@/components/Form/ActionButton";
 
 // Utils
+import { testProps } from "@/utils/testProps";
 import { deviceImages } from "@/utils/device";
 import { useToast } from "@/hooks/useToast";
 
@@ -71,6 +72,7 @@ const ScannedDeviceCard: React.FC<ScannedDeviceProps> = ({
   isSelected,
 }) => (
   <TouchableOpacity
+    {...testProps("button_scanned_device_soft_ap")}
     style={[
       globalStyles.deviceCard,
       { padding: 0 },
@@ -78,18 +80,19 @@ const ScannedDeviceCard: React.FC<ScannedDeviceProps> = ({
     ]}
     onPress={onPress}
   >
-    <View style={globalStyles.deviceIconContainer}>
+    <View {...testProps("view_icon_container_device")} style={globalStyles.deviceIconContainer}>
       <Image
+        {...testProps("image_icon_device")}
         source={deviceImages[`${type}-online`]}
         style={globalStyles.deviceIcon}
         resizeMode="contain"
       />
     </View>
-    <View style={globalStyles.deviceInfo}>
-      <Text style={globalStyles.deviceName}>{name}</Text>
+    <View {...testProps("view_info_device")} style={globalStyles.deviceInfo}>
+      <Text {...testProps("text_name_device")} style={globalStyles.deviceName}>{name}</Text>
     </View>
     {isSelected && (
-      <View style={styles.checkboxContainer}>
+      <View {...testProps("view_checkbox_scan_soft_ap")} style={styles.checkboxContainer}>
         <Check size={16} color={tokens.colors.white} />
       </View>
     )}
@@ -129,13 +132,14 @@ const ScanningAnimation = () => {
 
   // Render
   return (
-    <View style={globalStyles.scanningContainer}>
+    <View {...testProps("view_scanning_container")} style={globalStyles.scanningContainer}>
       <Animated.View
+        {...testProps("view_scanning_icon")}
         style={[globalStyles.scanningIcon, { transform: [{ rotate: spin }] }]}
       >
         <ActivityIndicator size="large" color={tokens.colors.primary} />
       </Animated.View>
-      <Text style={globalStyles.scanningText}>
+      <Text {...testProps("text_scanning_devices_soft_ap")} style={globalStyles.scanningText}>
         {t("device.scan.softAP.scanningDevices")}
       </Text>
     </View>
@@ -156,10 +160,11 @@ const NoDevicesFound = ({ onScanAgain }: { onScanAgain: () => void }) => {
       title={t("device.scan.softAP.noDevicesFound")}
       style={globalStyles.shadowElevationForLightTheme}
       leftSlot={
-        <TouchableOpacity onPress={onScanAgain} style={styles.rescanButton}>
+      <TouchableOpacity {...testProps("button_rescan_scan_soft_ap")} onPress={onScanAgain} style={styles.rescanButton}>
           <RotateCcw size={20} color={tokens.colors.primary} />
         </TouchableOpacity>
       }
+      qaId="no_devices_found_scan_soft_ap"
     >
       <View style={styles.emptyContainer} />
     </ContentWrapper>
@@ -242,19 +247,20 @@ const IOSScanSoftAP = () => {
 
   return (
     <>
-      <Header label={t("device.scan.softAP.title")} />
+      <Header label={t("device.scan.softAP.title")} qaId="header_scan_soft_ap" />
       <ScreenWrapper
         style={{
           ...globalStyles.container,
           backgroundColor: tokens.colors.bg5,
         }}
+        qaId="screen_wrapper_scan_soft_ap"
       >
         {/* Instructions */}
         <View
           style={[
             globalStyles.emptyStateContainer,
             { backgroundColor: "transparent" },
-          ]}
+          ]} {...testProps("view_scan_soft_ap")}
         >
           <View
             style={[
@@ -263,27 +269,28 @@ const IOSScanSoftAP = () => {
                 backgroundColor: tokens.colors.white,
                 padding: tokens.spacing._15,
               },
-            ]}
+            ]} {...testProps("view_scan_soft_ap")}
           >
-            <HouseWifi size={50} color={tokens.colors.primary} />
+            <HouseWifi size={50} color={tokens.colors.primary} {...testProps("icon_house_wifi")}/>
           </View>
-          <Typo variant="h2" style={globalStyles.instructionsText}>
+          <Typo variant="h2" style={globalStyles.instructionsText} qaId="typo_instruction_title">
             {t("device.scan.softAP.mainHeading")}
           </Typo>
 
-          <Typo variant="body" style={globalStyles.instrctionDescription}>
+          <Typo variant="body" style={globalStyles.instrctionDescription} qaId="typo_instruction_description">
             {t("device.scan.softAP.instructions")}
           </Typo>
         </View>
 
         {/* Connect Button */}
-        <View style={globalStyles.footerAddButtonContainer}>
+        <View style={globalStyles.footerAddButtonContainer} {...testProps("view_scan_soft_ap")}>
           <ActionButton
             variant="primary"
             onPress={handleConnect}
             style={globalStyles.footerAddButton}
+            qaId="button_connect_scan_soft_ap"
           >
-            <Typo variant="body" style={globalStyles.buttonTextPrimary}>
+            <Typo variant="body" style={globalStyles.buttonTextPrimary} qaId="typo_connect">
               {t("device.scan.softAP.connectButton")}
             </Typo>
           </ActionButton>
@@ -432,13 +439,15 @@ const AndroidScanSoftAP = () => {
     <>
       <Header
         label={t("device.scan.softAP.title")}
-        rightSlot={<HouseWifi size={24} color={tokens.colors.primary} />}
+        rightSlot={<HouseWifi {...testProps("icon_house_wifi")} size={24} color={tokens.colors.primary} />}
+        qaId="header_scan_soft_ap"
       />
-      <ScreenWrapper style={{ ...globalStyles.scanContainer }}>
+      <ScreenWrapper style={{ ...globalStyles.scanContainer }} qaId="screen_wrapper_scan_soft_ap">
         {isScanning ? (
           <ContentWrapper
             title={t("device.scan.softAP.scanningDevices")}
             style={globalStyles.shadowElevationForLightTheme}
+            qaId="scanning_devices_scan_soft_ap"
           >
             <ScanningAnimation />
           </ContentWrapper>
@@ -454,8 +463,9 @@ const AndroidScanSoftAP = () => {
                       })
                 }
                 style={globalStyles.shadowElevationForLightTheme}
+                qaId="devices_found_scan_soft_ap"
               >
-                <ScrollView style={globalStyles.scannedDevicesList}>
+                <ScrollView {...testProps("scroll_scan_soft_ap")} style={globalStyles.scannedDevicesList}>
                   {scannedDevices.map((device, index) => (
                     <ScannedDeviceCard
                       key={index}
@@ -474,17 +484,18 @@ const AndroidScanSoftAP = () => {
         )}
 
         {/* Connect Button - Only enabled when a device is selected */}
-        <View style={globalStyles.footerAddButtonContainer}>
+        <View style={globalStyles.footerAddButtonContainer} {...testProps("view_scan_soft_ap")}>
           <ActionButton
             variant="primary"
             onPress={handleSoftAPDeviceConnect}
             style={globalStyles.footerAddButton}
             disabled={!selectedDevice || connectingDevice}
+            qaId="button_connect_scan_soft_ap"
           >
             {connectingDevice ? (
               <ActivityIndicator size="small" color={tokens.colors.white} />
             ) : (
-              <Typo variant="body" style={globalStyles.buttonTextPrimary}>
+              <Typo variant="body" style={globalStyles.buttonTextPrimary} qaId="typo_connect">
                 {t("device.scan.softAP.connectButton")}
               </Typo>
             )}

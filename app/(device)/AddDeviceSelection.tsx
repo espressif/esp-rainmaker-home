@@ -27,6 +27,9 @@ import { tokens } from "@/theme/tokens";
 import { ScreenWrapper, Header, Typo } from "@/components";
 import { globalStyles } from "@/theme/globalStyleSheet";
 
+// Utils
+import { testProps } from "@/utils/testProps";
+
 interface DeviceOption {
   icon: React.ReactNode;
   label: string;
@@ -49,38 +52,39 @@ const AddDeviceSelection = () => {
 
   const deviceOptions: DeviceOption[] = [
     {
-      icon: <QrCode size={24} color={tokens.colors.primary} />,
+      icon: <QrCode {...testProps("icon_qr_code")} size={24} color={tokens.colors.primary} />,
       label: t("device.addDeviceSelection.qrOption"),
       description: t("device.addDeviceSelection.qrDescription"),
       onClick: () => router.push("/ScanQR"),
     },
     {
-      icon: <Bluetooth size={24} color={tokens.colors.primary} />,
+      icon: <Bluetooth {...testProps("icon_bluetooth")} size={24} color={tokens.colors.primary} />,
       label: t("device.addDeviceSelection.bluetoothOption"),
       description: t("device.addDeviceSelection.bluetoothDescription"),
       onClick: () => router.push("/ScanBLE"),
     },
 
-    {
-      icon: <HouseWifi size={24} color={tokens.colors.primary} />,
-      label: t("device.addDeviceSelection.softAPOption"),
-      description: t("device.addDeviceSelection.softAPDescription"),
-      onClick: () => router.push("/ScanSoftAP"),
-    },
-  ];
+  {
+    icon: <HouseWifi {...testProps("icon_house_wifi")} size={24} color={tokens.colors.primary} />,
+    label: t("device.addDeviceSelection.softAPOption"),
+    description: t("device.addDeviceSelection.softAPDescription"),
+    onClick: () => router.push("/ScanSoftAP")
+  },
+];
 
   const renderOptionCard = (option: DeviceOption) => (
     <TouchableOpacity
       key={option.label}
       style={styles.optionCard}
+      {...testProps("button_add_device_selection")}
       onPress={option.onClick}
     >
-      <View style={styles.iconContainer}>{option.icon}</View>
-      <View style={styles.textContainer}>
-        <Typo variant="h3" style={styles.title}>
+      <View {...testProps("view_icon")} style={styles.iconContainer}>{option.icon}</View>
+      <View {...testProps("view_text")} style={styles.textContainer}>
+        <Typo variant="h3" style={styles.title} qaId="text_add_device_selection_title">
           {option.label}
         </Typo>
-        <Typo variant="body" style={styles.description}>
+        <Typo variant="body" style={styles.description} qaId="text_add_device_selection_description">
           {option.description}
         </Typo>
       </View>
@@ -115,11 +119,11 @@ const AddDeviceSelection = () => {
 
   return (
     <>
-      <Header label={t("device.addDeviceSelection.title")} />
-      <ScreenWrapper style={styles.container}>
+      <Header label={t("device.addDeviceSelection.title")} qaId="header_add_device_selection" />
+      <ScreenWrapper style={styles.container} qaId="screen_wrapper_add_device_selection">
         {currentHome.isPrimaryUser ? (
           <>
-            <Typo variant="body" style={styles.noteText}>
+            <Typo variant="body" style={styles.noteText} qaId="text_add_device_selection_note">
               {t("device.addDeviceSelection.note")}
             </Typo>
             {deviceOptions.map(renderOptionCard)}

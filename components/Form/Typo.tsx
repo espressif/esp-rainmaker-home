@@ -13,6 +13,7 @@ import { verticalScale } from "@/utils/styling";
 // Styles
 import { tokens } from "@/theme/tokens";
 
+import { testProps } from "../../utils/testProps";
 // Types
 interface TypoProps extends TextProps {
   /** Font size in pixels */
@@ -35,6 +36,8 @@ interface TypoProps extends TextProps {
   bold?: boolean;
   /** Add double line break after text */
   addNewLine?: boolean;
+  /** QA automation identifier */
+  qaId?: string;
 }
 
 // Variant Styles
@@ -93,7 +96,7 @@ const Typo: React.FC<TypoProps> = ({
   variant = "body",
   bold,
   addNewLine = false,
-}) => {
+  qaId}) => {
   const baseStyle = variantStyles[variant];
 
   const textStyle: TextStyle = {
@@ -105,7 +108,7 @@ const Typo: React.FC<TypoProps> = ({
   };
 
   return (
-    <Text style={[textStyle, style]} {...textProps} onPress={onPress}>
+    <Text {...(qaId ? testProps(qaId) : {})}  style={[textStyle, style]} {...textProps} onPress={onPress}>
       {children}
       {addNewLine && "\n\n"}
     </Text>

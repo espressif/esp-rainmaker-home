@@ -73,12 +73,14 @@ const HomeSharing: React.FC<HomeSharingProps> = ({
       itemLabel="user"
       style={styles.contentWrapper}
       isExpandable={true}
+      qaId="section_sharing"
     >
       {/* Add User Button */}
       <ActionButton
         onPress={onAddUser}
         variant="secondary"
         style={{ marginBottom: tokens.spacing._15 }}
+        qaId="button_add_user_sharing"
       >
         {isLoading ? (
           <ActivityIndicator size="small" color={tokens.colors.primary} />

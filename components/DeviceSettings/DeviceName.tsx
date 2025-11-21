@@ -25,6 +25,7 @@ import { tokens } from "@/theme/tokens";
 // Types
 import { DeviceNameProps } from "@/types/global";
 import { globalStyles } from "@/theme/globalStyleSheet";
+import { testProps } from "@/utils/testProps";
 
 /**
  * DeviceName Component
@@ -80,11 +81,13 @@ const DeviceName: React.FC<DeviceNameProps> = ({
         backgroundColor: tokens.colors.white,
       }}
       contentStyle={{ paddingBottom: tokens.spacing._5 }}
+      qaId="device_name"
     >
       <Pressable
         style={[styles.inputContainer]}
         onPress={() => inputRef.current?.focus()}
         disabled={disabled}
+        {...testProps("button_edit_device_name")}
       >
         <Input
           ref={inputRef}
@@ -99,6 +102,7 @@ const DeviceName: React.FC<DeviceNameProps> = ({
           paddingHorizontal={false}
           marginBottom={false}
           editable={!disabled}
+          qaId="device_name"
         />
         <View style={[styles.editIcon]}>
           {isSaving ? (

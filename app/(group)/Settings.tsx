@@ -443,13 +443,14 @@ const Setting = () => {
   // Render
   return (
     <>
-      <Header label={home?.name || ""} showBack={true} />
+      <Header label={home?.name || ""} showBack={true} qaId="header_settings" />
       <ScreenWrapper
         style={{
           ...globalStyles.container,
           backgroundColor: tokens.colors.bg5,
         }}
         excludeTop={true}
+        qaId="screen_wrapper_settings"
       >
         <HomeName
           homeName={homeName}
@@ -467,6 +468,7 @@ const Setting = () => {
             leftSlot={<ChevronRight size={20} color={tokens.colors.primary} />}
             style={styles.contentWrapper}
             onPress={handleRoom}
+            qaId="section_room_management"
           />
         )}
 

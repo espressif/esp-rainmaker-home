@@ -174,20 +174,21 @@ const PersonalInfo: React.FC = () => {
   // Render
   return (
     <>
-      <Header label={t("user.personalInfo.title")} showBack={true} />
-      <ScreenWrapper style={styles.container}>
+      <Header label={t("user.personalInfo.title")} showBack={true} qaId="header_personal_info" />
+      <ScreenWrapper style={styles.container} qaId="screen_wrapper_personal_info">
         <ContentWrapper
           title={t(nicknameField.title)}
           style={{
             ...globalStyles.shadowElevationForLightTheme,
             backgroundColor: tokens.colors.white,
-          }}
+          }} qaId="nickname"
         >
           <EditableField
             value={userName}
             placeholder={t(nicknameField.placeholder)}
             onEdit={handleEditPress}
             mode="edit"
+            qaId="edit_nickname"
           />
         </ContentWrapper>
 
@@ -197,13 +198,14 @@ const PersonalInfo: React.FC = () => {
             ...globalStyles.shadowElevationForLightTheme,
             backgroundColor: tokens.colors.white,
             marginTop: tokens.spacing._15,
-          }}
+          }} qaId="user_id"
         >
           <EditableField
             value={userId}
             placeholder={t(userIdField.placeholder)}
             onEdit={() => {}} // Read-only field - no action
             mode="copy"
+            qaId="copy_userid"
           />
         </ContentWrapper>
 
@@ -217,6 +219,7 @@ const PersonalInfo: React.FC = () => {
           placeholder={t(nicknameField.placeholder)}
           maxLength={nicknameField.maxLength}
           isLoading={isLoading}
+          qaId="nickname"
         />
       </ScreenWrapper>
     </>

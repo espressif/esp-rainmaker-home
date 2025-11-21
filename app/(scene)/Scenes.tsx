@@ -56,6 +56,9 @@ import {
 } from "@/components";
 
 // Utils
+import { testProps } from "@/utils/testProps";
+
+// Utils
 import { getSceneCardDimensions } from "@/utils/common";
 import { SUCESS } from "@/utils/constants";
 
@@ -298,7 +301,7 @@ const Scenes = observer(() => {
    */
   const renderEmptyState = () => {
     return (
-      <View style={[globalStyles.sceneEmptyStateContainer]}>
+      <View {...testProps("view_empty_scenes")} style={[globalStyles.sceneEmptyStateContainer]}>
         {isLoading ? (
           <ActivityIndicator size="large" color={tokens.colors.primary} />
         ) : sceneList.length === 0 ? (
@@ -306,10 +309,10 @@ const Scenes = observer(() => {
             <View style={globalStyles.sceneEmptyStateIconContainerTop}>
               <LayoutPanelLeft size={35} color={tokens.colors.primary} />
             </View>
-            <Text style={globalStyles.emptyStateTitle}>
+            <Text {...testProps("text_title_empty")} style={globalStyles.emptyStateTitle}>
               {t("scene.scenes.noScenesYet")}
             </Text>
-            <Text style={globalStyles.emptyStateDescription}>
+            <Text {...testProps("text_description_empty")} style={globalStyles.emptyStateDescription}>
               {t("scene.scenes.noScenesYetDescription")}
             </Text>
           </>
@@ -319,10 +322,10 @@ const Scenes = observer(() => {
             <View style={globalStyles.sceneEmptyStateIconContainer}>
               <Heart size={35} color={tokens.colors.primary} />
             </View>
-            <Text style={globalStyles.sceneEmptyStateTitleLarge}>
+            <Text {...testProps("text_title_all_favorites")} style={globalStyles.sceneEmptyStateTitleLarge}>
               {t("scene.scenes.allScenesFavorites")}
             </Text>
-            <Text style={globalStyles.emptyStateDescription}>
+            <Text {...testProps("text_description_all_favorites")} style={globalStyles.emptyStateDescription}>
               {t("scene.scenes.allScenesFavoritesDescription")}
             </Text>
           </>
@@ -365,13 +368,13 @@ const Scenes = observer(() => {
         showBack={false}
         rightSlot={
           sceneList.length > 0 ? (
-            <TouchableOpacity onPress={() => setIsEditing(!isEditing)}>
-              <Text style={styles.editButton}>
+            <TouchableOpacity {...testProps("button_edit_scenes")} onPress={() => setIsEditing(!isEditing)}>
+              <Text {...testProps("text_edit_scenes")} style={styles.editButton}>
                 {isEditing ? t("scene.scenes.done") : t("scene.scenes.edit")}
               </Text>
             </TouchableOpacity>
           ) : (
-            <TouchableOpacity onPress={fetchScenes}>
+            <TouchableOpacity {...testProps("button_refresh_scenes")} onPress={fetchScenes}>
               <RefreshCw size={20} color={tokens.colors.primary} />
             </TouchableOpacity>
           )
@@ -379,6 +382,7 @@ const Scenes = observer(() => {
       />
       <ScreenWrapper style={styles.container}>
         <ScrollView
+          {...testProps("scroll_scenes")}
           style={styles.scrollView}
           showsVerticalScrollIndicator={false}
           contentContainerStyle={{
@@ -393,12 +397,13 @@ const Scenes = observer(() => {
           {favoriteScenes.length > 0 && (
             <>
               <View style={[globalStyles.sceneSection, { marginBottom: 0 }]}>
-                <Text style={globalStyles.sceneSectionTitle}>
+                <Text {...testProps("text_title_favorites")} style={globalStyles.sceneSectionTitle}>
                   {t("scene.scenes.favourites")}
                 </Text>
 
                 {favoriteScenes.length > 0 && (
                   <ScrollView
+                    {...testProps("scroll_favorites")}
                     horizontal
                     showsHorizontalScrollIndicator={false}
                     contentContainerStyle={{
@@ -425,6 +430,7 @@ const Scenes = observer(() => {
                           sceneLoadingStates[scene.id] === "delete"
                         }
                         isEditing={isEditing}
+                        qaId={`scene_favorite_${scene.id}`}
                       />
                     ))}
                   </ScrollView>
@@ -439,12 +445,12 @@ const Scenes = observer(() => {
             <View style={[globalStyles.sceneSection, { paddingBottom: 140 }]}>
               {/* Only show "All Scenes" header if there are favorite scenes */}
               {favoriteScenes.length > 0 && (
-                <Text style={globalStyles.sceneSectionTitle}>
+                <Text {...testProps("text_title_all_scenes")} style={globalStyles.sceneSectionTitle}>
                   {t("scene.scenes.allScenes")}
                 </Text>
               )}
               {allScenes.length > 0 && (
-                <View style={globalStyles.sceneAllScenesGrid}>
+                <View {...testProps("view_grid_all_scenes")} style={globalStyles.sceneAllScenesGrid}>
                   {allScenes.map((scene, index) => (
                     <SceneItem
                       key={scene.id}
@@ -462,6 +468,7 @@ const Scenes = observer(() => {
                       onDelete={() => handleSceneAction(scene.id, "delete")}
                       deleteLoading={sceneLoadingStates[scene.id] === "delete"}
                       isEditing={isEditing}
+                      qaId={`card_scene`}
                     />
                   ))}
                 </View>
@@ -478,6 +485,7 @@ const Scenes = observer(() => {
             label={t("scene.scenes.addScene")}
             onPress={handleAddScene}
             style={globalStyles.footerAddButton}
+            qaId="button_add_scenes"
           />
         </View>
       </ScreenWrapper>
@@ -501,6 +509,7 @@ const Scenes = observer(() => {
 
       {/* Scene Name Input Dialog */}
       <InputDialog
+        qaId="create_scene"
         open={isSceneNameDialogVisible}
         title={t("scene.scenes.createScene")}
         inputPlaceholder={t("scene.scenes.sceneNamePlaceholder")}

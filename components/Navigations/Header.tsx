@@ -28,6 +28,7 @@ import { globalStyles } from "@/theme/globalStyleSheet";
 // Constants
 import { PLATFORM_IOS } from "@/utils/constants";
 
+import { testProps } from "../../utils/testProps";
 // Types
 interface HeaderProps {
   /** Header title text */
@@ -42,6 +43,8 @@ interface HeaderProps {
   backgroundColor?: string;
   /** Custom back press handler */
   onBackPress?: () => void;
+  /** QA automation identifier */
+  qaId?: string;
 }
 
 /**
@@ -62,6 +65,7 @@ const Header: React.FC<HeaderProps> = ({
   rightSlot,
   backgroundColor = tokens.colors.white,
   onBackPress,
+  qaId,
 }) => {
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -83,10 +87,10 @@ const Header: React.FC<HeaderProps> = ({
   };
 
   return (
-    <View style={[styles.headerWrap, { paddingTop, backgroundColor }]}>
+    <View {...(qaId ? testProps(qaId) : {})}  style={[styles.headerWrap, { paddingTop, backgroundColor }]}>
       <View style={styles.contentContainer}>
         {showBack && (
-          <Pressable onPress={goBack} style={styles.backIcon}>
+          <Pressable {...testProps("button_back")} onPress={goBack} style={styles.backIcon}>
             <Ionicons name="chevron-back" size={24} color={tokens.colors.bg3} />
           </Pressable>
         )}
@@ -99,6 +103,7 @@ const Header: React.FC<HeaderProps> = ({
             styles.title,
           ]}
           numberOfLines={1}
+          {...testProps('title')}
         >
           {label}
         </Text>

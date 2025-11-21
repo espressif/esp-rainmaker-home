@@ -21,6 +21,7 @@ import { CheckCircle2 } from "lucide-react-native";
 
 // Styles
 import { tokens } from "@/theme/tokens";
+import { testProps } from "../../utils/testProps";
 
 // Types
 import { ESPRMGroup } from "@espressif/rainmaker-base-sdk";
@@ -80,11 +81,13 @@ const HomeTooltip: React.FC<HomeTooltipProps> = ({
 
     return (
       <TouchableOpacity
+        {...testProps(`button_dropdown_${home.name}`)}
         onPress={handleSelectGroup}
         style={[styles.menuItem, isSelected && styles.selectedMenuItem]}
         key={`group-${home.id}-${index}`}
       >
         <Text
+          {...testProps(`text_dropdown_${home.name}`)}
           style={[styles.menuText, isSelected && styles.selectedMenuItemText]}
         >
           {home.name}
@@ -94,8 +97,9 @@ const HomeTooltip: React.FC<HomeTooltipProps> = ({
   };
 
   return (
-    <TouchableOpacity style={styles.overlay} onPress={onClose}>
+    <TouchableOpacity {...testProps("view_overlay_home_dropdown")} style={styles.overlay} onPress={onClose}>
       <View
+        {...testProps("view_container_home_dropdown")}
         style={[
           styles.container,
           anchorPosition && {
@@ -105,18 +109,20 @@ const HomeTooltip: React.FC<HomeTooltipProps> = ({
           },
         ]}
       >
-        <View style={styles.arrow} />
+        <View {...testProps("view_arrow_home_dropdown")} style={styles.arrow} />
         <ScrollView
+          {...testProps("scroll_home_dropdown")}
           style={styles.scrollContainer}
           showsVerticalScrollIndicator={false}
         >
           {homeList.map((group, index) => renderHomeOption(group, index))}
 
           <TouchableOpacity
+            {...testProps("button_home_management")}
             onPress={handleHomeManagement}
             style={[styles.menuItem, styles.lastMenuItem]}
           >
-            <Text style={styles.menuText}>Home Management</Text>
+            <Text {...testProps("text_home_management")} style={styles.menuText}>Home Management</Text>
           </TouchableOpacity>
         </ScrollView>
       </View>

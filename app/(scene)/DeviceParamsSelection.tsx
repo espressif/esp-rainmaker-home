@@ -51,6 +51,7 @@ import { PARAM_CONTROLS } from "@/config/params.config";
 
 import { DeviceParamGroup } from "@/types/global";
 import { useRouter } from "expo-router";
+import { testProps } from "@/utils/testProps";
 
 /**
  * UI Control Map for parameter types
@@ -149,14 +150,14 @@ const DeviceParamsSelection = observer(() => {
 
   if (!selectedDevice) {
     return (
-      <View style={globalStyles.emptyStateContainer}>
-        <View style={globalStyles.emptyStateIconContainer}>
+      <View style={globalStyles.emptyStateContainer} {...testProps("view_device_params_selection")}>
+        <View style={globalStyles.emptyStateIconContainer} {...testProps("view_device_params_selection")}>
           <Settings size={35} color={tokens.colors.primary} />
         </View>
-        <Text style={globalStyles.emptyStateTitle}>
+        <Text style={globalStyles.emptyStateTitle} {...testProps("text_title_no_devices")}>
           {t("scene.deviceParamsSelection.noDevicesAvailable")}
         </Text>
-        <Text style={globalStyles.emptyStateDescription}>
+        <Text style={globalStyles.emptyStateDescription} {...testProps("text_subtitle_no_devices")}>
           {t("scene.deviceParamsSelection.noActionsSelectedDescription")}
         </Text>
       </View>
@@ -221,12 +222,12 @@ const DeviceParamsSelection = observer(() => {
 
   return (
     <>
-      <Header label={t("scene.deviceParamsSelection.title")} showBack={true} />
+      <Header label={t("scene.deviceParamsSelection.title")} showBack={true} qaId="header_device_params_selection" />
       <ScreenWrapper
         style={{
           ...globalStyles.container,
           padding: tokens.spacing._15,
-        }}
+        }} qaId="screen_wrapper_device_params_selection"
       >
         <View style={{ flex: 1 }}>
           <FlatList
@@ -247,13 +248,14 @@ const DeviceParamsSelection = observer(() => {
                   borderColor: tokens.colors.borderColor,
                 }}
                 leftSlot={
-                  <Text style={globalStyles.fontMedium}>
+                  <Text style={globalStyles.fontMedium} {...testProps(`text_${item.name}_params_value`)}>
                     {renderParamValue(item)}
                   </Text>
                 }
                 onPress={() => {
                   handleParamSelect(item);
                 }}
+                qaId={`device_param_${item.name}_selection`}
               />
             )}
             keyExtractor={(item) => item.name}
@@ -262,15 +264,16 @@ const DeviceParamsSelection = observer(() => {
 
         {/* SAVE ACTION */}
         <View
-          style={[globalStyles.actionButtonContainer, styles.buttonContainer]}
+          style={[globalStyles.actionButtonContainer, styles.buttonContainer]} {...testProps("view_device_params_selection")}
         >
           <ActionButton
             onPress={handleSave}
             disabled={disableActionButton}
             variant="secondary"
+            qaId="button_save_device_params_selection"
           >
-            <View style={styles.buttonContent}>
-              <Text style={[globalStyles.fontMedium]}>
+            <View style={styles.buttonContent} {...testProps("view_device_params_selection")}>
+              <Text style={[globalStyles.fontMedium]} {...testProps("text_done_device_params_selection")}>
                 {t("layout.shared.done")}
               </Text>
             </View>
@@ -284,9 +287,11 @@ const DeviceParamsSelection = observer(() => {
         transparent
         animationType="slide"
         onRequestClose={handleParamSheetClose}
+        {...testProps("modal_device_params_selection")}
       >
         <Pressable
           style={styles.modalContainer}
+          {...testProps("button_close_device_params")}
           onPress={handleParamSheetClose}
         >
           <Pressable
@@ -294,10 +299,10 @@ const DeviceParamsSelection = observer(() => {
             onPress={(e) => e.stopPropagation()}
           >
             {/* Handle */}
-            <View style={styles.handle} />
+            <View style={styles.handle} {...testProps("view_device_params_selection")} />
 
             {/* Parameter UI */}
-            <View style={styles.paramUIContainer}>
+            <View {...testProps("view_device_param_ui_selection")} style={styles.paramUIContainer}>
               {selectedParam && (
                 <ParamWrap
                   key={`${selectedParam.name}-modal`}
@@ -305,6 +310,7 @@ const DeviceParamsSelection = observer(() => {
                   disabled={false}
                   setUpdating={() => {}}
                   onValueChange={(value) => handleParamValueChange(value)}
+                  qaId={`device_param_${selectedParam.name}_selection`}
                 >
                   {renderParamControl(selectedParam)}
                 </ParamWrap>
@@ -312,7 +318,7 @@ const DeviceParamsSelection = observer(() => {
             </View>
 
             {/* Action Buttons */}
-            <View style={styles.actionButtonsContainer}>
+            <View style={styles.actionButtonsContainer} {...testProps("view_device_params_selection")}>
               {checkActionExists(
                 nodeId,
                 selectedDevice?.name || "",
@@ -322,9 +328,11 @@ const DeviceParamsSelection = observer(() => {
                   onPress={handleParamDelete}
                   variant="danger"
                   style={styles.actionButton}
+                  qaId="button_delete_device_params_selection"
                 >
                   <Text
                     style={[globalStyles.fontMedium, globalStyles.textWhite]}
+                    {...testProps("text_delete_device_params_selection")}
                   >
                     {t("layout.shared.delete")}
                   </Text>
@@ -334,15 +342,16 @@ const DeviceParamsSelection = observer(() => {
                 onPress={handleParamSave}
                 variant="primary"
                 style={styles.actionButton}
+                qaId="button_save_device_params_selection"
               >
-                <Text style={[globalStyles.fontMedium, globalStyles.textWhite]}>
+                <Text style={[globalStyles.fontMedium, globalStyles.textWhite]} {...testProps("text_save_device_params_selection")}>
                   {t("layout.shared.save")}
                 </Text>
               </ActionButton>
             </View>
 
             {/* Bottom safe area */}
-            <View style={styles.bottomSafeArea} />
+            <View style={styles.bottomSafeArea} {...testProps("view_device_params_selection")} />
           </Pressable>
         </Pressable>
       </Modal>

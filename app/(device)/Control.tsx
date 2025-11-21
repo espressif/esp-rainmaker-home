@@ -27,6 +27,9 @@ import { Settings } from "lucide-react-native";
 
 // Components
 import { Header, ScreenWrapper } from "@/components";
+
+// Utils
+import { testProps } from "@/utils/testProps";
 import Fallback from "@/app/(device)/device_panels/Fallback";
 import LightControl from "@/app/(device)/device_panels/Light";
 import SwitchControl from "@/app/(device)/device_panels/Switch";
@@ -71,10 +74,10 @@ const Control = () => {
   if (!device) {
     return (
       <>
-        <Header label={t("device.control.title")} showBack={true} />
-        <ScreenWrapper style={styles.containerPadding} excludeTop={true}>
-          <View style={globalStyles.errorContainer}>
-            <Text style={globalStyles.errorText}>
+        <Header label={t("device.control.title")} showBack={true} qaId="header_control" />
+        <ScreenWrapper style={styles.containerPadding} qaId="screen_wrapper_control" excludeTop={true}>
+          <View {...testProps("view_control")} style={globalStyles.errorContainer}>
+            <Text {...testProps("text_error")} style={globalStyles.errorText}>
               {t("device.control.deviceNotFound")}
             </Text>
           </View>
@@ -105,13 +108,14 @@ const Control = () => {
         label={device?.displayName || t("device.control.title")}
         showBack={true}
         rightSlot={
-          <Pressable onPress={handleMorePress}>
+          <Pressable {...testProps("button_more")} onPress={handleMorePress}>
             <Settings size={24} color={tokens.colors.primary} />
           </Pressable>
         }
+        qaId="header_control"
       />
-      <ScreenWrapper style={styles.container} excludeTop={true}>
-        <View style={globalStyles.flex1}>{renderDeviceControl()}</View>
+      <ScreenWrapper style={styles.container} qaId="screen_wrapper_control" excludeTop={true}>
+        <View {...testProps("view_control")} style={globalStyles.flex1}>{renderDeviceControl()}</View>
       </ScreenWrapper>
     </>
   );

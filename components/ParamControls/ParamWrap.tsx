@@ -23,6 +23,7 @@ import {
 } from "./lib/types";
 import { paramControlStyles as styles } from "./lib/styles";
 import { tokens } from "@/theme/tokens";
+import { testProps } from "@/utils/testProps";
 
 /**
  * ParamControlWrap
@@ -48,7 +49,8 @@ const ParamControlWrap = observer(
     onSelect,
     children,
     onValueChange,
-  }: ParamControlProps) => {
+    qaId,
+  }: ParamControlProps & { qaId?: string }) => {
     // 1. Computed Values
     const { min, max, step = 1, ...rest } = getParamBounds(param);
     const toast = useToast();
@@ -114,6 +116,7 @@ const ParamControlWrap = observer(
         return React.cloneElement(
           child as ReactElement<ParamControlChildProps>,
           {
+            ...testProps(`param_${param.name}_control`),
             label: param.name,
             value: state.value,
             onValueChange: handleValueChange,
@@ -131,8 +134,9 @@ const ParamControlWrap = observer(
 
     // Render with checkbox when in selection mode
     return (
-      <View>
+      <View {...(qaId ? testProps(`view_${qaId}`) : {})}>
         <TouchableOpacity
+          {...(qaId ? testProps(`button_${qaId}`) : {})}
           onPress={handleSelect}
           style={[styles.controlRow]}
           activeOpacity={disabled ? 1 : 0.8}
@@ -146,12 +150,14 @@ const ParamControlWrap = observer(
             ]}
           >
             <Check
+              {...(qaId ? testProps(`icon_${qaId}`) : {})}
               size={12}
               color={tokens.colors.white}
               opacity={isSelected && !disabled ? 1 : 0}
             />
           </View>
           <View
+            {...(qaId ? testProps(`view_control_${qaId}`) : {})}
             style={[
               styles.controlContainer,
               disabled && styles.controlContainerDisabled,

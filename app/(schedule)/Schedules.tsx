@@ -44,6 +44,9 @@ import {
 } from "@/components";
 import { useSchedule } from "@/context/schedules.context";
 
+// Utils
+import { testProps } from "@/utils/testProps";
+
 /**
  * Schedules  Component
  *
@@ -194,16 +197,16 @@ const Schedules = observer(() => {
    */
   const renderEmptyState = () => {
     return (
-      <View style={[globalStyles.sceneEmptyStateContainer]}>
+      <View {...testProps("view_empty_schedules")} style={[globalStyles.sceneEmptyStateContainer]}>
         {!isLoading && (
           <>
             <View style={globalStyles.sceneEmptyStateIconContainerTop}>
               <LayoutPanelLeft size={35} color={tokens.colors.primary} />
             </View>
-            <Text style={globalStyles.emptyStateTitle}>
+            <Text {...testProps("text_title_empty")} style={globalStyles.emptyStateTitle}>
               {t("schedule.schedules.noSchedulesYet")}
             </Text>
-            <Text style={globalStyles.emptyStateDescription}>
+            <Text {...testProps("text_description_empty")} style={globalStyles.emptyStateDescription}>
               {t("schedule.schedules.noSchedulesYetDescription")}
             </Text>
           </>
@@ -220,11 +223,12 @@ const Schedules = observer(() => {
         rightSlot={
           scheduleList.length > 0 ? (
             <TouchableOpacity
+              {...testProps("button_edit_schedules")}
               onPress={() => setIsEditing(!isEditing)}
               style={styles.editButtonContainer}
               hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
             >
-              <Text style={styles.editButton}>
+              <Text {...testProps("text_edit_schedules")} style={styles.editButton}>
                 {isEditing
                   ? t("schedule.schedules.done")
                   : t("schedule.schedules.edit")}
@@ -232,6 +236,7 @@ const Schedules = observer(() => {
             </TouchableOpacity>
           ) : (
             <TouchableOpacity
+              {...testProps("button_refresh_schedules")}
               onPress={fetchSchedules}
               style={styles.editButtonContainer}
               hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
@@ -243,6 +248,7 @@ const Schedules = observer(() => {
       />
       <ScreenWrapper style={styles.container}>
         <ScrollView
+          {...testProps("scroll_schedules")}
           style={styles.scrollView}
           showsVerticalScrollIndicator={false}
           contentContainerStyle={{
@@ -270,6 +276,7 @@ const Schedules = observer(() => {
                   deleteLoading={
                     scheduleLoadingStates[schedule.id] === "delete"
                   }
+                  qaId="card_schedule"
                   toggleLoading={
                     scheduleLoadingStates[schedule.id] === "enable" ||
                     scheduleLoadingStates[schedule.id] === "disable"
@@ -285,12 +292,14 @@ const Schedules = observer(() => {
             label={t("schedule.schedules.addSchedule")}
             onPress={handleAddSchedule}
             style={globalStyles.footerAddButton}
+            qaId="button_add_schedules"
           />
         </View>
       </ScreenWrapper>
 
       {/* Schedule Name Input Dialog */}
       <InputDialog
+        qaId="create_schedule"
         open={isScheduleNameDialogVisible}
         title={t("schedule.schedules.createSchedule")}
         inputPlaceholder={t("schedule.schedules.scheduleNamePlaceholder")}

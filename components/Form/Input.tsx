@@ -23,6 +23,7 @@ import { useDebounce } from "@/hooks/useDebounce";
 // Styles
 import { tokens } from "@/theme/tokens";
 
+import { testProps } from "@/utils/testProps";
 // Types
 type InputMode = "text" | "numeric" | "email" | "tel" | "url";
 
@@ -62,6 +63,8 @@ interface InputProps extends Omit<TextInputProps, "onChangeText"> {
   paddingHorizontal?: boolean;
   /** Whether to add bottom margin */
   marginBottom?: boolean;
+  /** QA automation identifier */
+  qaId?: string;
 }
 
 /**
@@ -96,6 +99,7 @@ const Input = forwardRef<TextInput, InputProps>(
       border = true,
       paddingHorizontal = true,
       marginBottom = true,
+      qaId,
       ...rest
     },
     ref
@@ -197,7 +201,7 @@ const Input = forwardRef<TextInput, InputProps>(
     const hasError = !!errorMessage;
 
     return (
-      <View style={[styles.container, marginBottom && styles.marginBottom]}>
+      <View {...(qaId ? testProps(qaId) : {})}  style={[styles.container, marginBottom && styles.marginBottom]}>
         <View style={[styles.inputWrapper]}>
           {!!icon && (
             <Ionicons
@@ -210,6 +214,7 @@ const Input = forwardRef<TextInput, InputProps>(
 
           <TextInput
             ref={ref}
+            {...(qaId ? testProps(`input_${qaId}`) : testProps("text_input_field"))}
             secureTextEntry={isPassword && !showPassword}
             value={value}
             onChangeText={handleChange}
@@ -231,7 +236,7 @@ const Input = forwardRef<TextInput, InputProps>(
           />
 
           {isPassword && (
-            <TouchableOpacity onPress={togglePassword} style={styles.eyeIcon}>
+            <TouchableOpacity {...testProps(`button_toggle_${qaId}`) } onPress={togglePassword} style={styles.eyeIcon}>
               <Ionicons
                 name={showPassword ? "eye-outline" : "eye-off-outline"}
                 size={16}
@@ -242,7 +247,7 @@ const Input = forwardRef<TextInput, InputProps>(
         </View>
 
         {/* Error Message */}
-        {errorMessage && <Text style={styles.errorText}>{errorMessage}</Text>}
+        {errorMessage && <Text {...testProps("text_error_message")} style={styles.errorText}>{errorMessage}</Text>}
       </View>
     );
   }

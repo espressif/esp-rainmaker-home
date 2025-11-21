@@ -25,6 +25,7 @@ import { tokens } from "@/theme/tokens";
 // Constants
 import { PLATFORM_IOS } from "@/utils/constants";
 
+import { testProps } from "../../utils/testProps";
 // Types
 interface Tab {
   /** Route to navigate to */
@@ -38,6 +39,8 @@ interface Tab {
 interface FooterTabsProps {
   /** Array of tab configurations */
   tabs: Tab[];
+  /** QA automation identifier */
+  qaId?: string;
 }
 
 /**
@@ -71,19 +74,20 @@ const FooterTabs: React.FC<FooterTabsProps> = ({ tabs }) => {
     const iconColor = isActive ? tokens.colors.primary : tokens.colors.gray;
 
     return (
-      <TouchableOpacity
+      <TouchableOpacity {...testProps(`button_tab_${tab.label}`)}
         key={tab.route}
         style={styles.item}
         onPress={() => handleTabPress(tab.route, tab.label)}
       >
         <tab.Icon style={{ color: iconColor }} size={28} />
-        <Text style={[styles.label, { color: iconColor }]}>{tab.label}</Text>
+        <Text {...testProps(`text_tab_${tab.label}`)} style={[styles.label, { color: iconColor }]}>{tab.label}</Text>
       </TouchableOpacity>
     );
   };
 
   return (
     <View
+      {...testProps(`view_footer_tabs`)}
       style={[
         styles.footerWrap,
         { bottom: tokens.spacing._15 + insets.bottom },
