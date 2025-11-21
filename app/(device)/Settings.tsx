@@ -298,6 +298,7 @@ const Settings = observer(() => {
             nodeConfig={node?.nodeConfig}
             device={device}
             otaInfo={otaInfo}
+            disabled={!isPrimary || !isConnected}
           />
 
           <OTA

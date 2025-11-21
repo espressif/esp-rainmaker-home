@@ -19,6 +19,7 @@ import { ScreenWrapper, Header, Input, Button } from "@/components";
 
 import APP_CONFIG from "@/app.json";
 import { testProps } from "@/utils/testProps";
+import { setUserTimeZone } from "@/utils/timezone";
 
 /**
  * ConfirmationCodeScreen component that displays the confirmation code screen for signup.
@@ -185,8 +186,15 @@ const ConfirmationCodeScreen = () => {
   const loginUser = async () => {
     store.userStore
       .login(email as string, password as string)
-      .then((res) => {
+      .then(async (res) => {
         if (res) {
+          // Set user timezone after auto-login
+          try {
+            await setUserTimeZone(store.userStore.user);
+          } catch (error) {
+            console.error("Failed to set timezone:", error);
+          }
+
           router.dismissAll();
           // redirect to home screen
           router.replace("/(group)/Home");

@@ -33,6 +33,7 @@ import { createPlatformEndpoint } from "@/utils/notifications";
 import { CDF_EXTERNAL_PROPERTIES } from "@/utils/constants";
 import { CDFConfig } from "@/rainmaker.config";
 import { testProps } from "@/utils/testProps";
+import { setUserTimeZone } from "@/utils/timezone";
 
 /**
  * LoginScreen component that displays the login screen.
@@ -143,6 +144,13 @@ export default function LoginScreen() {
       .login(email, password)
       .then(async (res) => {
         if (res) {
+          // Set user timezone
+          try {
+            await setUserTimeZone(store.userStore.user);
+          } catch (error) {
+            console.error("Failed to set timezone:", error);
+          }
+
           // Try to create platform endpoint, but don't block login if it fails
           try {
             await createPlatformEndpoint(store);
@@ -196,6 +204,13 @@ export default function LoginScreen() {
       const userInstance = await authInstance.loginWithOauth(provider);
       store.userStore[CDF_EXTERNAL_PROPERTIES.IS_OAUTH_LOGIN] = true;
       await store.userStore.setUserInstance(userInstance);
+
+      // Set user timezone
+      try {
+        await setUserTimeZone(store.userStore.user);
+      } catch (error) {
+        console.error("Failed to set timezone:", error);
+      }
 
       // With CDFConfig.autoSync enabled, CDF setUserInstance method will fetch the first page automatically,
       // so we don't need to fetch the first page again
