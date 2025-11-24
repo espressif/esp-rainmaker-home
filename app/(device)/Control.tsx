@@ -38,6 +38,13 @@ import TemperatureControl from "@/app/(device)/device_panels/Temperature";
 // Utils
 import { extractDeviceType, findDeviceConfig } from "@/utils/device";
 
+// Constants
+import {
+  ESPRM_NAME_PARAM_TYPE,
+  MATTER_METADATA_KEY,
+  MATTER_METADATA_DEVICE_NAME_KEY,
+} from "@/utils/constants";
+
 /**
  * Control Component
  * Main device control screen that renders different device controls based on device type
@@ -62,6 +69,33 @@ const Control = () => {
   // Handlers
   const handleMorePress = () => {
     router.push(`/(device)/Settings?id=${id}&device=${_device}`);
+  };
+
+  // Get device name from Matter metadata or fallback to default
+  const getDeviceName = (node: ESPRMNode | undefined, device: ESPRMDevice | undefined) => {
+    if (!node || !device) return "";
+
+    // Check if node metadata contains Matter key
+    const metadata = node.metadata;
+    if (metadata && metadata[MATTER_METADATA_KEY]) {
+      const deviceName =
+        metadata[MATTER_METADATA_KEY][MATTER_METADATA_DEVICE_NAME_KEY];
+      if (deviceName) {
+        return deviceName;
+      }
+    }
+    // Return empty string as fallback
+    return "";
+  };
+
+  // Get display name with fallback logic
+  const getDisplayName = () => {
+    const matterDeviceName = getDeviceName(node, device);
+    if (matterDeviceName) return matterDeviceName;
+    
+    // Fallback to name parameter or display name
+    const nameParam = device?.params?.find((param) => param.type === ESPRM_NAME_PARAM_TYPE);
+    return nameParam?.value || device?.displayName || t("device.control.title");
   };
 
   const CONTROL_PANELS: Record<string, React.FC<any>> = {
@@ -105,7 +139,7 @@ const Control = () => {
   return (
     <>
       <Header
-        label={device?.displayName || t("device.control.title")}
+        label={getDisplayName()}
         showBack={true}
         rightSlot={
           <Pressable {...testProps("button_more")} onPress={handleMorePress}>

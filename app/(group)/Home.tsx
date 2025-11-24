@@ -275,6 +275,7 @@ const HomeScreen = () => {
       // Spread to create new reference and trigger memoization recomputation
       // CDF interceptor has already updated the group object in place
       setSelectedHome({ ...currentHome });
+
     } catch (error) {
       console.error("Failed to initialize home:", error);
       toast.showError(

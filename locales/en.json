@@ -503,7 +503,12 @@
       "otaNewVersionLabel": "New Version",
       "otaUpdating": "Updating device...",
       "otaCheckForUpdates": "Check for Updates",
-      "otaUpdateNow": "Update Now"
+      "otaUpdateNow": "Update Now",
+      "timezoneTitle": "Timezone",
+      "selectTimezone": "Select Timezone",
+      "searchTimezone": "Search timezone...",
+      "noTimezonesFound": "No timezones found",
+      "timezoneUpdatedSuccess": "Timezone updated successfully"
     },
     "panels": {
       "light": {
@@ -542,7 +547,8 @@
       "failedToUpdateDeviceName": "Failed to update device name",
       "failedToRemoveDevice": "Failed to remove device",
       "checkOTAUpdateError": "Failed to check for updates",
-      "otaUpdateStartError": "Failed to start update"
+      "otaUpdateStartError": "Failed to start update",
+      "failedToUpdateTimezone": "Failed to update timezone"
     }
   },
   "scene": {

@@ -45,6 +45,14 @@ import { provisionAdapter } from "@/adaptors/implementations/ESPProvAdapter";
 import { testProps } from "@/utils/testProps";
 import { useToast } from "@/hooks/useToast";
 
+// Constants
+import {
+  MATTER_QR_CODE_PREFIX,
+  QR_CODE_TYPE,
+  CAMERA_TYPE_FRONT,
+  CAMERA_TYPE_BACK,
+} from "@/utils/constants";
+
 const { width, height } = Dimensions.get("window");
 const SCANNER_WIDTH = width * 0.8;
 
@@ -239,18 +247,22 @@ const PermissionScreen = ({
  */
 const ScanQR = () => {
   const toast = useToast();
-  const { store } = useCDF();
+  const { store, esprmUser } = useCDF();
   const router = useRouter();
   const { t } = useTranslation();
   const [permission, requestPermission] = useCameraPermissions();
   const [scanned, setScanned] = useState(false);
   const scannedRef = useRef(false);
-  const [cameraType, setCameraType] = useState<"front" | "back">("back");
+  const [cameraType, setCameraType] = useState<"front" | "back">(
+    CAMERA_TYPE_BACK
+  );
   const [isProcessing, setIsProcessing] = useState(false);
   const cameraRef = useRef<CameraView>(null);
 
   const toggleCamera = () => {
-    setCameraType((prev) => (prev === "front" ? "back" : "front"));
+    setCameraType((prev) =>
+      prev === CAMERA_TYPE_FRONT ? CAMERA_TYPE_BACK : CAMERA_TYPE_FRONT
+    );
   };
 
   /**
@@ -307,6 +319,32 @@ const ScanQR = () => {
   };
 
   /**
+   * Handle Matter QR code commissioning
+   */
+  const handleMatterCommissioning = async (qrData: string) => {
+    try {
+      setIsProcessing(true);
+
+      // Check if user is authenticated
+      if (!esprmUser) {
+        toast.showError(t("device.scan.qr.matterAuthRequired"));
+        return resetScanState();
+      }
+
+      // Navigate to Fabric Selection with QR data
+      router.push({
+        pathname: "/(matter)/FabricSelection",
+        params: { qrData },
+      });
+    } catch (error: unknown) {
+      const errorMessage =
+        error instanceof Error ? error.message : "Unknown error";
+      toast.showError(`Matter commissioning failed: ${errorMessage}`);
+      resetScanState();
+    }
+  };
+
+  /**
    * Handle device provisioning process
    */
   const handleDeviceProvision = async (qrData: any) => {
@@ -360,11 +398,30 @@ const ScanQR = () => {
     setScanned(true);
 
     // Validate QR code
-    if (result.type !== "qr" || !result.data) {
+    if (result.type !== QR_CODE_TYPE || !result.data) {
       return handleInvalidQRCode();
     }
 
-    // Parse and validate QR data
+    // Check if it's a Matter QR code
+    if (result.data.startsWith(MATTER_QR_CODE_PREFIX)) {
+      setIsProcessing(true);
+      await cameraRef.current?.pausePreview();
+      Vibration.vibrate(200);
+
+      // Process Matter QR code with delay for better UX
+      setTimeout(async () => {
+        try {
+          await handleMatterCommissioning(result.data);
+        } catch (error) {
+          toast.showError(t("device.scan.qr.matterCommissioningFailed"));
+        } finally {
+          resetScanState();
+        }
+      }, 1000);
+      return;
+    }
+
+    // Parse and validate ESP provisioning QR data
     let qrData: any;
     try {
       qrData = JSON.parse(result.data);
@@ -382,7 +439,6 @@ const ScanQR = () => {
       try {
         await handleDeviceProvision(qrData);
       } catch (error) {
-        console.error(error);
         toast.showError(t("device.scan.qr.invalidQRCode"));
       } finally {
         resetScanState();

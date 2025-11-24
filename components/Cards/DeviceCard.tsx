@@ -43,6 +43,8 @@ import {
   ESPRM_POWER_PARAM_TYPE,
   ERROR_CODES,
   ESPRM_TEMPERATURE_PARAM_TYPE,
+  MATTER_METADATA_KEY,
+  MATTER_METADATA_DEVICE_NAME_KEY,
 } from "@/utils/constants";
 
 // Styles
@@ -225,6 +227,20 @@ const DeviceCard: React.FC<DeviceCardProps> = ({
     return paramTypeMap[ESPRM_POWER_PARAM_TYPE]?.value;
   };
 
+  const getDeviceName = (node: ESPRMNode) => {
+    // Check if node metadata contains Matter key
+    const metadata = node.metadata;
+    if (metadata && metadata[MATTER_METADATA_KEY]) {
+      const deviceName =
+        metadata[MATTER_METADATA_KEY][MATTER_METADATA_DEVICE_NAME_KEY];
+      if (deviceName) {
+        return deviceName;
+      }
+    }
+    // Return empty string as fallback
+    return "";
+  };
+
   // Render full card
   return (
     <TouchableOpacity {...(qaId ? testProps(qaId) : {})}
@@ -283,7 +299,7 @@ const DeviceCard: React.FC<DeviceCardProps> = ({
       <View style={{ width: "100%", paddingLeft: 5 }}>
         <View>
           <Text {...testProps("text_device_name")} style={styles.name} numberOfLines={1}>
-            {paramTypeMap[ESPRM_NAME_PARAM_TYPE]?.value || device.displayName}
+            {getDeviceName(node) || paramTypeMap[ESPRM_NAME_PARAM_TYPE]?.value || device.displayName}
           </Text>
         </View>
         <View style={styles.statusContainer}>

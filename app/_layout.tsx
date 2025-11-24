@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import React from "react";
 import { Platform } from "react-native";
 
 import { Stack, usePathname, RelativePathString } from "expo-router";
@@ -27,11 +28,16 @@ import { createTamagui, TamaguiProvider } from "tamagui";
 import { Provider as PaperProvider } from "react-native-paper";
 // hooks
 import { useTranslation } from "react-i18next";
+// adapters
+import { matterAdapter } from "@/adaptors/implementations/ESPMatterAdapter";
 // components
 import { FooterTabs } from "@/components";
 import { ToastContainer } from "@/components";
 // icons
 import { Home, Calendar, User, History, Zap } from "lucide-react-native";
+// SDK configuration
+import { ESPRMMatterBase } from "@espressif/rainmaker-matter-sdk";
+import { SDKConfig } from "@/rainmaker.config";
 
 const InnerLayout = () => {
   const { t } = useTranslation();
@@ -75,7 +81,7 @@ const InnerLayout = () => {
     "/User",
     "/Scenes",
     "/Automations",
-    "/Schedules"
+    "/Schedules",
   ].some((route) => pathname === route);
 
   return (
@@ -121,6 +127,17 @@ const _layout = () => {
   configure({
     enforceActions: "never", // disables strict mode
   });
+
+  // Configure SDKs at app startup (before any login attempts)
+  React.useEffect(() => {
+    // Configure Matter SDK with complete config + Matter-specific settings
+    // This will internally call super.configure() to configure ESPRMBase
+    ESPRMMatterBase.configure({
+      ...SDKConfig, // Complete SDK config including authUrl, clientId, etc.
+      matterAdapter,
+      matterVendorId: "0x131B",
+    });
+  }, []);
 
   return (
     <SafeAreaProvider>

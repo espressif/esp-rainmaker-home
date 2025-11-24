@@ -12,6 +12,7 @@ import * as Clipboard from "expo-clipboard";
 // Components
 import CollapsibleCard from "../Cards/CollapsibleCard";
 import InfoRow from "../Info/InfoRow";
+import DeviceTimezone from "./DeviceTimezone";
 
 // Styles
 import { globalStyles } from "@/theme/globalStyleSheet";
@@ -28,11 +29,15 @@ import { DeviceInfoProps } from "@/types/global";
  * DeviceInfo Component
  *
  * Displays device information in a collapsible card format.
- * Shows device ID, type, IP, version, and configuration time.
+ * Shows device ID, version, and timezone (if available).
  *
  * @param props - Component properties containing device information
  */
-const DeviceInfo: React.FC<DeviceInfoProps> = ({ node, nodeConfig }) => {
+const DeviceInfo: React.FC<DeviceInfoProps> = ({
+  node,
+  nodeConfig,
+  disabled,
+}) => {
   const { t } = useTranslation();
   const toast = useToast();
 
@@ -57,7 +62,7 @@ const DeviceInfo: React.FC<DeviceInfoProps> = ({ node, nodeConfig }) => {
       }}
     >
       <View style={globalStyles.infoContainer}>
-        {/* Custom Node ID row with toast notification */}
+        {/* Node ID row with copy functionality */}
         <View style={globalStyles.infoRow}>
           <Text style={globalStyles.infoLabel}>
             {t("device.settings.deviceInfoIdLabel")}:
@@ -71,10 +76,15 @@ const DeviceInfo: React.FC<DeviceInfoProps> = ({ node, nodeConfig }) => {
             />
           </View>
         </View>
+
+        {/* Firmware Version */}
         <InfoRow
           label={t("device.settings.deviceInfoVersionLabel")}
           value={nodeConfig?.info?.firmwareVersion || "--"}
         />
+
+        {/* Timezone Row - Conditionally rendered based on device support */}
+        <DeviceTimezone node={node} disabled={disabled} />
       </View>
     </CollapsibleCard>
   );

@@ -7,12 +7,15 @@
 import "../i18n";
 import { StyleSheet, View } from "react-native";
 import { useCallback, useEffect } from "react";
+// Initialize Matter adapter early
+import "@/adaptors/implementations/ESPMatterAdapter";
 // hooks
 import { useCDF } from "@/hooks/useCDF";
 import { useRouter, usePathname, useFocusEffect } from "expo-router";
 // components
 import { Logo } from "@/components";
 import { createPlatformEndpoint } from "@/utils/notifications";
+import { setUserTimeZone } from "@/utils/timezone";
 // theme
 import { tokens } from "@/theme/tokens";
 import { CDFConfig } from "@/rainmaker.config";
@@ -27,6 +30,13 @@ const index = () => {
     try {
       const userInfo = store.userStore.userInfo;
       if (userInfo) {
+        // Set user timezone on app launch
+        try {
+          await setUserTimeZone(store.userStore.user);
+        } catch (error) {
+          console.error("Failed to set timezone:", error);
+        }
+
         /*
         With CDFConfig.autoSync enabled, CDF will fetch the first page automatically,
         so we don't need to fetch the first page again

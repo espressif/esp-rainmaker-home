@@ -5,6 +5,24 @@ All notable changes to the ESP RainMaker Home app will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.2.0]
+
+###  Added
+
+**Matter Commissioning Support:**
+
+- Introduced Matter ecosystem commissioning with support for onboarding Matter-enabled ESP devices.
+- Added QR-based Matter device setup flow with seamless integration into the existing provisioning workflow.
+- Integrated Matter commissioning status updates and device sync into RainMaker homes and rooms.
+- Added UI and error-handling improvements to guide users through onboarding failures and retries.
+
+### Enhanced
+
+**Timezone Management:**
+
+- Set the user’s timezone on the device during provisioning.
+- Display the current node timezone with the ability to update it from the node settings screen.
+
 ## [3.1.3]
 
 ### Enhanced

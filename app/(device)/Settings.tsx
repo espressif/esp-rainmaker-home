@@ -45,6 +45,8 @@ import {
   ESPRM_SYSTEM_SERVICE,
   ESPRM_FACTORY_RESET_PARAM_TYPE,
   ESPRM_NAME_PARAM_TYPE,
+  MATTER_METADATA_KEY,
+  MATTER_METADATA_DEVICE_NAME_KEY,
 } from "@/utils/constants";
 
 // Types
@@ -112,6 +114,25 @@ const Settings = observer(() => {
   const isPrimary = node?.isPrimaryUser || false;
 
   /**
+   * Get device name from Matter metadata or fallback to device display name
+   */
+  const getDeviceNameFromMetadata = () => {
+    if (!node) return "";
+
+    // Check if node metadata contains Matter key
+    const metadata = node.metadata;
+    if (metadata && metadata[MATTER_METADATA_KEY]) {
+      const deviceName =
+        metadata[MATTER_METADATA_KEY][MATTER_METADATA_DEVICE_NAME_KEY];
+      if (deviceName) {
+        return deviceName;
+      }
+    }
+    // Fallback to device display name
+    return device?.displayName || "";
+  };
+
+  /**
    * Effect: Initialize valid sections
    * Determines which sections should be shown based on device capabilities
    */
@@ -120,15 +141,18 @@ const Settings = observer(() => {
       (param) => param.type === ESPRM_NAME_PARAM_TYPE
     );
     if (nameParam) {
-      setDeviceName(device?.displayName || "");
+      // Use Matter metadata device name if available, otherwise use device display name
+      const matterDeviceName = getDeviceNameFromMetadata();
+      setDeviceName(matterDeviceName || device?.displayName || "");
     } else {
       setValidSection((prev) => prev.filter((section) => section !== "name"));
     }
-  }, [device]);
+  }, [device, node]);
 
   /**
    * Saves device name changes
    * Validates input and updates device configuration
+   * For Matter devices, updates metadata; for non-Matter devices, uses param.setValue
    */
   const handleSaveDeviceName = async () => {
     if (!deviceName.trim()) {
@@ -136,22 +160,56 @@ const Settings = observer(() => {
       return;
     }
     setIsSavingName(true);
-    const nameParam = device?.params?.find(
-      (param) => param.type === "esp.param.name"
-    );
 
-    if (nameParam) {
-      try {
-        await (nameParam as any).setValue(deviceName);
+    try {
+      // Check if this is a Matter device by checking metadata
+      const isMatterDevice =
+        node?.metadata && node.metadata[MATTER_METADATA_KEY];
+
+      if (isMatterDevice && node) {
+        // For Matter devices, update metadata
+        const currentMetadata = node.metadata || {};
+        const matterMetadata = currentMetadata[MATTER_METADATA_KEY] || {};
+
+        const updatedMatterMetadata = {
+          ...matterMetadata,
+          [MATTER_METADATA_DEVICE_NAME_KEY]: deviceName,
+        };
+
+        // Update the full metadata structure
+        const updatedMetadata = {
+          ...currentMetadata,
+          [MATTER_METADATA_KEY]: updatedMatterMetadata,
+        };
+
+        // Call updateMetadata API
+        await node.updateMetadata(updatedMetadata);
+
         if (device) {
           device.displayName = deviceName;
         }
+        node.metadata = updatedMetadata;
+
         toast.showSuccess(t("device.settings.deviceNameUpdatedSuccessfully"));
-      } catch (error) {
-        toast.showError(t("device.errors.failedToUpdateDeviceName"));
-      } finally {
-        setIsSavingName(false);
+      } else {
+        const nameParam = device?.params?.find(
+          (param) => param.type === "esp.param.name"
+        );
+
+        if (nameParam) {
+          await(nameParam as any).setValue(deviceName);
+          if (device) {
+            device.displayName = deviceName;
+          }
+          toast.showSuccess(t("device.settings.deviceNameUpdatedSuccessfully"));
+        } else {
+          toast.showError(t("device.errors.failedToUpdateDeviceName"));
+        }
       }
+    } catch (error) {
+      toast.showError(t("device.errors.failedToUpdateDeviceName"));
+    } finally {
+      setIsSavingName(false);
     }
   };
 
@@ -282,7 +340,9 @@ const Settings = observer(() => {
           {/* Device Name Section */}
           {validSection.includes("name") && (
             <DeviceName
-              initialDeviceName={device?.displayName || ""}
+              initialDeviceName={
+                getDeviceNameFromMetadata() || device?.displayName || ""
+              }
               deviceName={deviceName}
               setDeviceName={setDeviceName}
               isEditingName={isEditingName}
@@ -298,6 +358,7 @@ const Settings = observer(() => {
             nodeConfig={node?.nodeConfig}
             device={device}
             otaInfo={otaInfo}
+            disabled={!isPrimary || !isConnected}
           />
 
           <OTA

@@ -14,6 +14,10 @@
 		5A1455722E45C0D10066A31F /* ESPOauthModule.m in Sources */ = {isa = PBXBuildFile; fileRef = 5A14556F2E45C0D10066A31F /* ESPOauthModule.m */; };
 		5A1455732E45C0D10066A31F /* ESPOauthModule.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A1455702E45C0D10066A31F /* ESPOauthModule.swift */; };
 		761931A5804385B28082B351 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 94D7943BDE76E78EC62286AA /* PrivacyInfo.xcprivacy */; };
+		8728E4702E98D74800DF9B82 /* MatterExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 8728E4692E98D74800DF9B82 /* MatterExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		8728E48F2E99195700DF9B82 /* RequestHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8728E48C2E99195700DF9B82 /* RequestHandler.swift */; };
+		8728E4922E9919D700DF9B82 /* ESPMatterExtensionEcoInfo.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8728E4902E9919D700DF9B82 /* ESPMatterExtensionEcoInfo.swift */; };
+		8728E4932E9919D700DF9B82 /* ESPMatterExtLocalStorage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8728E4912E9919D700DF9B82 /* ESPMatterExtLocalStorage.swift */; };
 		96905EF65AED1B983A6B3ABC /* libPods-NOVA.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 58EEBF8E8E6FB1BC6CAF49B5 /* libPods-NOVA.a */; };
 		B18059E884C0ABDD17F3DC3D /* ExpoModulesProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = FAC715A2D49A985799AEE119 /* ExpoModulesProvider.swift */; };
 		BB2F792D24A3F905000567C9 /* Expo.plist in Resources */ = {isa = PBXBuildFile; fileRef = BB2F792C24A3F905000567C9 /* Expo.plist */; };
@@ -25,13 +29,45 @@
 		F18184B92E4B1C33002C7B0A /* ESPAppUtilityModule.m in Sources */ = {isa = PBXBuildFile; fileRef = F18184B52E4B1C33002C7B0A /* ESPAppUtilityModule.m */; };
 		F18184BB2E4B1C33002C7B0A /* ESPAppUtilityModule.swift in Sources */ = {isa = PBXBuildFile; fileRef = F18184B62E4B1C33002C7B0A /* ESPAppUtilityModule.swift */; };
 		F18184BC2E4B1C34002C7B0A /* ESPPermissionUtils.swift in Sources */ = {isa = PBXBuildFile; fileRef = F18184B72E4B1C34002C7B0A /* ESPPermissionUtils.swift */; };
+		F1A40E242EBC9E3A008A590D /* ESPMatterConstants.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1A40E1F2EBC9E3A008A590D /* ESPMatterConstants.swift */; };
+		F1A40E262EBC9E3A008A590D /* ESPMatterUtilityModule.m in Sources */ = {isa = PBXBuildFile; fileRef = F1A40E222EBC9E3A008A590D /* ESPMatterUtilityModule.m */; };
+		F1A40E272EBC9E3A008A590D /* ESPMatterEcosystemInfo.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1A40E212EBC9E3A008A590D /* ESPMatterEcosystemInfo.swift */; };
+		F1A40E282EBC9E3A008A590D /* ESPLocalStorage.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1A40E1E2EBC9E3A008A590D /* ESPLocalStorage.swift */; };
+		F1A40E292EBC9E3A008A590D /* ESPMatterUtilityModule.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1A40E232EBC9E3A008A590D /* ESPMatterUtilityModule.swift */; };
 		F1B602722E30C21D003DA0C4 /* ESPProvModule.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1B602702E30C21D003DA0C4 /* ESPProvModule.swift */; };
 		F1B602732E30C21D003DA0C4 /* ESPProvModule.m in Sources */ = {isa = PBXBuildFile; fileRef = F1B6026F2E30C21D003DA0C4 /* ESPProvModule.m */; };
 		F1B6027A2E30C23B003DA0C4 /* ESPLocalControlModule.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1B602782E30C23B003DA0C4 /* ESPLocalControlModule.swift */; };
 		F1B6027B2E30C23B003DA0C4 /* ESPLocalControlModule.m in Sources */ = {isa = PBXBuildFile; fileRef = F1B602772E30C23B003DA0C4 /* ESPLocalControlModule.m */; };
 		F1B6027F2E30C240003DA0C4 /* ESPNotificationModule.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1B6027D2E30C240003DA0C4 /* ESPNotificationModule.swift */; };
 		F1B602802E30C240003DA0C4 /* ESPNotificationModule.m in Sources */ = {isa = PBXBuildFile; fileRef = F1B6027C2E30C240003DA0C4 /* ESPNotificationModule.m */; };
+		F1C602812E30C241003DA0C5 /* ESPMatterModule.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1C602792E30C241003DA0C5 /* ESPMatterModule.swift */; };
+		F1C602822E30C241003DA0C5 /* ESPMatterModule.m in Sources */ = {isa = PBXBuildFile; fileRef = F1C6027A2E30C241003DA0C5 /* ESPMatterModule.m */; };
+		F1C602832E30C242003DA0C6 /* MTRCSRKeys.m in Sources */ = {isa = PBXBuildFile; fileRef = F1C6027C2E30C242003DA0C6 /* MTRCSRKeys.m */; };
 /* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		8728E46E2E98D74800DF9B82 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 83CBB9F71A601CBA00E9B192 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 8728E4682E98D74800DF9B82;
+			remoteInfo = MatterExtension;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		8728E4712E98D74800DF9B82 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				8728E4702E98D74800DF9B82 /* MatterExtension.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
 		0259EEB2E2A64AFC9F746EEF /* NOVA-Bridging-Header.h */ = {isa = PBXFileReference; explicitFileType = undefined; fileEncoding = 4; includeInIndex = 0; lastKnownFileType = sourcecode.c.h; name = "NOVA-Bridging-Header.h"; path = "NOVA/NOVA-Bridging-Header.h"; sourceTree = "<group>"; };
@@ -46,6 +82,13 @@
 		5A1455702E45C0D10066A31F /* ESPOauthModule.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ESPOauthModule.swift; sourceTree = "<group>"; };
 		6C2E3173556A471DD304B334 /* Pods-NOVA.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-NOVA.debug.xcconfig"; path = "Target Support Files/Pods-NOVA/Pods-NOVA.debug.xcconfig"; sourceTree = "<group>"; };
 		7A4D352CD337FB3A3BF06240 /* Pods-NOVA.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-NOVA.release.xcconfig"; path = "Target Support Files/Pods-NOVA/Pods-NOVA.release.xcconfig"; sourceTree = "<group>"; };
+		8728E4692E98D74800DF9B82 /* MatterExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = MatterExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		8728E48A2E99195700DF9B82 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		8728E48B2E99195700DF9B82 /* MatterExtension.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = MatterExtension.entitlements; sourceTree = "<group>"; };
+		8728E48C2E99195700DF9B82 /* RequestHandler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RequestHandler.swift; sourceTree = "<group>"; };
+		8728E4902E9919D700DF9B82 /* ESPMatterExtensionEcoInfo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ESPMatterExtensionEcoInfo.swift; sourceTree = "<group>"; };
+		8728E4912E9919D700DF9B82 /* ESPMatterExtLocalStorage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ESPMatterExtLocalStorage.swift; sourceTree = "<group>"; };
+		8728E49B2E991C1300DF9B82 /* NOVA.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = NOVA.entitlements; sourceTree = "<group>"; };
 		94D7943BDE76E78EC62286AA /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xml; name = PrivacyInfo.xcprivacy; path = NOVA/PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		AA286B85B6C04FC6940260E9 /* SplashScreen.storyboard */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = file.storyboard; name = SplashScreen.storyboard; path = NOVA/SplashScreen.storyboard; sourceTree = "<group>"; };
 		BB2F792C24A3F905000567C9 /* Expo.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; path = Expo.plist; sourceTree = "<group>"; };
@@ -58,12 +101,21 @@
 		F18184B52E4B1C33002C7B0A /* ESPAppUtilityModule.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = ESPAppUtilityModule.m; sourceTree = "<group>"; };
 		F18184B62E4B1C33002C7B0A /* ESPAppUtilityModule.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ESPAppUtilityModule.swift; sourceTree = "<group>"; };
 		F18184B72E4B1C34002C7B0A /* ESPPermissionUtils.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ESPPermissionUtils.swift; sourceTree = "<group>"; };
+		F1A40E1E2EBC9E3A008A590D /* ESPLocalStorage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ESPLocalStorage.swift; sourceTree = "<group>"; };
+		F1A40E1F2EBC9E3A008A590D /* ESPMatterConstants.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ESPMatterConstants.swift; sourceTree = "<group>"; };
+		F1A40E212EBC9E3A008A590D /* ESPMatterEcosystemInfo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ESPMatterEcosystemInfo.swift; sourceTree = "<group>"; };
+		F1A40E222EBC9E3A008A590D /* ESPMatterUtilityModule.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = ESPMatterUtilityModule.m; sourceTree = "<group>"; };
+		F1A40E232EBC9E3A008A590D /* ESPMatterUtilityModule.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ESPMatterUtilityModule.swift; sourceTree = "<group>"; };
 		F1B6026F2E30C21D003DA0C4 /* ESPProvModule.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = ESPProvModule.m; sourceTree = "<group>"; };
 		F1B602702E30C21D003DA0C4 /* ESPProvModule.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ESPProvModule.swift; sourceTree = "<group>"; };
 		F1B602772E30C23B003DA0C4 /* ESPLocalControlModule.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = ESPLocalControlModule.m; sourceTree = "<group>"; };
 		F1B602782E30C23B003DA0C4 /* ESPLocalControlModule.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ESPLocalControlModule.swift; sourceTree = "<group>"; };
 		F1B6027C2E30C240003DA0C4 /* ESPNotificationModule.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = ESPNotificationModule.m; sourceTree = "<group>"; };
 		F1B6027D2E30C240003DA0C4 /* ESPNotificationModule.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ESPNotificationModule.swift; sourceTree = "<group>"; };
+		F1C602792E30C241003DA0C5 /* ESPMatterModule.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ESPMatterModule.swift; sourceTree = "<group>"; };
+		F1C6027A2E30C241003DA0C5 /* ESPMatterModule.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = ESPMatterModule.m; sourceTree = "<group>"; };
+		F1C6027C2E30C242003DA0C6 /* MTRCSRKeys.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = MTRCSRKeys.m; sourceTree = "<group>"; };
+		F1C6027D2E30C242003DA0C6 /* MTRCSRKeys.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = MTRCSRKeys.h; sourceTree = "<group>"; };
 		FAC715A2D49A985799AEE119 /* ExpoModulesProvider.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ExpoModulesProvider.swift; path = "Pods/Target Support Files/Pods-NOVA/ExpoModulesProvider.swift"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -76,18 +128,26 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		8728E4662E98D74800DF9B82 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
 		13B07FAE1A68108700A75B9A /* NOVA */ = {
 			isa = PBXGroup;
 			children = (
-				BB2F792B24A3F905000567C9 /* Supporting */,
+				8728E49B2E991C1300DF9B82 /* NOVA.entitlements */,
 				13B07FAF1A68108700A75B9A /* AppDelegate.h */,
+				13B07FB01A68108700A75B9A /* AppDelegate.mm */,
+				BB2F792B24A3F905000567C9 /* Supporting */,
 				F15D5FEC2E559899005F3B57 /* SoftAP */,
 				F18184B82E4B1C33002C7B0A /* Utils */,
 				5A1455712E45C0D10066A31F /* OAuth */,
-				13B07FB01A68108700A75B9A /* AppDelegate.mm */,
 				13B07FB51A68108700A75B9A /* Images.xcassets */,
 				13B07FB61A68108700A75B9A /* Info.plist */,
 				13B07FB71A68108700A75B9A /* main.m */,
@@ -99,6 +159,7 @@
 				F1B6027E2E30C240003DA0C4 /* Notification */,
 				F1B602792E30C23B003DA0C4 /* Local Control */,
 				F1B602712E30C21D003DA0C4 /* Provisioning */,
+				F1C6027B2E30C241003DA0C5 /* Matter */,
 			);
 			name = NOVA;
 			sourceTree = "<group>";
@@ -133,6 +194,7 @@
 			children = (
 				13B07FAE1A68108700A75B9A /* NOVA */,
 				832341AE1AAA6A7D00B99B32 /* Libraries */,
+				8728E48D2E99195700DF9B82 /* MatterExtension */,
 				83CBBA001A601CBA00E9B192 /* Products */,
 				2D16E6871FA4F8E400B85C8A /* Frameworks */,
 				D65327D7A22EEC0BE12398D9 /* Pods */,
@@ -147,8 +209,21 @@
 			isa = PBXGroup;
 			children = (
 				13B07F961A680F5B00A75B9A /* NOVA.app */,
+				8728E4692E98D74800DF9B82 /* MatterExtension.appex */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		8728E48D2E99195700DF9B82 /* MatterExtension */ = {
+			isa = PBXGroup;
+			children = (
+				8728E4902E9919D700DF9B82 /* ESPMatterExtensionEcoInfo.swift */,
+				8728E4912E9919D700DF9B82 /* ESPMatterExtLocalStorage.swift */,
+				8728E48A2E99195700DF9B82 /* Info.plist */,
+				8728E48B2E99195700DF9B82 /* MatterExtension.entitlements */,
+				8728E48C2E99195700DF9B82 /* RequestHandler.swift */,
+			);
+			path = MatterExtension;
 			sourceTree = "<group>";
 		};
 		92DBD88DE9BF7D494EA9DA96 /* NOVA */ = {
@@ -240,6 +315,22 @@
 			path = Notification;
 			sourceTree = "<group>";
 		};
+		F1C6027B2E30C241003DA0C5 /* Matter */ = {
+			isa = PBXGroup;
+			children = (
+				F1A40E1E2EBC9E3A008A590D /* ESPLocalStorage.swift */,
+				F1A40E1F2EBC9E3A008A590D /* ESPMatterConstants.swift */,
+				F1A40E212EBC9E3A008A590D /* ESPMatterEcosystemInfo.swift */,
+				F1A40E222EBC9E3A008A590D /* ESPMatterUtilityModule.m */,
+				F1A40E232EBC9E3A008A590D /* ESPMatterUtilityModule.swift */,
+				F1C6027A2E30C241003DA0C5 /* ESPMatterModule.m */,
+				F1C602792E30C241003DA0C5 /* ESPMatterModule.swift */,
+				F1C6027C2E30C242003DA0C6 /* MTRCSRKeys.m */,
+				F1C6027D2E30C242003DA0C6 /* MTRCSRKeys.h */,
+			);
+			path = Matter;
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -255,15 +346,34 @@
 				00DD1BFF1BD5951E006B06BC /* Bundle React Native code and images */,
 				800E24972A6A228C8D4807E9 /* [CP] Copy Pods Resources */,
 				377D987CE3D020B003868BB4 /* [CP] Embed Pods Frameworks */,
+				8728E4712E98D74800DF9B82 /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				8728E46F2E98D74800DF9B82 /* PBXTargetDependency */,
 			);
 			name = NOVA;
 			productName = NOVA;
 			productReference = 13B07F961A680F5B00A75B9A /* NOVA.app */;
 			productType = "com.apple.product-type.application";
+		};
+		8728E4682E98D74800DF9B82 /* MatterExtension */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 8728E4752E98D74800DF9B82 /* Build configuration list for PBXNativeTarget "MatterExtension" */;
+			buildPhases = (
+				8728E4652E98D74800DF9B82 /* Sources */,
+				8728E4662E98D74800DF9B82 /* Frameworks */,
+				8728E4672E98D74800DF9B82 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = MatterExtension;
+			productName = MatterExtension;
+			productReference = 8728E4692E98D74800DF9B82 /* MatterExtension.appex */;
+			productType = "com.apple.product-type.app-extension";
 		};
 /* End PBXNativeTarget section */
 
@@ -271,10 +381,14 @@
 		83CBB9F71A601CBA00E9B192 /* Project object */ = {
 			isa = PBXProject;
 			attributes = {
+				LastSwiftUpdateCheck = 1630;
 				LastUpgradeCheck = 1130;
 				TargetAttributes = {
 					13B07F861A680F5B00A75B9A = {
 						LastSwiftMigration = 1250;
+					};
+					8728E4682E98D74800DF9B82 = {
+						CreatedOnToolsVersion = 16.3;
 					};
 				};
 			};
@@ -292,6 +406,7 @@
 			projectRoot = "";
 			targets = (
 				13B07F861A680F5B00A75B9A /* NOVA */,
+				8728E4682E98D74800DF9B82 /* MatterExtension */,
 			);
 		};
 /* End PBXProject section */
@@ -305,6 +420,13 @@
 				13B07FBF1A68108700A75B9A /* Images.xcassets in Resources */,
 				3E461D99554A48A4959DE609 /* SplashScreen.storyboard in Resources */,
 				761931A5804385B28082B351 /* PrivacyInfo.xcprivacy in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		8728E4672E98D74800DF9B82 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -428,11 +550,19 @@
 				F15D5FEE2E559899005F3B57 /* ESPSoftAPModule.swift in Sources */,
 				F1B6027B2E30C23B003DA0C4 /* ESPLocalControlModule.m in Sources */,
 				F1B602732E30C21D003DA0C4 /* ESPProvModule.m in Sources */,
+				F1A40E242EBC9E3A008A590D /* ESPMatterConstants.swift in Sources */,
+				F1A40E262EBC9E3A008A590D /* ESPMatterUtilityModule.m in Sources */,
+				F1A40E272EBC9E3A008A590D /* ESPMatterEcosystemInfo.swift in Sources */,
+				F1A40E282EBC9E3A008A590D /* ESPLocalStorage.swift in Sources */,
+				F1A40E292EBC9E3A008A590D /* ESPMatterUtilityModule.swift in Sources */,
 				5A1455722E45C0D10066A31F /* ESPOauthModule.m in Sources */,
 				5A1455732E45C0D10066A31F /* ESPOauthModule.swift in Sources */,
 				13B07FBC1A68108700A75B9A /* AppDelegate.mm in Sources */,
 				F1B6027F2E30C240003DA0C4 /* ESPNotificationModule.swift in Sources */,
 				F1B602802E30C240003DA0C4 /* ESPNotificationModule.m in Sources */,
+				F1C602812E30C241003DA0C5 /* ESPMatterModule.swift in Sources */,
+				F1C602822E30C241003DA0C5 /* ESPMatterModule.m in Sources */,
+				F1C602832E30C242003DA0C6 /* MTRCSRKeys.m in Sources */,
 				13B07FC11A68108700A75B9A /* main.m in Sources */,
 				F18184B92E4B1C33002C7B0A /* ESPAppUtilityModule.m in Sources */,
 				F18184BB2E4B1C33002C7B0A /* ESPAppUtilityModule.swift in Sources */,
@@ -442,7 +572,25 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		8728E4652E98D74800DF9B82 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				8728E4922E9919D700DF9B82 /* ESPMatterExtensionEcoInfo.swift in Sources */,
+				8728E4932E9919D700DF9B82 /* ESPMatterExtLocalStorage.swift in Sources */,
+				8728E48F2E99195700DF9B82 /* RequestHandler.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		8728E46F2E98D74800DF9B82 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 8728E4682E98D74800DF9B82 /* MatterExtension */;
+			targetProxy = 8728E46E2E98D74800DF9B82 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		13B07F941A680F5B00A75B9A /* Debug */ = {
@@ -452,6 +600,8 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_ENTITLEMENTS = NOVA/NOVA.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = QWXF6GB4AV;
 				ENABLE_BITCODE = NO;
@@ -461,12 +611,12 @@
 				);
 				INFOPLIST_FILE = NOVA/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "ESP RainMaker Home";
-				IPHONEOS_DEPLOYMENT_TARGET = 15.1;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.6;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 3.1.3;
+				MARKETING_VERSION = 3.2.0;
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"-ObjC",
@@ -475,6 +625,7 @@
 				OTHER_SWIFT_FLAGS = "$(inherited) -D EXPO_CONFIGURATION_DEBUG";
 				PRODUCT_BUNDLE_IDENTIFIER = com.espressif.nova;
 				PRODUCT_NAME = NOVA;
+				PROVISIONING_PROFILE_SPECIFIER = "";
 				SWIFT_OBJC_BRIDGING_HEADER = "NOVA/NOVA-Bridging-Header.h";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				SWIFT_VERSION = 5.0;
@@ -490,16 +641,18 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_ENTITLEMENTS = NOVA/NOVA.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = QWXF6GB4AV;
 				INFOPLIST_FILE = NOVA/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "ESP RainMaker Home";
-				IPHONEOS_DEPLOYMENT_TARGET = 15.1;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.6;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 3.1.3;
+				MARKETING_VERSION = 3.2.0;
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"-ObjC",
@@ -508,6 +661,7 @@
 				OTHER_SWIFT_FLAGS = "$(inherited) -D EXPO_CONFIGURATION_RELEASE";
 				PRODUCT_BUNDLE_IDENTIFIER = com.espressif.nova;
 				PRODUCT_NAME = NOVA;
+				PROVISIONING_PROFILE_SPECIFIER = "";
 				SWIFT_OBJC_BRIDGING_HEADER = "NOVA/NOVA-Bridging-Header.h";
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -633,6 +787,97 @@
 			};
 			name = Release;
 		};
+		8728E4722E98D74800DF9B82 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CODE_SIGN_ENTITLEMENTS = MatterExtension/MatterExtension.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				DEVELOPMENT_TEAM = QWXF6GB4AV;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = MatterExtension/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = MatterExtension;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				IPHONEOS_DEPLOYMENT_TARGET = 18.4;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MARKETING_VERSION = 1.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				OTHER_SWIFT_FLAGS = "$(inherited) -D EXPO_CONFIGURATION_DEBUG";
+				PRODUCT_BUNDLE_IDENTIFIER = com.espressif.nova.MatterExtension;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				PROVISIONING_PROFILE_SPECIFIER = "";
+				SKIP_INSTALL = YES;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		8728E4732E98D74800DF9B82 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CODE_SIGN_ENTITLEMENTS = MatterExtension/MatterExtension.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				COPY_PHASE_STRIP = NO;
+				CURRENT_PROJECT_VERSION = 1;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = QWXF6GB4AV;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = MatterExtension/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = MatterExtension;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				IPHONEOS_DEPLOYMENT_TARGET = 18.4;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MARKETING_VERSION = 1.0;
+				MTL_FAST_MATH = YES;
+				OTHER_SWIFT_FLAGS = "$(inherited) -D EXPO_CONFIGURATION_RELEASE";
+				PRODUCT_BUNDLE_IDENTIFIER = com.espressif.nova.MatterExtension;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				PROVISIONING_PROFILE_SPECIFIER = "";
+				SKIP_INSTALL = YES;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -650,6 +895,15 @@
 			buildConfigurations = (
 				83CBBA201A601CBA00E9B192 /* Debug */,
 				83CBBA211A601CBA00E9B192 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		8728E4752E98D74800DF9B82 /* Build configuration list for PBXNativeTarget "MatterExtension" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				8728E4722E98D74800DF9B82 /* Debug */,
+				8728E4732E98D74800DF9B82 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

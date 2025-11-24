@@ -7,11 +7,10 @@
 // CONSTANTS
 export const TOAST_ANIMATION_DURATION = "200ms";
 export const REJECTED_STATUS = "rejected";
+export const FULFILLED_STATUS = "fulfilled";
 
 // PLATFORMS
 export const PLATFORM_IOS = "ios";
-export const PLATFORM_ANDROID = "android";
-
 export const DEFAULT_HOME_GROUP_NAME = "Home";
 
 // LINKS
@@ -179,3 +178,33 @@ export const NODE_TYPE = {
   PURE_MATTER: "pure_matter",
   RAINMAKER_MATTER: "rainmaker_matter",
 };
+
+// Matter related constants
+export const DEFAULT_MATTER_DEVICE_NAME = "Matter Device";
+export const MAX_MATTER_DEVICE_NAME_LENGTH = 32;
+export const MATTER_METADATA_KEY = "Matter";
+export const MATTER_METADATA_DEVICE_NAME_KEY = "deviceName";
+
+// Matter QR Code constants
+export const MATTER_QR_CODE_PREFIX = "MT:";
+
+// Matter Commissioning Event constants
+export const MATTER_COMMISSIONING_EVENT = "MatterCommissioningEvent";
+export const MATTER_EVENT_COMMISSIONING_COMPLETE = "COMMISSIONING_COMPLETE";
+export const MATTER_EVENT_CONFIRM_NODE_REQUEST = "CONFIRM_NODE_REQUEST";
+export const MATTER_EVENT_NODE_NOC_REQUEST = "NODE_NOC_REQUEST";
+export const MATTER_EVENT_COMMISSIONING_CONFIRMATION_RESPONSE =
+  "COMMISSIONING_CONFIRMATION_RESPONSE";
+export const MATTER_EVENT_COMMISSIONING_ERROR = "COMMISSIONING_ERROR";
+
+// Matter Commissioning Status constants
+export const MATTER_STATUS_PREPARING = "Preparing...";
+export const MATTER_STATUS_PREPARING_FABRIC = "Preparing fabric...";
+export const MATTER_STATUS_STARTING_COMMISSIONING = "Starting commissioning...";
+export const MATTER_STATUS_CONFIRMING_DEVICE = "Confirming device...";
+export const MATTER_STATUS_ISSUING_CERTIFICATE = "Issuing user certificate...";
+
+// QR Code Scanner constants
+export const QR_CODE_TYPE = "qr";
+export const CAMERA_TYPE_FRONT = "front";
+export const CAMERA_TYPE_BACK = "back";

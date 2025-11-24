@@ -88,12 +88,19 @@ android {
     compileSdk rootProject.ext.compileSdkVersion
 
     namespace 'com.espressif.novahome'
+    
+    // Configure native libraries path
+    sourceSets {
+        main {
+            jniLibs.srcDirs = ['third_party/connectedhomeip/libs/jniLibs']
+        }
+    }
     defaultConfig {
         applicationId 'com.espressif.novahome'
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 21
-        versionName "3.1.3"
+        versionCode 22
+        versionName "3.2.0"
     }
     signingConfigs {
         debug {
@@ -149,6 +156,10 @@ android {
 
 dependencies {
     // The version of react-native is set by the React Native Gradle Plugin
+    implementation fileTree(dir: "third_party/connectedhomeip/libs", include: ["*.jar", "*.so"])
+    implementation fileTree(dir: "src/main/libs", include: ["*.aar"])
+    implementation fileTree(include: ['*.jar'], dir: 'libs')
+
     implementation("com.facebook.react:react-android")
     implementation("com.github.espressif:esp-idf-provisioning-android:lib-2.2.3")
     implementation ("org.greenrobot:eventbus:3.3.1")
@@ -157,6 +168,24 @@ dependencies {
     implementation platform('com.google.firebase:firebase-bom:33.5.1')
     implementation 'com.google.firebase:firebase-messaging'
     implementation 'com.google.firebase:firebase-common-ktx:21.0.0'
+
+    // Google Play Services Matter APIs
+//    implementation 'com.google.android.gms:play-services-base:18.8.0'
+    implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3'
+
+    implementation 'commons-codec:commons-codec:1.19.0'
+    implementation 'org.bouncycastle:bcprov-jdk15on:1.70'
+    implementation 'org.bouncycastle:bcpkix-jdk15on:1.70'
+    implementation 'org.bouncycastle:bcutil-jdk15on:1.70'
+
+    // Protobuf dependency for Matter TLV and certificate handling
+    implementation 'com.google.protobuf:protobuf-javalite:4.32.1'
+
+    // Google Play Services Matter APIs for commissioning UI (exactly like ESP RainMaker)
+    implementation 'com.google.android.gms:play-services-base:18.8.0'
+    implementation 'com.google.android.gms:play-services-home:16.0.0'
+
+    implementation 'com.google.code.gson:gson:2.13.2'
     
     // Chrome Custom Tabs for in-app OAuth browser
     implementation 'androidx.browser:browser:1.8.0'
