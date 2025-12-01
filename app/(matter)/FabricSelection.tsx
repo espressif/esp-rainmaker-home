@@ -12,6 +12,7 @@ import {
   TouchableOpacity,
   StyleSheet,
   DeviceEventEmitter,
+  Platform,
 } from "react-native";
 import { useEffect, useState } from "react";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -99,18 +100,25 @@ const FabricSelection = () => {
     toast.showSuccess(`Device "${deviceName}" commissioned successfully!`);
 
     try {
+      // Refresh nodes and groups to show the newly commissioned device
       const shouldFetchFirstPage = true;
       await fetchNodesAndGroups(shouldFetchFirstPage);
+
+      // On Android, also refresh groups and fabrics to update the fabric selection list
+      if (Platform.OS === "android") {
+        await loadGroupsAndFabrics();
+      }
+
+      // Navigate to home screen after successful commissioning and data refresh
+      router.dismissTo("/(group)/Home");
     } catch (error) {
       console.error(
         "[FabricSelection] Failed to refresh nodes after commissioning:",
         error
       );
-    }
-
-    setTimeout(() => {
+      // Still navigate to home even if refresh failed - the node is commissioned
       router.dismissTo("/(group)/Home");
-    }, 1000);
+    }
   };
 
   const handleCommissioningFailure = (message?: string) => {

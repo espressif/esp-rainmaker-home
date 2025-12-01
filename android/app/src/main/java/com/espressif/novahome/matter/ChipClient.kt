@@ -8,15 +8,24 @@ package com.espressif.novahome.matter
 
 import android.content.Context
 import android.content.Intent
+import android.os.Bundle
 import android.util.Base64
 import android.util.Log
-import android.os.Bundle
 import chip.devicecontroller.*
-import chip.devicecontroller.model.*
 import chip.devicecontroller.GetConnectedDeviceCallbackJni.GetConnectedDeviceCallback
+import chip.devicecontroller.model.*
 import chip.platform.*
 import com.google.gson.JsonArray
 import com.google.gson.JsonObject
+import kotlinx.coroutines.CancellableContinuation
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.suspendCancellableCoroutine
+import org.bouncycastle.asn1.DERBitString
+import org.bouncycastle.asn1.DERSequence
+import org.json.JSONObject
 import java.io.ByteArrayInputStream
 import java.security.KeyStore
 import java.security.PrivateKey
@@ -27,19 +36,6 @@ import java.util.concurrent.TimeoutException
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 import kotlin.coroutines.suspendCoroutine
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.suspendCancellableCoroutine
-import kotlinx.coroutines.CancellableContinuation
-import org.bouncycastle.asn1.DERBitString
-import org.bouncycastle.asn1.DERSequence
-import org.json.JSONObject
-import org.greenrobot.eventbus.EventBus
-import org.greenrobot.eventbus.Subscribe
-import org.greenrobot.eventbus.ThreadMode
 
 /**
  * Handles Matter device communication and commissioning
@@ -70,7 +66,8 @@ class ChipClient constructor(
     private var isCommissioning = false
     private var nocChainReceived = false
     private var nocChainInstalled = false
-    
+    private var confirmTaskTriggered = false
+
     var ipkEpochKey: ByteArray? = null
     lateinit var nocKey: ByteArray
     var requestId: String? = null
@@ -83,53 +80,13 @@ class ChipClient constructor(
     var success: String? = null
 
     private val confirmContinuations = mutableMapOf<String, CancellableContinuation<String>>()
-
-    init {
-        // Register for EventBus to receive NOC responses from React Native
-        EventBus.getDefault().register(this)
-        Log.d(TAG, "ChipClient : EventBus registered successfully")
-    }
-    
-    /**
-     * EventBus subscriber to handle confirm node responses from React Native
-     */
-    @Subscribe(threadMode = ThreadMode.MAIN)
-    fun onConfirmNodeResponse(event: MatterEvent) {
-        if (event.eventType == AppConstants.EVENT_MATTER_CONFIRM_RESPONSE) {
-            
-            val data = event.data
-            if (data != null) {
-                val requestId = data.getString(AppConstants.KEY_REQUEST_ID_CAMEL)
-                val status = data.getString(AppConstants.KEY_STATUS)
-                val description = data.getString(AppConstants.KEY_DESCRIPTION)
-                val isRainmakerNode = data.getBoolean(AppConstants.KEY_IS_RAINMAKER_NODE_CAMEL)
-                val rainmakerNodeId = data.getString(AppConstants.KEY_RAINMAKER_NODE_ID_CAMEL)
-                val matterNodeId = data.getString(AppConstants.KEY_MATTER_NODE_ID_CAMEL)
-                
-                if (requestId != null) {
-                    val continuation = confirmContinuations.remove(requestId)
-                    if (continuation != null) {
-                        // Create response JSON string
-                        val responseJson = JSONObject().apply {
-                            put(AppConstants.KEY_STATUS, status ?: AppConstants.STATUS_ERROR)
-                            put(AppConstants.KEY_DESCRIPTION, description ?: AppConstants.MESSAGE_CONFIRM_RESPONSE_SENT)
-                            put(AppConstants.KEY_IS_RAINMAKER_NODE, isRainmakerNode)
-                            put(AppConstants.KEY_RAINMAKER_NODE_ID, rainmakerNodeId ?: "")
-                            put(AppConstants.KEY_MATTER_NODE_ID, matterNodeId ?: "")
-                        }
-                        
-                        continuation.resume(responseJson.toString())
-                    }
-                }
-            }
-        }
-    }
+    private var commissioningContinuation: CancellableContinuation<Unit>? = null
 
     // Lazily instantiate ChipDeviceController
     private val chipDeviceController: ChipDeviceController by lazy {
         Log.d(TAG, "========== INITIALIZING ESP RAINMAKER CHIP DEVICE CONTROLLER ==========")
         ChipDeviceController.loadJni()
-        
+
         // Initialize Android platform components
         AndroidChipPlatform(
             AndroidBleManager(),
@@ -147,7 +104,6 @@ class ChipClient constructor(
             val encodedHexB64: ByteArray = Base64.encode(decodedHex, Base64.NO_WRAP)
             val ipkString = String(encodedHexB64)
             ipkEpochKey = Base64.decode(ipkString, Base64.NO_WRAP)
-            
         } catch (e: Exception) {
             Log.e(TAG, "Failed to process IPK: ${e.message}", e)
             throw e
@@ -166,9 +122,7 @@ class ChipClient constructor(
         }
     }
 
-    /**
-     * Establish PASE (Password Authenticated Session Establishment) connection with Matter device
-     */
+    /** Establish PASE connection with Matter device. */
     suspend fun awaitEstablishPaseConnection(
         deviceId: Long,
         ipAddress: String,
@@ -177,147 +131,129 @@ class ChipClient constructor(
     ) = suspendCoroutine<Unit> { continuation ->
 
         try {
-            val callback = object : ChipDeviceController.CompletionListener {
-                override fun onConnectDeviceComplete() {
-                    continuation.resume(Unit)
-                }
-
-                override fun onStatusUpdate(status: Int) {
-                }
-
-                override fun onPairingComplete(errorCode: Long) {
-                    if (errorCode == 0L) {
+            chipDeviceController.setCompletionListener(
+                object : BaseCompletionListener() {
+                    override fun onConnectDeviceComplete() {
+                        super.onConnectDeviceComplete()
                         continuation.resume(Unit)
-                    } else {
-                        continuation.resumeWithException(RuntimeException("PASE pairing failed with error code: $errorCode"))
                     }
-                }
 
-                override fun onPairingDeleted(errorCode: Long) {
-                }
+                    // Note that an error in processing is not necessarily communicated via onError().
+                    // onCommissioningComplete with a "code != 0" also denotes an error in processing.
+                    override fun onPairingComplete(code: Long) {
+                        super.onPairingComplete(code)
+                        if (code != 0L) {
+                            continuation.resumeWithException(
+                                IllegalStateException("Pairing failed with error code [${code}]")
+                            )
+                        } else {
+                            continuation.resume(Unit)
+                        }
+                    }
 
-                override fun onCommissioningComplete(nodeId: Long, errorCode: Long) {
-                }
+                    override fun onError(error: Throwable) {
+                        super.onError(error)
+                        continuation.resumeWithException(error)
+                    }
 
+                    override fun onReadCommissioningInfo(
+                        vendorId: Int,
+                        productId: Int,
+                        wifiEndpointId: Int,
+                        threadEndpointId: Int
+                    ) {
+                        super.onReadCommissioningInfo(
+                            vendorId,
+                            productId,
+                            wifiEndpointId,
+                            threadEndpointId
+                        )
+                        continuation.resume(Unit)
+                    }
 
-                override fun onICDRegistrationInfoRequired() {
-                }
+                    override fun onCommissioningStatusUpdate(
+                        nodeId: Long,
+                        stage: String?,
+                        errorCode: Long
+                    ) {
+                        super.onCommissioningStatusUpdate(nodeId, stage, errorCode)
+                        continuation.resume(Unit)
+                    }
 
-                override fun onCommissioningStatusUpdate(
-                    nodeId: Long,
-                    stage: String,
-                    errorCode: Long
-                ) {
-                }
+                    override fun onICDRegistrationInfoRequired() {
+                        Log.d(TAG, "onICDRegistrationInfoRequired")
+                    }
 
-                override fun onICDRegistrationComplete(
-                    errorCode: Long,
-                    icdDeviceInfo: ICDDeviceInfo?
-                ) {
-                }
-
-                override fun onError(error: Throwable) {
-                    continuation.resumeWithException(error)
-                }
-
-                override fun onOpCSRGenerationComplete(csr: ByteArray) {
-                    Log.d(TAG, "========== OpCSR GENERATION COMPLETE ==========")
-                    val csrBase64 = Base64.encodeToString(csr, Base64.NO_WRAP)
-                    
-                    // Send CSR to React Native
-                    sendCSRToReactNative(csrBase64, deviceId)
-                }
-
-                override fun onReadCommissioningInfo(
-                    vendorId: Int,
-                    productId: Int,
-                    wifiEndpointId: Int,
-                    threadEndpointId: Int
-                ) {
-                }
-
-                override fun onNotifyChipConnectionClosed() {
-                }
-
-                override fun onCloseBleComplete() {
-                }
-            }
+                    override fun onICDRegistrationComplete(
+                        errorCode: Long,
+                        icdDeviceInfo: ICDDeviceInfo?
+                    ) {
+                        Log.d(
+                            TAG,
+                            "onICDRegistrationComplete - errorCode: $errorCode, icdDeviceInfo : $icdDeviceInfo"
+                        )
+                    }
+                })
 
             // Establish PASE connection
-            chipDeviceController.setCompletionListener(callback)
             chipDeviceController.establishPaseConnection(deviceId, ipAddress, port, setupPinCode)
-            
+
         } catch (e: Exception) {
             continuation.resumeWithException(e)
         }
     }
 
-    /**
-     * Commission the Matter device into ESP RainMaker fabric
-     */
+    /** Commission Matter device into ESP RainMaker fabric. */
     suspend fun awaitCommissionDevice(
         deviceId: Long,
         networkCredentials: NetworkCredentials?
-    ) = suspendCoroutine<Unit> { continuation ->
-        
-        Log.d(TAG, "========== COMMISSIONING DEVICE ==========")
+    ) = suspendCancellableCoroutine<Unit> { continuation ->
+
+        Log.d(TAG, "Commissioning device")
+
+        commissioningContinuation = continuation
 
         try {
-            val callback = object : ChipDeviceController.CompletionListener {
-                override fun onConnectDeviceComplete() {
-                }
-
-                override fun onStatusUpdate(status: Int) {
-                }
-
-                override fun onPairingComplete(errorCode: Long) {
-                }
-
-                override fun onPairingDeleted(errorCode: Long) {
-                }
-
-                override fun onICDRegistrationInfoRequired() {
-                }
-
-                override fun onCommissioningStatusUpdate(
-                    nodeId: Long,
-                    stage: String,
-                    errorCode: Long
-                ) {
-                }
-
-                override fun onICDRegistrationComplete(
-                    errorCode: Long,
-                    icdDeviceInfo: ICDDeviceInfo?
-                ) {
-                }
-
+            val callback = object : BaseCompletionListener() {
+                // Note that an error in processing is not necessarily communicated via onError().
+                // onCommissioningComplete with an "errorCode != 0" also denotes an error in processing.
                 override fun onCommissioningComplete(nodeId: Long, errorCode: Long) {
                     if (errorCode == 0L) {
-                        
+                        if (confirmTaskTriggered) {
+                            Log.w(
+                                TAG,
+                                "onCommissioningComplete already processed, skipping duplicate execution"
+                            )
+                            return
+                        }
+                        confirmTaskTriggered = true
+
                         CoroutineScope(Dispatchers.IO).launch {
                             try {
-                                Log.d(TAG, "========== POST-COMMISSIONING DEVICE SETUP ==========")
-                                
+                                Log.d(TAG, "Post-commissioning setup started")
                                 delay(2000)
-                                
+
                                 val devicePtr = try {
                                     awaitGetConnectedDevicePointer(nodeId)
                                 } catch (e: Exception) {
+                                    e.printStackTrace()
                                     continuation.resume(Unit)
                                     return@launch
                                 }
-                                Log.d(TAG, "Got connected device pointer: $devicePtr for device setup")
-                                
+                                Log.d(
+                                    TAG,
+                                    "Got connected device pointer: $devicePtr for device setup"
+                                )
+
                                 val clustersHelper = ClustersHelper(this@ChipClient)
-                                
+
                                 val deviceMatterInfo = try {
                                     delay(1000)
                                     clustersHelper.fetchDeviceMatterInfo(nodeId)
                                 } catch (e: Exception) {
                                     emptyList<DeviceMatterInfo>()
                                 }
-                                
+
                                 var isRmClusterAvailable = false
                                 var isControllerClusterAvailable = false
                                 var rmNodeId: String? = null
@@ -327,26 +263,24 @@ class ChipClient constructor(
                                 var endpointsArray = JsonArray()
                                 var serversDataJson = JsonObject()
                                 var clientsDataJson = JsonObject()
-                                
+
                                 if (deviceMatterInfo.isNotEmpty()) {
-                                    
                                     try {
                                         for (info in deviceMatterInfo) {
-                                            
+
                                             if (info.types.isNotEmpty()) {
                                                 val primaryDeviceType = info.types[0].toInt()
                                                 metadataJson.addProperty(
                                                     AppConstants.KEY_DEVICE_TYPE,
                                                     primaryDeviceType
                                                 )
-                                                
+
                                                 if (deviceName.isEmpty()) {
                                                     deviceName = NodeUtils.getDefaultNameForMatterDevice(primaryDeviceType)
                                                 }
-                                                
+
                                                 for (deviceType in info.types) {
-                                                    val defaultName =
-                                                        NodeUtils.getDefaultNameForMatterDevice(deviceType.toInt())
+                                                    val defaultName = NodeUtils.getDefaultNameForMatterDevice(deviceType.toInt())
                                                     val category = NodeUtils.getDeviceCategory(deviceType.toInt())
                                                 }
                                             } else {
@@ -354,9 +288,9 @@ class ChipClient constructor(
                                                     deviceName = AppConstants.DEFAULT_MATTER_DEVICE_NAME
                                                 }
                                             }
-                                            
+
                                             endpointsArray.add(info.endpoint)
-                                            
+
                                             if (info.serverClusters.isNotEmpty()) {
                                                 val serverClustersArr = JsonArray()
                                                 for (serverCluster in info.serverClusters) {
@@ -369,7 +303,7 @@ class ChipClient constructor(
                                                     serverClustersArr
                                                 )
                                             }
-                                            
+
                                             if (info.clientClusters.isNotEmpty()) {
                                                 val clientClustersArr = JsonArray()
                                                 for (clientCluster in info.clientClusters) {
@@ -382,15 +316,15 @@ class ChipClient constructor(
                                                     clientClustersArr
                                                 )
                                             }
-                                            
+
                                             if (info.endpoint == 0) {
                                                 for (serverCluster in info.serverClusters) {
                                                     val clusterId: Long = serverCluster as Long
-                                                    
+
                                                     if (clusterId == AppConstants.RM_CLUSTER_ID) {
                                                         isRmClusterAvailable = true
                                                     }
-                                                    
+
                                                     if (clusterId == AppConstants.CONTROLLER_CLUSTER_ID) {
                                                         isControllerClusterAvailable = true
                                                         deviceName = AppConstants.MATTER_CONTROLLER_DEVICE_NAME
@@ -398,21 +332,36 @@ class ChipClient constructor(
                                                 }
                                             }
                                         }
-                                        
-                                        metadataJson.addProperty(AppConstants.KEY_IS_RAINMAKER_NODE, isRmClusterAvailable)
-                                        metadataJson.addProperty(AppConstants.KEY_DEVICE_NAME, deviceName)
+
+                                        metadataJson.addProperty(
+                                            AppConstants.KEY_IS_RAINMAKER_NODE,
+                                            isRmClusterAvailable
+                                        )
+                                        metadataJson.addProperty(
+                                            AppConstants.KEY_DEVICE_NAME,
+                                            deviceName
+                                        )
                                         metadataJson.addProperty(AppConstants.KEY_GROUP_ID, groupId)
-                                        
+
                                         this@ChipClient.lastCommissionedDeviceName = deviceName
-                                        metadataJson.add(AppConstants.KEY_ENDPOINTS_DATA, endpointsArray)
-                                        
+                                        metadataJson.add(
+                                            AppConstants.KEY_ENDPOINTS_DATA,
+                                            endpointsArray
+                                        )
+
                                         if (serversDataJson.size() > 0) {
-                                            metadataJson.add(AppConstants.KEY_SERVERS_DATA, serversDataJson)
+                                            metadataJson.add(
+                                                AppConstants.KEY_SERVERS_DATA,
+                                                serversDataJson
+                                            )
                                         }
                                         if (clientsDataJson.size() > 0) {
-                                            metadataJson.add(AppConstants.KEY_CLIENTS_DATA, clientsDataJson)
+                                            metadataJson.add(
+                                                AppConstants.KEY_CLIENTS_DATA,
+                                                clientsDataJson
+                                            )
                                         }
-                                        
+
                                     } catch (e: Exception) {
                                         Log.e(TAG, "Error building metadata: ${e.message}", e)
                                     }
@@ -421,9 +370,11 @@ class ChipClient constructor(
                                         deviceMatterInfo.firstOrNull()?.types?.firstOrNull()
                                             ?.toInt()
                                     if (primaryDeviceType != null) {
-                                        val defaultName = NodeUtils.getDefaultNameForMatterDevice(primaryDeviceType)
+                                        val defaultName = NodeUtils.getDefaultNameForMatterDevice(
+                                            primaryDeviceType
+                                        )
                                     }
-                                    
+
                                 } else {
                                     Log.w(TAG, "Could not fetch device Matter info")
                                 }
@@ -437,7 +388,8 @@ class ChipClient constructor(
                                         AppConstants.RM_ATTR_RAINMAKER_NODE_ID
                                     )
 
-                                    val rmNodeIdData = readAttribute(devicePtr, rmNodeIdAttributePath)
+                                    val rmNodeIdData =
+                                        readAttribute(devicePtr, rmNodeIdAttributePath)
                                     rmNodeId = rmNodeIdData?.value as String?
 
                                     if (matterNodeId != null) {
@@ -450,91 +402,53 @@ class ChipClient constructor(
                                                 matterNodeId = matterNodeId!!
                                             )
                                         } catch (e: Exception) {
-                                            Log.e(TAG, "Failed to write Matter Node ID via ClustersHelper: ${e.message}", e)
+                                            Log.e(
+                                                TAG,
+                                                "Failed to write Matter Node ID via ClustersHelper: ${e.message}",
+                                                e
+                                            )
                                         }
                                     } else {
                                         Log.w(TAG, "Matter Node ID is null - skipping write")
                                     }
 
-                                    // Read challenge response
+                                    // Read challenge response from RM cluster
                                     val challengeAttributePath = ChipAttributePath.newInstance(
                                         AppConstants.ENDPOINT_0,
                                         AppConstants.RM_CLUSTER_ID_HEX,
                                         AppConstants.RM_ATTR_CHALLENGE
                                     )
-                                    val challengeData: AttributeState? = readAttribute(devicePtr, challengeAttributePath)
-                                    var challenge: String? = null
+                                    val challengeData: AttributeState? =
+                                        readAttribute(devicePtr, challengeAttributePath)
                                     if (challengeData != null) {
                                         challenge = challengeData.value as String?
+                                        Log.d(TAG, "Challenge read from device: $challenge")
+                                    } else {
+                                        Log.w(TAG, "Failed to read challenge attribute from device")
                                     }
 
                                     this@ChipClient.rmNodeId = rmNodeId
-                                    this@ChipClient.challenge = challenge
-                                    
                                 }
 
                                 val matterMetadataJson = JsonObject()
                                 matterMetadataJson.add(AppConstants.KEY_MATTER, metadataJson)
-                                
+
                                 body.addProperty(AppConstants.KEY_REQ_ID, requestId)
-                                body.addProperty(AppConstants.KEY_STATUS, success)
+                                body.addProperty(AppConstants.KEY_STATUS, "success")
                                 body.add(AppConstants.KEY_METADATA, matterMetadataJson)
-                                
+
                                 if (isRmClusterAvailable) {
                                     body.addProperty(AppConstants.KEY_RAINMAKER_NODE_ID, rmNodeId)
                                     body.addProperty(AppConstants.KEY_CHALLENGE, challenge)
-                                }
-                                
-                                var isRainMaker: Boolean = isRmClusterAvailable
-                                
-                                try {
-                                    val confirmResponseString =
-                                        suspendCancellableCoroutine<String> { continuation ->
-                                            val originalRequestId = requestId
-                                                ?: throw IllegalStateException("Request ID is null")
-                                        confirmContinuations[originalRequestId] = continuation
-                                        
-                                        val requestBundle = Bundle().apply {
-                                                putString(AppConstants.KEY_REQUEST_BODY, body.toString())
-                                                putString(AppConstants.KEY_GROUP_ID_CAMEL, groupId)
-                                                putString(AppConstants.KEY_REQUEST_ID_CAMEL, originalRequestId)
-                                                putString(AppConstants.KEY_MATTER_NODE_ID_CAMEL, matterNodeId ?: "")
-                                                putString(AppConstants.KEY_CHALLENGE_CAMEL, challenge ?: "")
-                                                putString(AppConstants.KEY_CHALLENGE_RESPONSE_CAMEL, challenge ?: "")
-                                            }
-                                            val confirmCommissioningEvent = MatterEvent(
-                                                AppConstants.EVENT_COMMISSIONING_CONFIRM_REQUEST,
-                                                requestBundle
-                                            )
-                                            EventBus.getDefault().post(confirmCommissioningEvent)
-
-                                        CoroutineScope(Dispatchers.Main).launch {
-                                            delay(30000) // 30 second timeout
-                                            val storedContinuation = confirmContinuations.remove(originalRequestId)
-                                            if (storedContinuation != null && storedContinuation.isActive) {
-
-                                                    storedContinuation.resumeWithException(
-                                                        TimeoutException("Confirm request timed out")
-                                                    )
-                                            } else {
-                                            }
-                                        }
-                                    }
-                                    
-                                    val responseJson = JSONObject(confirmResponseString)
-                                    val status = responseJson.getString("status")
-                                    val description = responseJson.getString("description")
-                                    val isRainmakerNode = responseJson.getBoolean("is_rainmaker_node")
-                                    val rainmakerNodeId = responseJson.getString("rainmaker_node_id")
-                                    val matterNodeId = responseJson.getString("matter_node_id")
-                                    
-                                    isRainMaker = isRainmakerNode
-                                } catch (e: Exception) {
-                                    Log.e(TAG, "Error calling confirmMatterNode API", e)
-                                    isRainMaker = isRmClusterAvailable
+                                    body.addProperty(AppConstants.KEY_CHALLENGE_RESPONSE, challenge ?: "")
                                 }
 
-                                if (isControllerClusterAvailable && isRainMaker) {
+                                Log.d(
+                                    TAG,
+                                    "Metadata fetched successfully, triggering confirm commission headless task"
+                                )
+
+                                if (isControllerClusterAvailable && isRmClusterAvailable) {
                                     val sharedPreferences = context.getSharedPreferences(
                                         AppConstants.ESP_PREFERENCES,
                                         Context.MODE_PRIVATE
@@ -545,20 +459,21 @@ class ChipClient constructor(
                                     editor.putBoolean(key, false)
                                     editor.apply()
                                 }
-                                
+
                                 if (groupCatIdOperate.isNotEmpty()) {
-                                    
-                                    val aclClusterHelper = AccessControlClusterHelper(this@ChipClient)
-                                    
-                                    val aclAttr: MutableList<ChipStructs.AccessControlClusterAccessControlEntryStruct>? = 
+
+                                    val aclClusterHelper =
+                                        AccessControlClusterHelper(this@ChipClient)
+
+                                    val aclAttr: MutableList<ChipStructs.AccessControlClusterAccessControlEntryStruct>? =
                                         aclClusterHelper.readAclAttributeAsync(
                                             nodeId,
                                             AppConstants.ENDPOINT_0
                                         ).get()
 
-                                    val entries: ArrayList<ChipStructs.AccessControlClusterAccessControlEntryStruct> = 
+                                    val entries: ArrayList<ChipStructs.AccessControlClusterAccessControlEntryStruct> =
                                         ArrayList<ChipStructs.AccessControlClusterAccessControlEntryStruct>()
-                                    
+
                                     var fabricIndex = 0
                                     var authMode = 0
                                     val it = aclAttr?.listIterator()
@@ -571,21 +486,21 @@ class ChipClient constructor(
                                             }
                                         }
                                     }
-                                    
+
                                     val subjects: ArrayList<Long> = ArrayList<Long>()
                                     subjects.add(Utils.getCatId(groupCatIdOperate))
-                                    
+
                                     val entry =
                                         ChipStructs.AccessControlClusterAccessControlEntryStruct(
-                                        AppConstants.PRIVILEGE_OPERATE,
-                                        authMode, 
-                                        subjects,
-                                        null,
-                                        fabricIndex
-                                    )
-                                    
+                                            AppConstants.PRIVILEGE_OPERATE,
+                                            authMode,
+                                            subjects,
+                                            null,
+                                            fabricIndex
+                                        )
+
                                     entries.add(entry)
-                                    
+
                                     aclClusterHelper.writeAclAttributeAsync(
                                         nodeId,
                                         AppConstants.ENDPOINT_0,
@@ -595,99 +510,138 @@ class ChipClient constructor(
                                 } else {
                                     Log.w(TAG, "No group CAT ID provided skipping ACL setup")
                                 }
-                                
+
                                 lastCommissionedDeviceName = deviceName
                                 lastCommissionedNodeId = nodeId
-                                
-                                continuation.resume(Unit)
-                                
+
+                                if (body != null) {
+                                    triggerHeadlessConfirmCommissionTask(JSONObject(body.toString()))
+                                } else {
+                                    Log.e(
+                                        TAG,
+                                        "Failed to fetch metadata, cannot confirm commission"
+                                    )
+                                }
                             } catch (e: Exception) {
-                                continuation.resume(Unit)
+                                Log.e(TAG, "Error in post-commissioning steps: ${e.message}", e)
                             }
                         }
-                        
+
                     } else {
-                        continuation.resumeWithException(
+                        val error =
                             RuntimeException("Device commissioning failed with error code: $errorCode")
-                        )
+                        Log.e(TAG, "Commissioning failed: ${error.message}")
+                        continuation.resumeWithException(error)
+                        commissioningContinuation = null
                     }
                 }
 
                 override fun onError(error: Throwable) {
+                    super.onError(error)
+                    Log.e(TAG, "Commissioning error: ${error.message}")
                     continuation.resumeWithException(error)
+                    commissioningContinuation = null
                 }
 
-                override fun onOpCSRGenerationComplete(csr: ByteArray) {
-                    Log.d(TAG, "========== OpCSR GENERATION DURING COMMISSIONING ==========")
-                    val csrBase64 = Base64.encodeToString(csr, Base64.NO_WRAP)
-                    sendCSRToReactNative(csrBase64, deviceId)
+                override fun onICDRegistrationInfoRequired() {
                 }
 
-                override fun onReadCommissioningInfo(
-                    vendorId: Int,
-                    productId: Int,
-                    wifiEndpointId: Int,
-                    threadEndpointId: Int
+                override fun onICDRegistrationComplete(
+                    errorCode: Long,
+                    icdDeviceInfo: ICDDeviceInfo?
                 ) {
-                    Log.d(TAG, "Commissioning info: vendorId=$vendorId, productId=$productId")
-                }
-
-                override fun onNotifyChipConnectionClosed() {
-                }
-
-                override fun onCloseBleComplete() {
                 }
             }
 
             chipDeviceController.setCompletionListener(callback)
-            
             chipDeviceController.commissionDevice(deviceId, networkCredentials)
-            
+
         } catch (e: Exception) {
             Log.e(TAG, "Failed to commission device: ${e.message}", e)
             continuation.resumeWithException(e)
+            commissioningContinuation = null
         }
     }
 
-    private fun sendCSRToReactNative(csrBase64: String, deviceId: Long) {
+    /** Called when commissioning is fully complete (after confirm API succeeds). */
+    fun onCommissioningFullyComplete() {
+        Log.d(TAG, "Commissioning fully complete")
+        commissioningContinuation?.resume(Unit)
+        commissioningContinuation = null
+
+        // Reset commissioning state
+        isCommissioning = false
+    }
+
+    /** Called when commissioning confirmation fails. */
+    fun onCommissioningFailed(errorMessage: String) {
+        Log.e(TAG, "Commissioning failed: $errorMessage")
+        commissioningContinuation?.resumeWithException(
+            RuntimeException("Commissioning confirmation failed: $errorMessage")
+        )
+        commissioningContinuation = null
+
+        // Reset commissioning state
+        isCommissioning = false
+    }
+
+    /** Initialize commissioning state and trigger HeadlessJS task to issue NOC. */
+    private fun triggerNOCTask(csrBase64: String, deviceId: Long) {
+        currentDeviceId = deviceId
+        isCommissioning = true
+        nocChainReceived = false
+        nocChainInstalled = false
+        confirmTaskTriggered = false
+        triggerHeadlessNOCTask(csrBase64, deviceId)
+    }
+
+    /** Trigger HeadlessJS task to issue NOC certificate. */
+    private fun triggerHeadlessNOCTask(csrBase64: String, deviceId: Long) {
         try {
-            
-            currentDeviceId = deviceId
-            isCommissioning = true
-            nocChainReceived = false
-            nocChainInstalled = false
-            nocChainInstalled = false
+            val currentRequestId = requestId ?: deviceId.toString()
 
-            val requestBody = JSONObject().apply {
-                put(AppConstants.KEY_CSR, csrBase64)
-                put(AppConstants.KEY_DEVICE_ID_CAMEL, deviceId.toString())
-                put(AppConstants.KEY_GROUP_ID_CAMEL, groupId)
-                put(AppConstants.KEY_FABRIC_ID_CAMEL, fabricId)
+            // Create Intent to start the headless task service
+            val intent = Intent(context, MatterHeadlessTaskService::class.java).apply {
+                putExtra(AppConstants.EXTRA_TASK_NAME, AppConstants.TASK_ISSUE_NOC)
+                putExtra(AppConstants.EXTRA_NODE_ID, deviceId.toString())
+                putExtra(AppConstants.KEY_CSR, csrBase64)
+                putExtra(AppConstants.KEY_FABRIC_ID_CAMEL, fabricId)
+                putExtra(AppConstants.KEY_GROUP_ID_CAMEL, groupId)
+                putExtra(AppConstants.KEY_REQUEST_ID_CAMEL, currentRequestId)
             }
 
-            val out = Bundle().apply {
-                putString(AppConstants.KEY_REQUEST_BODY, requestBody.toString())
-                putString(AppConstants.KEY_DEVICE_ID_CAMEL, deviceId.toString())
-                putString(AppConstants.KEY_GROUP_ID_CAMEL, groupId)
-                putString(AppConstants.KEY_FABRIC_ID_CAMEL, fabricId)
-            }
-
-            EventBus.getDefault().post(MatterEvent(AppConstants.EVENT_MATTER_NOC_REQUEST, out))
-
-            val intent = Intent(context, com.espressif.novahome.MainActivity::class.java)
-                .apply {
-                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
-                putExtra("NOC_GENERATION_STEP", true)
-                putExtra("requestId", deviceId.toString())
-            }
-            context.startActivity(intent)
-            
+            // Start the headless task service
+            context.startService(intent)
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to send CSR to React Native: ${e.message}", e)
+            Log.e(TAG, "Failed to trigger NOC task: ${e.message}", e)
         }
     }
 
+    /** Trigger HeadlessJS task to confirm commissioning. */
+    private fun triggerHeadlessConfirmCommissionTask(metadata: JSONObject) {
+        try {
+            val currentRequestId = requestId ?: currentDeviceId.toString()
+            val nodeId = currentDeviceId?.toString() ?: ""
+            val challengeValue = metadata.optString(AppConstants.KEY_CHALLENGE, challenge ?: "")
+            val challengeResponseValue = metadata.optString(AppConstants.KEY_CHALLENGE_RESPONSE, challenge ?: "")
 
+            val intent = Intent(context, MatterHeadlessTaskService::class.java).apply {
+                putExtra(AppConstants.EXTRA_TASK_NAME, AppConstants.TASK_CONFIRM_COMMISSION)
+                putExtra(AppConstants.EXTRA_NODE_ID, nodeId)
+                putExtra(AppConstants.KEY_FABRIC_ID_CAMEL, fabricId)
+                putExtra(AppConstants.KEY_GROUP_ID_CAMEL, groupId)
+                putExtra(AppConstants.KEY_REQUEST_ID_CAMEL, currentRequestId)
+                putExtra(AppConstants.KEY_METADATA, metadata.toString())
+                putExtra(AppConstants.KEY_CHALLENGE_CAMEL, challengeValue)
+                putExtra(AppConstants.KEY_CHALLENGE_RESPONSE_CAMEL, challengeResponseValue)
+            }
+            context.startService(intent)
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to trigger Confirm Commission task: ${e.message}", e)
+        }
+    }
+
+    /** Receive NOC chain from React Native and install it. */
     fun receiveNOCChain(
         requestId: String,
         rootCert: String,
@@ -698,8 +652,8 @@ class ChipClient constructor(
         matterNodeId: String? = null
     ) {
         try {
-            Log.d(TAG, "========== NOC CHAIN RECEIVED FROM REACT NATIVE ==========")
-            
+            Log.d(TAG, "NOC chain received")
+
             if (!isCommissioning || currentDeviceId == null) {
                 Log.w(TAG, "Received NOC chain but not currently commissioning")
                 return
@@ -708,34 +662,37 @@ class ChipClient constructor(
             if (nocChainInstalled) {
                 return
             }
-            
+
             nocChainReceived = true
-            
+
             try {
                 this@ChipClient.requestId = requestId
                 this@ChipClient.matterNodeId = matterNodeId
-                
+
                 if (this@ChipClient.matterNodeId.isNullOrEmpty()) {
-                    Log.w(TAG, "Matter Node ID is null/empty from API response - this may cause issues")
+                    Log.w(
+                        TAG,
+                        "Matter Node ID is null/empty from API response - this may cause issues"
+                    )
                 }
-                
+
                 var cleanOperationalCert = operationalCert
                     .replace(AppConstants.CERTIFICATE_BEGIN, "")
                     .replace(AppConstants.CERTIFICATE_END, "")
                     .replace("\n", "")
                     .trim()
-                
+
                 var cleanRootCert = rootCert
                     .replace(AppConstants.CERTIFICATE_BEGIN, "")
                     .replace(AppConstants.CERTIFICATE_END, "")
                     .replace("\n", "")
                     .trim()
-                
+
                 val chain = arrayOf(
                     decode(cleanOperationalCert),
                     decode(cleanRootCert)
                 )
-                
+
                 val errorCode = chipDeviceController.onNOCChainGeneration(
                     ControllerParams.newBuilder()
                         .setRootCertificate(chain[1].encoded)
@@ -744,76 +701,56 @@ class ChipClient constructor(
                         .setIpk(ipkEpochKey)
                         .build()
                 )
-                
+
                 if (errorCode == 0L) {
                     nocChainInstalled = true
-
                 } else {
                     Log.e(TAG, "NOC chain installation failed with error code: $errorCode")
                 }
-                
+
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to install NOC chain: ${e.message}", e)
             }
-            
+
         } catch (e: Exception) {
             Log.e(TAG, "Failed to receive NOC chain: ${e.message}", e)
         }
     }
 
-    /**
-     * Get connected device pointer for cluster operations
-     * This is required for post-commissioning device interactions
-     */
+    /** Get connected device pointer for cluster operations. */
     suspend fun awaitGetConnectedDevicePointer(deviceId: Long): Long =
         suspendCoroutine { continuation ->
-        
-        try {
+
+            try {
                 chipDeviceController.getConnectedDevicePointer(
                     deviceId,
                     object : GetConnectedDeviceCallback {
-                override fun onDeviceConnected(devicePointer: Long) {
+                        override fun onDeviceConnected(devicePointer: Long) {
                             Log.d(TAG, "Got connected device pointer: $devicePointer")
-                    continuation.resume(devicePointer)
-                }
-                
-                override fun onConnectionFailure(nodeId: Long, error: Exception?) {
-                            Log.e(TAG, "Failed to get connected device pointer for node $nodeId: ${error?.message}")
+                            continuation.resume(devicePointer)
+                        }
+
+                        override fun onConnectionFailure(nodeId: Long, error: Exception?) {
+                            Log.e(
+                                TAG,
+                                "Failed to get connected device pointer for node $nodeId: ${error?.message}"
+                            )
                             continuation.resumeWithException(
                                 error ?: Exception("Connection failure")
                             )
-                }
-            })
-        } catch (e: Exception) {
+                        }
+                    })
+            } catch (e: Exception) {
                 Log.e(TAG, "Exception getting connected device pointer: ${e.message}")
-            continuation.resumeWithException(e)
-        }
-    }
-
-    /**
-     * Get connected device pointer synchronously (non-suspend version)
-     * Used by helper classes that need device pointer
-     */
-    fun getConnectedDevicePointer(deviceId: Long): Long {
-        
-        return try {
-            runBlocking {
-                awaitGetConnectedDevicePointer(deviceId)
+                continuation.resumeWithException(e)
             }
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to get connected device pointer: ${e.message}")
-            throw IllegalStateException("Cannot get connected device pointer for device $deviceId", e)
         }
-    }
 
-    /**
-     * Read attribute from device using ChipAttributePath
-     */
     private suspend fun readAttribute(
         devicePtr: Long,
         attributePath: ChipAttributePath
     ): AttributeState? {
-        
+
         return suspendCoroutine { continuation ->
             try {
                 chipDeviceController.readAttributePath(
@@ -821,11 +758,11 @@ class ChipClient constructor(
                         override fun onReport(nodeState: NodeState?) {
                             try {
                                 if (nodeState != null) {
-                                    
+
                                     val endpoint = attributePath.endpointId.id.toInt()
                                     val clusterId = attributePath.clusterId.id
                                     val attributeId = attributePath.attributeId.id
-                                    
+
                                     val endpointState = nodeState.getEndpointState(endpoint)
                                     if (endpointState != null) {
                                         Log.d(TAG, "Endpoint state found")
@@ -835,22 +772,38 @@ class ChipClient constructor(
                                             val attributeState =
                                                 clusterState.getAttributeState(attributeId)
                                             if (attributeState != null) {
-                                                Log.d(TAG, "Attribute state found: ${attributeState.value}")
+                                                Log.d(
+                                                    TAG,
+                                                    "Attribute state found: ${attributeState.value}"
+                                                )
                                                 continuation.resume(attributeState)
                                                 return
                                             } else {
-                                                Log.w(TAG, "Attribute state not found for attribute 0x${attributeId.toString(16)}")
+                                                Log.w(
+                                                    TAG,
+                                                    "Attribute state not found for attribute 0x${
+                                                        attributeId.toString(16)
+                                                    }"
+                                                )
                                             }
                                         } else {
-                                            Log.w(TAG, "Cluster state not found for cluster 0x${clusterId.toString(16)}")
+                                            Log.w(
+                                                TAG,
+                                                "Cluster state not found for cluster 0x${
+                                                    clusterId.toString(16)
+                                                }"
+                                            )
                                         }
                                     } else {
-                                        Log.w(TAG, "Endpoint state not found for endpoint $endpoint")
+                                        Log.w(
+                                            TAG,
+                                            "Endpoint state not found for endpoint $endpoint"
+                                        )
                                     }
                                 } else {
                                     Log.w(TAG, "NodeState is null")
                                 }
-                                
+
                                 Log.w(TAG, "Attribute not found, returning null")
                                 continuation.resume(null)
                             } catch (e: Exception) {
@@ -858,11 +811,11 @@ class ChipClient constructor(
                                 continuation.resume(null)
                             }
                         }
-                        
+
                         override fun onError(
                             attributePath: ChipAttributePath?,
-                        eventPath: ChipEventPath?,
-                        ex: Exception
+                            eventPath: ChipEventPath?,
+                            ex: Exception
                         ) {
                             continuation.resume(null)
                         }
@@ -886,7 +839,7 @@ class ChipClient constructor(
         attributePath: ChipAttributePath,
         tlvData: ByteArray
     ): Boolean {
-        
+
         return suspendCoroutine { continuation ->
             try {
                 val writeRequest = AttributeWriteRequest.newInstance(
@@ -895,17 +848,17 @@ class ChipClient constructor(
                     attributePath.attributeId,
                     tlvData
                 )
-                
+
                 val callback = object : WriteAttributesCallback {
                     override fun onResponse(attributePath: ChipAttributePath?, status: Status?) {
                         continuation.resume(true)
                     }
-                    
+
                     override fun onError(attributePath: ChipAttributePath?, ex: Exception?) {
                         continuation.resume(false)
                     }
                 }
-                
+
                 chipDeviceController.write(
                     callback,
                     devicePtr,
@@ -930,22 +883,23 @@ class ChipClient constructor(
         commandId: Long,
         tlvData: ByteArray
     ): Boolean {
-        
+
         return suspendCoroutine { continuation ->
             try {
-                val invokeElement = InvokeElement.newInstance(endpointId, clusterId, commandId, tlvData, null)
+                val invokeElement =
+                    InvokeElement.newInstance(endpointId, clusterId, commandId, tlvData, null)
                 val callback = object : InvokeCallback {
                     override fun onResponse(invokeElement: InvokeElement?, successCode: Long) {
                         Log.d(TAG, "Command write success: code=$successCode")
                         continuation.resume(true)
                     }
-                    
+
                     override fun onError(ex: Exception?) {
                         Log.e(TAG, "Failed to write command: ${ex?.message}")
                         continuation.resume(false)
                     }
                 }
-                
+
                 chipDeviceController.invoke(
                     callback,
                     devicePtr,
@@ -962,12 +916,12 @@ class ChipClient constructor(
 
     private fun operationalKeyConfig(): OperationalKeyConfig {
         Log.d(TAG, "Creating OperationalKeyConfig")
-        
+
         try {
             val chain = keyStore.getCertificateChain(fabricId)
-            
+
             if (chain == null || chain.isEmpty()) {
-                
+
                 return OperationalKeyConfig(
                     EspKeypairDelegate(),
                     null,
@@ -988,10 +942,10 @@ class ChipClient constructor(
                 chain[0].encoded,
                 ipkEpochKey
             )
-            
+
         } catch (e: Exception) {
             Log.e(TAG, "Failed to create operational key config: ${e.message}", e)
-            
+
             return OperationalKeyConfig(
                 EspKeypairDelegate(),
                 null,
@@ -1009,45 +963,24 @@ class ChipClient constructor(
     inner class EspKeypairDelegate : KeypairDelegate {
 
         @Throws(KeypairDelegate.KeypairException::class)
-        override fun generatePrivateKey() {
-            Log.d(TAG, "generatePrivateKey called")
-        }
+        override fun generatePrivateKey() {}
 
         @Throws(KeypairDelegate.KeypairException::class)
-        override fun createCertificateSigningRequest(): ByteArray? {
-            Log.d(TAG, "EspKeypairDelegate createCertificateSigningRequest called")
-            return null
-        }
+        override fun createCertificateSigningRequest(): ByteArray? = null
 
         @Throws(KeypairDelegate.KeypairException::class)
-        override fun getPublicKey(): ByteArray? {
-            return if (::nocKey.isInitialized) nocKey else null
-        }
+        override fun getPublicKey(): ByteArray? = if (::nocKey.isInitialized) nocKey else null
 
         @Throws(KeypairDelegate.KeypairException::class)
         override fun ecdsaSignMessage(message: ByteArray?): ByteArray? {
-            
-            if (message == null) {
-                Log.w(TAG, "Sign called with null message")
-                return null
-            }
-            
+            if (message == null) return null
+
             try {
-                // Get private key from Android KeyStore
-                val privateKey = keyStore.getKey(fabricId, null) as? PrivateKey
-                if (privateKey == null) {
-                    Log.w(TAG, "No private key found for fabric: $fabricId")
-                    return null
-                }
-                
-                // Sign the message using ECDSA
+                val privateKey = keyStore.getKey(fabricId, null) as? PrivateKey ?: return null
                 val signature = Signature.getInstance(AppConstants.SIGNATURE_ALGORITHM)
                 signature.initSign(privateKey)
                 signature.update(message)
-                val signedMessage = signature.sign()
-                
-                return signedMessage
-                
+                return signature.sign()
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to sign message: ${e.message}", e)
                 throw KeypairDelegate.KeypairException(e.message)
@@ -1055,16 +988,13 @@ class ChipClient constructor(
         }
     }
 
-    /**
-     * ESP NOC Chain Issuer
-     * Handles NOC chain generation during commissioning
-     */
+    /** Handles NOC chain generation during commissioning. */
     inner class EspNOCChainIssuer : ChipDeviceController.NOCChainIssuer {
         override fun onNOCChainGenerationNeeded(
             csrInfo: CSRInfo?,
             attestationInfo: AttestationInfo?
         ) {
-            Log.d(TAG, "========== NOC CHAIN GENERATION NEEDED ==========")
+            Log.d(TAG, "NOC chain generation needed")
 
             if (csrInfo == null) {
                 Log.e(TAG, "CSR Info is null cannot generate NOC chain")
@@ -1074,10 +1004,11 @@ class ChipClient constructor(
             CoroutineScope(Dispatchers.IO).launch {
                 try {
                     val tempCsr = Base64.encodeToString(csrInfo.csr, Base64.NO_WRAP)
-                    val finalCSR = AppConstants.CERT_BEGIN + "\n" + tempCsr + "\n" + AppConstants.CERT_END
-                    
-                    sendCSRToReactNative(finalCSR, currentDeviceId ?: System.currentTimeMillis())
-                    
+                    val finalCSR =
+                        AppConstants.CERT_BEGIN + "\n" + tempCsr + "\n" + AppConstants.CERT_END
+
+                    triggerNOCTask(finalCSR, currentDeviceId ?: System.currentTimeMillis())
+
                 } catch (e: Exception) {
                     Log.e(TAG, "Failed to process NOC chain generation: ${e.message}", e)
                 }
@@ -1102,14 +1033,14 @@ class ChipClient constructor(
         val cleanHex = hexString.replace(" ", "").replace("\n", "")
         val len = cleanHex.length
         val data = ByteArray(len / 2)
-        
+
         for (i in 0 until len step 2) {
             data[i / 2] = ((Character.digit(cleanHex[i], 16) shl 4) + Character.digit(
                 cleanHex[i + 1],
                 16
             )).toByte()
         }
-        
+
         return data
     }
 
@@ -1125,7 +1056,10 @@ class ChipClient constructor(
             val callback: OpenCommissioningCallback =
                 object : OpenCommissioningCallback {
                     override fun onError(status: Int, deviceId: Long) {
-                        Log.e(TAG, "awaitOpenPairingWindowWithPIN.onError: status [${status}] device [${deviceId}]")
+                        Log.e(
+                            TAG,
+                            "awaitOpenPairingWindowWithPIN.onError: status [${status}] device [${deviceId}]"
+                        )
                         continuation.resumeWithException(
                             IllegalStateException(
                                 "Failed opening the pairing window with status [${status}]"
@@ -1138,7 +1072,10 @@ class ChipClient constructor(
                         manualPairingCode: String?,
                         qrCode: String?
                     ) {
-                        Log.d(TAG, "awaitOpenPairingWindowWithPIN.onSuccess: deviceId [${deviceId}]")
+                        Log.d(
+                            TAG,
+                            "awaitOpenPairingWindowWithPIN.onSuccess: deviceId [${deviceId}]"
+                        )
                         continuation.resume(Unit)
                     }
                 }
@@ -1162,10 +1099,13 @@ class ChipClient constructor(
         iterations: Long,
         salt: ByteArray
     ): PaseVerifierParams {
-        Log.d(TAG, "computePaseVerifier: devicePtr [${devicePtr}] pinCode [${setupPincode}] iterations [${iterations}] salt [${salt}]")
+        Log.d(
+            TAG,
+            "computePaseVerifier: devicePtr [${devicePtr}] pinCode [${setupPincode}] iterations [${iterations}] salt [${salt}]"
+        )
         return chipDeviceController.computePaseVerifier(devicePtr, setupPincode, iterations, salt)
     }
-    
+
     /**
      * Descriptor Cluster Methods
      */
@@ -1187,14 +1127,14 @@ class ChipClient constructor(
                     })
         }
     }
-    
+
     private fun getDescriptorClusterForDevice(
         devicePtr: Long,
         endpoint: Int
     ): ChipClusters.DescriptorCluster {
         return ChipClusters.DescriptorCluster(devicePtr, endpoint)
     }
-    
+
     /**
      * Enhanced Attribute Operations
      */
@@ -1247,7 +1187,7 @@ class ChipClient constructor(
             )
         }
     }
-    
+
     suspend fun writeAttributes(
         devicePtr: Long,
         attributes: Map<ChipAttributePath, ByteArray>,
@@ -1293,7 +1233,7 @@ class ChipClient constructor(
             )
         }
     }
-    
+
     suspend fun invoke(
         devicePtr: Long,
         invokeElement: InvokeElement,
@@ -1327,12 +1267,9 @@ class ChipClient constructor(
     fun close() {
         Log.d(TAG, "Closing ChipClient and cleaning up resources")
         try {
-            // Reset commissioning state
             currentDeviceId = null
             isCommissioning = false
             nocChainReceived = false
-            
-            Log.d(TAG, "ChipClient closed successfully")
         } catch (e: Exception) {
             Log.e(TAG, "Error closing ChipClient: ${e.message}", e)
         }

@@ -27,8 +27,9 @@ class AccessControlClusterHelper constructor(private val chipClient: ChipClient)
     suspend fun readAclAttribute(deviceId: Long, endpoint: Int):
             MutableList<AccessControlClusterAccessControlEntryStruct>? {
         val connectedDevicePtr = try {
-            chipClient.getConnectedDevicePointer(deviceId)
-        } catch (e: IllegalStateException) {
+            chipClient.awaitGetConnectedDevicePointer(deviceId)
+        } catch (e: Exception) {
+            Log.e(TAG, "Cannot get connected device pointer for deviceId=$deviceId: ${e.message}")
             return null
         }
         return suspendCoroutine { continuation ->
@@ -58,11 +59,10 @@ class AccessControlClusterHelper constructor(private val chipClient: ChipClient)
         endpoint: Int,
         entries: ArrayList<AccessControlClusterAccessControlEntryStruct>
     ) {
-
         val connectedDevicePtr = try {
-            chipClient.getConnectedDevicePointer(deviceId)
-        } catch (e: IllegalStateException) {
-            Log.e(TAG, "Cannot get connected device pointer for deviceId=$deviceId")
+            chipClient.awaitGetConnectedDevicePointer(deviceId)
+        } catch (e: Exception) {
+            Log.e(TAG, "Cannot get connected device pointer for deviceId=$deviceId: ${e.message}")
             return
         }
 
