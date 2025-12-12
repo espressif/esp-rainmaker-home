@@ -9,7 +9,7 @@ import { View, Pressable, ViewStyle } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 // Icons
-import { Settings, Bell, Shield, FileText } from "lucide-react-native";
+import { Settings, Bell, Shield, FileText, Bot } from "lucide-react-native";
 
 // Components
 import {
@@ -46,6 +46,8 @@ import {
   TERMS_OF_USE_LINK,
 } from "@/utils/constants";
 import { deletePlatformEndpoint } from "@/utils/notifications";
+import { getAgentTermsAccepted } from "@/utils/agent/storage";
+import { pipelineTask } from "@/utils/pipelineTask";
 
 // Types
 import {
@@ -60,6 +62,8 @@ type RouteMap = {
   handleAlexa: "/(user)/AlexaGuide";
   handleGoogleAssistant: "/(user)/GoogleAssistantGuide";
   handleNotificationCenter: "/(user)/NotificationCenter";
+  handleAssistantSettings: "/(agent)/Settings";
+  handleEnableAgent: "/(auth)/AgentTerms";
   handlePrivacyPolicy: () => void;
   handleTermsOfUse: () => void;
 };
@@ -90,6 +94,9 @@ const User: React.FC<UserProps> = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [showLogoutDialog, setShowLogoutDialog] = useState(false);
 
+  // Check agent terms acceptance status
+  const agentTermsAccepted = getAgentTermsAccepted(store.userStore);
+
   // Configuration
   const userOperations: UserOperationConfig[] = [
     {
@@ -99,6 +106,28 @@ const User: React.FC<UserProps> = () => {
       action: "handleNotificationCenter",
       showBadge: false,
     },
+    // Only show AI Settings if terms are accepted
+    ...(agentTermsAccepted === true
+      ? [
+          {
+            id: "assistant-settings",
+            icon: <Bot size={20} color={tokens.colors.primary} />,
+            title: t("user.settings.aiSettings"),
+            action: "handleAssistantSettings",
+          },
+        ]
+      : []),
+    // Show Enable Agent option if user disagreed
+    ...(agentTermsAccepted === false
+      ? [
+          {
+            id: "enable-agent",
+            icon: <Bot size={20} color={tokens.colors.primary} />,
+            title: "Enable Agent",
+            action: "handleEnableAgent",
+          },
+        ]
+      : []),
     {
       id: "privacy",
       icon: <Shield size={20} color={tokens.colors.primary} />,
@@ -134,6 +163,8 @@ const User: React.FC<UserProps> = () => {
       handleAlexa: "/(user)/AlexaGuide",
       handleGoogleAssistant: "/(user)/GoogleAssistantGuide",
       handleNotificationCenter: "/(user)/NotificationCenter",
+      handleAssistantSettings: "/(agent)/Settings",
+      handleEnableAgent: "/(auth)/AgentTerms",
       handlePrivacyPolicy: () => openUrl(PRIVACY_POLICY_LINK),
       handleTermsOfUse: () => openUrl(TERMS_OF_USE_LINK),
     };
@@ -159,29 +190,84 @@ const User: React.FC<UserProps> = () => {
     try {
       setIsLoading(true);
 
-      store.groupStore.currentHomeId = null;
+      await pipelineTask(
+        [
+          {
+            name: "clearCurrentHome",
+            run: async () => {
+              store.groupStore.currentHomeId = null;
+            },
+          },
+          {
+            name: "deletePlatformEndpoint",
+            run: async () => {
+              await deletePlatformEndpoint(store);
+            },
+            optional: true, // Don't block logout if this fails
+            background: true,
+          },
+          {
+            name: "logoutUser",
+            run: async () => {
+              await store.userStore?.logout();
+            },
+            dependsOn: ["clearCurrentHome"],
+          },
+          {
+            name: "clearUserData",
+            run: async () => {
+              if (store.userStore) {
+                store.userStore.user = null;
+                store.userStore.userInfo = null;
+                store.userStore[CDF_EXTERNAL_PROPERTIES.IS_OAUTH_LOGIN] = false;
+              }
+            },
+            dependsOn: ["logoutUser"],
+          },
+          {
+            name: "clearESPRMUser",
+            run: async () => {
+              setESPRMUser(null);
+            },
+            dependsOn: ["clearUserData"],
+          },
+          {
+            name: "clearAsyncStorage",
+            run: async () => {
+              await AsyncStorage.clear();
+            },
+            dependsOn: ["clearUserData"],
+          },
+        ],
+        {
+          onStart: (stepName) => {
+            console.log(`[logout pipeline] start: ${stepName}`);
+          },
+          onComplete: (stepName) => {
+            console.log(`[logout pipeline] complete: ${stepName}`);
+          },
+          onError: (stepName, error) => {
+            console.error(`[logout pipeline] error in ${stepName}:`, error);
+          },
+          onProgress: (state) => {
+            console.log(
+              `[logout pipeline] progress ${state.completed}/${state.total} (last: ${state.lastFinished})`
+            );
+          },
+        }
+      );
 
-      // Try to delete platform endpoint, but don't block logout if it fails
-      try {
-        await deletePlatformEndpoint(store);
-      } catch (error) {
-        console.warn("Failed to delete platform endpoint:", error);
-        // Don't show error to user as logout should proceed
-      }
+      // Close dialog and stop loading
+      setShowLogoutDialog(false);
+      setIsLoading(false);
 
-      await store.userStore?.logout();
-
-      if (store.userStore) {
-        store.userStore.user = null;
-        store.userStore.userInfo = null;
-        store.userStore[CDF_EXTERNAL_PROPERTIES.IS_OAUTH_LOGIN] = false;
-      }
-      // Clear ESPRMUser from context created for Matter SDK functionality usage
-      setESPRMUser(null);
-
-      await AsyncStorage.clear();
-      router.replace("/(auth)/Login");
+      // Navigate to login screen
+      setTimeout(() => {
+        router.replace("/(auth)/Login");
+      }, 100);
     } catch (error) {
+      console.error("Logout error:", error);
+      setShowLogoutDialog(false);
       toast.showError(
         t("user.errors.logoutFailed"),
         (error as ESPAPIError).description || t("user.errors.fallback")

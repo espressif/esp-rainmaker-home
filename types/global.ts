@@ -924,3 +924,100 @@ export interface AutomationMenuBottomSheetProps {
   /** Warning message to display */
   warning?: string;
 }
+
+// ============================================================================
+// Chat Types
+// ============================================================================
+
+export interface ChatMessage {
+  id: string;
+  text: string;
+  isUser: boolean;
+  timestamp: Date;
+  messageType?: string;
+  isCollapsed?: boolean;
+  toolName?: string; // For tool_call_info and tool_result_info
+  jsonData?: any; // For JSON messages
+  isJsonExpanded?: boolean; // For JSON expandable state
+}
+
+// ============================================================================
+// Agent/Chat Settings Types
+// ============================================================================
+
+export interface AgentConfigResponse {
+  agentId: string;
+  name: string;
+  textModelId: string;
+  speechModelId: string;
+  modelCapabilities: {
+    supportsText: boolean;
+    supportsVoice: boolean;
+  };
+  textModelCapabilities: {
+    supportsText: boolean;
+    supportsVoice: boolean;
+    displayName: string;
+    description: string;
+  };
+  speechModelCapabilities: {
+    supportsText: boolean;
+    supportsVoice: boolean;
+    displayName: string;
+    description: string;
+  };
+  requiredConnectors: Array<{
+    connectorUrl: string;
+    description: string;
+    type: string;
+    authType: string;
+    oauthMetadata?: any;
+  }>;
+  tools: Array<{
+    type: string;
+    name: string;
+    url: string;
+    timeout: number;
+    authType: string;
+    oauthMetadata?: any;
+  }>;
+  createdByName: string;
+}
+
+export interface ToolConnectionStatus {
+  isConnected: boolean;
+  isExpired: boolean;
+}
+
+// ============================================================================
+// Agent Settings Types
+// ============================================================================
+
+/**
+ * Re-export AgentConfig from agent utils for convenience
+ */
+export type { AgentConfig } from "@/utils/agent";
+
+/**
+ * AI Device Data interface for agent configuration
+ */
+export interface AIDeviceData {
+  node: ESPRMNode;
+  device: ESPRMDevice;
+  agentIdParam: ESPRMDeviceParam | null;
+  isUpdating: boolean;
+}
+
+/**
+ * Agent Selection Bottom Sheet Props
+ */
+export interface AgentSelectionBottomSheetProps {
+  /** Whether the bottom sheet is visible */
+  visible: boolean;
+  /** Callback when bottom sheet is closed */
+  onClose: () => void;
+  /** Callback when an agent is selected */
+  onSelect: (agentId: string) => void;
+  /** Currently selected agent ID */
+  currentAgentId?: string;
+}

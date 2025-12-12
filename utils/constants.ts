@@ -50,8 +50,13 @@ export const ESPRM_HUE_PARAM_TYPE = "esp.param.hue";
 export const ESPRM_SATURATION_PARAM_TYPE = "esp.param.saturation";
 export const ESPRM_TEMPERATURE_PARAM_TYPE = "esp.param.temperature";
 export const ESPRM_FACTORY_RESET_PARAM_TYPE = "esp.param.factory-reset";
+export const ESPRM_REBOOT_PARAM_TYPE = "esp.param.reboot";
+export const ESPRM_WIFI_RESET_PARAM_TYPE = "esp.param.wifi-reset";
 export const ESPRM_SPEED_PARAM_TYPE = "esp.param.speed";
 export const ESPRM_DIRECTION_PARAM_TYPE = "esp.param.direction";
+export const ESPRM_REFRESH_TOKEN_PARAM_TYPE = "esp.param.refresh-token";
+export const ESPRM_USER_TOKEN_PARAM_TYPE = "esp.param.user-token";
+export const ESPRM_BASE_URL_PARAM_TYPE = "esp.param.base-url";
 
 // SUPPORTED PARAM UI TYPES
 export const ESPRM_UI_TEXT_PARAM_TYPE = "esp.ui.text";
@@ -73,6 +78,8 @@ export const USER_PERMISSION = "user";
 export const ESPRM_SYSTEM_SERVICE = "esp.service.system";
 export const ESPRM_SCENES_SERVICE = "esp.service.scenes";
 export const ESPRM_SCHEDULES_SERVICE = "esp.service.schedule";
+export const ESPRM_AGENT_AUTH_SERVICE = "esp.service.agent-auth";
+export const ESPRM_RMAKER_USER_AUTH_SERVICE = "esp.service.rmaker-user-auth";
 
 // DISCOVERY EVENTS
 export const DISCOVERY_UPDATE_EVENT = "DiscoveryUpdate";
@@ -159,6 +166,9 @@ export const ERROR_CODES = {
   GEO_COORDINATES_MISSING: "error.geo.coordinates_missing",
   GEO_COORDINATES_INVALID: "error.geo.coordinates_invalid",
 } as const;
+
+// Chat Constants
+export const MAX_MESSAGES_IN_MEMORY = 500;
 
 export const ERROR_CODES_MAP = {
   USER_NOT_FOUND: "108052",

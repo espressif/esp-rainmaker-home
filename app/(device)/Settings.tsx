@@ -4,9 +4,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useState, useEffect } from "react";
-import { View, Text, ScrollView, ActivityIndicator } from "react-native";
-import { Trash2 } from "lucide-react-native";
+import { useState, useEffect, useMemo } from "react";
+import {
+  View,
+  Text,
+  ScrollView,
+  ActivityIndicator,
+  Pressable,
+} from "react-native";
+import { Trash2, ChevronRight } from "lucide-react-native";
 
 // Styles
 import { tokens } from "@/theme/tokens";
@@ -17,7 +23,7 @@ import { ESPRMDevice, ESPRMNode } from "@espressif/rainmaker-base-sdk";
 import { ESPRMServiceParam } from "@espressif/rainmaker-base-cdf/dist/types";
 
 // Hooks
-import { useLocalSearchParams, router } from "expo-router";
+import { useLocalSearchParams, router, useRouter } from "expo-router";
 import { useCDF } from "@/hooks/useCDF";
 import { useTranslation } from "react-i18next";
 import { useToast } from "@/hooks/useToast";
@@ -34,7 +40,9 @@ import {
   DeviceName,
   DeviceInfo,
   OTA,
+  ContentWrapper,
 } from "@/components";
+import DeviceOperations from "@/components/DeviceSettings/DeviceOperations";
 
 // validations
 import { validateEmail as _validateEmail } from "@/utils/validations";
@@ -75,6 +83,7 @@ const Settings = observer(() => {
   const { store } = useCDF();
   const { t } = useTranslation();
   const toast = useToast();
+  const routerNav = useRouter();
 
   const { id, device: _device } = useLocalSearchParams<{
     id?: string;
@@ -197,7 +206,7 @@ const Settings = observer(() => {
         );
 
         if (nameParam) {
-          await(nameParam as any).setValue(deviceName);
+          await (nameParam as any).setValue(deviceName);
           if (device) {
             device.displayName = deviceName;
           }
@@ -306,18 +315,102 @@ const Settings = observer(() => {
   };
 
   /**
+   * Opens the Guide page with the readme URL from node info
+   */
+  const handleGuidePress = () => {
+    const readmeUrl = (node?.nodeConfig?.info as any)?.readme;
+    if (!readmeUrl) return;
+
+    const headerName = node?.nodeConfig?.info?.name || "Device";
+    const deviceDisplayName = device?.displayName || headerName;
+
+    routerNav.push({
+      pathname: "/(device)/Guide" as any,
+      params: {
+        url: readmeUrl,
+        title: headerName,
+        deviceName: deviceDisplayName,
+      },
+    });
+  };
+
+  // Get readme URL from node config info
+  const readmeUrl = useMemo(
+    () => (node?.nodeConfig?.info as any)?.readme || null,
+    [node]
+  );
+
+  /**
    * Renders error state when device is not found
    */
   const renderError = () => (
     <>
-      <Header label={t("device.settings.title")} showBack={true} qaId="header_settings" />
-      <ScreenWrapper style={globalStyles.container} excludeTop={true} qaId="screen_wrapper_settings">
-        <View {...testProps("view_settings")} style={globalStyles.errorContainer}>
-          <Text {...testProps("text_error_settings")} style={globalStyles.errorText}>
+      <Header
+        label={t("device.settings.title")}
+        showBack={true}
+        qaId="header_settings"
+      />
+      <ScreenWrapper
+        style={globalStyles.container}
+        excludeTop={true}
+        qaId="screen_wrapper_settings"
+      >
+        <View
+          {...testProps("view_settings")}
+          style={globalStyles.errorContainer}
+        >
+          <Text
+            {...testProps("text_error_settings")}
+            style={globalStyles.errorText}
+          >
             {t("device.settings.deviceNotFound")}
           </Text>
         </View>
       </ScreenWrapper>
+    </>
+  );
+
+  /**
+   * Renders the guide section
+   */
+  const renderGuideSection = () => (
+    <>
+      <ContentWrapper
+        style={{
+          marginBottom: tokens.spacing._15,
+          ...globalStyles.shadowElevationForLightTheme,
+          backgroundColor: tokens.colors.white,
+        }}
+      >
+        <View
+          style={[globalStyles.settingsSection, { gap: tokens.spacing._10 }]}
+        >
+          <Pressable
+            style={globalStyles.settingsItem}
+            onPress={handleGuidePress}
+          >
+            {/* Left Section */}
+            <View style={globalStyles.settingsItemLeft}>
+              <Text
+                style={[
+                  {
+                    flex: 1,
+                    fontWeight: 500,
+                    fontFamily: tokens.fonts.medium,
+                  },
+                ]}
+              >
+                {t("device.settings.guide") || "Guide"}
+              </Text>
+            </View>
+
+            {/* Right Section */}
+            <View style={[globalStyles.flex, globalStyles.alignCenter]}>
+              <ChevronRight size={20} color={tokens.colors.primary} />
+            </View>
+          </Pressable>
+        </View>
+      </ContentWrapper>
     </>
   );
 
@@ -327,7 +420,11 @@ const Settings = observer(() => {
 
   return (
     <>
-      <Header label={t("device.settings.title")} showBack={true} qaId="header_settings" />
+      <Header
+        label={t("device.settings.title")}
+        showBack={true}
+        qaId="header_settings"
+      />
       <ScreenWrapper
         style={{
           ...globalStyles.container,
@@ -361,6 +458,13 @@ const Settings = observer(() => {
             disabled={!isPrimary || !isConnected}
           />
 
+          {/* Guide Section - Show only if readme URL exists */}
+          {readmeUrl && renderGuideSection()}
+          <DeviceOperations
+            node={node}
+            disabled={!isPrimary || !isConnected}
+          />
+
           <OTA
             otaInfo={otaInfo}
             onCheckUpdates={handleCheckForUpdates}
@@ -379,7 +483,10 @@ const Settings = observer(() => {
               qaId="button_settings"
             >
               <Trash2 size={16} color={tokens.colors.white} />
-              <Text {...testProps("text_remove_device_settings")} style={[globalStyles.buttonTextDanger, { marginLeft: 8 }]}>
+              <Text
+                {...testProps("text_remove_device_settings")}
+                style={[globalStyles.buttonTextDanger, { marginLeft: 8 }]}
+              >
                 {isRemovingDevice ? (
                   <ActivityIndicator size="small" color={tokens.colors.white} />
                 ) : (

@@ -45,6 +45,8 @@ interface HeaderProps {
   onBackPress?: () => void;
   /** QA automation identifier */
   qaId?: string;
+  /** Optional label press handler */
+  onLabelPress?: () => void;
 }
 
 /**
@@ -66,6 +68,7 @@ const Header: React.FC<HeaderProps> = ({
   backgroundColor = tokens.colors.white,
   onBackPress,
   qaId,
+  onLabelPress,
 }) => {
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -78,12 +81,18 @@ const Header: React.FC<HeaderProps> = ({
       : insets.top + 10; // Use SafeAreaInsets for Android
 
   const goBack = () => {
+    // If custom back press handler is provided, use it instead of default behavior
+    if (onBackPress) {
+      onBackPress();
+      return;
+    }
+
+    // Default back behavior
     if (customBackUrl) {
       router.replace(customBackUrl as any);
     } else {
       router.back();
     }
-    onBackPress?.();
   };
 
   return (
@@ -95,18 +104,39 @@ const Header: React.FC<HeaderProps> = ({
           </Pressable>
         )}
 
-        <Text
-          style={[
-            globalStyles.fontMedium,
-            globalStyles.fontMd,
-            globalStyles.ellipsis,
-            styles.title,
-          ]}
-          numberOfLines={1}
-          {...testProps('title')}
-        >
-          {label}
-        </Text>
+        {onLabelPress ? (
+          <Pressable
+            onPress={onLabelPress}
+            style={styles.titleContainer}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
+            <Text
+              style={[
+                globalStyles.fontMedium,
+                globalStyles.fontMd,
+                globalStyles.ellipsis,
+                styles.titlePressable,
+              ]}
+              numberOfLines={1}
+              {...testProps('title')}
+            >
+              {label}
+            </Text>
+          </Pressable>
+        ) : (
+          <Text
+            style={[
+              globalStyles.fontMedium,
+              globalStyles.fontMd,
+              globalStyles.ellipsis,
+              styles.title,
+            ]}
+            numberOfLines={1}
+            {...testProps('title')}
+          >
+            {label}
+          </Text>
+        )}
 
         <View style={styles.rightSlot}>{rightSlot}</View>
       </View>
@@ -138,12 +168,26 @@ const styles = StyleSheet.create({
     padding: 0,
     zIndex: 1,
   },
+  titleContainer: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: tokens.spacing._40,
+    minHeight: 24,
+    alignSelf: "stretch",
+  },
   title: {
     flex: 1,
     textAlign: "center",
     paddingHorizontal: tokens.spacing._40,
     fontFamily: tokens.fonts.medium,
     fontWeight: "bold",
+  },
+  titlePressable: {
+    textAlign: "center",
+    fontFamily: tokens.fonts.medium,
+    fontWeight: "bold",
+    color: tokens.colors.text_primary,
   },
   rightSlot: {
     position: "absolute",

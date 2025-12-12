@@ -15,4 +15,12 @@ RCT_EXTERN_METHOD(isBlePermissionGranted:(RCTPromiseResolveBlock)resolve
 RCT_EXTERN_METHOD(isLocationPermissionGranted:(RCTPromiseResolveBlock)resolve
                   rejecter:(RCTPromiseRejectBlock)reject)
 
+RCT_EXTERN_METHOD(isLocationServicesEnabled:(RCTPromiseResolveBlock)resolve
+                  rejecter:(RCTPromiseRejectBlock)reject)
+
+RCT_EXTERN_METHOD(isBluetoothEnabled:(RCTPromiseResolveBlock)resolve
+                  rejecter:(RCTPromiseRejectBlock)reject)
+
+RCT_EXTERN_METHOD(requestAllPermissions)
+
 @end
