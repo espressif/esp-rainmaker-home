@@ -565,6 +565,8 @@
              )
  
              if (espDevice != null) {
+                 // Set device name before connecting
+                 espDevice.deviceName = deviceName
                  espDevice.connectBLEDevice(bleDevice.bluetoothDevice, uuid)
  
                  handler.postDelayed({
@@ -794,26 +796,26 @@
              Log.e(TAG, "Capabilities JSON not available: ${e.message}")
          }
      }
- 
+
      @ReactMethod
      fun getDeviceCapabilities(deviceName: String, promise: Promise) {
          val espDevice = when {
              bleDevices.containsKey(deviceName) || deviceList.isNotEmpty() -> {
                  espProvisionManager?.espDevice
              }
- 
+
              softAPDevices.containsKey(deviceName) -> {
                  softAPDevices[deviceName]
              }
- 
+
              else -> null
          }
- 
+
          if (espDevice == null || espDevice.deviceName != deviceName) {
              promise.reject("DEVICE_NOT_FOUND", "Device not found or not connected")
              return
          }
- 
+
          try {
              val deviceCapabilities = espDevice.deviceCapabilities ?: emptyList<String>()
              promise.resolve(Arguments.fromArray(deviceCapabilities.toTypedArray()))
@@ -824,9 +826,88 @@
              )
          }
      }
- 
+
      /**
-      * Sets the proof of possession (PoP) for the specified device.
+      * Retrieves the version information from the specified ESP device.
+      * 
+      * The version info contains device metadata including:
+      * - Provisioning capabilities (prov.cap): no_pop, wifi_scan, wifi_prov, etc.
+      * - RainMaker capabilities (rmaker.cap): claim, wifi_scan, wifi_prov, etc.
+      * - Other device information such as protocol version and security type
+      * 
+      * The returned object is a WritableMap containing the parsed JSON structure
+      * from the device's version info response.
+      *
+      * @param deviceName The name of the ESP device.
+      * @param promise Promise to resolve with the version info as a WritableMap, or empty map if unavailable.
+      */
+     @ReactMethod
+     fun getDeviceVersionInfo(deviceName: String, promise: Promise) {
+         val espDevice = when {
+             bleDevices.containsKey(deviceName) || deviceList.isNotEmpty() -> {
+                 espProvisionManager?.espDevice
+             }
+
+             softAPDevices.containsKey(deviceName) -> {
+                 softAPDevices[deviceName]
+             }
+
+             else -> null
+         }
+
+         if (espDevice == null || espDevice.deviceName != deviceName) {
+             promise.reject("DEVICE_NOT_FOUND", "Device not found or not connected")
+             return
+         }
+
+         try {
+             val versionInfo = espDevice.versionInfo
+             if (versionInfo != null) {
+                 // Parse JSON string to return as a proper object
+                 val jsonObject = JSONObject(versionInfo)
+                 val result = Arguments.createMap()
+                 
+                 // Convert JSON to WritableMap
+                 jsonObject.keys().forEach { key ->
+                     when (val value = jsonObject.get(key)) {
+                         is JSONObject -> {
+                             val innerMap = Arguments.createMap()
+                             value.keys().forEach { innerKey ->
+                                 when (val innerValue = value.get(innerKey)) {
+                                     is org.json.JSONArray -> {
+                                         val array = Arguments.createArray()
+                                         for (i in 0 until innerValue.length()) {
+                                             array.pushString(innerValue.getString(i))
+                                         }
+                                         innerMap.putArray(innerKey, array)
+                                     }
+                                     is String -> innerMap.putString(innerKey, innerValue)
+                                     is Int -> innerMap.putInt(innerKey, innerValue)
+                                     is Boolean -> innerMap.putBoolean(innerKey, innerValue)
+                                     else -> innerMap.putString(innerKey, innerValue.toString())
+                                 }
+                             }
+                             result.putMap(key, innerMap)
+                         }
+                         is String -> result.putString(key, value)
+                         is Int -> result.putInt(key, value)
+                         is Boolean -> result.putBoolean(key, value)
+                         else -> result.putString(key, value.toString())
+                     }
+                 }
+                 promise.resolve(result)
+             } else {
+                 // Return empty object if version info is not available
+                 promise.resolve(Arguments.createMap())
+             }
+         } catch (e: Exception) {
+             Log.e(TAG, "Error getting version info: ${e.message}")
+             promise.resolve(Arguments.createMap())
+         }
+     }
+
+    /**
+     * Sets the proof of possession (PoP) for the specified device.
       *
       * @param deviceName The name of the device.
       * @param pop The proof of possession.

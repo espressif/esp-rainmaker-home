@@ -13,7 +13,6 @@ import {
   TouchableOpacity,
   Animated,
   Dimensions,
-  Platform,
   Vibration,
   ActivityIndicator,
 } from "react-native";
@@ -45,6 +44,7 @@ import { provisionAdapter } from "@/adaptors/implementations/ESPProvAdapter";
 // Utils
 import { testProps } from "@/utils/testProps";
 import { useToast } from "@/hooks/useToast";
+import { parseRMakerCapabilities } from "@/utils/rmakerCapabilities";
 
 // Constants
 import {
@@ -295,26 +295,77 @@ const ScanQR = () => {
   };
 
   /**
-   * Handle Android-specific provisioning logic
+   * Handle QR code provisioning logic
    */
-  const handleAndroidProvisioning = async (
-    espDevice: ESPDevice,
-    pop: string
-  ) => {
-    const capabilities = await espDevice.getDeviceCapabilities();
+  const handleQRProvisioning = async (espDevice: ESPDevice, pop: string) => {
+    // Fetch version info and prov capabilities
+    let versionInfo: any;
+    let provCapabilities: string[];
 
-    // Check if device needs PoP (both no_pop and no_sec must be absent)
-    if (!capabilities.includes("no_pop") && !capabilities.includes("no_sec")) {
-      const popSet = await espDevice.setProofOfPossession(pop);
-      if (!popSet) {
+    try {
+      versionInfo = await espDevice.getDeviceVersionInfo();
+    } catch (error: any) {
+      console.error(
+        "[QR Provisioning] Error fetching version info:",
+        error?.message
+      );
+      throw error;
+    }
+
+    try {
+      provCapabilities = await espDevice.getDeviceCapabilities();
+    } catch (error: any) {
+      console.error(
+        "[QR Provisioning] Error fetching capabilities:",
+        error?.message
+      );
+      throw error;
+    }
+
+    // Parse RMaker capabilities from version info
+    // This determines if device supports assisted claiming (claim)
+    const rmakerCaps = parseRMakerCapabilities(versionInfo, provCapabilities);
+
+    // Check if device needs PoP
+    if (rmakerCaps.requiresPop && pop) {
+      try {
+        const popSet = await espDevice.setProofOfPossession(pop);
+        if (!popSet) {
+          return toast.showError(t("device.scan.qr.invalidQRCode"));
+        }
+      } catch (error: any) {
+        console.error("[QR Provisioning] POP set error:", error?.message);
         return toast.showError(t("device.scan.qr.invalidQRCode"));
       }
+    } else if (rmakerCaps.requiresPop && !pop) {
+      // If POP is required but not provided in QR code, navigate to POP screen
+      router.push({
+        pathname: "/(device)/POP",
+        params: {
+          hasClaimCap: rmakerCaps.hasClaim ? "true" : "false",
+        },
+      });
+      return;
     }
 
     // Initialize session
-    const isSessionInitialized = await espDevice.initializeSession();
-    if (!isSessionInitialized) {
-      return toast.showError(t("device.scan.qr.sessionInitFailed"));
+    try {
+      const isSessionInitialized = await espDevice.initializeSession();
+      if (!isSessionInitialized) {
+        return toast.showError(t("device.scan.qr.sessionInitFailed"));
+      }
+    } catch (error: any) {
+      console.error("[QR Provisioning] Session init error:", error?.message);
+      throw error;
+    }
+
+    // If device supports claiming, navigate to Claiming screen
+    // This is determined by rmaker.cap array containing "claim"
+    if (rmakerCaps.hasClaim) {
+      router.push({
+        pathname: "/(device)/Claiming",
+      });
+      return;
     }
 
     navigateToWifi();
@@ -376,17 +427,8 @@ const ScanQR = () => {
     // Store connected device
     store.nodeStore.connectedDevice = espDevice;
 
-    // Handle platform-specific logic
-    if (Platform.OS === "ios") {
-      return navigateToWifi();
-    }
-
-    if (Platform.OS === "android") {
-      await handleAndroidProvisioning(espDevice, pop);
-      return;
-    }
-
-    toast.showError(t("device.scan.qr.platformNotSupported"));
+    // Handle QR provisioning (same flow for both iOS and Android)
+    await handleQRProvisioning(espDevice, pop);
   };
 
   /**
@@ -440,8 +482,17 @@ const ScanQR = () => {
     setTimeout(async () => {
       try {
         await handleDeviceProvision(qrData);
-      } catch (error) {
-        toast.showError(t("device.scan.qr.invalidQRCode"));
+      } catch (error: any) {
+        console.error("[QR Scan] Provisioning error:", error);
+        const errorMessage = error?.message || "Unknown error";
+        // Show specific error message if available, otherwise show generic error
+        if (errorMessage.includes("DEVICE_NOT_FOUND") || errorMessage.includes("connection")) {
+          toast.showError(t("device.scan.qr.unableToConnectToDevice"));
+        } else if (errorMessage.includes("session") || errorMessage.includes("SESSION")) {
+          toast.showError(t("device.scan.qr.sessionInitFailed"));
+        } else {
+          toast.showError(t("device.scan.qr.invalidQRCode"));
+        }
       } finally {
         resetScanState();
       }
