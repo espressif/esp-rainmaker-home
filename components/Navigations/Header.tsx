@@ -95,11 +95,32 @@ const Header: React.FC<HeaderProps> = ({
     }
   };
 
+  // Platform-specific touch target sizes
+  // Android: 48dp minimum (Material Design guidelines)
+  // iOS: 44pt minimum (Human Interface Guidelines)
+  const minTouchSize = Platform.OS === PLATFORM_IOS ? 44 : 48;
+  const touchPadding = Platform.OS === PLATFORM_IOS ? 0 : tokens.spacing._10;
+  const hitSlopValue = Platform.OS === PLATFORM_IOS ? 0 : 10;
+
   return (
     <View {...(qaId ? testProps(qaId) : {})}  style={[styles.headerWrap, { paddingTop, backgroundColor }]}>
       <View style={styles.contentContainer}>
         {showBack && (
-          <Pressable {...testProps("button_back")} onPress={goBack} style={styles.backIcon}>
+          <Pressable 
+            {...testProps("button_back")} 
+            onPress={goBack} 
+            style={[
+              styles.backIcon,
+              Platform.OS !== PLATFORM_IOS && {
+                padding: touchPadding,
+                minWidth: minTouchSize,
+                minHeight: minTouchSize,
+                justifyContent: "center",
+                alignItems: "center",
+              }
+            ]}
+            hitSlop={hitSlopValue > 0 ? { top: hitSlopValue, bottom: hitSlopValue, left: hitSlopValue, right: hitSlopValue } : undefined}
+          >
             <Ionicons name="chevron-back" size={24} color={tokens.colors.primary} />
           </Pressable>
         )}
@@ -108,7 +129,7 @@ const Header: React.FC<HeaderProps> = ({
           <Pressable
             onPress={onLabelPress}
             style={styles.titleContainer}
-            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            hitSlop={hitSlopValue > 0 ? { top: hitSlopValue, bottom: hitSlopValue, left: hitSlopValue, right: hitSlopValue } : undefined}
           >
             <Text
               style={[
@@ -138,7 +159,16 @@ const Header: React.FC<HeaderProps> = ({
           </Text>
         )}
 
-        <View style={styles.rightSlot}>{rightSlot}</View>
+        <View style={[
+          styles.rightSlot,
+          Platform.OS !== PLATFORM_IOS && {
+            padding: touchPadding,
+            minWidth: minTouchSize,
+            minHeight: minTouchSize,
+            justifyContent: "center",
+            alignItems: "flex-end",
+          }
+        ]}>{rightSlot}</View>
       </View>
     </View>
   );

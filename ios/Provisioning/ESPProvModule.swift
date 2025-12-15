@@ -119,11 +119,21 @@ class ESPProvModule: NSObject, ESPDeviceConnectionDelegate, RCTBridgeModule {
       self.espDevices[espDevice!.name] = espDevice
       self.popRecords[espDevice!.name] = proofOfPossession
       
-      resolve([
+      var result: [String: Any] = [
         "name": espDevice!.name,
         "transport": espDevice!.transport.rawValue,
         "security": espDevice!.security.rawValue,
-      ])
+      ]
+      
+      // Add manufacturer data if available for device parsing
+      if let advertisementData = espDevice!.advertisementData,
+         let manufacturerData = advertisementData["kCBAdvDataManufacturerData"] as? Data {
+        result["advertisementData"] = [
+          "kCBAdvDataManufacturerData": Array(manufacturerData)
+        ]
+      }
+      
+      resolve(result)
     }
   }
   

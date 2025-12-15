@@ -15,6 +15,7 @@ import {
   Image,
   ActivityIndicator,
 } from "react-native";
+import { useRouter } from "expo-router";
 
 // Styles
 import { tokens } from "@/theme/tokens";
@@ -31,12 +32,15 @@ import { observer } from "mobx-react-lite";
 // Types
 import { ControlPanelProps } from "@/types/global";
 import type { ESPRMService, ESPRMServiceParam } from "@espressif/rainmaker-base-sdk";
+import type { ConversationListItem } from "@/types/global";
 
 // Constants
 import {
   ESPRM_AGENT_AUTH_SERVICE,
   ESPRM_REFRESH_TOKEN_PARAM_TYPE,
   ESPRM_RMAKER_USER_AUTH_SERVICE,
+  VOLUME_PARAM_NAME,
+  ESPRM_UI_SLIDER_PARAM_TYPE,
 } from "@/utils/constants";
 
 // Utils
@@ -57,11 +61,13 @@ import { useCDF } from "@/hooks/useCDF";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 // Icons
-import { RefreshCw, Edit3 } from "lucide-react-native";
+import { RefreshCw, Edit3, MessageCircle } from "lucide-react-native";
 
 // Components
 import AgentSelectionBottomSheet from "@/components/Modals/AgentSelectionBottomSheet";
-import { ActionButton } from "@/components";
+import { ActionButton, ParamControlWrap } from "@/components";
+import { AgentConversationsBottomSheet } from "@/components/Chat/AgentConversationsBottomSheet";
+import { VolumeSlider } from "@/components/ParamControls";
 
 // Assets
 const aiAnimationGif = require("@/assets/images/devices/ai-anitmation.gif");
@@ -82,12 +88,16 @@ const AiAgent: React.FC<ControlPanelProps> = ({ node, device }) => {
   const toast = useToast();
   const { t } = useTranslation();
   const { store } = useCDF();
+  const router = useRouter();
 
   // State
   const [refreshing, setRefreshing] = useState(false);
   const [isAgentSheetVisible, setIsAgentSheetVisible] = useState(false);
   const [isUpdatingAgent, setIsUpdatingAgent] = useState(false);
   const [agentName, setAgentName] = useState<string | null>(null);
+  const [scrollEnabled, setScrollEnabled] = useState(true);
+  const [isConversationsSheetVisible, setIsConversationsSheetVisible] =
+    useState(false);
 
   // Computed Values
   const isConnected = node.connectivityStatus?.isConnected || false;
@@ -97,6 +107,13 @@ const AiAgent: React.FC<ControlPanelProps> = ({ node, device }) => {
 
   // Get current agent ID value using utility function
   const currentAgentId = getCurrentAgentId(device);
+
+  // Find Volume parameter
+  const volumeParam = device?.params?.find(
+    (param) =>
+      param.name === VOLUME_PARAM_NAME &&
+      param.uiType === ESPRM_UI_SLIDER_PARAM_TYPE
+  );
 
   // Fetch agent name from cache or API when agent ID changes
   useEffect(() => {
@@ -257,6 +274,26 @@ const AiAgent: React.FC<ControlPanelProps> = ({ node, device }) => {
     }
   };
 
+  const handleViewConversation = async (conversation: ConversationListItem) => {
+    if (!currentAgentId) {
+      // No agent selected; just close sheet
+      setIsConversationsSheetVisible(false);
+      return;
+    }
+
+    // Close the sheet before navigating
+    setIsConversationsSheetVisible(false);
+
+    router.push({
+      pathname: "/(agent)/ViewConversation",
+      params: {
+        agentId: currentAgentId,
+        conversationId: conversation.conversationId,
+        title: conversation.title || "",
+      },
+    } as any);
+  };
+
   // Render
   return (
     <View
@@ -266,10 +303,21 @@ const AiAgent: React.FC<ControlPanelProps> = ({ node, device }) => {
         { opacity: isConnected ? 1 : 0.5 },
       ]}
     >
+      {/* Floating Conversations Button (top-right) */}
+      <TouchableOpacity
+        style={styles.conversationsFab}
+        onPress={() => setIsConversationsSheetVisible(true)}
+        activeOpacity={0.8}
+      >
+        <MessageCircle size={16} color={tokens.colors.primary} />
+        <Text style={styles.conversationsFabText}>
+          {t("chatSettings.conversations")}
+        </Text>
+      </TouchableOpacity>
       <ScrollView
         style={styles.content}
         contentContainerStyle={styles.contentContainer}
-        scrollEnabled={true}
+        scrollEnabled={scrollEnabled}
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl
@@ -317,6 +365,23 @@ const AiAgent: React.FC<ControlPanelProps> = ({ node, device }) => {
         </View>
       )}
 
+      {/* Volume Control - Positioned above Agent ID */}
+      {volumeParam && (
+        <View style={styles.volumeContainer}>
+          <ParamControlWrap
+            key={volumeParam.name}
+            param={volumeParam}
+            disabled={!isConnected}
+            setUpdating={(s) => {
+              setScrollEnabled(!s);
+            }}
+            style={styles.volumeControlWrap}
+          >
+            <VolumeSlider />
+          </ParamControlWrap>
+        </View>
+      )}
+
       {/* Refresh Token Button - Absolutely positioned at bottom */}
       <View style={styles.refreshButtonContainer}>
         <ActionButton
@@ -349,6 +414,17 @@ const AiAgent: React.FC<ControlPanelProps> = ({ node, device }) => {
         onSelect={handleAgentSelect}
         currentAgentId={currentAgentId}
       />
+
+      {/* Conversations Bottom Sheet (read-only, no activation) */}
+      <AgentConversationsBottomSheet
+        visible={isConversationsSheetVisible}
+        agentId={currentAgentId || null}
+        onClose={() => setIsConversationsSheetVisible(false)}
+        // In device panel we only view conversations in read-only mode
+        onSelectConversation={handleViewConversation}
+        showActiveStatus={false}
+        allowActivation={false}
+      />
     </View>
   );
 };
@@ -367,15 +443,33 @@ const styles = StyleSheet.create({
     ...globalStyles.alignCenter,
     ...globalStyles.justifyCenter,
     flexGrow: 1,
-    paddingBottom: 180, // Space for Agent ID input and refresh button at bottom
+    paddingBottom: 280, // Space for Volume slider, Agent ID input and refresh button at bottom
     paddingVertical: tokens.spacing._30,
   },
-  agentIdContainer: {
+  volumeContainer: {
     position: "absolute",
-    bottom: 100, // Position above refresh button
+    bottom: 90, // Position above Agent ID container
     left: tokens.spacing._20,
     right: tokens.spacing._20,
     zIndex: 10,
+    borderWidth: 1,
+    borderColor: tokens.colors.bg2,
+    borderRadius: tokens.radius.md,
+    overflow: "hidden",
+  },
+  volumeControlWrap: {
+    width: "100%",
+  },
+  agentIdContainer: {
+    position: "absolute",
+    bottom: 180, // Position above refresh button
+    left: tokens.spacing._20,
+    right: tokens.spacing._20,
+    overflow: "hidden",
+    zIndex: 10,
+    borderWidth: 1,
+    borderColor: tokens.colors.bg2,
+    borderRadius: tokens.radius.md,
   },
   animationContainer: {
     ...globalStyles.flex1,
@@ -383,7 +477,7 @@ const styles = StyleSheet.create({
     ...globalStyles.alignCenter,
     width: "100%",
     paddingVertical: tokens.spacing._20,
-    marginTop: -150,
+    marginTop: -200,
   },
   animationGif: {
     width: 700,
@@ -407,6 +501,24 @@ const styles = StyleSheet.create({
     ...globalStyles.alignCenter,
     ...globalStyles.justifyCenter,
     gap: tokens.spacing._10,
+  },
+  conversationsFab: {
+    position: "absolute",
+    top: 0,
+    right: 0,
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: tokens.spacing._10,
+    paddingVertical: tokens.spacing._5,
+    borderRadius: tokens.radius.sm,
+    backgroundColor: tokens.colors.bg4,
+    zIndex: 20,
+  },
+  conversationsFabText: {
+    marginLeft: tokens.spacing._5,
+    fontSize: tokens.fontSize.xs,
+    fontFamily: tokens.fonts.medium,
+    color: tokens.colors.primary,
   },
 });
 

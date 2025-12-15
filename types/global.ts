@@ -949,87 +949,6 @@ export interface ChatMessage {
 }
 
 // ============================================================================
-// Agent/Chat Settings Types
-// ============================================================================
-
-export interface AgentConfigResponse {
-  agentId: string;
-  name: string;
-  textModelId: string;
-  speechModelId: string;
-  modelCapabilities: {
-    supportsText: boolean;
-    supportsVoice: boolean;
-  };
-  textModelCapabilities: {
-    supportsText: boolean;
-    supportsVoice: boolean;
-    displayName: string;
-    description: string;
-  };
-  speechModelCapabilities: {
-    supportsText: boolean;
-    supportsVoice: boolean;
-    displayName: string;
-    description: string;
-  };
-  requiredConnectors: Array<{
-    connectorUrl: string;
-    description: string;
-    type: string;
-    authType: string;
-    oauthMetadata?: any;
-  }>;
-  tools: Array<{
-    type: string;
-    name: string;
-    url: string;
-    timeout: number;
-    authType: string;
-    oauthMetadata?: any;
-  }>;
-  createdByName: string;
-}
-
-export interface ToolConnectionStatus {
-  isConnected: boolean;
-  isExpired: boolean;
-}
-
-// ============================================================================
-// Agent Settings Types
-// ============================================================================
-
-/**
- * Re-export AgentConfig from agent utils for convenience
- */
-export type { AgentConfig } from "@/utils/agent";
-
-/**
- * AI Device Data interface for agent configuration
- */
-export interface AIDeviceData {
-  node: ESPRMNode;
-  device: ESPRMDevice;
-  agentIdParam: ESPRMDeviceParam | null;
-  isUpdating: boolean;
-}
-
-/**
- * Agent Selection Bottom Sheet Props
- */
-export interface AgentSelectionBottomSheetProps {
-  /** Whether the bottom sheet is visible */
-  visible: boolean;
-  /** Callback when bottom sheet is closed */
-  onClose: () => void;
-  /** Callback when an agent is selected */
-  onSelect: (agentId: string) => void;
-  /** Currently selected agent ID */
-  currentAgentId?: string;
-}
-
-// ============================================================================
 // Polling Types
 // ============================================================================
 
@@ -1094,3 +1013,37 @@ export interface SanitizeAgentIdResult {
   /** The next processed ID value to store (caller should update ref) */
   nextProcessedId: string | null;
 }
+// Re-export all agent-related types from utils/agent/types
+export type {
+  AgentConfig,
+  AgentConfigResponse,
+  ToolConnectionStatus,
+  AIDeviceData,
+  AgentSelectionBottomSheetProps,
+  AgentConversationsBottomSheetProps,
+  Agent,
+  UserProfile,
+  ConnectedConnector,
+  UsageQuota,
+  UsageLogEntry,
+  UsageHistory,
+  UsageByAgent,
+  ConversationMessage,
+  Conversation,
+  ConversationListItem,
+  AggregatedAgent,
+  AgentValidationResult,
+  AgentSource,
+  AgentSelectionItemProps,
+  AgentCardProps,
+  AgentInfoSectionProps,
+  AddAgentBottomSheetProps,
+  AgentTermsBottomSheetProps,
+  OAuthMetadata,
+  OAuthState,
+  ConversationData,
+  MessageDisplayConfig,
+  WebSocketMessage,
+  FontSizeLevel,
+  AgentTermsBottomSheetStyles, AgentConversationsSheetStyles 
+} from "@/utils/agent/types";

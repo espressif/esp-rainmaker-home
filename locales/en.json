@@ -190,7 +190,13 @@
       "placeholder": "Enter your nickname",
       "skip": "No",
       "add": "Add",
-      "profileSavedSuccessfully": "Profile saved successfully"
+      "profileSavedSuccessfully": "Profile saved successfully",
+      "validation": {
+        "nameMinLength": "Name must be at least 2 characters",
+        "nameMaxLength": "Name must be less than 30 characters"
+      },
+      "profileSavedSuccess": "Profile saved successfully",
+      "profileSaveFailed": "Failed to save profile",
     },
     "errors": {
       "signInFailed": "Sign in failed",
@@ -624,9 +630,9 @@
         "tokenRefreshed": "Token refreshed successfully",
         "selectAgent": "Select Agent",
         "defaultAgent": "Default Agent",
-        "userAgents": "User Agents",
+        "userAgents": "Your Agents",
         "customAgents": "Custom Agents",
-        "commonAgents": "Common Agents",
+        "commonAgents": "Public Agents",
         "yourAgents": "Your Agents",
         "loadingAgents": "Loading agents...",
         "noAgentsAvailable": "No agents available",
@@ -993,6 +999,20 @@
       "showTransactionEnd": "Show Transaction End",
       "showHandshakeAck": "Show Handshake ACK",
       "saveFailed": "Failed to save message display settings"
+    },
+    "conversations": {
+      "title": "Conversations",
+      "loading": "Loading conversations...",
+      "empty": "No conversations yet.",
+      "untitled": "Untitled conversation",
+      "messagesCount": "{{count}} messages",
+      "active": "Active",
+      "deleteSuccessTitle": "Conversation deleted",
+      "deleteSuccessMessage": "The conversation has been deleted successfully.",
+      "deleteErrorTitle": "Failed to delete",
+      "deleteErrorMessage": "Failed to delete the conversation. Please try again.",
+      "activateErrorTitle": "Failed to open conversation",
+      "activateErrorMessage": "Something went wrong while opening the conversation."
     }
   },
   "chatSettings": {
@@ -1045,7 +1065,8 @@
     "fontSizeUpdated": "Font size updated",
     "fontSizeUpdatedMessage": "Font size has been updated successfully.",
     "fontSizeUpdateFailed": "Failed to update font size",
-    "fontSizeUpdateFailedMessage": "Failed to save font size. Please try again."
+    "fontSizeUpdateFailedMessage": "Failed to save font size. Please try again.",
+    "conversations": "Conversations"
   },
   "aiSettings": {
     "title": "Agents Settings",
@@ -1123,6 +1144,8 @@
     "cancel": "Cancel",
     "delete": "Delete",
     "retry": "Retry",
-    "ok": "OK"
+    "ok": "OK",
+    "close": "Close",
+    "continue": "Continue"
   }
 }

@@ -46,7 +46,6 @@ import {
   TERMS_OF_USE_LINK,
 } from "@/utils/constants";
 import { deletePlatformEndpoint } from "@/utils/notifications";
-import { getAgentTermsAccepted } from "@/utils/agent/storage";
 import { pipelineTask } from "@/utils/pipelineTask";
 
 // Types
@@ -63,7 +62,6 @@ type RouteMap = {
   handleGoogleAssistant: "/(user)/GoogleAssistantGuide";
   handleNotificationCenter: "/(user)/NotificationCenter";
   handleAssistantSettings: "/(agent)/Settings";
-  handleEnableAgent: "/(auth)/AgentTerms";
   handlePrivacyPolicy: () => void;
   handleTermsOfUse: () => void;
 };
@@ -94,9 +92,6 @@ const User: React.FC<UserProps> = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [showLogoutDialog, setShowLogoutDialog] = useState(false);
 
-  // Check agent terms acceptance status
-  const agentTermsAccepted = getAgentTermsAccepted(store.userStore);
-
   // Configuration
   const userOperations: UserOperationConfig[] = [
     {
@@ -106,28 +101,12 @@ const User: React.FC<UserProps> = () => {
       action: "handleNotificationCenter",
       showBadge: false,
     },
-    // Only show AI Settings if terms are accepted
-    ...(agentTermsAccepted === true
-      ? [
-          {
-            id: "assistant-settings",
-            icon: <Bot size={20} color={tokens.colors.primary} />,
-            title: t("user.settings.aiSettings"),
-            action: "handleAssistantSettings",
-          },
-        ]
-      : []),
-    // Show Enable Agent option if user disagreed
-    ...(agentTermsAccepted === false
-      ? [
-          {
-            id: "enable-agent",
-            icon: <Bot size={20} color={tokens.colors.primary} />,
-            title: "Enable Agent",
-            action: "handleEnableAgent",
-          },
-        ]
-      : []),
+    {
+      id: "assistant-settings",
+      icon: <Bot size={20} color={tokens.colors.primary} />,
+      title: t("user.settings.aiSettings"),
+      action: "handleAssistantSettings",
+    },
     {
       id: "privacy",
       icon: <Shield size={20} color={tokens.colors.primary} />,
@@ -164,7 +143,6 @@ const User: React.FC<UserProps> = () => {
       handleGoogleAssistant: "/(user)/GoogleAssistantGuide",
       handleNotificationCenter: "/(user)/NotificationCenter",
       handleAssistantSettings: "/(agent)/Settings",
-      handleEnableAgent: "/(auth)/AgentTerms",
       handlePrivacyPolicy: () => openUrl(PRIVACY_POLICY_LINK),
       handleTermsOfUse: () => openUrl(TERMS_OF_USE_LINK),
     };

@@ -56,6 +56,7 @@ export { default as HomeTooltip } from "./Modals/HomeTooltip";
 export { default as SceneMenuBottomSheet } from "./Modals/SceneMenuBottomSheet";
 export { default as AddAgentBottomSheet } from "./Modals/AddAgentBottomSheet";
 export { default as AgentSelectionBottomSheet } from "./Modals/AgentSelectionBottomSheet";
+export { default as AgentTermsBottomSheet } from "./Modals/AgentTermsBottomSheet";
 
 // Navigation
 export { default as FooterTabs } from "./Navigations/FooterTabs";

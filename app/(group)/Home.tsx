@@ -66,7 +66,6 @@ import { RoomTab, HomeData } from "@/types/global";
 import { startNodeLocalDiscovery } from "@/utils/localDiscovery";
 import { updateLastSelectedHome } from "@/utils/common";
 import { useToast } from "@/hooks/useToast";
-import { getAgentTermsAccepted } from "@/utils/agent/storage";
 
 /**
  * HomeScreen component first screen after login
@@ -451,9 +450,7 @@ const HomeScreen = () => {
       </ScreenWrapper>
 
       {/* Floating Chat Button - positioned outside ScreenWrapper */}
-      {getAgentTermsAccepted(store.userStore) && (
-        <FloatingChatButton />
-      )}
+      <FloatingChatButton />
 
       {/* HomeTooltip positioned absolutely at screen level */}
       <HomeTooltip

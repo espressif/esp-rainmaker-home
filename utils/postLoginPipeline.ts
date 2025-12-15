@@ -10,7 +10,6 @@ import { createPlatformEndpoint } from "./notifications";
 import { setUserTimeZone } from "./timezone";
 import { RAINMAKER_MCP_CONNECTOR_ID, updateRefreshTokensForAllAIDevices } from "./agent";
 import { getUserProfile, getAgentConfig, getConnectedConnectors } from "./apiHelper";
-import { getAgentTermsAccepted, setAgentTermsAccepted } from "./agent/storage";
 import { getSelectedAgentId } from "./agent/storage";
 import { connectToolWithTokens } from "./agent/oauth";
 import { DEFAULT_AGENT_ID, RAINMAKER_MCP_CONNECTOR_URL } from "@/config/agent.config";
@@ -38,7 +37,6 @@ export interface PostLoginPipelineOptions {
  * - Fetching nodes and groups
  * - Updating refresh tokens for AI devices
  * - Initializing user custom data
- * - Checking agent terms acceptance and routing
  *
  * @param options - Configuration options for the pipeline
  */
@@ -111,17 +109,6 @@ export async function executePostLoginPipeline(
     });
   }
 
-  postLoginSteps.push({
-    name: "getAgentTermsAccepted",
-    dependsOn: ["initUserCustomData"],
-    run: async () => {
-      const agentTermsAccepted = getAgentTermsAccepted(store.userStore);
-      if (agentTermsAccepted === null) {
-        await setAgentTermsAccepted(store.userStore, true);
-      }
-    },
-  });
-
   // Auto-connect MCP RainMaker connector for default agent
   postLoginSteps.push({
     name: "autoConnectMCPConnector",
@@ -192,24 +179,10 @@ export async function executePostLoginPipeline(
     run: async () => {
       try {
         await getUserProfile();
-        const agentTermsAccepted = getAgentTermsAccepted(store.userStore);
-        if (agentTermsAccepted === null) {
-          try {
-            await setAgentTermsAccepted(store.userStore, true);
-          } catch (error) {
-            console.warn(
-              "Failed to set agent terms acceptance for backward compatibility:",
-              error
-            );
-          }
-        }
         router.replace("/(group)/Home");
       } catch (error: any) {
-        if (error?.status === 404) {
-          router.replace("/(auth)/AgentTerms");
-        } else {
-          router.replace("/(group)/Home");
-        }
+        // Always route to Home, profile setup will be shown when needed
+        router.replace("/(group)/Home");
       }
     },
   });

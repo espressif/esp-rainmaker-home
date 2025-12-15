@@ -9,13 +9,7 @@ import { View, Text, TouchableOpacity } from "react-native";
 import { Check } from "lucide-react-native";
 import { tokens } from "@/theme/tokens";
 import { agentSelectionSheetStyles } from "@/theme/globalStyleSheet";
-import type { Agent } from "@/utils/apiHelper";
-
-interface AgentSelectionItemProps {
-  agent: Agent;
-  isSelected: boolean;
-  onPress: () => void;
-}
+import { AgentSelectionItemProps } from "@/types/global";
 
 /**
  * AgentSelectionItem
