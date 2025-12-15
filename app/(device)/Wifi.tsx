@@ -15,6 +15,9 @@ import {
   ActivityIndicator,
   Image,
   StyleSheet,
+  KeyboardAvoidingView,
+  ScrollView,
+  Platform,
 } from "react-native";
 
 // Styles and Theme
@@ -356,6 +359,7 @@ const Wifi = () => {
             styles.input,
             { borderRadius: tokens.radius.md },
             globalStyles.shadowElevationForLightTheme,
+            globalStyles.settingsItemText,
           ]}
           placeholder={t("device.wifi.password")}
           value={password}
@@ -415,39 +419,48 @@ const Wifi = () => {
         }}
         qaId="screen_wrapper_wifi"
       >
-        <View style={styles.content} {...testProps("view_wifi")}>
-          <View style={styles.imageContainer} {...testProps("view_wifi")}>
-            <Image
-              source={require("../../assets/images/wifi.png")}
-              style={styles.networkImage}
-              resizeMode="contain"
-              {...testProps("image_wifi")}
-            />
-          </View>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          style={{ flex: 1 }}
+        >
+          <ScrollView
+            contentContainerStyle={styles.content}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+          >
+            <View style={styles.imageContainer} {...testProps("view_wifi")}>
+              <Image
+                source={require("../../assets/images/wifi.png")}
+                style={styles.networkImage}
+                resizeMode="contain"
+                {...testProps("image_wifi")}
+              />
+            </View>
 
-          <View style={styles.formContainer} {...testProps("view_wifi")}>
-            {renderNetworkSelection()}
-            {renderPasswordInput()}
-            {/* Only show save option for secure networks with passwords */}
-            {selectedWifi &&
-              wifiList.find((n) => n.ssid === selectedWifi)?.secure && (
-                <View style={styles.saveWifi} {...testProps("view_wifi")}>
-                  <Checkbox.Android
-                    {...testProps("checkbox_save_network_wifi")}
-                    status={shouldSave ? "checked" : "unchecked"}
-                    onPress={() => setShouldSave(!shouldSave)}
-                    color={tokens.colors.primary}
-                    uncheckedColor={tokens.colors.gray}
-                  />
-                  <Text style={styles.saveText} {...testProps("text_save_network_wifi")}>
-                    {t("device.wifi.saveNetwork")}
-                  </Text>
-                </View>
-              )}
+            <View style={styles.formContainer} {...testProps("view_wifi")}>
+              {renderNetworkSelection()}
+              {renderPasswordInput()}
+              {/* Only show save option for secure networks with passwords */}
+              {selectedWifi &&
+                wifiList.find((n) => n.ssid === selectedWifi)?.secure && (
+                  <View style={styles.saveWifi} {...testProps("view_wifi")}>
+                    <Checkbox.Android
+                      {...testProps("checkbox_save_network_wifi")}
+                      status={shouldSave ? "checked" : "unchecked"}
+                      onPress={() => setShouldSave(!shouldSave)}
+                      color={tokens.colors.primary}
+                      uncheckedColor={tokens.colors.gray}
+                    />
+                    <Text style={styles.saveText} {...testProps("text_save_network_wifi")}>
+                      {t("device.wifi.saveNetwork")}
+                    </Text>
+                  </View>
+                )}
 
-            {renderConnectButton()}
-          </View>
-        </View>
+              {renderConnectButton()}
+            </View>
+          </ScrollView>
+        </KeyboardAvoidingView>
 
         <NetworkListModal
           visible={isModalVisible}
@@ -464,7 +477,7 @@ const Wifi = () => {
 
 const styles = StyleSheet.create({
   content: {
-    flex: 1,
+    flexGrow: 1,
     justifyContent: "center",
     alignItems: "center",
     maxWidth: 400,

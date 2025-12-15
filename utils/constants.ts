@@ -218,3 +218,25 @@ export const MATTER_STATUS_ISSUING_CERTIFICATE = "Issuing user certificate...";
 export const QR_CODE_TYPE = "qr";
 export const CAMERA_TYPE_FRONT = "front";
 export const CAMERA_TYPE_BACK = "back";
+
+// Constants for challenge-response communication
+export const ESP_CHALLENGE_RESPONSE_CONSTANTS = {
+  // Device communication endpoints (only challenge-response needed)
+  CH_RESP_ENDPOINT: "ch_resp",
+  // Expected signature length
+  SIGNATURE_LENGTH_BYTES: 256,
+  SIGNATURE_LENGTH_HEX: 512,
+  // Challenge-response capability
+  CHALLENGE_RESPONSE_CAPABILITY: "ch_resp",
+};
+export const TRANSPORT_BLE = "TRANSPORT_BLE";
+export const BLE = "BLE";
+
+// Constants for polling
+export const POLLING = {
+  MAX_ATTEMPTS: 5,
+  INTERVAL_MS: 2000,
+  ENABLE_LOGGING: true,
+  DEFAULT_LABEL: "Polling",
+  NODE_CONFIG_LABEL: "Node config",
+};

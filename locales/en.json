@@ -75,6 +75,22 @@
       "longitude_missing": "Longitude is required",
       "coordinates_missing": "Geographic coordinates are required",
       "coordinates_invalid": "Invalid geographic coordinates"
+    },
+    "challengeResponse": {
+      "deviceUnsuccessfulStatus": "Device returned unsuccessful status",
+      "missingResponsePayload": "Missing response payload from device",
+      "invalidResponsePayload": "Invalid response payload - missing signed challenge or node ID",
+      "invalidSignatureLength": "Invalid signature length: {{length}} bytes (expected 256)",
+      "parseResponseFailed": "Failed to parse device response: {{message}}",
+      "noConnectedDevice": "No connected device available",
+      "noResponseFromDevice": "No response received from device",
+      "communicationError": "Communication error: {{message}}",
+      "initiateUserNodeMappingFailed": "Failed to initiate user node mapping",
+      "invalidMappingResponse": "Invalid response from server - missing challenge or request_id",
+      "deviceChallengeResponseFailed": "Device failed to respond to challenge",
+      "invalidChallengeResponseFormat": "Invalid challenge response format from device",
+      "verifyNodeMappingFailed": "Failed to verify node mapping",
+      "setNetworkCredentialsFailed": "Failed to set network credentials"
     }
   },
   "layout": {
@@ -439,15 +455,23 @@
     "provision": {
       "title": "Connecting Device",
       "success": "Device provisioned successfully",
-      "sendingCredentialsTitle": "Sending WiFi Credentials",
+      "sendingCredentialsTitle": "Sending Wi-Fi Credentials",
       "sendingCredentialsDescription": "Sending network credentials to device...",
-      "confirmingConnectionTitle": "Confirming WiFi Connection",
+      "confirmingConnectionTitle": "Confirming Wi-Fi Connection",
       "confirmingConnectionDescription": "Verifying network connection...",
       "configuringDeviceAssociationTitle": "Configuring Device Association",
       "configuringDeviceAssociationDescription": "Setting up device association...",
-      "verifyingDeviceAssociation": "Verifying device association...",
+      "verifyingDeviceAssociation": "Verifying Device Association",
       "settingUpNode": "Setting Up Node",
-      "settingUpNodeDescription": "Finalizing device setup..."
+      "settingUpNodeDescription": "Finalizing device setup...",
+      "challengeResponse": {
+        "confirmingNodeAssociationTitle": "Confirming Node Association",
+        "confirmingNodeAssociationDescription": "Confirming Node association with user",
+        "confirmingWifiConnectionTitle": "Confirming Wi-Fi Connection",
+        "confirmingWifiConnectionDescription": "Confirming Wi-Fi Connection with the device",
+        "settingUpNodeTitle": "Setting up the Node",
+        "settingUpNodeDescription": "Setting up the Node with the user's timezone"
+      }
     },
     "claiming": {
       "title": "Claiming Device",
@@ -629,6 +653,9 @@
       "noDeviceSelected": "No device selected",
       "sessionInitFailed": "Session initialization failed",
       "provisioningFailed": "Provisioning failed",
+      "wifiAuthFailed": "Wi-Fi Authentication failed.",
+      "networkNotFound": "Network not found. Please check the network name.",
+      "deviceDisconnected": "Device disconnected. Please try again.",
       "failedToScanNetworks": "Failed to scan for networks",
       "invalidCredentials": "Please enter valid credentials",
       "fallback": "Something went wrong. Please try again later.",
