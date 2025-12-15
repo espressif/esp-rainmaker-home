@@ -225,6 +225,167 @@ const transformNodesToDevices = (
 // Type definition for a device configuration
 export type DeviceConfig = (typeof DEVICE_TYPE_LIST)[0];
 
+/**
+ * Determines the error type based on BLE scan error message content
+ * 
+ * @param errorMessage - The error message to analyze
+ * @param errorCode - Optional error code from React Native rejection
+ * @returns The categorized error type: "permission" | "noDevices" | "scanFailed" | "bluetoothDisabled" | "generic"
+ * 
+ * @example
+ * const errorType = getBleScanErrorType("BLE scanning failed");
+ * // Returns: "scanFailed"
+ * 
+ * @example
+ * const errorType = getBleScanErrorType("Error message", "BLUETOOTH_DISABLED");
+ * // Returns: "bluetoothDisabled"
+ */
+const getBleScanErrorType = (
+  errorMessage: string,
+  errorCode?: string
+): "permission" | "noDevices" | "scanFailed" | "bluetoothDisabled" | "generic" => {
+  const normalizedMessage = errorMessage.toLowerCase();
+  const normalizedCode = errorCode?.toLowerCase() || "";
+  
+  // Check error codes first (Android-specific)
+  if (
+    normalizedCode === "scan_failed" ||
+    normalizedCode === "scan_error"
+  ) {
+    return "scanFailed";
+  }
+  
+  if (normalizedCode === "bluetooth_disabled") {
+    return "bluetoothDisabled";
+  }
+  
+  if (normalizedCode === "location_disabled") {
+    return "permission";
+  }
+  
+  // Check for no devices found FIRST (before generic bluetooth checks)
+  // This prevents "No bluetooth device found" from being misclassified as permission error
+  if (
+    normalizedMessage.includes("no bluetooth device found") ||
+    normalizedMessage.includes("no bluetooth device found with given prefix")
+  ) {
+    return "noDevices";
+  }
+  
+  // Check for Bluetooth/permission related errors in message
+  if (
+    normalizedMessage.includes("bluetooth_scan") ||
+    normalizedMessage.includes("bluetooth") ||
+    normalizedMessage.includes("location") ||
+    normalizedMessage.includes("permission")
+  ) {
+    // Check if it's Bluetooth disabled vs permission
+    if (
+      normalizedMessage.includes("disabled") ||
+      normalizedMessage.includes("not enabled") ||
+      normalizedMessage.includes("turn on") ||
+      normalizedMessage.includes("enable bluetooth") ||
+      normalizedMessage.includes("bluetooth is required") ||
+      normalizedMessage.includes("user needs to enable bluetooth")
+    ) {
+      return "bluetoothDisabled";
+    } else {
+      return "permission";
+    }
+  }
+  
+  // Check for scan failures
+  if (
+    normalizedMessage.includes("ble scanning failed") ||
+    normalizedMessage.includes("scan could not be started") ||
+    normalizedMessage.includes("error during ble scan") ||
+    normalizedMessage.includes("scan failed") ||
+    normalizedMessage.includes("search is not supported")
+  ) {
+    return "scanFailed";
+  }
+  
+  return "generic";
+};
+
+/**
+ * Determines which permission is missing based on BLE and Location permission status
+ * 
+ * @param bleGranted - Whether BLE permission is granted (null means unknown/checking)
+ * @param locationGranted - Whether Location permission is granted (null means unknown/checking)
+ * @returns The missing permission type: "ble" | "location" | "both" | "none"
+ * 
+ * @example
+ * const missing = getMissingPermission(false, true);
+ * // Returns: "ble"
+ */
+const getMissingPermission = (
+  bleGranted: boolean | null,
+  locationGranted: boolean | null
+): "ble" | "location" | "both" | "none" => {
+  if (bleGranted === false && locationGranted === false) return "both";
+  if (bleGranted === false) return "ble";
+  if (locationGranted === false) return "location";
+  return "none";
+};
+
+/**
+ * Determines the error type based on QR scan error message content
+ * 
+ * @param errorMessage - The error message to analyze
+ * @returns The categorized error type: "permission" | "bluetoothDisabled" | "connection" | "session" | "generic"
+ * 
+ * @example
+ * const errorType = getQRScanErrorType("Bluetooth is not enabled");
+ * // Returns: "bluetoothDisabled"
+ * 
+ * @example
+ * const errorType = getQRScanErrorType("DEVICE_NOT_FOUND");
+ * // Returns: "connection"
+ */
+const getQRScanErrorType = (
+  errorMessage: string
+): "permission" | "bluetoothDisabled" | "connection" | "session" | "generic" => {
+  const normalizedMessage = errorMessage.toLowerCase();
+
+  // Check for Bluetooth/permission related errors
+  if (
+    normalizedMessage.includes("bluetooth_scan") ||
+    normalizedMessage.includes("bluetooth") ||
+    normalizedMessage.includes("ble") ||
+    normalizedMessage.includes("permission")
+  ) {
+    // Check if it's a permission issue or BLE disabled
+    if (
+      normalizedMessage.includes("disabled") ||
+      normalizedMessage.includes("not enabled") ||
+      normalizedMessage.includes("turn on")
+    ) {
+      return "bluetoothDisabled";
+    } else {
+      return "permission";
+    }
+  }
+
+  // Check for connection errors
+  if (
+    normalizedMessage.includes("device_not_found") ||
+    normalizedMessage.includes("connection")
+  ) {
+    return "connection";
+  }
+
+  // Check for session errors
+  if (
+    normalizedMessage.includes("session")
+  ) {
+    return "session";
+  }
+
+  // Default to generic error
+  return "generic";
+};
+
 // Export constants and utility functions
 export { DEVICE_TYPE_LIST, deviceImages };
 
@@ -239,4 +400,7 @@ export {
   getDeviceCategory,
   isDeviceCategory,
   transformNodesToDevices,
+  getBleScanErrorType,
+  getMissingPermission,
+  getQRScanErrorType,
 };

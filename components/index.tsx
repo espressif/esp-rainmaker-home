@@ -47,6 +47,7 @@ export { default as ContentWrapper } from "./Layout/ContentWrapper";
 export { default as ScreenWrapper } from "./Layout/ScreenWrapper";
 export { default as PhonePair } from "./Layout/PhonePair";
 export { default as BluetoothDisabledScreen } from "./Layout/BluetoothDisabledScreen";
+export { default as BLEPermissionScreen } from "./Layout/BLEPermissionScreen";
 
 // Modals
 export { default as EditModal } from "./Modals/EditModal";

@@ -494,11 +494,10 @@
         "title": "Scan Bluetooth Devices",
         "scanningDevices": "Scanning for devices...",
         "devicesFound": "{{count}} Device Found",
-        "devicesFoundPlural": "{{count}} Devices Found",
         "allDevices": "All Devices",
-        "scanAgain": "Scan Again ?",
         "connectingDevice": "Connecting Device",
         "noDevicesFound": "No Devices Found",
+        "noDeviceMessage": "No Bluetooth device found with prefix",
         "requestingPermission": "Checking permissions...",
         "noBlePermission": "Bluetooth Access Required",
         "noLocationPermission": "Location Access Required",
@@ -509,8 +508,7 @@
         "grantPermission": "Grant Permission",
         "bluetoothDisabled": "Bluetooth is Off",
         "bluetoothDisabledMessage": "Bluetooth is required to scan for devices. Please turn on Bluetooth in your device settings to continue.",
-        "enableBluetooth": "Enable Bluetooth",
-        "openSettings": "Open Settings"
+        "scanFailed": "BLE scanning failed. Please try again or check if Bluetooth is enabled."
       },
       "qr": {
         "title": "Scan QR Code",
@@ -531,7 +529,10 @@
         "androidNotImplemented": "Android QR scan connection not yet implemented",
         "platformNotSupported": "Platform not supported for QR scanning",
         "sessionInitFailed": "Failed to initialize session. Please try again.",
-        "scanAgain": "Scan Again"
+        "scanAgain": "Scan Again",
+        "bluetoothPermissionRequired": "Bluetooth permission required. Please grant permission and try again.",
+        "matterAuthRequired": "Authentication required for Matter device commissioning.",
+        "matterCommissioningFailed": "Matter commissioning failed: {{error}}"
       },
       "softAP": {
         "title": "Connect to Device",

@@ -10,6 +10,7 @@ import { getAgents, saveAgents } from './storage';
 import { AGENT_SOURCE, CUSTOM_DATA_KEYS } from './constants';
 import { DEFAULT_AGENT_ID } from '@/config/agent.config';
 import type { AgentConfig, AggregatedAgent, AgentValidationResult, AgentSource } from './types';
+import type { AgentExistenceCheckResult, SanitizeAgentIdResult } from '@/types/global';
 
 /**
  * Aggregates agents from all three sources:
@@ -251,6 +252,114 @@ export async function removeInvalidAgentFromCustomData(
     console.error('Error removing invalid agent from custom data:', error);
     // Silent error handling - don't throw
   }
+}
+
+/**
+ * Checks if an agent exists in the agents list and determines the appropriate action.
+ * 
+ * @param agentId - The agent ID to check
+ * @param agents - List of available agents
+ * @param selectedAgentId - Currently selected agent ID
+ * @returns Result object indicating existence and action to take
+ */
+export function checkAgentExistenceAndAction(
+  agentId: string | undefined,
+  agents: AgentConfig[],
+  selectedAgentId: string
+): AgentExistenceCheckResult {
+  // If no agentId provided, no action needed
+  if (!agentId) {
+    return {
+      exists: false,
+      agent: null,
+      shouldActivate: false,
+      shouldShowModal: false,
+    };
+  }
+
+  const trimmedAgentId = agentId.trim();
+
+  // Check if agent already exists
+  const existingAgent = agents.find(
+    (agent) => agent.agentId.trim() === trimmedAgentId
+  );
+
+  if (existingAgent) {
+    // Agent exists - check if it should be activated
+    const shouldActivate = selectedAgentId !== existingAgent.agentId;
+    return {
+      exists: true,
+      agent: existingAgent,
+      shouldActivate,
+      shouldShowModal: false,
+    };
+  }
+
+  // Agent doesn't exist - show add modal
+  return {
+    exists: false,
+    agent: null,
+    shouldActivate: false,
+    shouldShowModal: true,
+  };
+}
+
+/**
+ * Sanitizes and validates an agentId for processing.
+ * Determines if an agentId should be processed based on:
+ * - Whether it's already been processed
+ * - Whether agents are still loading
+ * - Whether agents list is available
+ * 
+ * Pure function - returns the next processed ID value for the caller to manage.
+ * 
+ * @param agentId - The agent ID from route params
+ * @param currentProcessedId - The currently processed agent ID value
+ * @param isLoadingAgents - Whether agents are currently loading
+ * @param agents - List of available agents
+ * @returns Result indicating whether to process, the trimmed agentId, and next processed ID
+ */
+export function sanitizeAgentID(
+  agentId: string | undefined,
+  currentProcessedId: string | null,
+  isLoadingAgents: boolean,
+  agents: AgentConfig[]
+): SanitizeAgentIdResult {
+  // If no agentId provided, don't process
+  if (!agentId) {
+    return {
+      shouldProcess: false,
+      trimmedAgentId: '',
+      nextProcessedId: currentProcessedId,
+    };
+  }
+
+  const trimmedAgentId = agentId.trim();
+
+  // Already processed this exact agentId
+  if (currentProcessedId === trimmedAgentId) {
+    return {
+      shouldProcess: false,
+      trimmedAgentId,
+      nextProcessedId: currentProcessedId,
+    };
+  }
+
+  // Wait for agents to be loaded
+  if (isLoadingAgents || agents.length === 0) {
+    return {
+      shouldProcess: false,
+      trimmedAgentId,
+      nextProcessedId: currentProcessedId,
+    };
+  }
+
+  // Should process - return the new processed ID
+  return {
+    shouldProcess: true,
+    trimmedAgentId,
+    nextProcessedId: trimmedAgentId,
+  };
 }
 
  

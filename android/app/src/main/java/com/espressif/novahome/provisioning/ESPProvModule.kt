@@ -1322,6 +1322,8 @@
              promise.reject("SCAN_ERROR", e.message ?: "Error during scan")
          }
      }
+
+
  
  
      /**
@@ -1344,10 +1346,39 @@
          val scanResult: ScanResult?
      )
  
-     /**
-      * Cleans up resources and unregisters event listeners.
-      */
-     fun cleanup() {
-         EventBus.getDefault().unregister(this)
-     }
- }
+    /**
+     * Disconnects the specified ESP device.
+     *
+     * @param deviceName The name of the device to disconnect.
+     */
+    @ReactMethod
+    fun disconnect(deviceName: String) {
+        val espDevice = when {
+            bleDevices.containsKey(deviceName) || deviceList.any { it.deviceName == deviceName } -> {
+                espProvisionManager?.espDevice
+            }
+
+            softAPDevices.containsKey(deviceName) -> {
+                softAPDevices[deviceName]
+            }
+
+            else -> null
+        }
+
+        if (espDevice != null) {
+            try {
+                espDevice.disconnectDevice()
+                Log.d(TAG, "Device disconnected: $deviceName")
+            } catch (e: Exception) {
+                Log.e(TAG, "Error disconnecting device: ${e.message}")
+            }
+        }
+    }
+
+    /**
+     * Cleans up resources and unregisters event listeners.
+     */
+    fun cleanup() {
+        EventBus.getDefault().unregister(this)
+    }
+}

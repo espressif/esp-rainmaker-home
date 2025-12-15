@@ -209,11 +209,16 @@ export const provisionAdapter: ESPProvisionAdapterInterface = {
   },
 
   /**
-   * Disconnect the ESP devices.
+   * Disconnects the specified ESP device.
+   *
+   * @param {string} deviceName - The name of the ESP device to disconnect.
    */
   disconnect: async (deviceName: string) => {
-    // TO-DO:
-    console.log("Disconnect the ESP devices.");
+    try {
+      await ESPProvModule.disconnect(deviceName);
+    } catch (error) {
+      console.error("[ESPProvAdapter] Error disconnecting device:", error);
+    }
   },
 
   /**

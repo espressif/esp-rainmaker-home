@@ -22,6 +22,7 @@ import {
   ESPRMGroup,
   ESPAutomation,
 } from "@espressif/rainmaker-base-sdk";
+import { AgentConfig } from "@/utils/agent";
 
 // ============================================================================
 // Common Types
@@ -125,6 +126,12 @@ export interface ScannedDeviceProps {
   type: string;
   isConnecting: boolean;
   onPress: () => void;
+}
+
+export interface BLEPermissionScreenProps {
+  status: "requesting" | "denied";
+  missingPermission: "ble" | "location" | "both" | "none";
+  testIdPrefix?: string;
 }
 
 // ============================================================================
@@ -1061,4 +1068,29 @@ export interface DeviceChallengeResponse {
   signedChallenge?: string;
   /** The error message if failed */
   error?: string;
+}
+/**
+ * Result type for checking agent existence and action
+ */
+export interface AgentExistenceCheckResult {
+  /** Whether the agent exists in the list */
+  exists: boolean;
+  /** The agent if found, null otherwise */
+  agent: AgentConfig | null;
+  /** Whether the agent should be activated (exists and not already selected) */
+  shouldActivate: boolean;
+  /** Whether the add modal should be shown (agent doesn't exist) */
+  shouldShowModal: boolean;
+}
+
+/**
+ * Result type for sanitizing agentId
+ */
+export interface SanitizeAgentIdResult {
+  /** Whether the agentId should be processed */
+  shouldProcess: boolean;
+  /** The trimmed agentId */
+  trimmedAgentId: string;
+  /** The next processed ID value to store (caller should update ref) */
+  nextProcessedId: string | null;
 }
