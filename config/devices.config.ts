@@ -164,4 +164,19 @@ export const DEVICE_TYPE_LIST = [
     defaultIcon: "watering",
     disabled: true,
   },
+  {
+    label: "Espressif AI Agent",
+    groupLabel: "AI Assistant",
+    type: ["ai-assistant", 'AI Assistant', 'ai assistant'],
+    name: "Espressif AI Agent",
+    param: "Espressif AI Agent",
+    icon: {
+      "ai-assistant": { icon: "ai-assistant" },
+      "AI Assistant": { icon: "ai-assistant" },
+      "ai assistant": { icon: "ai-assistant" }
+    },
+    defaultIcon: "ai-assistant",
+    disabled: false,
+    controlPanel: "ai-agent",
+  },
 ];

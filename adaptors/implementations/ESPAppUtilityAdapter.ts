@@ -47,6 +47,19 @@ export const ESPAppUtilityAdapter = {
   },
 
   /**
+   * Checks if Bluetooth is enabled/powered on.
+   */
+  async isBluetoothEnabled(): Promise<boolean> {
+    try {
+      const result = await ESPAppUtilityModule.isBluetoothEnabled();
+      return result;
+    } catch (error) {
+      console.error("ESPAppUtilityAdapter: Error checking Bluetooth state:", error);
+      return false;
+    }
+  },
+
+  /**
    * Requests all required permissions.
    */
   requestAllPermissions(): void {

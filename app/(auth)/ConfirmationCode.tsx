@@ -19,7 +19,7 @@ import { ScreenWrapper, Header, Input, Button } from "@/components";
 
 import APP_CONFIG from "@/app.json";
 import { testProps } from "@/utils/testProps";
-import { setUserTimeZone } from "@/utils/timezone";
+import { executePostLoginPipeline } from "@/utils/postLoginPipeline";
 
 /**
  * ConfirmationCodeScreen component that displays the confirmation code screen for signup.
@@ -32,7 +32,7 @@ const ConfirmationCodeScreen = () => {
   const appVersion = APP_CONFIG.expo.version;
 
   const { t } = useTranslation();
-  const { store } = useCDF();
+  const { store, initUserCustomData, refreshESPRMUser, fetchNodesAndGroups } = useCDF();
   const { email, password = "" } = useLocalSearchParams();
   const toast = useToast();
 
@@ -150,11 +150,11 @@ const ConfirmationCodeScreen = () => {
     // Confirm signup
     store.userStore.authInstance
       ?.confirmSignUp(email as string, code)
-      .then((res) => {
+      .then(async (res) => {
         if (res.status === "success") {
           toast.showSuccess(t("auth.signup.registrationSuccess"));
           // Auto-login after successful signup verification
-          loginUser();
+          await loginUser();
         } else {
           toast.showError(
             t("auth.errors.signupConfirmationFailed"),
@@ -184,34 +184,30 @@ const ConfirmationCodeScreen = () => {
    * 1. login
    */
   const loginUser = async () => {
-    store.userStore
-      .login(email as string, password as string)
-      .then(async (res) => {
-        if (res) {
-          // Set user timezone after auto-login
-          try {
-            await setUserTimeZone(store.userStore.user);
-          } catch (error) {
-            console.error("Failed to set timezone:", error);
-          }
-
-          router.dismissAll();
-          // redirect to home screen
-          router.replace("/(group)/Home");
-        }
-      })
-      .catch((error) => {
-        toast.showError(
-          t("auth.errors.autoSignInFailed"),
-          error.description || t("auth.errors.fallback")
-        );
-        setTimeout(() => {
-          router.dismissTo({
-            pathname: "/(auth)/Login",
-            params: { email: email },
-          });
-        }, 1000);
-      });
+    try {
+      const res = await store.userStore.login(email as string, password as string);
+      if (res) {
+        router.dismissAll();
+        await executePostLoginPipeline({
+          store,
+          router,
+          refreshESPRMUser,
+          fetchNodesAndGroups,
+          initUserCustomData,
+        });
+      }
+    } catch (error: any) {
+      toast.showError(
+        t("auth.errors.autoSignInFailed"),
+        error.description || t("auth.errors.fallback")
+      );
+      setTimeout(() => {
+        router.dismissTo({
+          pathname: "/(auth)/Login",
+          params: { email: email },
+        });
+      }, 10000);
+    }
   };
 
   return (

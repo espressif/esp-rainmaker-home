@@ -123,7 +123,13 @@
       "signInButton": "Sign in",
       "forgotPassword": "Forgot password",
       "thirdPartyLogin": "Third party account login",
-      "navigateToSignUp": "Don't have an account? Sign up"
+      "navigateToSignUp": "Don't have an account? Sign up",
+      "settingUpAccount": "Setting up your account",
+      "settingUpHomes": "Setting up homes",
+      "settingUpNodes": "Setting up nodes",
+      "gettingProfile": "Getting profile",
+      "finishingUp": "Finishing up",
+      "loading": "Loading..."
     },
     "signup": {
       "title": "Sign Up",
@@ -162,6 +168,14 @@
       "invalidCode": "Please enter a valid 6-digit code",
       "newPasswordSameAsCurrent": "New password cannot be the same as the current password"
     },
+    "agentTerms": {
+      "title": "Would you like to add a nickname for your account?",
+      "subtitle": "Add a friendly name to personalize your experience, or skip.",
+      "placeholder": "Enter your nickname",
+      "skip": "No",
+      "add": "Add",
+      "profileSavedSuccessfully": "Profile saved successfully"
+    },
     "errors": {
       "signInFailed": "Sign in failed",
       "signUpFailed": "Sign up failed",
@@ -172,7 +186,9 @@
       "authInstanceNotInitialized": "Authentication instance not initialized",
       "signupConfirmationFailed": "Failed to confirm signup",
       "passwordResetFailed": "Failed to reset password",
-      "autoSignInFailed": "Failed to auto sign in"
+      "autoSignInFailed": "Failed to auto sign in",
+      "failedToSaveProfile": "Failed to save profile",
+      "pleaseTryAgain": "Please try again"
     }
   },
   "user": {
@@ -182,7 +198,7 @@
         "title": "Voice Assistants and Integrations"
       },
       "logoutModal": {
-        "message": "Are you sure you want to log out?",
+        "message": "Are you sure you want to log out? If you log out from the application, the agents which are configured from your account will also get logged out.",
         "confirmButton": "Yes, Log Out",
         "cancelButton": "Stay Logged In"
       }
@@ -191,6 +207,7 @@
       "title": "Settings",
       "personalInformation": "Personal Information",
       "accountSecurity": "Account and Security",
+      "aiSettings": "Agents Settings",
       "aboutUs": "About Us"
     },
     "personalInfo": {
@@ -441,17 +458,36 @@
         "allDevices": "All Devices",
         "scanAgain": "Scan Again ?",
         "connectingDevice": "Connecting Device",
-        "noDevicesFound": "No Devices Found"
+        "noDevicesFound": "No Devices Found",
+        "requestingPermission": "Checking permissions...",
+        "noBlePermission": "Bluetooth Access Required",
+        "noLocationPermission": "Location Access Required",
+        "permissionRequired": "Permissions Required",
+        "blePermissionRequired": "We need Bluetooth access to scan for devices. Please grant permission to continue.",
+        "locationPermissionRequired": "We need location access to scan for Bluetooth devices. Please grant permission to continue.",
+        "allPermissionsRequired": "We need Bluetooth and location access to scan for devices. Please grant permissions to continue.",
+        "grantPermission": "Grant Permission",
+        "bluetoothDisabled": "Bluetooth is Off",
+        "bluetoothDisabledMessage": "Bluetooth is required to scan for devices. Please turn on Bluetooth in your device settings to continue.",
+        "enableBluetooth": "Enable Bluetooth",
+        "openSettings": "Open Settings"
       },
       "qr": {
         "title": "Scan QR Code",
         "holdSteady": "Hold your phone steady",
+        "connectingToDevice": "Connecting to device...",
         "alignQRCode": "Align QR code within the frame",
         "requestingPermission": "Checking camera permission...",
         "noCameraPermission": "Camera Access Required",
         "cameraPermissionRequired": "We need camera access to scan QR codes. Please grant permission to continue.",
         "grantPermission": "Proceed",
+        "bluetoothDisabled": "Bluetooth is Off",
+        "bluetoothDisabledMessage": "Bluetooth is required for QR code provisioning. Please turn on Bluetooth in your device settings to continue.",
+        "enableBluetooth": "Enable Bluetooth",
+        "openSettings": "Open Settings",
         "invalidQRCode": "Invalid QR Code",
+        "unableToConnectToDevice": "Unable to connect to device",
+        "failedToInitializeDevice": "Failed to initialize device",
         "androidNotImplemented": "Android QR scan connection not yet implemented",
         "platformNotSupported": "Platform not supported for QR scanning",
         "sessionInitFailed": "Failed to initialize session. Please try again.",
@@ -468,7 +504,11 @@
         "devicesFoundPlural": "{{count}} Devices Found",
         "noDevicesFound": "No Devices Found",
         "scanAgain": "Scan Again ?",
-        "deviceConnected": "Device connected successfully"
+        "deviceConnected": "Device connected successfully",
+        "requestingPermission": "Checking location permission...",
+        "noLocationPermission": "Location Access Required",
+        "locationPermissionRequired": "We need location access to scan for Wi-Fi networks and connect to your device. Please grant permission to continue.",
+        "grantPermission": "Grant Permission"
       }
     },
     "wifi": {
@@ -508,7 +548,18 @@
       "selectTimezone": "Select Timezone",
       "searchTimezone": "Search timezone...",
       "noTimezonesFound": "No timezones found",
-      "timezoneUpdatedSuccess": "Timezone updated successfully"
+      "timezoneUpdatedSuccess": "Timezone updated successfully",
+      "guide": "Guide",
+      "operationsTitle": "Operations",
+      "reboot": "Reboot",
+      "factoryReset": "Factory Reset",
+      "wifiReset": "Wi-Fi Reset",
+      "rebootConfirm": "Are you sure you want to reboot this device? The device will restart and may be temporarily unavailable.",
+      "factoryResetConfirmWithRemoval": "Are you sure you want to factory reset this device? This will erase all settings, remove the device from your account, and cannot be undone.",
+      "wifiResetConfirm": "Are you sure you want to reset Wi-Fi settings? This will disconnect the device from the current network.",
+      "systemOperationSuccess": "{{operation}} initiated successfully",
+      "systemOperationFailed": "Failed to initiate {{operation}}",
+      "systemOperationConfirm": "Are you sure you want to perform {{operation}}?"
     },
     "panels": {
       "light": {
@@ -525,6 +576,30 @@
       "temperature": {
         "title": "Temperature",
         "unit": "°C"
+      },
+      "aiAgent": {
+        "refreshToken": "Refresh Token",
+        "refreshing": "Refreshing...",
+        "tokenRefreshed": "Token refreshed successfully",
+        "selectAgent": "Select Agent",
+        "defaultAgent": "Default Agent",
+        "userAgents": "User Agents",
+        "customAgents": "Custom Agents",
+        "commonAgents": "Common Agents",
+        "yourAgents": "Your Agents",
+        "loadingAgents": "Loading agents...",
+        "noAgentsAvailable": "No agents available",
+        "agentUpdated": "Agent updated successfully",
+        "agentInvalid": "Agent Invalid",
+        "agentNotFound": "Agent not found. It has been removed from your list.",
+        "agentSelectionError": "Failed to load agents. Please try again.",
+        "agentUpdateError": "Failed to update agent",
+        "agentIdParamNotFound": "Agent ID parameter not found",
+        "noAgentSelected": "No agent selected",
+        "agentAuthServiceNotFound": "Agent auth service not found",
+        "refreshTokenParamNotFound": "Refresh token parameter not found",
+        "agentName": "Agent",
+        "guide": "Guide"
       }
     },
     "validation": {
@@ -548,7 +623,8 @@
       "failedToRemoveDevice": "Failed to remove device",
       "checkOTAUpdateError": "Failed to check for updates",
       "otaUpdateStartError": "Failed to start update",
-      "failedToUpdateTimezone": "Failed to update timezone"
+      "failedToUpdateTimezone": "Failed to update timezone",
+      "noReadmeURLProvided": "No README URL provided"
     }
   },
   "scene": {
@@ -834,5 +910,174 @@
       "one": "{{count}} device",
       "other": "{{count}} devices"
     }
+  },
+  "chat": {
+    "title": "Chat Assistant",
+    "placeholder": "Type your message...",
+    "connected": "Connected",
+    "connecting": "Connecting...",
+    "disconnected": "Disconnected",
+    "reconnect": "Reconnect",
+    "connectionError": "Connection Error",
+    "connectionErrorMessage": "Failed to connect to chat service",
+    "notConnected": "Not connected to chat service",
+    "connectionClosed": "Connection closed",
+    "connectionErrorOccurred": "Connection error occurred",
+    "talkToAI": "Talk to AI",
+    "identifying": "Identifying agent...",
+    "noAgentsConfigured": "No agents configured",
+    "noAgentsMessage": "Please configure an agent in Assistant Settings to start chatting.",
+    "goToSettings": "Go to Settings",
+    "rainmakerMCPNotConnected": "Rainmaker MCP Not Connected",
+    "rainmakerMCPWarning": "Rainmaker MCP connector is not connected. Do you want to continue or retry?",
+    "retry": "Retry",
+    "continue": "Continue",
+    "agentError": "Agent does not exist or something went wrong",
+    "connectingConnector": "Connecting Rainmaker MCP...",
+    "initializing": "Initializing chat...",
+    "agentConfigNotFound": "Configured agent not found",
+    "agentConfigNotFoundDescription": "The configured agent could not be found. Please update your agent settings.",
+    "updateAgent": "Update Agent",
+    "messageDisplayConfig": {
+      "title": "Message Display Settings",
+      "showUser": "Show User Messages",
+      "showAssistant": "Show Assistant Messages",
+      "showThinking": "Show Thinking Messages",
+      "showToolCallInfo": "Show Tool Call Info",
+      "showToolResultInfo": "Show Tool Result Info",
+      "showUsageInfo": "Show Usage Info",
+      "showTransactionEnd": "Show Transaction End",
+      "showHandshakeAck": "Show Handshake ACK",
+      "saveFailed": "Failed to save message display settings"
+    }
+  },
+  "chatSettings": {
+    "title": "Chat Settings",
+    "basicInfo": "Basic Information",
+    "agentInfo": "Agent Information",
+    "agentId": "Agent ID",
+    "name": "Name",
+    "createdBy": "Created By",
+    "textModelId": "Text Model ID",
+    "speechModelId": "Speech Model ID",
+    "conversationId": "Conversation ID",
+    "noConversation": "No conversation",
+    "noConversationToDelete": "There is no conversation to delete.",
+    "modelCapabilities": "Model Capabilities",
+    "supportsText": "Supports Text",
+    "supportsVoice": "Supports Voice",
+    "capabilities": "Capabilities",
+    "noCapabilities": "No capabilities configured",
+    "displayName": "Display Name",
+    "tools": "Tools",
+    "noTools": "No tools configured",
+    "connected": "Connected",
+    "connect": "Connect",
+    "connecting": "Connecting...",
+    "connectNotImplemented": "Connect functionality coming soon",
+    "connectFailed": "Failed to connect. Please try again.",
+    "connectSuccess": "Connected successfully",
+    "connectSuccessMessage": "Tool connected successfully",
+    "newChat": "New Chat",
+    "settings": "Settings",
+    "deleteConversation": "Delete Conversation",
+    "deleteConversationConfirm": "Are you sure you want to delete this conversation? This action cannot be undone.",
+    "conversationDeleted": "Conversation deleted",
+    "conversationDeletedSuccess": "Conversation has been deleted successfully.",
+    "deleteFailed": "Delete failed",
+    "disconnectTool": "Disconnect Tool",
+    "disconnectToolConfirm": "Are you sure you want to disconnect {{toolName}}? This will remove stored authentication credentials.",
+    "disconnect": "Disconnect",
+    "disconnectSuccess": "Disconnected successfully",
+    "disconnectSuccessMessage": "Tool disconnected successfully",
+    "toolDisconnected": "Tool has been disconnected successfully.",
+    "disconnectFailed": "Failed to disconnect. Please try again.",
+    "fontSize": "Font Size",
+    "fontSizeLevel": "Font Size Level",
+    "fontSizeSmall": "Small",
+    "fontSizeMedium": "Medium",
+    "fontSizeLarge": "Large",
+    "fontSizeExtraLarge": "Extra Large",
+    "fontSizeUpdated": "Font size updated",
+    "fontSizeUpdatedMessage": "Font size has been updated successfully.",
+    "fontSizeUpdateFailed": "Failed to update font size",
+    "fontSizeUpdateFailedMessage": "Failed to save font size. Please try again."
+  },
+  "aiSettings": {
+    "title": "Agents Settings",
+    "currentSelection": "Current Selection",
+    "availableAgents": "Available Agents",
+    "addNewAgent": "Add New Agent",
+    "agentName": "Agent Name",
+    "agentNamePlaceholder": "Enter agent name",
+    "agentId": "Agent ID",
+    "agentIdPlaceholder": "Enter agent ID",
+    "default": "Default",
+    "selected": "Active",
+    "noAgents": "No agents available",
+    "noAgentsDescription": "Add your first agent to get started",
+    "agentAdded": "Agent added successfully",
+    "agentUpdated": "Agent updated successfully",
+    "agentDeleted": "Agent deleted successfully",
+    "agentSetForChat": "Agent set for chat",
+    "confirmDelete": {
+      "title": "Delete Agent",
+      "message": "Are you sure you want to delete this agent? This action cannot be undone."
+    },
+    "errors": {
+      "saveFailed": "Failed to save settings",
+      "fallback": "Something went wrong. Please try again.",
+      "invalidInput": "Invalid Input",
+      "fillAllFields": "Please fill in all fields",
+      "cannotDelete": "Cannot Delete",
+      "cannotDeleteDefault": "Cannot delete the default agent",
+      "invalidAgentId": "Invalid agent ID",
+      "agentDoesNotExist": "Agent does not exist",
+      "agentInvalid": "Agent Invalid",
+      "agentNotFound": "Agent not found. Please check the agent ID.",
+      "agentNotFoundRemoved": "Agent not found. It has been removed from your list.",
+      "agentAlreadyExists": "Agent already exists",
+      "cannotDeleteTemplateOrUser": "Cannot delete template or user agents. Only custom agents can be deleted."
+    }
+  },
+  "agent": {
+    "configure": {
+      "title": "Configure Agent",
+      "agentIdToSet": "Agent",
+      "agentConfigNotAvailable": "Agent configuration not available",
+      "selectDevices": "Tap on AI Assistant devices below to select them. Selected devices will be updated with the Agent ID above.",
+      "noAIDevices": "No AI Assistant devices found",
+      "noAIDevicesDescription": "Please add AI Assistant devices to your account first.",
+      "updating": "Updating...",
+      "updateAgentId": "Update Agent ID",
+      "updateDevices": "Update Devices",
+      "addToChat": "Add to Chat",
+      "defaultChat": "Chat",
+      "addAgentToChat": "Add agent to chat",
+      "updateSuccess": "Agent ID updated successfully",
+      "devicesUpdated": "{{count}} device(s) updated",
+      "devicesUpdatedCount": "{{count}} device(s) updated successfully",
+      "devicesUpdatedPartial": "{{successful}} of {{total}} device(s) updated successfully",
+      "updateError": "Failed to update Agent ID",
+      "noDevicesSelected": "Please select at least one device"
+    },
+    "try": {
+      "title": "Agent Setup",
+      "loading": "Loading agent configuration...",
+      "loadError": "Failed to load agent configuration",
+      "connectorCheckDescription": "Please ensure all required connectors are connected before proceeding.",
+      "requiredConnectors": "Required Connectors",
+      "connected": "Connected",
+      "notConnected": "Not Connected",
+      "noRequiredConnectors": "No required connectors for this agent.",
+      "connectAllConnectors": "Please connect all required connectors to continue.",
+      "continue": "Continue"
+    }
+  },
+  "common": {
+    "save": "Save",
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "retry": "Retry"
   }
 }

@@ -1,0 +1,24 @@
+<svg width="256px" height="256px" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg" stroke="#333333" stroke-width="0.8" fill="none">
+  <style>
+    .b { stroke:#333333; stroke-linecap:round; stroke-linejoin:round; }
+  </style>
+
+  <!-- Outer arcs -->
+  <path class="b" d="M19.5 2.98C11.24 4.74 4.74 11.24 2.98 19.5"/>
+  <path class="b" d="M45.02 19.5C43.26 11.24 36.76 4.74 28.5 2.98"/>
+  <path class="b" d="M28.5 45.02c8.26-1.76 14.76-8.26 16.52-16.52"/>
+  <path class="b" d="M2.98 28.5c1.76 8.26 8.26 14.76 16.52 16.52"/>
+
+  <!-- Middle filled surface (blue) -->
+  <path class="b" fill="#80a9e0" d="M24.0319 17.1043c7.6696 0 13.887 6.2174 13.887 13.887 
+    0 1.0906-.8841 1.9748-1.9748 1.9748H12.0559c-1.0906 0-1.9748-.8841-1.9748-1.9748 
+    0-7.6696 6.2173-13.8871 13.8869-13.8872h.0638Z"/>
+
+  <!-- Eyes -->
+  <circle cx="18.4" cy="27.1" r="2" fill="#ffffff" stroke="#333333" stroke-width="0.6"/>
+  <circle cx="29.7" cy="27.1" r="2" fill="#ffffff" stroke="#333333" stroke-width="0.6"/>
+
+  <!-- Lines -->
+  <line class="b" x1="12.0559" y1="15.0339" x2="16.0054" y2="19.6683"/>
+  <line class="b" x1="36.0397" y1="15.0339" x2="32.1061" y2="19.6683"/>
+</svg>

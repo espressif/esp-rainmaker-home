@@ -99,14 +99,16 @@ class ESPAppUtilityModule(private val reactCtx: ReactApplicationContext) :
 
 
     /**
-     * Synchronous version - Check if Bluetooth is enabled at the system level
+     * Promise<boolean> — true if Bluetooth is enabled at the system level.
      */
-    fun isBluetoothEnabledSync(): Boolean {
-        return try {
+    @ReactMethod
+    fun isBluetoothEnabled(promise: Promise) {
+        try {
             val bluetoothAdapter = BluetoothAdapter.getDefaultAdapter()
-            bluetoothAdapter?.isEnabled == true
+            val enabled = bluetoothAdapter?.isEnabled == true
+            promise.resolve(enabled)
         } catch (t: Throwable) {
-            false
+            promise.resolve(false)
         }
     }
 

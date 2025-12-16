@@ -224,6 +224,10 @@ const DeviceCard: React.FC<DeviceCardProps> = ({
     if (extractDeviceType(device.type) === "temperature-sensor") {
       return isConnected;
     }
+
+    if (extractDeviceType(device.type) == "ai assistant") {
+      return isConnected;
+    }
     return paramTypeMap[ESPRM_POWER_PARAM_TYPE]?.value;
   };
 
