@@ -41,6 +41,7 @@ import {
   ScreenWrapper,
   AddYourFirstDeviceBanner,
   HomeTooltip,
+  FloatingChatButton,
 } from "@/components";
 // utils
 import { testProps } from "@/utils/testProps";
@@ -65,6 +66,7 @@ import { RoomTab, HomeData } from "@/types/global";
 import { startNodeLocalDiscovery } from "@/utils/localDiscovery";
 import { updateLastSelectedHome } from "@/utils/common";
 import { useToast } from "@/hooks/useToast";
+import { getAgentTermsAccepted } from "@/utils/agent/storage";
 
 /**
  * HomeScreen component first screen after login
@@ -110,8 +112,9 @@ const HomeScreen = () => {
 
   // Get all connected nodes for this home
   const activeHomeNodes = useMemo(() => {
-    return getHomeNodes(processedHome, nodeStore?.nodeList);
-  }, [processedHome, nodeStore?.nodeList]);
+    const currentHome = groupStore._groupsByID?.[groupStore.currentHomeId];
+    return getHomeNodes(currentHome, nodeStore?.nodeList);
+  }, [processedHome, nodeStore?.nodeList, groupStore?.currentHomeId, groupStore?.groupList]);
 
   // Build navigation tabs for rooms
   const roomNavigationTabs = useMemo(() => {
@@ -446,6 +449,11 @@ const HomeScreen = () => {
           </>
         )}
       </ScreenWrapper>
+
+      {/* Floating Chat Button - positioned outside ScreenWrapper */}
+      {getAgentTermsAccepted(store.userStore) && (
+        <FloatingChatButton />
+      )}
 
       {/* HomeTooltip positioned absolutely at screen level */}
       <HomeTooltip

@@ -28,9 +28,10 @@ import { ESPDevice, ESPTransport } from "@espressif/rainmaker-base-sdk";
 // Hooks
 import { useCDF } from "@/hooks/useCDF";
 import { useRouter } from "expo-router";
+import { useDevicePermissions } from "@/hooks/useDevicePermissions";
 
 // Icons
-import { HouseWifi, Check, RotateCcw } from "lucide-react-native";
+import { HouseWifi, Check, RotateCcw, MapPin } from "lucide-react-native";
 
 // Components
 import { Header, ScreenWrapper, ContentWrapper, Typo } from "@/components";
@@ -147,6 +148,78 @@ const ScanningAnimation = () => {
 };
 
 /**
+ * PermissionScreen
+ *
+ * Displays permission request screen when Location permission is missing
+ */
+const PermissionScreen = ({
+  status,
+  onRequestPermission,
+}: {
+  status: "requesting" | "denied";
+  onRequestPermission: () => void;
+}) => {
+  const { t } = useTranslation();
+
+  return (
+    <View
+      {...testProps("view_permission_screen")}
+      style={[
+        globalStyles.container,
+        globalStyles.itemCenter,
+        { backgroundColor: tokens.colors.bg5 },
+      ]}
+    >
+      <View
+        {...testProps("view_permission_content")}
+        style={[
+          globalStyles.permissionContent,
+          {
+            ...globalStyles.shadowElevationForLightTheme,
+            backgroundColor: tokens.colors.white,
+          },
+        ]}
+      >
+        <View {...testProps("view_permission_icon")} style={globalStyles.permissionIconContainer}>
+          <MapPin size={40} color={tokens.colors.gray} />
+        </View>
+        <Text {...testProps("text_permission_title_scan_soft_ap")} style={[globalStyles.heading, globalStyles.permissionTitle]}>
+          {status === "requesting"
+            ? t("device.scan.softAP.requestingPermission")
+            : t("device.scan.softAP.noLocationPermission")}
+        </Text>
+        <Text
+          {...testProps("text_permission_msg_scan_soft_ap")}
+          style={[globalStyles.textGray, globalStyles.permissionDescription]}
+        >
+          {t("device.scan.softAP.locationPermissionRequired")}
+        </Text>
+        {status === "denied" && (
+          <TouchableOpacity
+            {...testProps("button_permission")}
+            style={[
+              globalStyles.actionButton,
+              globalStyles.actionButtonPrimary,
+              globalStyles.permissionButton,
+            ]}
+            onPress={onRequestPermission}
+          >
+            <HouseWifi
+              size={20}
+              color={tokens.colors.white}
+              style={styles.buttonIcon}
+            />
+            <Text {...testProps("text_grant_permission_scan_soft_ap")} style={globalStyles.actionButtonTextPrimary}>
+              {t("device.scan.softAP.grantPermission")}
+            </Text>
+          </TouchableOpacity>
+        )}
+      </View>
+    </View>
+  );
+};
+
+/**
  * NoDevicesFound
  *
  * Displays a message when no SoftAP devices are found with option to scan again
@@ -182,6 +255,70 @@ const IOSScanSoftAP = () => {
   const toast = useToast();
   const router = useRouter();
   const { store } = useCDF();
+  const {
+    locationGranted,
+    isChecking,
+    requestPermissions,
+    checkPermissions,
+  } = useDevicePermissions();
+
+  // Determine permission status
+  const getPermissionStatus = (): "requesting" | "denied" => {
+    if (isChecking) return "requesting";
+    return "denied";
+  };
+
+  // Handle permission request
+  const handleRequestPermission = () => {
+    requestPermissions();
+    // Re-check after a delay
+    setTimeout(() => {
+      checkPermissions();
+    }, 1000);
+  };
+
+  // Show permission screen if location permission is not granted
+  // Note: iOS may not strictly require location for SoftAP, but we check for consistency
+  if (!isChecking && locationGranted === false) {
+    return (
+      <>
+        <Header label={t("device.scan.softAP.title")} qaId="header_scan_soft_ap" />
+        <ScreenWrapper
+          style={{
+            ...globalStyles.container,
+            backgroundColor: tokens.colors.bg5,
+          }}
+          qaId="screen_wrapper_scan_soft_ap"
+        >
+          <PermissionScreen
+            status={getPermissionStatus()}
+            onRequestPermission={handleRequestPermission}
+          />
+        </ScreenWrapper>
+      </>
+    );
+  }
+
+  // Show loading while checking permissions
+  if (isChecking) {
+    return (
+      <>
+        <Header label={t("device.scan.softAP.title")} qaId="header_scan_soft_ap" />
+        <ScreenWrapper
+          style={{
+            ...globalStyles.container,
+            backgroundColor: tokens.colors.bg5,
+          }}
+          qaId="screen_wrapper_scan_soft_ap"
+        >
+          <PermissionScreen
+            status="requesting"
+            onRequestPermission={handleRequestPermission}
+          />
+        </ScreenWrapper>
+      </>
+    );
+  }
 
   const handleConnect = async () => {
     try {
@@ -314,6 +451,32 @@ const AndroidScanSoftAP = () => {
   const { store } = useCDF();
   const router = useRouter();
   const { t } = useTranslation();
+  const {
+    locationGranted,
+    locationServicesEnabled,
+    isChecking,
+    requestPermissions,
+    checkPermissions,
+  } = useDevicePermissions();
+
+  // Determine permission status
+  const getPermissionStatus = (): "requesting" | "denied" => {
+    if (isChecking) return "requesting";
+    return "denied";
+  };
+
+  // Handle permission request
+  const handleRequestPermission = () => {
+    requestPermissions();
+    // Re-check after a delay
+    setTimeout(() => {
+      checkPermissions();
+    }, 1000);
+  };
+
+  // Check if location permission is required and granted
+  // Android requires location permission for WiFi scanning
+  const hasRequiredPermissions = locationGranted === true && locationServicesEnabled !== false;
 
   // State
   const [isScanning, setIsScanning] = useState(false);
@@ -324,10 +487,11 @@ const AndroidScanSoftAP = () => {
 
   // Effects
   useEffect(() => {
-    if (store.userStore.user) {
+    // Only scan if permissions are granted
+    if (hasRequiredPermissions && store.userStore.user) {
       handleSoftAPDeviceScan();
     }
-  }, []);
+  }, [hasRequiredPermissions, store.userStore.user]);
 
   /**
    * This function is used to scan for SoftAP devices with the default prefix
@@ -435,6 +599,44 @@ const AndroidScanSoftAP = () => {
   };
 
   // Render
+  // Show permission screen if location permission is not granted
+  if (!hasRequiredPermissions && !isChecking) {
+    return (
+      <>
+        <Header
+          label={t("device.scan.softAP.title")}
+          rightSlot={<HouseWifi {...testProps("icon_house_wifi")} size={24} color={tokens.colors.primary} />}
+          qaId="header_scan_soft_ap"
+        />
+        <ScreenWrapper style={{ ...globalStyles.scanContainer }} qaId="screen_wrapper_scan_soft_ap">
+          <PermissionScreen
+            status={getPermissionStatus()}
+            onRequestPermission={handleRequestPermission}
+          />
+        </ScreenWrapper>
+      </>
+    );
+  }
+
+  // Show loading while checking permissions
+  if (isChecking) {
+    return (
+      <>
+        <Header
+          label={t("device.scan.softAP.title")}
+          rightSlot={<HouseWifi {...testProps("icon_house_wifi")} size={24} color={tokens.colors.primary} />}
+          qaId="header_scan_soft_ap"
+        />
+        <ScreenWrapper style={{ ...globalStyles.scanContainer }} qaId="screen_wrapper_scan_soft_ap">
+          <PermissionScreen
+            status="requesting"
+            onRequestPermission={handleRequestPermission}
+          />
+        </ScreenWrapper>
+      </>
+    );
+  }
+
   return (
     <>
       <Header
@@ -542,6 +744,9 @@ const styles = StyleSheet.create({
   },
   emptyContainer: {
     height: 60,
+  },
+  buttonIcon: {
+    marginRight: tokens.spacing._10,
   },
 });
 

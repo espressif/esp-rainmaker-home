@@ -26,6 +26,9 @@ RCT_EXTERN_METHOD(connect:(NSString *)deviceName
 RCT_EXTERN_METHOD(getDeviceCapabilities:(NSString *)deviceName
                   resolve:(RCTPromiseResolveBlock)resolve
                   reject:(RCTPromiseRejectBlock)reject)
+RCT_EXTERN_METHOD(getDeviceVersionInfo:(NSString *)deviceName
+                  resolve:(RCTPromiseResolveBlock)resolve
+                  reject:(RCTPromiseRejectBlock)reject)
 RCT_EXTERN_METHOD(setProofOfPossession:(NSString *)deviceName
                   pop:(NSString *)pop
                   resolve:(RCTPromiseResolveBlock)resolve

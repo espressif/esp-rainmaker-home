@@ -42,6 +42,8 @@ type ThemeColors = {
   warnBg: string;
   errorBg: string;
   successBg: string;
+
+  qrCodeScanLoader: string;
 };
 
 const themes = {
@@ -85,6 +87,7 @@ const themes = {
       warnBg: "#FFF4D6",
       errorBg: "#FADADA",
       successBg: "#D9F7BE",
+      qrCodeScanLoader: "#1875D6",
     },
   },
   dark: {
@@ -125,6 +128,7 @@ const themes = {
       warnBg: "#ffde8e",
       errorBg: "#ed7e7e",
       successBg: "#5ce712",
+      qrCodeScanLoader: "#1875D6",
     },
   },
 };

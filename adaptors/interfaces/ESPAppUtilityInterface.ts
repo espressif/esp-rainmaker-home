@@ -23,6 +23,11 @@ interface ESPAppUtilityInterface {
   isLocationServicesEnabled(): Promise<boolean>;
   
   /**
+   * Checks if Bluetooth is enabled/powered on.
+   */
+  isBluetoothEnabled(): Promise<boolean>;
+  
+  /**
    * Requests all required permissions.
    */
   requestAllPermissions(): void;

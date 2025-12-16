@@ -44,12 +44,13 @@ const ActionButton: React.FC<ActionButtonProps> = ({
 }) => (
   <Pressable
     {...(qaId ? testProps(qaId) : {})}
-    style={[
+    style={({ pressed }) => [
       globalStyles.button,
       variant === "primary" && globalStyles.buttonPrimary,
       variant === "secondary" && globalStyles.buttonSecondary,
       variant === "danger" && globalStyles.buttonDanger,
       disabled && globalStyles.btnDisabled,
+      pressed && !disabled && { opacity: 0.7 },
       style
     ]}
     onPress={onPress}

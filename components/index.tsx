@@ -29,6 +29,7 @@ export { default as Input } from "./Form/Input";
 export { default as DangerButton } from "./Form/DangerButton";
 export { default as Button } from "./Form/Button";
 export { default as ActionButton } from "./Form/ActionButton";
+export { default as FontSizeSlider } from "./Form/FontSizeSlider";
 
 // Info
 export { default as SettingsSection } from "./Info/SettingsSection";
@@ -45,12 +46,15 @@ export { default as ToastContainer } from "./Layout/ToastContainer";
 export { default as ContentWrapper } from "./Layout/ContentWrapper";
 export { default as ScreenWrapper } from "./Layout/ScreenWrapper";
 export { default as PhonePair } from "./Layout/PhonePair";
+export { default as BluetoothDisabledScreen } from "./Layout/BluetoothDisabledScreen";
 
 // Modals
 export { default as EditModal } from "./Modals/EditModal";
 export { default as ConfirmationDialog } from "./Modals/ConfirmationDialog";
 export { default as HomeTooltip } from "./Modals/HomeTooltip";
 export { default as SceneMenuBottomSheet } from "./Modals/SceneMenuBottomSheet";
+export { default as AddAgentBottomSheet } from "./Modals/AddAgentBottomSheet";
+export { default as AgentSelectionBottomSheet } from "./Modals/AgentSelectionBottomSheet";
 
 // Navigation
 export { default as FooterTabs } from "./Navigations/FooterTabs";
@@ -93,5 +97,9 @@ export { default as AddUserModal } from "./HomeSettings/AddUserModal";
 export { default as AutomationDeviceCard } from "./Automation/AutomationDeviceCard";
 export { default as AutomationCard } from "./Automation/AutomationCard";
 export { default as AutomationMenuBottomSheet } from "./Automation/AutomationMenuBottomSheet";
+
+// Chat
+export { default as FloatingChatButton } from "./Chat/FloatingChatButton";
+
 // schedule
 export * from "./Schedule"

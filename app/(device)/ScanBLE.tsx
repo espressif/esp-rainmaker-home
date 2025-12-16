@@ -27,17 +27,19 @@ import { ESPDevice } from "@espressif/rainmaker-base-sdk";
 import { useCDF } from "@/hooks/useCDF";
 import { useRouter } from "expo-router";
 import { useTranslation } from "react-i18next";
+import { useDevicePermissions } from "@/hooks/useDevicePermissions";
 
 // Icons
-import { Bluetooth, RotateCcw } from "lucide-react-native";
+import { Bluetooth, RotateCcw, BluetoothOff, MapPin } from "lucide-react-native";
 
 // Components
-import { Header, ScreenWrapper, ContentWrapper } from "@/components";
+import { Header, ScreenWrapper, ContentWrapper, BluetoothDisabledScreen } from "@/components";
 
 // Utils
 import { testProps } from "@/utils/testProps";
 import { deviceImages } from "@/utils/device";
 import { useToast } from "@/hooks/useToast";
+import { parseRMakerCapabilities } from "@/utils/rmakerCapabilities";
 
 // config
 import { DEVICE_TYPE_LIST } from "@/config/devices.config";
@@ -173,6 +175,108 @@ const ScanningAnimation = () => {
 };
 
 /**
+ * PermissionScreen
+ *
+ * Displays permission request screen when BLE or Location permissions are missing
+ */
+const PermissionScreen = ({
+  status,
+  onRequestPermission,
+  missingPermission,
+}: {
+  status: "requesting" | "denied";
+  onRequestPermission: () => void;
+  missingPermission: "ble" | "location" | "both";
+}) => {
+  const { t } = useTranslation();
+
+  const getTitle = () => {
+    if (status === "requesting") {
+      return t("device.scan.ble.requestingPermission");
+    }
+    if (missingPermission === "ble") {
+      return t("device.scan.ble.noBlePermission");
+    }
+    if (missingPermission === "location") {
+      return t("device.scan.ble.noLocationPermission");
+    }
+    return t("device.scan.ble.permissionRequired");
+  };
+
+  const getDescription = () => {
+    if (missingPermission === "ble") {
+      return t("device.scan.ble.blePermissionRequired");
+    }
+    if (missingPermission === "location") {
+      return t("device.scan.ble.locationPermissionRequired");
+    }
+    return t("device.scan.ble.allPermissionsRequired");
+  };
+
+  const getIcon = () => {
+    if (missingPermission === "location") {
+      return <MapPin size={40} color={tokens.colors.gray} />;
+    }
+    return <BluetoothOff size={40} color={tokens.colors.gray} />;
+  };
+
+  return (
+    <View
+      {...testProps("view_permission_screen")}
+      style={[
+        globalStyles.container,
+        globalStyles.itemCenter,
+        { backgroundColor: tokens.colors.bg5 },
+      ]}
+    >
+      <View
+        {...testProps("view_permission_content")}
+        style={[
+          globalStyles.permissionContent,
+          {
+            ...globalStyles.shadowElevationForLightTheme,
+            backgroundColor: tokens.colors.white,
+          },
+        ]}
+      >
+        <View {...testProps("view_permission_icon")} style={globalStyles.permissionIconContainer}>
+          {getIcon()}
+        </View>
+        <Text {...testProps("text_permission_title_scan_ble")} style={[globalStyles.heading, globalStyles.permissionTitle]}>
+          {getTitle()}
+        </Text>
+        <Text
+          {...testProps("text_permission_msg_scan_ble")}
+          style={[globalStyles.textGray, globalStyles.permissionDescription]}
+        >
+          {getDescription()}
+        </Text>
+        {status === "denied" && (
+          <TouchableOpacity
+            {...testProps("button_permission")}
+            style={[
+              globalStyles.actionButton,
+              globalStyles.actionButtonPrimary,
+              globalStyles.permissionButton,
+            ]}
+            onPress={onRequestPermission}
+          >
+            <Bluetooth
+              size={20}
+              color={tokens.colors.white}
+              style={styles.buttonIcon}
+            />
+            <Text {...testProps("text_grant_permission_scan_ble")} style={globalStyles.actionButtonTextPrimary}>
+              {t("device.scan.ble.grantPermission")}
+            </Text>
+          </TouchableOpacity>
+        )}
+      </View>
+    </View>
+  );
+};
+
+/**
  * NoDevicesFound
  *
  * Displays a message when no devices are found with refresh icon to rescan
@@ -216,6 +320,15 @@ const Scan = () => {
   const { store } = useCDF();
   const router = useRouter();
   const { t } = useTranslation();
+  const {
+    bleGranted,
+    locationGranted,
+    bluetoothEnabled,
+    isChecking,
+    allPermissionsGranted,
+    requestPermissions,
+    checkPermissions,
+  } = useDevicePermissions();
 
   // State
   const [isScanning, setIsScanning] = useState(false);
@@ -229,11 +342,27 @@ const Scan = () => {
     (device) => !device.disabled
   );
 
-  useEffect(() => {
-    if (store.userStore.user) {
-      handleBleDeviceScan();
-    }
-  }, []);
+  // Determine permission status
+  const getPermissionStatus = (): "requesting" | "denied" => {
+    if (isChecking) return "requesting";
+    return "denied";
+  };
+
+  const getMissingPermission = (): "ble" | "location" | "both" => {
+    if (bleGranted === false && locationGranted === false) return "both";
+    if (bleGranted === false) return "ble";
+    if (locationGranted === false) return "location";
+    return "ble"; // fallback
+  };
+
+  // Handle permission request
+  const handleRequestPermission = () => {
+    requestPermissions();
+    // Re-check after a delay
+    setTimeout(() => {
+      checkPermissions();
+    }, 1000);
+  };
 
   /**
    * This function is used to scan for ble devices with the default prefix
@@ -253,6 +382,23 @@ const Scan = () => {
       setIsScanning(false);
     }
   };
+
+  useEffect(() => {
+    // Only scan if permissions are granted and Bluetooth is enabled
+    if (allPermissionsGranted && bluetoothEnabled && store.userStore.user) {
+      handleBleDeviceScan();
+    }
+  }, [allPermissionsGranted, bluetoothEnabled, store.userStore.user]);
+
+  // Re-check Bluetooth state periodically when it's disabled
+  useEffect(() => {
+    if (allPermissionsGranted && bluetoothEnabled === false) {
+      const interval = setInterval(() => {
+        checkPermissions();
+      }, 2000); // Check every 2 seconds
+      return () => clearInterval(interval);
+    }
+  }, [allPermissionsGranted, bluetoothEnabled, checkPermissions]);
 
   /**
    * This function is used to connect to a ble device
@@ -286,20 +432,39 @@ const Scan = () => {
       const response = await device.connect();
       // Check for successful connection (0 typically means success)
       if (response === 0) {
-        // get the device capabilities
-        const capabilities = await device.getDeviceCapabilities();
-        // If device need pop then navigate to the pop screen
-        if (
-          !capabilities.includes("no_pop") ||
-          !capabilities.includes("no_sec")
-        ) {
+        // Fetch version info and prov capabilities
+        const versionInfo = await device.getDeviceVersionInfo();
+        const provCapabilities = await device.getDeviceCapabilities();
+
+        // Parse RMaker capabilities from version info
+        const rmakerCaps = parseRMakerCapabilities(
+          versionInfo,
+          provCapabilities
+        );
+
+        // If device needs POP then navigate to the POP screen
+        if (rmakerCaps.requiresPop) {
           router.push({
             pathname: "/(device)/POP",
+            params: {
+              hasClaimCap: rmakerCaps.hasClaim ? "true" : "false",
+            },
           });
           return;
         }
+
         // initialize the session
         await device.initializeSession();
+
+        // If device supports claiming, navigate to Claiming screen
+        if (rmakerCaps.hasClaim) {
+          router.push({
+            pathname: "/(device)/Claiming",
+          });
+          return;
+        }
+
+        // Otherwise go directly to WiFi
         router.push({
           pathname: "/(device)/Wifi",
         });
@@ -317,6 +482,62 @@ const Scan = () => {
   };
 
   // Render
+  // Show Bluetooth disabled screen if Bluetooth is off
+  if (allPermissionsGranted && bluetoothEnabled === false && !isChecking) {
+    return (
+      <>
+        <Header
+          label={t("device.scan.ble.title")}
+          rightSlot={<Bluetooth {...testProps("icon_bluetooth_scan_ble")} size={24} color={tokens.colors.bluetooth} />}
+          qaId="header_scan_ble"
+        />
+        <ScreenWrapper style={globalStyles.scanContainer} qaId="screen_wrapper_scan_ble">
+          <BluetoothDisabledScreen />
+        </ScreenWrapper>
+      </>
+    );
+  }
+
+  // Show permission screen if permissions are not granted
+  if (!allPermissionsGranted && !isChecking) {
+    return (
+      <>
+        <Header
+          label={t("device.scan.ble.title")}
+          rightSlot={<Bluetooth {...testProps("icon_bluetooth_scan_ble")} size={24} color={tokens.colors.bluetooth} />}
+          qaId="header_scan_ble"
+        />
+        <ScreenWrapper style={globalStyles.scanContainer} qaId="screen_wrapper_scan_ble">
+          <PermissionScreen
+            status={getPermissionStatus()}
+            onRequestPermission={handleRequestPermission}
+            missingPermission={getMissingPermission()}
+          />
+        </ScreenWrapper>
+      </>
+    );
+  }
+
+  // Show loading while checking permissions
+  if (isChecking) {
+    return (
+      <>
+        <Header
+          label={t("device.scan.ble.title")}
+          rightSlot={<Bluetooth {...testProps("icon_bluetooth_scan_ble")} size={24} color={tokens.colors.bluetooth} />}
+          qaId="header_scan_ble"
+        />
+        <ScreenWrapper style={globalStyles.scanContainer} qaId="screen_wrapper_scan_ble">
+          <PermissionScreen
+            status="requesting"
+            onRequestPermission={handleRequestPermission}
+            missingPermission={getMissingPermission()}
+          />
+        </ScreenWrapper>
+      </>
+    );
+  }
+
   return (
     <>
       <Header
@@ -400,6 +621,9 @@ const styles = StyleSheet.create({
   },
   emptyContainer: {
     height: 60,
+  },
+  buttonIcon: {
+    marginRight: tokens.spacing._10,
   },
 });
 

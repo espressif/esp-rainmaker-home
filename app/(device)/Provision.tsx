@@ -24,6 +24,8 @@ import {
   ESPProvResponse,
   ESPProvResponseStatus,
   ESPProvProgressMessages,
+  ESPRMNode,
+  ESPRMServiceParam,
 } from "@espressif/rainmaker-base-sdk";
 
 // Hooks
@@ -40,9 +42,18 @@ import { Header, ScreenWrapper, Button } from "@/components";
 // Utils
 import { testProps } from "@/utils/testProps";
 import { useToast } from "@/hooks/useToast";
+import {
+  ESPRM_AGENT_AUTH_SERVICE,
+  ESPRM_REFRESH_TOKEN_PARAM_TYPE,
+} from "@/utils/constants";
+import { setUserAuthForNode } from "@/utils/agent/device";
+import { TOKEN_STORAGE_KEYS } from "@/utils/agent";
 
 // Types
 import { ProvisionStatus } from "@/types/global";
+
+// Storage
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 type StageStatus = "pending" | "loading" | "success" | "error";
 
@@ -197,20 +208,157 @@ const Provision = () => {
   };
 
   /**
+   * Sets refresh token for the provisioned node if it's an AI agent device
+   */
+  const setRefreshTokenForNode = async (node: ESPRMNode) => {
+    try {
+      // Find the agent-auth service
+      const agentAuthService = node?.nodeConfig?.services?.find(
+        (service) => service.type === ESPRM_AGENT_AUTH_SERVICE
+      );
+
+      if (!agentAuthService) {
+        // Not an AI agent device, skip
+        return;
+      }
+
+      // Find the refresh-token parameter
+      const refreshTokenParam: ESPRMServiceParam | undefined =
+        agentAuthService.params?.find(
+          (param) => param.type === ESPRM_REFRESH_TOKEN_PARAM_TYPE
+        );
+
+      if (!refreshTokenParam) {
+        return;
+      }
+
+      const refreshToken = await AsyncStorage.getItem(
+        TOKEN_STORAGE_KEYS.REFRESH_TOKEN
+      );
+
+      if (!refreshToken) {
+        return;
+      }
+
+      // Update the refresh-token parameter to trigger refresh
+      await node?.setMultipleParams({
+        [agentAuthService.name]: [
+          {
+            [refreshTokenParam.name]: refreshToken,
+          },
+        ],
+      });
+
+    } catch (error) {
+      console.error("Error setting refresh token for provisioned node:", error);
+      // Don't throw error, just log it as this is not critical for provisioning success
+    }
+  };
+
+  /**
    * Handle successful provisioning completion
    */
   const handleProvisionSuccess = async () => {
     try {
-      await store.userStore.user?.getGroupById({
-        id: currentHomeId as string,
-        withNodeList: true,
-        withSubGroups: true,
-      });
+      if (!decodedNodeIdRef.current) {
+        setIsComplete(true);
+        toast.showSuccess(t("device.provision.success"));
+        return;
+      }
+
+      const nodeId = decodedNodeIdRef.current;
+
+      // Step 1: First refresh the group to get updated node list
+      if (currentHomeId) {
+        await store.userStore.user?.getGroupById({
+          id: currentHomeId as string,
+          withNodeList: true,
+          withSubGroups: true,
+        });
+      }
+
+      // Step 2: Try to get node from store after group refresh
+      let provisionedNode: ESPRMNode | undefined = store.nodeStore.nodesByID[nodeId] as ESPRMNode | undefined;
+
+      // Step 3: If node still not found in group store, fetch it by syncing node list
+      if (!provisionedNode) {
+        try {
+          await store.nodeStore.syncNodeList();
+          
+          // Try again after sync
+          provisionedNode = store.nodeStore.nodesByID[nodeId] as ESPRMNode | undefined;
+        } catch (syncError) {
+          console.error("Failed to sync node list:", syncError);
+        }
+      }
+
+      // Step 4: If node is found, set refresh token and add to group
+      if (provisionedNode) {
+        // Check if this is an AI agent device
+        const agentAuthService = provisionedNode?.nodeConfig?.services?.find(
+          (service) => service.type === ESPRM_AGENT_AUTH_SERVICE
+        );
+        const isAgentDevice = !!agentAuthService;
+
+        // Set refresh token for AI agent device (enable continue button regardless of success/failure)
+        if (isAgentDevice) {
+          try {
+            await setRefreshTokenForNode(provisionedNode);
+            // Also set user auth (access token and base URL) if service is available
+            await setUserAuthForNode(provisionedNode);
+            // Enable continue button after token setting attempt (regardless of success/failure)
+            setIsComplete(true);
+            toast.showSuccess(t("device.provision.success"));
+          } catch (tokenError) {
+            console.error("Error setting refresh token (non-blocking):", tokenError);
+            // Enable continue button even if token setting failed
+            setIsComplete(true);
+            toast.showSuccess(t("device.provision.success"));
+          }
+        } else {
+          // For non-agent devices, set user auth if service is available
+          // Wait for completion before enabling continue button
+          try {
+            await setUserAuthForNode(provisionedNode);
+            // Enable continue button after user auth service settings complete
+            setIsComplete(true);
+            toast.showSuccess(t("device.provision.success"));
+          } catch (userAuthError) {
+            console.error("Error setting user auth (non-blocking):", userAuthError);
+            // Enable continue button anyway - don't block provisioning flow
+            setIsComplete(true);
+            toast.showSuccess(t("device.provision.success"));
+          }
+        }
+
+        // Step 5: Add node to current group if not already in it
+        // Note: Continue button is already enabled above for both agent and non-agent devices
+        if (currentHomeId) {
+          const currentGroup = store.groupStore._groupsByID[currentHomeId];
+          const isNodeInGroup = currentGroup?.nodes?.includes(nodeId);
+
+          if (isNodeInGroup) {
+            // Continue button is already enabled after service settings
+          } else if (currentGroup) {
+            try {
+              await currentGroup.addNodes([nodeId]);
+              // Continue button is already enabled after service settings
+            } catch (addError) {
+              console.error("Failed to add node to current group:", addError);
+              toast.showError(t("device.errors.failedToAddNodeToGroup") || "Failed to add device to home");
+              // Continue button is already enabled after service settings
+            }
+          }
+        }
+      } else {
+        toast.showError(t("device.errors.nodeNotFound") || "Device not found after provisioning");
+        // Don't enable continue button if node not found
+      }
     } catch (error) {
-      console.error("Error adding node to current group", error);
+      console.error("Error handling provision success:", error);
+      toast.showError(t("device.errors.provisioningFailed") || "Failed to complete provisioning");
+      // Don't enable continue button on error
     }
-    setIsComplete(true);
-    toast.showSuccess(t("device.provision.success"));
   };
 
   /**
@@ -330,6 +478,38 @@ const Provision = () => {
   };
 
   const handleContinue = () => {
+    // Check if the provisioned device is an agent device with readme URL
+    if (decodedNodeIdRef.current) {
+      const provisionedNode = store.nodeStore.nodesByID[
+        decodedNodeIdRef.current
+      ] as ESPRMNode | undefined;
+
+      if (provisionedNode) {
+        // Get readme URL from node config info
+        const readmeUrl = provisionedNode?.nodeConfig?.info?.readme;
+
+        // If has readme, redirect to Guide page
+        if (readmeUrl) {
+          const headerName =
+            provisionedNode?.nodeConfig?.info?.name || "Device";
+          const device = provisionedNode?.nodeConfig?.devices?.[0];
+          const deviceDisplayName = device?.displayName || headerName;
+
+          router.replace({
+            pathname: "/(device)/Guide" as any,
+            params: {
+              url: readmeUrl,
+              title: headerName,
+              deviceName: deviceDisplayName,
+              fromProvision: "true",
+            },
+          });
+          return;
+        }
+      }
+    }
+
+    // Default behavior: navigate to Home
     router.dismissTo("/(group)/Home");
   };
 

@@ -11,10 +11,12 @@ import {
   Image,
   TouchableOpacity,
   ImageSourcePropType,
+  ActivityIndicator,
 } from "react-native";
 
 // styles
 import { globalStyles } from "@/theme/globalStyleSheet";
+import { tokens } from "@/theme/tokens";
 // hooks
 import { useCDF } from "@/hooks/useCDF";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -22,17 +24,17 @@ import { useTranslation } from "react-i18next";
 import { useToast } from "@/hooks/useToast";
 // components
 import { Input, Button, ScreenWrapper, Logo } from "@/components";
+// icons
+import { UserCircle, X } from "lucide-react-native";
 // images
 import google from "@/assets/images/google.png";
 import signinwithapple from "@/assets/images/apple.png";
 
 import APP_CONFIG from "@/app.json";
 import { validateEmail } from "@/utils/validations";
-import { createPlatformEndpoint } from "@/utils/notifications";
 import { CDF_EXTERNAL_PROPERTIES } from "@/utils/constants";
-import { CDFConfig } from "@/rainmaker.config";
 import { testProps } from "@/utils/testProps";
-import { setUserTimeZone } from "@/utils/timezone";
+import { executePostLoginPipeline } from "@/utils/postLoginPipeline";
 
 /**
  * LoginScreen component that displays the login screen.
@@ -60,8 +62,51 @@ export default function LoginScreen() {
   const [isEmailValid, setIsEmailValid] = useState(false);
   const [isPasswordValid, setIsPasswordValid] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [isOAuthLoading, setIsOAuthLoading] = useState(false);
+  const [pipelineProgress, setPipelineProgress] = useState<{
+    currentStep: string;
+    completed: number;
+    total: number;
+    steps: Array<{ name: string; status: "pending" | "running" | "completed" | "failed" }>;
+  } | null>(null);
 
   const appVersion = APP_CONFIG.expo.version;
+
+  /**
+   * Maps technical step names to user-friendly messages
+   */
+  const getFriendlyStepName = (stepName: string): string => {
+    const stepMap: Record<string, string> = {
+      refreshESPRMUser: t("auth.login.settingUpAccount") || "Setting up account",
+      setUserTimeZone: t("auth.login.settingUpAccount") || "Setting up account",
+      createPlatformEndpoint: t("auth.login.settingUpAccount") || "Setting up account",
+      fetchNodesAndGroups: t("auth.login.settingUpHomes") || "Setting up homes",
+      updateRefreshTokensForAllAIDevices: t("auth.login.settingUpNodes") || "Setting up nodes",
+      initUserCustomData: t("auth.login.settingUpNodes") || "Setting up nodes",
+      getAgentTermsAccepted: t("auth.login.gettingProfile") || "Getting profile",
+    };
+    return stepMap[stepName] || stepName;
+  };
+
+  /**
+   * Gets the current friendly message based on pipeline progress
+   */
+  const getCurrentFriendlyMessage = (): string => {
+    if (!pipelineProgress) {
+      return t("auth.login.settingUpAccount") || "Setting up account";
+    }
+    
+    // If we're on the last step (getUserProfileAndRoute), show "Finishing up"
+    if (pipelineProgress.currentStep === "getUserProfileAndRoute") {
+      return t("auth.login.finishingUp") || "Finishing up";
+    }
+    
+    if (!pipelineProgress.currentStep) {
+      return t("auth.login.settingUpAccount") || "Setting up account";
+    }
+    
+    return getFriendlyStepName(pipelineProgress.currentStep);
+  };
 
   /**
    * Validates password input
@@ -132,7 +177,7 @@ export default function LoginScreen() {
    * SDK function used:
    * 1. login
    */
-  const login = () => {
+  const login = async () => {
     // Check if form is valid before submitting
     if (!isEmailValid || !isPasswordValid) {
       return;
@@ -140,47 +185,28 @@ export default function LoginScreen() {
 
     setIsLoading(true);
 
-    store.userStore
-      .login(email, password)
-      .then(async (res) => {
-        if (res) {
-          // Refresh ESPRMUser from stored tokens (for Matter SDK)
-          await refreshESPRMUser();
+    try {
+      const res = await store.userStore.login(email, password);
+      if (!res) {
+        return;
+      }
 
-          // Set user timezone
-          try {
-            await setUserTimeZone(store.userStore.user);
-          } catch (error) {
-            console.error("Failed to set timezone:", error);
-          }
-
-          // Try to create platform endpoint, but don't block login if it fails
-          try {
-            await createPlatformEndpoint(store);
-          } catch (error) {
-            console.warn("Failed to create platform endpoint:", error);
-          }
-          /*
-          With CDFConfig.autoSync enabled, CDF login method will fetch the first page automatically,
-          so we don't need to fetch the first page again
-          */
-          const shouldFetchFirstPage = !CDFConfig.autoSync;
-          await fetchNodesAndGroups(shouldFetchFirstPage);
-          // redirect to home screen
-          await initUserCustomData();
-          router.replace("/(group)/Home");
-        }
-      })
-      .catch((error) => {
-        toast.showError(
-          t("auth.errors.signInFailed"),
-          error.description || t("auth.errors.fallback")
-        );
-      })
-      .finally(() => {
-        // reset loading state
-        setIsLoading(false);
+      await executePostLoginPipeline({
+        store,
+        router,
+        refreshESPRMUser,
+        fetchNodesAndGroups,
+        initUserCustomData,
       });
+    } catch (error: any) {
+      toast.showError(
+        t("auth.errors.signInFailed"),
+        error?.description || t("auth.errors.fallback")
+      );
+    } finally {
+      // reset loading state
+      setIsLoading(false);
+    }
   };
 
   /**
@@ -198,6 +224,8 @@ export default function LoginScreen() {
    * 1. loginWithOauth
    */
   const oauthLogin = async (provider: string) => {
+    setIsOAuthLoading(true);
+    setPipelineProgress(null);
     try {
       const authInstance = store.userStore.authInstance;
       if (!authInstance) {
@@ -205,28 +233,76 @@ export default function LoginScreen() {
       }
 
       const userInstance = await authInstance.loginWithOauth(provider);
+
+      
       store.userStore[CDF_EXTERNAL_PROPERTIES.IS_OAUTH_LOGIN] = true;
       await store.userStore.setUserInstance(userInstance);
 
-      // Create ESPRMUser instance from stored tokens (for Matter SDK)
-      await refreshESPRMUser();
-
-      // Set user timezone
-      try {
-        await setUserTimeZone(store.userStore.user);
-      } catch (error) {
-        console.error("Failed to set timezone:", error);
-      }
-
-      // With CDFConfig.autoSync enabled, CDF setUserInstance method will fetch the first page automatically,
-      // so we don't need to fetch the first page again
-      const shouldFetchFirstPage = !CDFConfig.autoSync;
-      await fetchNodesAndGroups(shouldFetchFirstPage);
-
-      await createPlatformEndpoint(store);
       if (userInstance) {
-        await initUserCustomData();
-        router.push("/(group)/Home");
+        // Initialize pipeline progress tracking
+        const pipelineSteps = [
+          { name: "refreshESPRMUser", status: "pending" as const },
+          { name: "setUserTimeZone", status: "pending" as const },
+          { name: "createPlatformEndpoint", status: "pending" as const },
+          { name: "fetchNodesAndGroups", status: "pending" as const },
+          { name: "updateRefreshTokensForAllAIDevices", status: "pending" as const },
+          { name: "initUserCustomData", status: "pending" as const },
+          { name: "getAgentTermsAccepted", status: "pending" as const },
+          { name: "getUserProfileAndRoute", status: "pending" as const },
+        ];
+
+        setPipelineProgress({
+          currentStep: "",
+          completed: 0,
+          total: pipelineSteps.length,
+          steps: pipelineSteps,
+        });
+
+        await executePostLoginPipeline({
+          store,
+          router,
+          refreshESPRMUser,
+          fetchNodesAndGroups,
+          initUserCustomData,
+          onStepStart: (stepName) => {
+            setPipelineProgress((prev) => {
+              if (!prev) return prev;
+              return {
+                ...prev,
+                currentStep: stepName,
+                steps: prev.steps.map((step) =>
+                  step.name === stepName ? { ...step, status: "running" as const } : step
+                ),
+              };
+            });
+          },
+          onStepComplete: (stepName) => {
+            setPipelineProgress((prev) => {
+              if (!prev) return prev;
+              const updatedSteps = prev.steps.map((step) =>
+                step.name === stepName ? { ...step, status: "completed" as const } : step
+              );
+              const completed = updatedSteps.filter((s) => s.status === "completed").length;
+              return {
+                ...prev,
+                currentStep: stepName,
+                completed,
+                steps: updatedSteps,
+              };
+            });
+          },
+          onProgress: (stepName, state) => {
+            setPipelineProgress((prev) => {
+              if (!prev) return prev;
+              return {
+                ...prev,
+                currentStep: stepName,
+                completed: state.completed,
+                total: state.total,
+              };
+            });
+          },
+        });
       }
     } catch (error) {
       console.error(`OAuth login failed for provider ${provider}:`, error);
@@ -246,12 +322,90 @@ export default function LoginScreen() {
 
       // Show error toast to user
       toast.showError("OAuth Login Failed", errorMessage);
+      setPipelineProgress(null);
+    } finally {
+      // Hide loader when login completes (success or failure)
+      setIsOAuthLoading(false);
     }
+  };
+
+  /**
+   * Handles canceling OAuth login
+   */
+  const handleCancelOAuth = () => {
+    setIsOAuthLoading(false);
+    setPipelineProgress(null);
   };
 
   return (
     <ScreenWrapper style={globalStyles.screenWrapper} excludeTop={false}>
-      <View style={globalStyles.scrollViewContent} {...testProps("view_login")}>
+      {isOAuthLoading ? (
+        <View style={[globalStyles.emptyStateContainer, { backgroundColor: tokens.colors.bg5, flex: 1 }]}>
+          {/* Close Button - Top Right */}
+          <View style={{ position: "absolute", top: 20, right: 20, zIndex: 10 }}>
+            <TouchableOpacity
+              onPress={handleCancelOAuth}
+              style={{
+                padding: 8,
+                borderRadius: 20,
+                backgroundColor: tokens.colors.bg5,
+              }}
+              {...testProps("button_close_oauth")}
+            >
+              <X size={24} color={tokens.colors.text_primary} />
+            </TouchableOpacity>
+          </View>
+
+          {/* Main Content */}
+          <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
+            <View style={globalStyles.emptyStateIconContainer}>
+              <UserCircle size={40} color={tokens.colors.primary} />
+            </View>
+            <Text style={[globalStyles.emptyStateTitle, { marginBottom: tokens.spacing._10 }]}>
+              {t("auth.login.settingUpAccount")}
+            </Text>
+            <ActivityIndicator 
+              size="large" 
+              color={tokens.colors.primary} 
+            />
+          </View>
+
+          {/* Pipeline Progress - Bottom */}
+          {pipelineProgress && (
+            <View style={{
+              position: "absolute",
+              bottom: 0,
+              left: 0,
+              right: 0,
+              backgroundColor: tokens.colors.bg5,
+              padding: tokens.spacing._15,
+              borderTopWidth: 1,
+              borderTopColor: tokens.colors.borderColor,
+            }}>
+              {/* Current Step with Friendly Message */}
+              <View style={{
+                flexDirection: "row",
+                alignItems: "center",
+                justifyContent: "center",
+              }}>
+                <ActivityIndicator 
+                  size="small" 
+                  color={tokens.colors.text_secondary}
+                  style={{ marginRight: tokens.spacing._10 }}
+                />
+                <Text style={{
+                  fontSize: 15,
+                  color: tokens.colors.text_secondary,
+                  fontStyle: "italic",
+                }}>
+                  {getCurrentFriendlyMessage()}
+                </Text>
+              </View>
+            </View>
+          )}
+        </View>
+      ) : (
+        <View style={globalStyles.scrollViewContent} {...testProps("view_login")}>
         <Logo qaId="logo_login" />
         <View style={globalStyles.inputContainer} {...testProps("view_input_login")}>
           {/* Email Input */}
@@ -329,12 +483,13 @@ export default function LoginScreen() {
             {t("auth.login.navigateToSignUp")}
           </Text>
         </TouchableOpacity>
-      </View>
 
-      {/* App Version Text */}
-      <Text {...testProps("text_app_version_login")} style={globalStyles.versionText}>
-        {t("layout.shared.version")} {appVersion}
-      </Text>
+        {/* App Version Text */}
+        <Text {...testProps("text_app_version_login")} style={globalStyles.versionText}>
+          {t("layout.shared.version")} {appVersion}
+        </Text>
+      </View>
+      )}
     </ScreenWrapper>
   );
 }

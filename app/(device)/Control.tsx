@@ -34,6 +34,7 @@ import Fallback from "@/app/(device)/device_panels/Fallback";
 import LightControl from "@/app/(device)/device_panels/Light";
 import SwitchControl from "@/app/(device)/device_panels/Switch";
 import TemperatureControl from "@/app/(device)/device_panels/Temperature";
+import AiAgentControl from "@/app/(device)/device_panels/AiAgent";
 
 // Utils
 import { extractDeviceType, findDeviceConfig } from "@/utils/device";
@@ -102,6 +103,7 @@ const Control = () => {
     light: LightControl,
     switch: SwitchControl,
     temperature: TemperatureControl,
+    "ai-agent": AiAgentControl,
   };
 
   // Early return for missing device

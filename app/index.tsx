@@ -15,36 +15,27 @@ import { useRouter, usePathname, useFocusEffect } from "expo-router";
 // components
 import { Logo } from "@/components";
 import { createPlatformEndpoint } from "@/utils/notifications";
-import { setUserTimeZone } from "@/utils/timezone";
+import { executePostLoginPipeline } from "@/utils/postLoginPipeline";
 // theme
 import { tokens } from "@/theme/tokens";
-import { CDFConfig } from "@/rainmaker.config";
 
 const index = () => {
   const router = useRouter();
   const pathname = usePathname();
-  const { store, isInitialized, fetchNodesAndGroups, initUserCustomData } =
+  const { store, isInitialized, fetchNodesAndGroups, initUserCustomData, refreshESPRMUser } =
     useCDF();
 
   const authCheck = async () => {
     try {
       const userInfo = store.userStore.userInfo;
       if (userInfo) {
-        // Set user timezone on app launch
-        try {
-          await setUserTimeZone(store.userStore.user);
-        } catch (error) {
-          console.error("Failed to set timezone:", error);
-        }
-
-        /*
-        With CDFConfig.autoSync enabled, CDF will fetch the first page automatically,
-        so we don't need to fetch the first page again
-        */
-        const shouldFetchFirstPage = !CDFConfig.autoSync;
-        await fetchNodesAndGroups(shouldFetchFirstPage);
-        await initUserCustomData();
-        router.replace("/(group)/Home");
+        await executePostLoginPipeline({
+          store,
+          router,
+          refreshESPRMUser,
+          fetchNodesAndGroups,
+          initUserCustomData,
+        });
         return;
       }
 

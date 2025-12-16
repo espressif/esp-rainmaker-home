@@ -13,7 +13,6 @@ import {
   TouchableOpacity,
   Animated,
   Dimensions,
-  Platform,
   Vibration,
   ActivityIndicator,
 } from "react-native";
@@ -31,12 +30,13 @@ import { globalStyles } from "@/theme/globalStyleSheet";
 import { useCDF } from "@/hooks/useCDF";
 import { useRouter } from "expo-router";
 import { useTranslation } from "react-i18next";
+import { useDevicePermissions } from "@/hooks/useDevicePermissions";
 
 // Icons
 import { QrCode, Camera, CameraOff, RotateCcw } from "lucide-react-native";
 
 // Components
-import { Header, ScreenWrapper } from "@/components";
+import { Header, ScreenWrapper, BluetoothDisabledScreen } from "@/components";
 
 // adapters
 import { provisionAdapter } from "@/adaptors/implementations/ESPProvAdapter";
@@ -44,6 +44,7 @@ import { provisionAdapter } from "@/adaptors/implementations/ESPProvAdapter";
 // Utils
 import { testProps } from "@/utils/testProps";
 import { useToast } from "@/hooks/useToast";
+import { parseRMakerCapabilities } from "@/utils/rmakerCapabilities";
 
 // Constants
 import {
@@ -61,7 +62,7 @@ const SCANNER_WIDTH = width * 0.8;
  *
  * Displays an animated guide to help users scan QR codes
  */
-const AnimatedGuide = () => {
+const AnimatedGuide = ({ scanned }: { scanned: boolean }) => {
   const [fadeAnim] = useState(new Animated.Value(0));
   const { t } = useTranslation();
 
@@ -97,7 +98,7 @@ const AnimatedGuide = () => {
         style={globalStyles.guideIcon}
       />
       <Text {...testProps("text_qr_guide")} style={globalStyles.guideText}>
-        {t("device.scan.qr.holdSteady")}
+        {scanned ? t("device.scan.qr.connectingToDevice") : t("device.scan.qr.holdSteady")}
       </Text>
     </Animated.View>
   );
@@ -106,7 +107,7 @@ const AnimatedGuide = () => {
 /**
  * ScannerOverlay
  */
-const ScannerOverlay = ({ isProcessing }: { isProcessing: boolean }) => {
+const ScannerOverlay = ({ isProcessing, scanned }: { isProcessing: boolean, scanned: boolean }) => {
   const [animation] = useState(new Animated.Value(0));
   const { t } = useTranslation();
 
@@ -141,8 +142,8 @@ const ScannerOverlay = ({ isProcessing }: { isProcessing: boolean }) => {
                 right: 0,
                 bottom: 0,
               }}
-              size={80}
-              color={tokens.colors.primary}
+              size={150}
+              color="#1875D6"
             />
           ) : (
             <Animated.View
@@ -167,7 +168,7 @@ const ScannerOverlay = ({ isProcessing }: { isProcessing: boolean }) => {
           {t("device.scan.qr.alignQRCode")}
         </Text>
       </View>
-      <AnimatedGuide />
+      <AnimatedGuide scanned={scanned} />
     </View>
   );
 };
@@ -190,17 +191,12 @@ const PermissionScreen = ({
       style={[
         globalStyles.container,
         globalStyles.itemCenter,
-        { backgroundColor: tokens.colors.bg5 },
       ]}
     >
       <View
         {...testProps("view_permission_content")}
         style={[
           globalStyles.permissionContent,
-          {
-            ...globalStyles.shadowElevationForLightTheme,
-            backgroundColor: tokens.colors.white,
-          },
         ]}
       >
         <View {...testProps("view_permission_icon")} style={globalStyles.permissionIconContainer}>
@@ -224,6 +220,7 @@ const PermissionScreen = ({
               globalStyles.actionButton,
               globalStyles.actionButtonPrimary,
               globalStyles.permissionButton,
+              
             ]}
             onPress={onRequestPermission}
           >
@@ -251,6 +248,11 @@ const ScanQR = () => {
   const router = useRouter();
   const { t } = useTranslation();
   const [permission, requestPermission] = useCameraPermissions();
+  const {
+    bluetoothEnabled,
+    isChecking: isCheckingBluetooth,
+    checkPermissions: checkBluetoothPermissions,
+  } = useDevicePermissions();
   const [scanned, setScanned] = useState(false);
   const scannedRef = useRef(false);
   const [cameraType, setCameraType] = useState<"front" | "back">(
@@ -293,26 +295,77 @@ const ScanQR = () => {
   };
 
   /**
-   * Handle Android-specific provisioning logic
+   * Handle QR code provisioning logic
    */
-  const handleAndroidProvisioning = async (
-    espDevice: ESPDevice,
-    pop: string
-  ) => {
-    const capabilities = await espDevice.getDeviceCapabilities();
+  const handleQRProvisioning = async (espDevice: ESPDevice, pop: string) => {
+    // Fetch version info and prov capabilities
+    let versionInfo: any;
+    let provCapabilities: string[];
 
-    // Check if device needs PoP (both no_pop and no_sec must be absent)
-    if (!capabilities.includes("no_pop") && !capabilities.includes("no_sec")) {
-      const popSet = await espDevice.setProofOfPossession(pop);
-      if (!popSet) {
+    try {
+      versionInfo = await espDevice.getDeviceVersionInfo();
+    } catch (error: any) {
+      console.error(
+        "[QR Provisioning] Error fetching version info:",
+        error?.message
+      );
+      throw error;
+    }
+
+    try {
+      provCapabilities = await espDevice.getDeviceCapabilities();
+    } catch (error: any) {
+      console.error(
+        "[QR Provisioning] Error fetching capabilities:",
+        error?.message
+      );
+      throw error;
+    }
+
+    // Parse RMaker capabilities from version info
+    // This determines if device supports assisted claiming (claim)
+    const rmakerCaps = parseRMakerCapabilities(versionInfo, provCapabilities);
+
+    // Check if device needs PoP
+    if (rmakerCaps.requiresPop && pop) {
+      try {
+        const popSet = await espDevice.setProofOfPossession(pop);
+        if (!popSet) {
+          return toast.showError(t("device.scan.qr.invalidQRCode"));
+        }
+      } catch (error: any) {
+        console.error("[QR Provisioning] POP set error:", error?.message);
         return toast.showError(t("device.scan.qr.invalidQRCode"));
       }
+    } else if (rmakerCaps.requiresPop && !pop) {
+      // If POP is required but not provided in QR code, navigate to POP screen
+      router.push({
+        pathname: "/(device)/POP",
+        params: {
+          hasClaimCap: rmakerCaps.hasClaim ? "true" : "false",
+        },
+      });
+      return;
     }
 
     // Initialize session
-    const isSessionInitialized = await espDevice.initializeSession();
-    if (!isSessionInitialized) {
-      return toast.showError(t("device.scan.qr.sessionInitFailed"));
+    try {
+      const isSessionInitialized = await espDevice.initializeSession();
+      if (!isSessionInitialized) {
+        return toast.showError(t("device.scan.qr.sessionInitFailed"));
+      }
+    } catch (error: any) {
+      console.error("[QR Provisioning] Session init error:", error?.message);
+      throw error;
+    }
+
+    // If device supports claiming, navigate to Claiming screen
+    // This is determined by rmaker.cap array containing "claim"
+    if (rmakerCaps.hasClaim) {
+      router.push({
+        pathname: "/(device)/Claiming",
+      });
+      return;
     }
 
     navigateToWifi();
@@ -360,7 +413,7 @@ const ScanQR = () => {
     );
 
     if (!deviceInterface?.name) {
-      return toast.showError(t("device.scan.qr.invalidQRCode"));
+      return toast.showError(t("device.scan.qr.failedToInitializeDevice"));
     }
 
     // Create and connect device
@@ -368,23 +421,14 @@ const ScanQR = () => {
     const connectResponse = await espDevice.connect();
 
     if (connectResponse !== 0) {
-      return toast.showError(t("device.scan.qr.invalidQRCode"));
+      return toast.showError(t("device.scan.qr.unableToConnectToDevice"));
     }
 
     // Store connected device
     store.nodeStore.connectedDevice = espDevice;
 
-    // Handle platform-specific logic
-    if (Platform.OS === "ios") {
-      return navigateToWifi();
-    }
-
-    if (Platform.OS === "android") {
-      await handleAndroidProvisioning(espDevice, pop);
-      return;
-    }
-
-    toast.showError(t("device.scan.qr.platformNotSupported"));
+    // Handle QR provisioning (same flow for both iOS and Android)
+    await handleQRProvisioning(espDevice, pop);
   };
 
   /**
@@ -438,8 +482,17 @@ const ScanQR = () => {
     setTimeout(async () => {
       try {
         await handleDeviceProvision(qrData);
-      } catch (error) {
-        toast.showError(t("device.scan.qr.invalidQRCode"));
+      } catch (error: any) {
+        console.error("[QR Scan] Provisioning error:", error);
+        const errorMessage = error?.message || "Unknown error";
+        // Show specific error message if available, otherwise show generic error
+        if (errorMessage.includes("DEVICE_NOT_FOUND") || errorMessage.includes("connection")) {
+          toast.showError(t("device.scan.qr.unableToConnectToDevice"));
+        } else if (errorMessage.includes("session") || errorMessage.includes("SESSION")) {
+          toast.showError(t("device.scan.qr.sessionInitFailed"));
+        } else {
+          toast.showError(t("device.scan.qr.invalidQRCode"));
+        }
       } finally {
         resetScanState();
       }
@@ -452,6 +505,16 @@ const ScanQR = () => {
     setIsProcessing(false);
     scannedRef.current = false;
   };
+
+  // Re-check Bluetooth state periodically when it's disabled
+  useEffect(() => {
+    if (bluetoothEnabled === false && !isCheckingBluetooth) {
+      const interval = setInterval(() => {
+        checkBluetoothPermissions();
+      }, 3000); // Check every 3 seconds to reduce re-renders
+      return () => clearInterval(interval);
+    }
+  }, [bluetoothEnabled, isCheckingBluetooth]);
 
   return (
     <ScreenWrapper style={{ ...globalStyles.screenWrapper, padding: 0 }} qaId="screen_wrapper_scan_qr">
@@ -473,6 +536,8 @@ const ScanQR = () => {
               status="denied"
               onRequestPermission={requestPermission}
             />
+          ) : bluetoothEnabled === false && !isCheckingBluetooth ? (
+            <BluetoothDisabledScreen />
           ) : (
             <View style={globalStyles.scannerContainer}>
               <CameraView
@@ -484,7 +549,7 @@ const ScanQR = () => {
                 }}
                 onBarcodeScanned={handleBarCodeScanned}
               />
-              <ScannerOverlay isProcessing={isProcessing} />
+              <ScannerOverlay isProcessing={isProcessing} scanned={scanned} />
 
               <View {...testProps("view_camera_controls")} style={globalStyles.cameraControlsContainer}>
                 <TouchableOpacity

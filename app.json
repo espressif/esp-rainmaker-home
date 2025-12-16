@@ -2,7 +2,7 @@
   "expo": {
     "name": "NOVA",
     "slug": "NOVA",
-    "version": "3.2.0",
+    "version": "3.3.3",
     "orientation": "portrait",
     "icon": "./assets/images/logo.png",
     "scheme": "Nova",
@@ -10,14 +10,33 @@
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.espressif.nova"
+      "bundleIdentifier": "com.espressif.nova",
+      "associatedDomains": [
+        "applinks:agents.espressif.com"
+      ]
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/logo.png",
         "backgroundColor": "#ffffff"
       },
-      "package": "com.espressif.nova"
+      "package": "com.espressif.nova",
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "data": [
+            {
+              "scheme": "https",
+              "host": "agents.espressif.com"
+            }
+          ],
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
+        }
+      ]
     },
     "web": {
       "bundler": "metro",

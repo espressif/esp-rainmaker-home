@@ -852,6 +852,56 @@ export const globalStyles = StyleSheet.create({
     flex: 1,
   },
 
+  // Agent Terms Styles
+  agentTermsOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.35)",
+  },
+  agentTermsHero: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: tokens.spacing._20,
+    paddingBottom: tokens.spacing._30,
+  },
+  agentTermsHeroBubble: {
+    width: 140,
+    height: 140,
+    borderRadius: 70,
+    backgroundColor: tokens.colors.bg2,
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: tokens.colors.primary,
+    shadowOpacity: 0.15,
+    shadowOffset: { width: 0, height: 8 },
+    shadowRadius: 18,
+    elevation: 6,
+  },
+  agentTermsSheetWrapper: {
+    flexGrow: 0,
+    justifyContent: "flex-end",
+  },
+  agentTermsSheet: {
+    backgroundColor: tokens.colors.white,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingHorizontal: tokens.spacing._20,
+    paddingTop: tokens.spacing._15,
+    paddingBottom: tokens.spacing._30,
+    shadowColor: "#000",
+    shadowOpacity: 0.12,
+    shadowOffset: { width: 0, height: -4 },
+    shadowRadius: 12,
+    elevation: 10,
+  },
+  agentTermsHandle: {
+    width: 48,
+    height: 5,
+    backgroundColor: tokens.colors.bg2,
+    borderRadius: 3,
+    alignSelf: "center",
+    marginBottom: tokens.spacing._15,
+  },
+
   // Icon Container
   processingText: {
     color: tokens.colors.white,
@@ -902,17 +952,13 @@ export const globalStyles = StyleSheet.create({
   },
   permissionContent: {
     alignItems: "center",
-    padding: tokens.spacing._20,
-    backgroundColor: tokens.colors.white,
-    borderRadius: tokens.radius.md,
     width: "90%",
-    maxWidth: 400,
   },
   permissionIconContainer: {
     width: 80,
     height: 80,
     borderRadius: 40,
-    backgroundColor: tokens.colors.bg2,
+    backgroundColor: tokens.colors.white,
     alignItems: "center",
     justifyContent: "center",
     marginBottom: tokens.spacing._20,
@@ -923,14 +969,13 @@ export const globalStyles = StyleSheet.create({
   },
   permissionDescription: {
     textAlign: "center",
-    marginBottom: tokens.spacing._30,
     fontSize: tokens.fontSize.md,
-    paddingHorizontal: tokens.spacing._20,
   },
   permissionButton: {
     minWidth: 200,
     flexDirection: "row",
     alignItems: "center",
+    marginTop:tokens.spacing._20
   },
   cameraControlsContainer: {
     position: "absolute",
@@ -1340,6 +1385,7 @@ export const globalStyles = StyleSheet.create({
     backgroundColor: tokens.colors.primary,
     borderRadius: tokens.radius.md,
     paddingVertical: tokens.spacing._15,
+    textAlign: "center",
   },
 
   // Empty State Styles
@@ -1586,5 +1632,861 @@ export const globalStyles = StyleSheet.create({
     backgroundColor: tokens.colors.primary,
     borderRadius: tokens.radius.md,
     paddingVertical: tokens.spacing._15,
+  },
+
+  // Chat Styles
+  chatGestureContainer: {
+    flex: 1,
+  },
+  chatContainer: {
+    flex: 1,
+    backgroundColor: tokens.colors.bg5,
+    padding: 0,
+    margin: 0,
+  },
+  chatContentContainer: {
+    flex: 1,
+    width: "100%",
+  },
+  chatInnerContainer: {
+    flex: 1,
+  },
+  chatHeaderRight: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: tokens.spacing._10,
+  },
+  chatConnectionDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+  },
+  chatHeaderSettingsButton: {
+    padding: tokens.spacing._5,
+  },
+  chatStatusContainer: {
+    maxHeight: 40,
+    backgroundColor: tokens.colors.bg2,
+    borderBottomWidth: 1,
+    borderBottomColor: tokens.colors.bg3,
+  },
+  chatStatusContent: {
+    paddingHorizontal: tokens.spacing._10,
+    paddingVertical: tokens.spacing._5,
+    gap: tokens.spacing._10,
+  },
+  chatStatusMessage: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: tokens.spacing._5,
+    paddingHorizontal: tokens.spacing._10,
+    paddingVertical: tokens.spacing._5,
+    backgroundColor: tokens.colors.bg1,
+    borderRadius: tokens.spacing._10,
+  },
+  chatStatusIndicator: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  chatStatusText: {
+    fontSize: 12,
+    color: tokens.colors.text_secondary,
+  },
+  chatMessagesList: {
+    flex: 1,
+    width: "100%",
+  },
+  chatMessagesContent: {
+    padding: tokens.spacing._15,
+    paddingBottom: tokens.spacing._5,
+  },
+  chatMessagesContentEmpty: {
+    flexGrow: 1,
+    justifyContent: "flex-end",
+  },
+  chatMessagesContentKeyboardVisible: {
+    paddingBottom: tokens.spacing._10,
+  },
+  chatMessageWrapper: {
+    marginBottom: tokens.spacing._5,
+  },
+  chatUserMessageWrapper: {
+    alignItems: "flex-end",
+  },
+  chatBotMessageWrapper: {
+    alignItems: "flex-start",
+  },
+  chatMessageContainer: {
+    maxWidth: "85%",
+    paddingHorizontal: tokens.spacing._15,
+    paddingVertical: tokens.spacing._10,
+    borderRadius: tokens.spacing._15,
+    shadowColor: tokens.colors.text_primary,
+    shadowOffset: {
+      width: 0,
+      height: 1,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  chatUserMessage: {
+    backgroundColor: tokens.colors.primary,
+    borderBottomRightRadius: tokens.spacing._5,
+  },
+  chatBotMessage: {
+    backgroundColor: tokens.colors.bg1,
+    borderBottomLeftRadius: tokens.spacing._5,
+    borderWidth: 1,
+    borderColor: tokens.colors.bg3,
+  },
+  chatMessageText: {
+    fontSize: 16,
+    lineHeight: 24,
+    fontWeight: "400",
+  },
+  chatUserMessageText: {
+    color: tokens.colors.bg1,
+  },
+  chatBotMessageText: {
+    color: tokens.colors.text_primary,
+  },
+  chatMessageTextPreview: {
+    fontSize: 16,
+    lineHeight: 24,
+    fontWeight: "400",
+  },
+  chatExpandButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: tokens.spacing._10,
+    paddingVertical: tokens.spacing._5,
+    gap: tokens.spacing._5,
+  },
+  chatExpandButtonText: {
+    fontSize: 14,
+    color: tokens.colors.primary,
+    fontWeight: "600",
+  },
+  chatCollapseButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: tokens.spacing._10,
+    paddingVertical: tokens.spacing._5,
+    gap: tokens.spacing._5,
+  },
+  chatCollapseButtonText: {
+    fontSize: 14,
+    color: tokens.colors.primary,
+    fontWeight: "600",
+  },
+  chatTimestamp: {
+    fontSize: 11,
+    color: tokens.colors.text_secondary,
+    marginTop: 10,
+    fontWeight: "500",
+  },
+  chatUserTimestamp: {
+    textAlign: "right",
+  },
+  chatBotTimestamp: {
+    textAlign: "left",
+  },
+  chatInputContainer: {
+    backgroundColor: tokens.colors.bg1,
+    borderTopWidth: 1,
+    borderTopColor: tokens.colors.bg3,
+    shadowColor: tokens.colors.text_primary,
+    shadowOffset: {
+      width: 0,
+      height: -2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  chatInputContainerKeyboardVisible: {
+    paddingBottom: tokens.spacing._5,
+  },
+  chatConnectionBanner: {
+    backgroundColor: tokens.colors.bg2,
+    borderBottomWidth: 1,
+    borderBottomColor: tokens.colors.bg3,
+    paddingHorizontal: tokens.spacing._15,
+    paddingVertical: tokens.spacing._10,
+  },
+  chatConnectionBannerContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: tokens.spacing._10,
+  },
+  chatConnectionBannerIndicator: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  chatConnectionBannerText: {
+    flex: 1,
+    fontSize: 13,
+    color: tokens.colors.text_secondary,
+    fontWeight: "500",
+  },
+  chatReconnectButtonInline: {
+    paddingHorizontal: tokens.spacing._15,
+    paddingVertical: tokens.spacing._5,
+    backgroundColor: tokens.colors.primary,
+    borderRadius: tokens.spacing._10,
+  },
+  chatReconnectTextInline: {
+    color: tokens.colors.bg1,
+    fontSize: 13,
+    fontWeight: "600",
+  },
+  chatInputWrapper: {
+    flexDirection: "row",
+    alignItems: "flex-end",
+    paddingHorizontal: tokens.spacing._15,
+    paddingVertical: tokens.spacing._15,
+    gap: tokens.spacing._10,
+  },
+  chatTextInputContainer: {
+    flex: 1,
+    backgroundColor: tokens.colors.bg3,
+    borderRadius: tokens.radius.md,
+    paddingHorizontal: tokens.spacing._15,
+    paddingVertical: tokens.spacing._10,
+    minHeight: 44,
+    maxHeight: 108,
+    borderWidth: 1,
+    borderColor: "transparent",
+  },
+  chatTextInput: {
+    flex: 1,
+    fontSize: 16,
+    color: tokens.colors.text_primary,
+    lineHeight: 22,
+    padding: 0,
+    margin: 0,
+  },
+  chatTextInputDisabled: {
+    opacity: 0.5,
+  },
+  chatCharCountContainer: {
+    position: "absolute",
+    bottom: 4,
+    right: tokens.spacing._15,
+  },
+  chatCharCount: {
+    fontSize: 11,
+    color: tokens.colors.text_secondary,
+    fontWeight: "500",
+  },
+  chatCharCountWarning: {
+    color: tokens.colors.error,
+    fontWeight: "600",
+  },
+  chatSendButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 0,
+  },
+  chatSendButtonActive: {
+    backgroundColor: tokens.colors.primary,
+    shadowColor: tokens.colors.primary,
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 4,
+  },
+  chatSendButtonDisabled: {
+    backgroundColor: tokens.colors.bg3,
+    opacity: 0.4,
+  },
+  chatReconnectButton: {
+    marginTop: tokens.spacing._10,
+    padding: tokens.spacing._15,
+    backgroundColor: tokens.colors.primary,
+    borderRadius: tokens.spacing._10,
+    alignItems: "center",
+    shadowColor: tokens.colors.primary,
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  chatReconnectText: {
+    color: tokens.colors.bg1,
+    fontSize: 15,
+    fontWeight: "600",
+  },
+  chatThinkingWrapper: {
+    marginBottom: tokens.spacing._10,
+  },
+  chatThinkingContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: tokens.spacing._10,
+  },
+  chatThinkingLoader: {
+    marginRight: tokens.spacing._5,
+  },
+  chatThinkingText: {
+    fontSize: 14,
+    color: tokens.colors.text_secondary,
+    fontStyle: "italic",
+    flex: 1,
+  },
+  chatThinkingIndicatorWrapper: {
+    paddingHorizontal: tokens.spacing._15,
+    paddingVertical: tokens.spacing._10,
+  },
+  chatThinkingIndicatorContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: tokens.spacing._10,
+  },
+  chatThinkingIndicatorLoader: {
+    marginRight: tokens.spacing._5,
+  },
+  chatThinkingIndicatorText: {
+    fontSize: 14,
+    color: tokens.colors.text_secondary,
+    fontStyle: "italic",
+  },
+  chatToolCallWrapper: {
+    marginBottom: tokens.spacing._5,
+  },
+  chatToolCallText: {
+    fontSize: 14,
+    color: tokens.colors.text_secondary,
+    fontWeight: "500",
+  },
+  chatToolResultWrapper: {
+    marginBottom: tokens.spacing._5,
+  },
+  chatToolResultLabel: {
+    fontSize: 14,
+    color: tokens.colors.text_secondary,
+    fontWeight: "600",
+    marginBottom: tokens.spacing._5,
+  },
+  chatJsonMessageWrapper: {
+    marginBottom: tokens.spacing._5,
+  },
+  chatJsonContainer: {
+    marginTop: tokens.spacing._5,
+    borderRadius: tokens.spacing._10,
+    borderWidth: 1,
+    borderColor: tokens.colors.bg3,
+    overflow: "hidden",
+  },
+  chatJsonExpandedWrapper: {
+    width: "100%",
+  },
+  chatJsonExpandedHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "flex-end",
+    paddingHorizontal: tokens.spacing._10,
+    paddingVertical: tokens.spacing._10,
+    backgroundColor: tokens.colors.bg2,
+    borderBottomWidth: 1,
+    borderBottomColor: tokens.colors.bg3,
+  },
+  chatJsonCollapsedWrapper: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: tokens.spacing._10,
+    paddingVertical: tokens.spacing._10,
+    backgroundColor: tokens.colors.bg2,
+    gap: tokens.spacing._10,
+  },
+  chatJsonCollapsedIcon: {
+    paddingLeft: tokens.spacing._5,
+  },
+  chatJsonContent: {
+    backgroundColor: tokens.colors.bg1,
+  },
+  chatJsonContentContainer: {
+    padding: tokens.spacing._15,
+  },
+  chatJsonText: {
+    fontSize: 12,
+    fontFamily: "monospace",
+    color: tokens.colors.text_primary,
+    lineHeight: 20,
+  },
+  chatJsonPreview: {
+    flex: 1,
+    fontSize: 12,
+    fontFamily: "monospace",
+    color: tokens.colors.text_secondary,
+    lineHeight: 18,
+  },
+  chatInitializingContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    padding: tokens.spacing._20,
+  },
+  chatInitializingText: {
+    marginTop: tokens.spacing._15,
+    fontSize: 16,
+    color: tokens.colors.text_secondary,
+    textAlign: "center",
+  },
+  chatErrorContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    padding: tokens.spacing._20,
+  },
+  chatErrorText: {
+    fontSize: 16,
+    color: tokens.colors.error,
+    textAlign: "center",
+    marginBottom: tokens.spacing._20,
+  },
+  chatTimeoutMessage: {
+    backgroundColor: tokens.colors.error + "20",
+    borderWidth: 1,
+    borderColor: tokens.colors.error,
+    alignItems: "center",
+  },
+  chatTimeoutMessageText: {
+    fontSize: 16,
+    lineHeight: 24,
+    fontWeight: "400",
+    color: tokens.colors.error,
+    textAlign: "center",
+  },
+  chatRetryButton: {
+    paddingHorizontal: tokens.spacing._20,
+    paddingVertical: tokens.spacing._10,
+    backgroundColor: tokens.colors.primary,
+    borderRadius: tokens.spacing._10,
+  },
+  chatRetryButtonText: {
+    color: tokens.colors.bg1,
+    fontSize: 16,
+    fontWeight: "600",
+  },
+
+  // Chat Settings Styles
+  chatSettingsCenterContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 0,
+  },
+  chatSettingsLoadingText: {
+    marginTop: tokens.spacing._15,
+    fontSize: 16,
+    color: tokens.colors.text_secondary,
+  },
+  chatSettingsErrorText: {
+    marginTop: tokens.spacing._15,
+    fontSize: 16,
+    color: tokens.colors.error,
+    textAlign: "center",
+  },
+  chatSettingsEmptyText: {
+    fontSize: 14,
+    color: tokens.colors.text_secondary,
+    fontStyle: "italic",
+    textAlign: "center",
+    padding: tokens.spacing._20,
+  },
+  chatSettingsRetryButton: {
+    marginTop: tokens.spacing._20,
+    paddingHorizontal: tokens.spacing._20,
+    paddingVertical: tokens.spacing._10,
+    backgroundColor: tokens.colors.primary,
+    borderRadius: tokens.spacing._10,
+  },
+  chatSettingsRetryButtonText: {
+    color: tokens.colors.bg1,
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  chatSettingsScrollView: {
+    flex: 1,
+  },
+  chatSettingsScrollContent: {
+    padding: tokens.spacing._15,
+    paddingBottom: tokens.spacing._20,
+  },
+  chatSettingsSectionContainer: {
+    marginBottom: tokens.spacing._20,
+  },
+  chatSettingsSectionTitle: {
+    fontSize: tokens.fontSize.md,
+    fontFamily: tokens.fonts.medium,
+    color: tokens.colors.text_primary,
+    marginBottom: tokens.spacing._15,
+    paddingHorizontal: tokens.spacing._5,
+  },
+  chatSettingsCardsGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: tokens.spacing._10,
+    justifyContent: "flex-start",
+  },
+  chatSettingsCapabilityCard: {
+    backgroundColor: tokens.colors.white,
+    padding: tokens.spacing._10,
+    alignItems: "center",
+    justifyContent: "center",
+    minHeight: 100,
+    borderRadius: tokens.radius.md,
+    borderWidth: tokens.border.defaultWidth,
+    borderColor: tokens.colors.borderColor,
+    shadowColor: tokens.colors.text_primary,
+    shadowOffset: {
+      width: 0,
+      height: 1,
+    },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  chatSettingsCapabilityIconContainer: {
+    marginBottom: tokens.spacing._5,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  chatSettingsCapabilityLabel: {
+    fontSize: tokens.fontSize.sm,
+    fontFamily: tokens.fonts.medium,
+    color: tokens.colors.text_primary,
+    textAlign: "center",
+  },
+  chatSettingsToolCard: {
+    backgroundColor: tokens.colors.white,
+    padding: tokens.spacing._10,
+    alignItems: "center",
+    justifyContent: "center",
+    minHeight: 80,
+    borderRadius: tokens.radius.md,
+    borderWidth: tokens.border.defaultWidth,
+    borderColor: tokens.colors.borderColor,
+    shadowColor: tokens.colors.text_primary,
+    shadowOffset: {
+      width: 0,
+      height: 1,
+    },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  chatSettingsToolName: {
+    fontSize: tokens.fontSize.sm,
+    fontFamily: tokens.fonts.medium,
+    color: tokens.colors.text_primary,
+    textAlign: "center",
+    marginBottom: tokens.spacing._5,
+  },
+  chatSettingsConnectedBadge: {
+    backgroundColor: tokens.colors.bg4,
+    paddingHorizontal: tokens.spacing._10,
+    paddingVertical: tokens.spacing._5,
+    borderRadius: tokens.radius.sm,
+    marginTop: tokens.spacing._5,
+  },
+  chatSettingsConnectedText: {
+    fontSize: tokens.fontSize.xs,
+    fontFamily: tokens.fonts.medium,
+    color: tokens.colors.primary,
+  },
+  chatSettingsConnectButton: {
+    backgroundColor: tokens.colors.primary,
+    paddingHorizontal: tokens.spacing._15,
+    paddingVertical: tokens.spacing._5,
+    borderRadius: tokens.radius.sm,
+    marginTop: tokens.spacing._5,
+    minWidth: 80,
+  },
+  chatSettingsConnectButtonText: {
+    fontSize: tokens.fontSize.xs,
+    fontFamily: tokens.fonts.medium,
+    color: tokens.colors.white,
+    textAlign: "center",
+  },
+
+  // Agent Settings Styles
+  agentSettingsContainer: {
+    flex: 1,
+    backgroundColor: tokens.colors.bg5,
+    padding: 0,
+  },
+  agentSettingsScrollView: {
+    flex: 1,
+  },
+  agentSettingsEditButtonContainer: {
+    padding: tokens.spacing._10,
+    marginRight: -tokens.spacing._10,
+  },
+  agentSettingsEditButton: {
+    color: tokens.colors.primary,
+    fontSize: tokens.fontSize.md,
+    fontFamily: tokens.fonts.medium,
+  },
+  agentSettingsList: {
+    padding: tokens.spacing._15,
+    gap: tokens.spacing._15,
+  },
+  agentSettingsFooterButton: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    padding: tokens.spacing._15,
+    backgroundColor: "transparent",
+  },
+
+  // Guide Styles
+  centerContent: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  guideButton: {
+    position: "absolute",
+    top: 0,
+    right: 0,
+    backgroundColor: tokens.colors.bg3,
+    paddingHorizontal: tokens.spacing._15,
+    paddingVertical: tokens.spacing._5,
+    borderRadius: 20, // Pill shape (half of height)
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 1000,
+    elevation: 8,
+    shadowColor: tokens.colors.text_primary,
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+  },
+  guideButtonContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: tokens.spacing._5,
+  },
+  guideButtonText: {
+    color: tokens.colors.primary,
+    fontSize: tokens.fontSize.sm,
+    fontFamily: tokens.fonts.medium,
+  },
+});
+
+// Chat Markdown Styles Helper
+// Returns markdown styles configurable by user type and font sizes
+export const getChatMarkdownStyles = (
+  isUser: boolean,
+  fontSizes: {
+    base: number;
+    lineHeight: number;
+    heading1: number;
+    heading2: number;
+    heading3: number;
+  }
+) => {
+  return {
+    body: {
+      color: isUser ? tokens.colors.bg1 : tokens.colors.text_primary,
+      fontSize: fontSizes.base,
+      lineHeight: fontSizes.lineHeight,
+      fontFamily: tokens.fonts.regular,
+    },
+    paragraph: {
+      marginTop: 0,
+      marginBottom: 8,
+    },
+    heading1: {
+      fontSize: fontSizes.heading1,
+      fontWeight: "bold" as const,
+      marginBottom: 8,
+      color: isUser ? tokens.colors.bg1 : tokens.colors.text_primary,
+    },
+    heading2: {
+      fontSize: fontSizes.heading2,
+      fontWeight: "bold" as const,
+      marginBottom: 6,
+      color: isUser ? tokens.colors.bg1 : tokens.colors.text_primary,
+    },
+    heading3: {
+      fontSize: fontSizes.heading3,
+      fontWeight: "bold" as const,
+      marginBottom: 4,
+      color: isUser ? tokens.colors.bg1 : tokens.colors.text_primary,
+    },
+    code_inline: {
+      backgroundColor: isUser ? "rgba(255,255,255,0.2)" : tokens.colors.bg3,
+      paddingHorizontal: 4,
+      paddingVertical: 2,
+      borderRadius: 4,
+      fontFamily: "monospace",
+    },
+    code_block: {
+      backgroundColor: isUser ? "rgba(255,255,255,0.2)" : tokens.colors.bg3,
+      padding: 12,
+      borderRadius: 8,
+      marginVertical: 8,
+      fontFamily: "monospace",
+    },
+    link: {
+      color: isUser ? tokens.colors.bg1 : tokens.colors.primary,
+      textDecorationLine: "underline" as const,
+    },
+    list_item: {
+      marginBottom: 4,
+    },
+  };
+};
+
+// Agent Selection Bottom Sheet Styles
+export const agentSelectionSheetStyles = StyleSheet.create({
+  content: {
+    backgroundColor: tokens.colors.white,
+    borderTopLeftRadius: tokens.radius.md,
+    borderTopRightRadius: tokens.radius.md,
+    padding: tokens.spacing._20,
+    paddingTop: tokens.spacing._15,
+  },
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: tokens.spacing._20,
+    paddingBottom: tokens.spacing._20,
+    paddingTop: tokens.spacing._10,
+  },
+  title: {
+    fontSize: tokens.fontSize.lg,
+    fontFamily: tokens.fonts.medium,
+    color: tokens.colors.text_primary,
+    flex: 1,
+  },
+  closeButton: {
+    padding: tokens.spacing._5,
+  },
+  scrollContent: {
+    paddingBottom: tokens.spacing._30,
+    paddingTop: tokens.spacing._10,
+  },
+  section: {
+    paddingHorizontal: tokens.spacing._20,
+    marginBottom: tokens.spacing._5,
+  },
+  sectionTitle: {
+    fontSize: tokens.fontSize.xs,
+    fontFamily: tokens.fonts.medium,
+    color: tokens.colors.text_secondary,
+    marginBottom: tokens.spacing._15,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
+  agentItem: {
+    backgroundColor: tokens.colors.white,
+    borderRadius: tokens.radius.md,
+    marginBottom: tokens.spacing._10,
+    borderWidth: 1,
+    borderColor: tokens.colors.bg2,
+    padding: tokens.spacing._15,
+  },
+  agentItemSelected: {
+    backgroundColor: tokens.colors.primary + "10",
+    borderColor: tokens.colors.primary,
+    borderWidth: 2,
+  },
+  agentItemContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  agentInfo: {
+    flex: 1,
+    marginRight: tokens.spacing._15,
+  },
+  agentName: {
+    fontSize: tokens.fontSize.md,
+    fontFamily: tokens.fonts.medium,
+    color: tokens.colors.text_primary,
+    marginBottom: tokens.spacing._5,
+  },
+  agentNameSelected: {
+    color: tokens.colors.primary,
+  },
+  agentId: {
+    fontSize: tokens.fontSize.sm,
+    fontFamily: tokens.fonts.regular,
+    color: tokens.colors.text_secondary,
+  },
+  agentIdSelected: {
+    color: tokens.colors.primary,
+  },
+  loadingContainer: {
+    padding: tokens.spacing._40,
+    alignItems: "center",
+    justifyContent: "center",
+    minHeight: 200,
+  },
+  loadingText: {
+    marginTop: tokens.spacing._20,
+    fontSize: tokens.fontSize.md,
+    fontFamily: tokens.fonts.regular,
+    color: tokens.colors.text_secondary,
+  },
+  errorContainer: {
+    padding: tokens.spacing._40,
+    alignItems: "center",
+    justifyContent: "center",
+    minHeight: 200,
+  },
+  errorText: {
+    fontSize: tokens.fontSize.md,
+    fontFamily: tokens.fonts.regular,
+    color: tokens.colors.red,
+    marginBottom: tokens.spacing._20,
+    textAlign: "center",
+  },
+  retryButton: {
+    paddingVertical: tokens.spacing._10,
+    paddingHorizontal: tokens.spacing._20,
+    backgroundColor: tokens.colors.primary,
+    borderRadius: tokens.radius.md,
+  },
+  retryButtonText: {
+    fontSize: tokens.fontSize.md,
+    fontFamily: tokens.fonts.medium,
+    color: tokens.colors.white,
+  },
+  emptyContainer: {
+    padding: tokens.spacing._40,
+    alignItems: "center",
+    justifyContent: "center",
+    minHeight: 200,
+  },
+  emptyText: {
+    fontSize: tokens.fontSize.md,
+    fontFamily: tokens.fonts.regular,
+    color: tokens.colors.text_secondary,
+    textAlign: "center",
   },
 });
