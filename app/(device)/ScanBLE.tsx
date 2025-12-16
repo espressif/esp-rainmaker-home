@@ -39,6 +39,7 @@ import { Header, ScreenWrapper, ContentWrapper, BluetoothDisabledScreen } from "
 import { testProps } from "@/utils/testProps";
 import { deviceImages } from "@/utils/device";
 import { useToast } from "@/hooks/useToast";
+import { parseRMakerCapabilities } from "@/utils/rmakerCapabilities";
 
 // config
 import { DEVICE_TYPE_LIST } from "@/config/devices.config";
@@ -431,20 +432,39 @@ const Scan = () => {
       const response = await device.connect();
       // Check for successful connection (0 typically means success)
       if (response === 0) {
-        // get the device capabilities
-        const capabilities = await device.getDeviceCapabilities();
-        // If device need pop then navigate to the pop screen
-        if (
-          !capabilities.includes("no_pop") ||
-          !capabilities.includes("no_sec")
-        ) {
+        // Fetch version info and prov capabilities
+        const versionInfo = await device.getDeviceVersionInfo();
+        const provCapabilities = await device.getDeviceCapabilities();
+
+        // Parse RMaker capabilities from version info
+        const rmakerCaps = parseRMakerCapabilities(
+          versionInfo,
+          provCapabilities
+        );
+
+        // If device needs POP then navigate to the POP screen
+        if (rmakerCaps.requiresPop) {
           router.push({
             pathname: "/(device)/POP",
+            params: {
+              hasClaimCap: rmakerCaps.hasClaim ? "true" : "false",
+            },
           });
           return;
         }
+
         // initialize the session
         await device.initializeSession();
+
+        // If device supports claiming, navigate to Claiming screen
+        if (rmakerCaps.hasClaim) {
+          router.push({
+            pathname: "/(device)/Claiming",
+          });
+          return;
+        }
+
+        // Otherwise go directly to WiFi
         router.push({
           pathname: "/(device)/Wifi",
         });

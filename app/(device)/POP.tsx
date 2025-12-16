@@ -6,7 +6,7 @@
 
 import { useState } from "react";
 import { View, Text, StyleSheet, ScrollView, Image } from "react-native";
-import { router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 
 // SDK
 import { ESPDevice } from "@espressif/rainmaker-base-sdk";
@@ -28,6 +28,7 @@ import { provisionAdapter } from "@/adaptors/implementations/ESPProvAdapter";
 
 import POPCODE_Image from "@/assets/images/popcode.png";
 import { testProps } from "@/utils/testProps";
+import { parseRMakerCapabilities } from "@/utils/rmakerCapabilities";
 
 /**
  * POPScreen component for device Proof of Possession code input.
@@ -38,11 +39,35 @@ import { testProps } from "@/utils/testProps";
 const POPScreen = () => {
   const { t } = useTranslation();
   const { store } = useCDF();
+  const params = useLocalSearchParams<{
+    hasClaimCap?: string;
+  }>();
   const device: ESPDevice = store.nodeStore.connectedDevice;
   const softAPDeviceInfo = store.nodeStore.softAPDeviceInfo;
   const toast = useToast();
   const [popCode, setPopCode] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+
+  // Parse claiming capability params
+  const hasClaimCap = params.hasClaimCap === "true";
+
+  /**
+   * Navigate to the next screen based on claiming capability
+   */
+  const navigateToNextScreen = (deviceName: string, pop: string) => {
+    // If device supports claiming, go to Claiming screen first
+    if (hasClaimCap) {
+      router.push({
+        pathname: "/(device)/Claiming",
+      });
+    } else {
+      // Otherwise go directly to WiFi
+      router.push({
+        pathname: "/(device)/Wifi",
+        params: { popCode: pop, deviceName },
+      });
+    }
+  };
 
   /**
    * Handles the verification of the POP code.
@@ -72,11 +97,28 @@ const POPScreen = () => {
             store.nodeStore.connectedDevice = espDevice;
             // Clear SoftAP device info
             store.nodeStore.softAPDeviceInfo = null;
-            // Navigate to WiFi screen
-            router.push({
-              pathname: "/(device)/Wifi",
-              params: { popCode, deviceName: espDevice.name },
-            });
+
+            // Fetch version info and prov capabilities
+            const versionInfo = await espDevice.getDeviceVersionInfo();
+            const provCapabilities = await espDevice.getDeviceCapabilities();
+
+            // Parse RMaker capabilities from version info (parsing done in app)
+            const rmakerCaps = parseRMakerCapabilities(
+              versionInfo,
+              provCapabilities
+            );
+
+            // Navigate based on claiming capability
+            if (rmakerCaps.hasClaim) {
+              router.push({
+                pathname: "/(device)/Claiming",
+              });
+            } else {
+              router.push({
+                pathname: "/(device)/Wifi",
+                params: { popCode, deviceName: espDevice.name },
+              });
+            }
           }
         }
       } else if (device) {
@@ -84,11 +126,8 @@ const POPScreen = () => {
         await device.setProofOfPossession(popCode);
         await device.initializeSession();
 
-        // Navigate to the next step in device provisioning
-        router.push({
-          pathname: "/(device)/Wifi",
-          params: { popCode, deviceName: device.name },
-        });
+        // Navigate to the next screen based on claiming capability
+        navigateToNextScreen(device.name, popCode);
       } else {
         toast.showError(t("device.errors.deviceNotConnected"));
       }

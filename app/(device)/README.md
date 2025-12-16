@@ -36,8 +36,10 @@ The device module manages device discovery, provisioning, control, and settings 
   1. Initialize BLE scanning with device prefix (default: "PROV\_")
   2. Display discovered devices and all available device types
   3. Handle device selection and connection
-  4. Check device capabilities for POP requirement
-  5. Navigate to POP screen or WiFi setup based on capabilities
+  4. Fetch device version info and capabilities
+  5. Parse RMaker capabilities to detect POP and claiming support
+  6. If POP required: Navigate to POP screen (with claiming capability info)
+  7. If no POP required: Initialize session, then navigate to Claiming screen (if claiming supported) or WiFi setup
 - **CDF/SDK Functions**:
 
   ```typescript
@@ -46,14 +48,30 @@ The device module manages device discovery, provisioning, control, and settings 
 
   // Connect to device
   const response = await device.connect();
-  const capabilities = await device.getDeviceCapabilities();
+  
+  // Fetch version info and capabilities for claiming detection
+  const versionInfo = await device.getDeviceVersionInfo();
+  const provCapabilities = await device.getDeviceCapabilities();
+  const rmakerCaps = parseRMakerCapabilities(versionInfo, provCapabilities);
 
   // Check if POP is needed
-  if (!capabilities.includes("no_pop") || !capabilities.includes("no_sec")) {
-    // Navigate to POP screen
+  if (rmakerCaps.requiresPop) {
+    // Navigate to POP screen with claiming capability info
+    // After POP verification, POP screen will navigate to Claiming (if needed) or WiFi
+    router.push({
+      pathname: "/(device)/POP",
+      params: {
+        hasClaimCap: rmakerCaps.hasClaim ? "true" : "false",
+      },
+    });
   } else {
+    // No POP required, initialize session and check claiming
     await device.initializeSession();
-    // Navigate to WiFi screen
+    if (rmakerCaps.hasClaim) {
+      // Navigate to Claiming screen
+    } else {
+      // Navigate to WiFi screen
+    }
   }
   ```
 
@@ -72,9 +90,12 @@ The device module manages device discovery, provisioning, control, and settings 
   1. Request camera permissions
   2. Initialize camera with QR code detection
   3. Parse and validate QR code data (JSON format)
-  4. Create ESP device from QR data
-  5. Handle platform-specific connection logic
-  6. Navigate to WiFi setup
+  4. Create ESP device from QR data and connect
+  5. Fetch version info and capabilities
+  6. Parse RMaker capabilities to detect POP and claiming support
+  7. If POP required and provided in QR: Set POP and initialize session
+  8. If POP required but not in QR: Still initialize session (for claim-enabled devices)
+  9. Navigate to Claiming screen (if supported) or WiFi setup
 - **QR Code Format**:
   ```json
   {
@@ -95,6 +116,24 @@ The device module manages device discovery, provisioning, control, and settings 
   );
   const espDevice = new ESPDevice(deviceInterface);
   const connectResponse = await espDevice.connect();
+  
+  // Fetch version info and capabilities for claiming detection
+  const versionInfo = await espDevice.getDeviceVersionInfo();
+  const provCapabilities = await espDevice.getDeviceCapabilities();
+  const rmakerCaps = parseRMakerCapabilities(versionInfo, provCapabilities);
+  
+  // Set POP if required
+  if (rmakerCaps.requiresPop && pop) {
+    await espDevice.setProofOfPossession(pop);
+  }
+  await espDevice.initializeSession();
+  
+  // Navigate based on claiming capability
+  if (rmakerCaps.hasClaim) {
+    // Navigate to Claiming screen
+  } else {
+    // Navigate to WiFi setup
+  }
   ```
 
 ### 4. SoftAP Scan Screen (`ScanSoftAP.tsx`)
@@ -121,6 +160,7 @@ The device module manages device discovery, provisioning, control, and settings 
   - SoftAP device discovery and connection
   - Capability-based flow control (POP vs direct WiFi)
   - Connection status feedback
+  - **Note**: Assisted claiming is **NOT supported** for SoftAP transport
 - **CDF/SDK Functions**:
 
   ```typescript
@@ -146,29 +186,80 @@ The device module manages device discovery, provisioning, control, and settings 
   - Visual guide showing where to find POP code on device
   - Support for both BLE and SoftAP device flows
   - Platform-specific handling for SoftAP devices
+  - Assisted claiming capability detection and navigation
 - **Steps**:
   1. Display POP code input form with device image guide
   2. Validate entered POP code (max 8 characters)
-  3. For SoftAP devices: Create new ESP device with POP
-  4. For BLE devices: Set POP on existing device
-  5. Initialize session and navigate to WiFi setup
+  3. For SoftAP devices: Create new ESP device with POP, then navigate to WiFi setup (claiming is not supported for SoftAP)
+  4. For BLE devices: Set POP on existing device, then initialize session, use claiming capability from route params (passed from ScanBLE screen)
+  5. Navigate to Claiming screen (if supported) or WiFi setup
 - **CDF/SDK Functions**:
 
   ```typescript
-  // Set POP for BLE devices
+  // For BLE devices: Set POP and initialize session
   await device.setProofOfPossession(popCode);
   await device.initializeSession();
 
-  // Create SoftAP device with POP
+  // Navigate based on claiming capability (passed as params from previous screen)
+  // For BLE flow: claiming capability info is passed from ScanBLE screen
+  if (hasClaimCap) {
+    // Navigate to Claiming screen
+  } else {
+    // Navigate to WiFi setup
+  }
+
+  // For SoftAP devices: Create device, then fetch capabilities
   const deviceInterface = await provisionAdapter.createESPDevice(
     deviceName,
     "softap",
     2,
     popCode
   );
+  const espDevice = new ESPDevice(deviceInterface);
+  // Fetch and parse capabilities, then navigate to Claiming or WiFi
   ```
 
-### 6. WiFi Screen (`Wifi.tsx`)
+### 6. Assisted Claiming Screen (`Claiming.tsx`)
+
+- **Purpose**: Handle assisted claiming process for devices that require claiming before provisioning
+- **Key Features**:
+  - Automatic claiming process initiation on screen mount
+  - Real-time progress updates with animated loading indicator
+  - Success/failure state handling with visual feedback
+  - Automatic navigation to WiFi setup on success
+  - Error handling with user-friendly messages
+- **When is Claiming Required?**:
+  - Device's `rmaker.cap` array contains `"claim"`
+  - Detected automatically after device connection and capability parsing
+  - Required for devices that need to be claimed to a user account before provisioning
+- **Steps**:
+  1. Screen loads and automatically starts claiming process
+  2. Display animated progress indicator during claiming
+  3. Show real-time progress messages from SDK
+  4. Handle success: Navigate to WiFi setup screen
+  5. Handle failure: Display error message with OK button to go back
+- **CDF/SDK Functions**:
+
+  ```typescript
+  // Get connected device from store
+  const device: ESPDevice = store.nodeStore.connectedDevice;
+
+  // Start assisted claiming with progress callback
+  await device.startAssistedClaiming((response: ESPClaimResponse) => {
+    setStatus(response.status);
+    setProgressMessage(response.message);
+    
+    if (response.status === ESPClaimStatus.success) {
+      // Navigate to WiFi setup
+    } else if (response.status === ESPClaimStatus.failed) {
+      // Show error message
+    }
+  });
+  ```
+
+- **SDK Documentation**: [ESPDevice.startAssistedClaiming](https://espressif.github.io/esp-rainmaker-app-sdk-ts/classes/ESPDevice.ESPDevice.html#startassistedclaiming)
+
+### 7. WiFi Screen (`Wifi.tsx`)
 
 - **Purpose**: Configure WiFi settings for device provisioning
 - **Key Features**:
@@ -198,7 +289,7 @@ The device module manages device discovery, provisioning, control, and settings 
 
 - **SDK Documentation**: [ESPDevice.scanWifiList](https://espressif.github.io/esp-rainmaker-app-sdk-ts/classes/ESPDevice.ESPDevice.html#scanwifilist)
 
-### 7. Provision Screen (`Provision.tsx`)
+### 8. Provision Screen (`Provision.tsx`)
 
 - **Purpose**: Handle device provisioning process with real-time feedback
 - **Key Features**:
@@ -233,7 +324,7 @@ The device module manages device discovery, provisioning, control, and settings 
 
 - **SDK Documentation**: [ESPDevice.provision](https://espressif.github.io/esp-rainmaker-app-sdk-ts/classes/ESPDevice.ESPDevice.html#provision)
 
-### 8. Control Screen (`Control.tsx`)
+### 9. Control Screen (`Control.tsx`)
 
 - **Purpose**: Main device control interface with dynamic rendering
 - **Key Features**:
@@ -272,7 +363,7 @@ The device module manages device discovery, provisioning, control, and settings 
 
 - **SDK Documentation**: [ESPRMNode](https://espressif.github.io/esp-rainmaker-app-sdk-ts/classes/ESPRMNode.ESPRMNode.html)
 
-### 9. Settings Screen (`Settings.tsx`)
+### 10. Settings Screen (`Settings.tsx`)
 
 - **Purpose**: Comprehensive device settings and management
 - **Key Features**:
@@ -319,6 +410,76 @@ The device module manages device discovery, provisioning, control, and settings 
   ```
 
 - **SDK Documentation**: [ESPRMNode](https://espressif.github.io/esp-rainmaker-app-sdk-ts/classes/ESPRMNode.ESPRMNode.html)
+</details>
+
+<details>
+<summary><strong>Assisted Claiming Support</strong></summary>
+
+### Overview
+
+Assisted claiming is a feature that allows devices to be claimed to a user account before provisioning. This is automatically detected and handled during the device provisioning flow.
+
+### How Claiming is Detected
+
+1. **After Device Connection**: Once a device is connected to BLE, the app fetches:
+   - Device version info (`getDeviceVersionInfo()`)
+   - Provisioning capabilities (`getDeviceCapabilities()`)
+
+2. **Capability Parsing**: The app parses RMaker capabilities using `parseRMakerCapabilities()`:
+   ```typescript
+   import { parseRMakerCapabilities } from "@/utils/rmakerCapabilities";
+   
+   const versionInfo = await device.getDeviceVersionInfo();
+   const provCapabilities = await device.getDeviceCapabilities();
+   const rmakerCaps = parseRMakerCapabilities(versionInfo, provCapabilities);
+   ```
+
+3. **Claiming Detection**: The function checks the `rmaker.cap` array in the version info:
+   - `"claim"` → Assisted claiming
+   
+   ```typescript
+   if (rmakerCaps.hasClaim) {
+     // Navigate to Claiming screen
+   }
+   ```
+
+### Claiming Flow Integration
+
+The claiming step is integrated into BLE and QR Code provisioning methods with the following order:
+
+- **BLE Scanning** (`ScanBLE.tsx`): 
+  - If POP required: Navigate to POP → After POP verification → Claiming (if supported) → WiFi
+  - If no POP: Initialize session → Claiming (if supported) → WiFi
+
+- **QR Code Scanning** (`ScanQR.tsx`): 
+  - If POP in QR: Set POP → Initialize session → Claiming (if supported) → WiFi
+  - If POP required but not in QR: Initialize session → Claiming (if supported) → WiFi
+  - If no POP: Initialize session → Claiming (if supported) → WiFi
+
+- **SoftAP** (`ScanSoftAP.tsx`): **Assisted claiming is NOT supported for SoftAP transport**
+- **POP Screen** (`POP.tsx`): After POP verification, navigates to Claiming (if supported) or WiFi
+
+### Claiming Process
+
+1. **Automatic Start**: The Claiming screen automatically starts the claiming process on mount
+2. **Progress Updates**: Real-time progress messages from the SDK are displayed
+3. **Success**: Automatically navigates to WiFi setup after successful claiming
+4. **Failure**: Displays error message with option to go back
+
+### SDK Integration
+
+The claiming process uses the SDK's `startAssistedClaiming()` method:
+
+```typescript
+await device.startAssistedClaiming((response: ESPClaimResponse) => {
+  // Handle progress updates
+  setStatus(response.status);
+  setProgressMessage(response.message);
+});
+```
+
+For more details, see the [ESPDevice.startAssistedClaiming](https://espressif.github.io/esp-rainmaker-app-sdk-ts/classes/ESPDevice.ESPDevice.html#startassistedclaiming) SDK documentation.
+
 </details>
 
 <details>
@@ -377,19 +538,56 @@ graph TD
     Selection -->|Bluetooth| BLE[ScanBLE]
     Selection -->|SoftAP| SAP[ScanSoftAP]
 
-    QR -->|Valid QR| POP1{Need POP?}
-    BLE -->|Device Found| POP2{Need POP?}
-    SAP -->|Device Found| POP3{Need POP?}
+    QR -->|Valid QR| Connect1[Connect Device]
+    BLE -->|Device Found| Connect2[Connect Device]
+    SAP -->|Device Found| Connect3[Connect Device]
 
-    POP1 -->|Yes| POP[POP Screen]
-    POP1 -->|No| WiFi[WiFi Setup]
-    POP2 -->|Yes| POP
-    POP2 -->|No| WiFi
-    POP3 -->|Yes| POP
-    POP3 -->|No| WiFi
+    Connect1 --> Cap1[Fetch Capabilities]
+    Connect2 --> Cap2[Fetch Capabilities]
+    Connect3 --> Cap3[Fetch Capabilities]
 
-    POP -->|Code Verified| WiFi
-    WiFi -->|Network Selected| Provision[Provision]
+    Cap1 --> Check1{Need POP?}
+    Cap2 --> Check2{Need POP?}
+    Cap3 --> Check3{Need POP?}
+
+    Check1 -->|Yes| POP1[POP Screen]
+    Check1 -->|No| Claim1{Claiming?}
+    Check2 -->|Yes| POP2[POP Screen]
+    Check2 -->|No| Claim2{Claiming?}
+    Check3 -->|Yes| POP3[POP Screen]
+    Check3 -->|No| Claim3{Claiming?}
+
+    POP1 -->|Code Verified| Claim4{Claiming?}
+    POP2 -->|Code Verified| Claim5{Claiming?}
+    POP3 -->|Code Verified| Claim6{Claiming?}
+
+    Claim1 -->|Yes| Claiming1[Claiming Screen]
+    Claim1 -->|No| WiFi1[WiFi Setup]
+    Claim2 -->|Yes| Claiming2[Claiming Screen]
+    Claim2 -->|No| WiFi2[WiFi Setup]
+    Claim3 -->|Yes| Claiming3[Claiming Screen]
+    Claim3 -->|No| WiFi3[WiFi Setup]
+    Claim4 -->|Yes| Claiming4[Claiming Screen]
+    Claim4 -->|No| WiFi4[WiFi Setup]
+    Claim5 -->|Yes| Claiming5[Claiming Screen]
+    Claim5 -->|No| WiFi5[WiFi Setup]
+    Claim6 -->|Yes| Claiming6[Claiming Screen]
+    Claim6 -->|No| WiFi6[WiFi Setup]
+
+    Claiming1 --> WiFi1
+    Claiming2 --> WiFi2
+    Claiming3 --> WiFi3
+    Claiming4 --> WiFi4
+    Claiming5 --> WiFi5
+    Claiming6 --> WiFi6
+
+    WiFi1 --> Provision[Provision]
+    WiFi2 --> Provision
+    WiFi3 --> Provision
+    WiFi4 --> Provision
+    WiFi5 --> Provision
+    WiFi6 --> Provision
+
     Provision -->|Success| Home[Home Screen]
 
     Home -->|Select Device| Control[Control]
@@ -402,13 +600,15 @@ graph TD
     classDef entry fill:#e1f5fe,stroke:#01579b,stroke-width:2px;
     classDef provisioning fill:#5db9f8,stroke:#333,stroke-width:2px;
     classDef auth fill:#fff3e0,stroke:#e65100,stroke-width:2px;
+    classDef claiming fill:#ff9800,stroke:#e65100,stroke-width:2px;
     classDef success fill:#5ce712,stroke:#333,stroke-width:2px;
     classDef management fill:#f3e5f5,stroke:#4a148c,stroke-width:2px;
     classDef danger fill:#ff4444,stroke:#333,stroke-width:2px;
 
     class Start,Selection entry;
-    class QR,BLE,SAP,WiFi,Provision provisioning;
-    class POP,POP1,POP2,POP3 auth;
+    class QR,BLE,SAP,Connect1,Connect2,Connect3,Cap1,Cap2,Cap3,WiFi1,WiFi2,WiFi3,WiFi4,WiFi5,WiFi6,Provision provisioning;
+    class POP1,POP2,POP3,Check1,Check2,Check3 auth;
+    class Claiming1,Claiming2,Claiming3,Claiming4,Claiming5,Claiming6,Claim1,Claim2,Claim3,Claim4,Claim5,Claim6 claiming;
     class Home success;
     class Control,Settings management;
     class Reset danger;
@@ -420,9 +620,17 @@ The device module now consists of three main flows:
 
 - **Entry**: AddDeviceSelection → Choose provisioning method
 - **Discovery**: ScanQR/ScanBLE/ScanSoftAP → Find and connect to device
+- **Capability Detection**: Fetch version info and capabilities → Parse RMaker capabilities
 - **Authentication**: POP Screen (if required) → Verify device ownership
+  - **Note**: For BLE flow, POP comes **before** claiming. After POP verification, the flow proceeds to claiming if supported.
+- **Claiming**: Assisted Claiming Screen (if device supports claiming) → Claim device to user account
+  - **Note**: Claiming happens **after** POP verification (if POP was required) or after session initialization (if no POP)
 - **Configuration**: WiFi Setup → Configure network credentials
 - **Completion**: Provision → Complete device setup → Home
+
+**Flow Order for BLE**: Connect → Check capabilities → **POP (if required)** → **Claiming (if supported)** → WiFi → Provision
+
+**Flow Order for QR**: Connect → Check capabilities → Set POP (if in QR) → Initialize session → **Claiming (if supported)** → WiFi → Provision
 
 ### 2. **Device Management Flow**
 

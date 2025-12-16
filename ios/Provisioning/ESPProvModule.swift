@@ -177,6 +177,30 @@ class ESPProvModule: NSObject, ESPDeviceConnectionDelegate, RCTBridgeModule {
       resolve(espDevice.capabilities)
   }
   
+  /// Retrieves the version info of a specified ESP device.
+  ///
+  /// - Parameters:
+  ///   - deviceName: The name of the ESP device whose version info is to be retrieved.
+  ///   - resolve: A promise resolve block that is called with the device's version info as a dictionary.
+  ///   - reject: A promise reject block that is called if the device is not found.
+  @objc(getDeviceVersionInfo:resolve:reject:)
+  func getDeviceVersionInfo(deviceName: String, resolve: @escaping RCTPromiseResolveBlock, reject: @escaping RCTPromiseRejectBlock) {
+      // Check if the specified ESP device exists in the espDevices dictionary
+      guard let espDevice = self.espDevices[deviceName] else {
+          // Reject the promise if the device is not found
+          reject("error", "No ESP device found. Call createESPDevice first.", nil)
+          return
+      }
+      
+      // Convert NSDictionary to a Swift dictionary for proper serialization
+      if let versionInfo = espDevice.versionInfo as? [String: Any] {
+          resolve(versionInfo)
+      } else {
+          // Return empty dictionary if version info is not available
+          resolve([:])
+      }
+  }
+  
   /// Sets the Proof of Possession (PoP) for a specified ESP device.
   ///
   /// - Parameters:

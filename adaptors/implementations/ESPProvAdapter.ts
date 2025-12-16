@@ -225,6 +225,11 @@ export const provisionAdapter: ESPProvisionAdapterInterface = {
   getDeviceVersionInfo: async (
     deviceName: string
   ): Promise<{ [key: string]: any }> => {
-    throw new Error("Not implemented");
+    try {
+      const versionInfo = await ESPProvModule.getDeviceVersionInfo(deviceName);
+      return versionInfo;
+    } catch (error) {
+      throw error;
+    }
   },
 };

@@ -449,6 +449,22 @@
       "settingUpNode": "Setting Up Node",
       "settingUpNodeDescription": "Finalizing device setup..."
     },
+    "claiming": {
+      "title": "Claiming Device",
+      "starting": "Starting assisted claiming...",
+      "startingSent": "Claim start command sent...",
+      "deviceInfoReceived": "Device info received...",
+      "initiatingCloud": "Initiating claim with cloud...",
+      "sendingInitData": "Sending init data to device...",
+      "receivingCSR": "Receiving CSR from device...",
+      "verifyingCSR": "Verifying CSR with cloud...",
+      "sendingCertificate": "Sending certificate to device...",
+      "success": "Device claimed successfully!",
+      "failed": "Claiming failed",
+      "failedMessage": "Assisted claiming failed",
+      "pleaseWait": "This process may take a few moments...",
+      "notSupportedSoftAP": "Assisted Claiming not supported for SoftAP"
+    },
     "scan": {
       "ble": {
         "title": "Scan Bluetooth Devices",
@@ -1078,6 +1094,7 @@
     "save": "Save",
     "cancel": "Cancel",
     "delete": "Delete",
-    "retry": "Retry"
+    "retry": "Retry",
+    "ok": "OK"
   }
 }
