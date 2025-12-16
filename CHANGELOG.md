@@ -5,9 +5,35 @@ All notable changes to the ESP RainMaker Home app will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.3.3]
+
+### Added
+
+**ESP AI Agent Support:**
+
+- Integrated the default RainMaker Control AI Agent for device management via chat.
+- Added support for selecting from multiple AI agents or adding custom agents using a QR code or AI Agent ID.
+- Enabled configuration of ESP AI Voice Assistant devices with a preferred AI agent.
+
+**Assisted Claiming:**
+
+- Added support for Assisted Claiming during device onboarding.
+
+**System Services**
+
+- Introduced System Services to allow primary users to perform supported node-level operations like reboot remotely, Wi-Fi reset and factory reset.
+- Added handling of RainMaker Authentication Services on devices.
+
+### Enhanced
+
+**Provisioning**
+
+- Added BLE status check during device provisioning.
+- Automatically display the device README after successful provisioning.
+
 ## [3.2.0]
 
-###  Added
+### Added
 
 **Matter Commissioning Support:**
 

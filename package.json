@@ -1,7 +1,7 @@
 {
   "name": "NOVA",
   "main": "expo-router/entry",
-  "version": "3.2.0",
+  "version": "3.3.3",
   "scripts": {
     "start": "expo start",
     "android": "expo run:android",
