@@ -51,9 +51,13 @@ class ESPProvModule: NSObject, ESPDeviceConnectionDelegate, RCTBridgeModule {
                 self.espDevices[$0.name] = $0
             }
           
-          // Resolve the promise with the array of discovered devices (name only)
+          // Resolve the promise with the array of discovered devices
           resolve(espDevices!.map {
-            var result: [String: Any] = ["name": $0.name]
+            var result: [String: Any] = [
+              "name": $0.name,
+              "transport": $0.transport.rawValue,
+              "security": $0.security.rawValue
+            ]
             
             // Add manufacturer data if available for device parsing
             if let advertisementData = $0.advertisementData,

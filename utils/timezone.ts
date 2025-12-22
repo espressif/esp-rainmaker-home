@@ -502,3 +502,41 @@ export const setUserTimeZone = async (user: ESPRMUser | null) => {
   const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
   await user.setTimeZone(timezone);
 };
+
+/**
+ * Gets the user's timezone from the user's custom data
+ * @param user - The user instance
+ * @returns The user's timezone if user exists and timezone is set else empty string, undefined if user is not found
+ */
+export const getUserTimeZone = async (
+  user: ESPRMUser | null
+): Promise<string | undefined> => {
+  if (!user) return undefined;
+  const customData = await user.getCustomData();
+  return (customData?.timeZone?.value ?? "") as string;
+};
+
+/**
+ * Sets the timezone for the node if it has write permission
+ * @param node - The node instance
+ * @param timeZone - The timezone to set
+ * @returns True if the timezone was set successfully, false otherwise
+ */
+export const setNodeTimeZone = async (
+  node: ESPRMNode | null,
+  timeZone: string
+): Promise<boolean> => {
+  if (!node) return false;
+
+  const { hasWritePermission } = getNodeTimezoneConfig(node);
+  if (!hasWritePermission) {
+    return false;
+  }
+  try {
+    await node.setTimeZone(timeZone);
+    return true;
+  } catch (error) {
+    console.error("Error setting node timezone:", error);
+    return false;
+  }
+};

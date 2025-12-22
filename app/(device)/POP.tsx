@@ -5,7 +5,7 @@
  */
 
 import { useState } from "react";
-import { View, Text, StyleSheet, ScrollView, Image } from "react-native";
+import { View, Text, StyleSheet, ScrollView, Image, KeyboardAvoidingView, Platform } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 
 // SDK
@@ -147,55 +147,64 @@ const POPScreen = () => {
           backgroundColor: tokens.colors.bg5,
         }} qaId="screen_wrapper_pop"
       >
-        <ScrollView {...testProps("scroll_pop")} contentContainerStyle={globalStyles.scrollViewContent}>
-          <View {...testProps("view_image_pop")} style={styles.imageContainer}>
-            <Image
-              {...testProps("image_pop")}
-              source={POPCODE_Image}
-              style={styles.popcodeImage}
-              resizeMode="contain"
-            />
-          </View>
-
-          <Text {...testProps("text_title_pop")} style={[globalStyles.heading, globalStyles.verificationTitle]}>
-            {t("device.pop.enterCode")}
-          </Text>
-          <Text
-            {...testProps("text_subtitle_pop")}
-            style={[globalStyles.subHeading, globalStyles.verificationSubtitle]}
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          style={{ flex: 1 }}
+        >
+          <ScrollView
+            {...testProps("scroll_pop")}
+            contentContainerStyle={globalStyles.scrollViewContent}
+            keyboardShouldPersistTaps="handled"
           >
-            {t("device.pop.description")}
-          </Text>
+            <View {...testProps("view_image_pop")} style={styles.imageContainer}>
+              <Image
+                {...testProps("image_pop")}
+                source={POPCODE_Image}
+                style={styles.popcodeImage}
+                resizeMode="contain"
+              />
+            </View>
 
-          <View {...testProps("view_verification_pop")} style={globalStyles.verificationContainer}>
-            {/* POP Code Input */}
-            <Input
-              initialValue={popCode}
-              onFieldChange={(value) => setPopCode(value)}
-              style={[
-                globalStyles.verificationInput,
-                globalStyles.shadowElevationForLightTheme,
-              ]}
-              placeholder={t("device.pop.placeholder")}
-              maxLength={8}
-              qaId="pop_code"
+            <Text {...testProps("text_title_pop")} style={[globalStyles.heading, globalStyles.verificationTitle]}>
+              {t("device.pop.enterCode")}
+            </Text>
+            <Text
+              {...testProps("text_subtitle_pop")}
+              style={[globalStyles.subHeading, globalStyles.verificationSubtitle]}
+            >
+              {t("device.pop.description")}
+            </Text>
+
+            <View {...testProps("view_verification_pop")} style={globalStyles.verificationContainer}>
+              {/* POP Code Input */}
+              <Input
+                initialValue={popCode}
+                onFieldChange={(value) => setPopCode(value)}
+                style={[
+                  globalStyles.verificationInput,
+                  globalStyles.shadowElevationForLightTheme,
+                ]}
+                placeholder={t("device.pop.placeholder")}
+                maxLength={8}
+                qaId="pop_code"
+              />
+            </View>
+
+            {/* Verify Button */}
+            <Button
+              label={t("device.pop.verify")}
+              onPress={handleVerify}
+              style={{
+                ...globalStyles.btn,
+                ...globalStyles.bgBlue,
+                ...globalStyles.shadowElevationForLightTheme,
+              }}
+              disabled={isLoading}
+              isLoading={isLoading}
+              qaId="button_verify_pop"
             />
-          </View>
-
-          {/* Verify Button */}
-          <Button
-            label={t("device.pop.verify")}
-            onPress={handleVerify}
-            style={{
-              ...globalStyles.btn,
-              ...globalStyles.bgBlue,
-              ...globalStyles.shadowElevationForLightTheme,
-            }}
-            disabled={isLoading}
-            isLoading={isLoading}
-            qaId="button_verify_pop"
-          />
-        </ScrollView>
+          </ScrollView>
+        </KeyboardAvoidingView>
       </ScreenWrapper>
     </>
   );

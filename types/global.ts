@@ -1021,3 +1021,44 @@ export interface AgentSelectionBottomSheetProps {
   /** Currently selected agent ID */
   currentAgentId?: string;
 }
+
+// ============================================================================
+// Polling Types
+// ============================================================================
+
+export interface PollOptions {
+  /** Maximum number of attempts (default: 5) */
+  maxAttempts?: number;
+  /** Interval between attempts in milliseconds (default: 2000) */
+  intervalMs?: number;
+  /** Optional label for logging purposes */
+  label?: string;
+  /** Whether to log progress (default: true) */
+  enableLogging?: boolean;
+}
+
+export interface PollResult<T> {
+  /** Whether the polling succeeded */
+  success: boolean;
+  /** The result data if successful */
+  data: T | null;
+  /** Number of attempts made */
+  attempts: number;
+  /** Error message if failed */
+  error?: string;
+}
+
+
+// ============================================================================
+// Device Challenge Response Types
+// ============================================================================
+export interface DeviceChallengeResponse {
+  /** Whether the challenge response succeeded */
+  success: boolean;
+  /** The node ID if successful */
+  nodeId?: string;
+  /** The signed challenge if successful */
+  signedChallenge?: string;
+  /** The error message if failed */
+  error?: string;
+}
