@@ -48,7 +48,7 @@ The device module manages device discovery, provisioning, control, and settings 
 
   // Connect to device
   const response = await device.connect();
-  
+
   // Fetch version info and capabilities for claiming detection
   const versionInfo = await device.getDeviceVersionInfo();
   const provCapabilities = await device.getDeviceCapabilities();
@@ -106,6 +106,7 @@ The device module manages device discovery, provisioning, control, and settings 
   }
   ```
 - **CDF/SDK Functions**:
+
   ```typescript
   // Create device from QR data
   const deviceInterface = await provisionAdapter.createESPDevice(
@@ -116,18 +117,18 @@ The device module manages device discovery, provisioning, control, and settings 
   );
   const espDevice = new ESPDevice(deviceInterface);
   const connectResponse = await espDevice.connect();
-  
+
   // Fetch version info and capabilities for claiming detection
   const versionInfo = await espDevice.getDeviceVersionInfo();
   const provCapabilities = await espDevice.getDeviceCapabilities();
   const rmakerCaps = parseRMakerCapabilities(versionInfo, provCapabilities);
-  
+
   // Set POP if required
   if (rmakerCaps.requiresPop && pop) {
     await espDevice.setProofOfPossession(pop);
   }
   await espDevice.initializeSession();
-  
+
   // Navigate based on claiming capability
   if (rmakerCaps.hasClaim) {
     // Navigate to Claiming screen
@@ -248,7 +249,7 @@ The device module manages device discovery, provisioning, control, and settings 
   await device.startAssistedClaiming((response: ESPClaimResponse) => {
     setStatus(response.status);
     setProgressMessage(response.message);
-    
+
     if (response.status === ESPClaimStatus.success) {
       // Navigate to WiFi setup
     } else if (response.status === ESPClaimStatus.failed) {
@@ -298,19 +299,65 @@ The device module manages device discovery, provisioning, control, and settings 
   - Real-time status updates from device
   - Comprehensive error handling and recovery
   - Auto-scroll status view for better UX
-- **Steps**:
+  - **Challenge-Response authentication support** (for BLE devices with `ch_resp` capability)
+- **Provisioning Flows**:
+
+  The screen supports two provisioning flows based on device capabilities:
+
+  **A. Challenge-Response Flow** (for devices with `ch_resp` capability):
+  1. Check device capabilities via `checkChallengeResponseCapability()`
+  2. Initiate user-node mapping to get challenge from server
+  3. Send challenge to device using Protocol Buffers
+  4. Device signs challenge and returns signed response with node ID
+  5. Verify signed response with server
+  6. Set network credentials directly via `setNetworkCredentials()`
+  7. Poll for node availability and complete provisioning
+
+  **B. Traditional Flow** (for devices without challenge-response):
   1. Initialize provisioning with WiFi credentials
   2. Display provisioning steps in real-time
   3. Handle various status updates (connecting, configuring, etc.)
   4. Show success/failure states with appropriate actions
   5. Navigate to home on successful completion
+
 - **CDF/SDK Functions**:
 
   ```typescript
-  // Start provisioning
-  await device.provision(ssid, password, handleProvisionUpdates);
+  // Check if device supports challenge-response
+  import { checkChallengeResponseCapability, ChallengeResponseHelper } from "@/utils/challengeResponseHelper";
 
-  // Handle provision updates
+  const versionInfo = await device.getDeviceVersionInfo();
+  const supportsChallengeResponse = checkChallengeResponseCapability(
+    versionInfo,
+    device.transport
+  );
+
+  if (supportsChallengeResponse) {
+    // Challenge-Response Flow
+    // 1. Get challenge from server
+    const { challenge, request_id } = await device.initiateUserNodeMapping({});
+
+    // 2. Send challenge to device (uses Protocol Buffers)
+    const deviceResponse = await ChallengeResponseHelper.sendChallengeToDevice(
+      device,
+      challenge
+    );
+
+    // 3. Verify with server
+    await device.verifyUserNodeMapping({
+      request_id,
+      challenge_response: deviceResponse.signedChallenge,
+      node_id: deviceResponse.nodeId,
+    });
+
+    // 4. Set network credentials directly
+    await device.setNetworkCredentials(ssid, password);
+  } else {
+    // Traditional Flow
+    await device.provision(ssid, password, handleProvisionUpdates);
+  }
+
+  // Handle provision updates (traditional flow)
   const handleProvisionUpdates = (message: ESPProvResponse) => {
     if (message.status === ESPProvResponseStatus.succeed) {
       // Handle success - device is now provisioned
@@ -422,21 +469,24 @@ Assisted claiming is a feature that allows devices to be claimed to a user accou
 ### How Claiming is Detected
 
 1. **After Device Connection**: Once a device is connected to BLE, the app fetches:
+
    - Device version info (`getDeviceVersionInfo()`)
    - Provisioning capabilities (`getDeviceCapabilities()`)
 
 2. **Capability Parsing**: The app parses RMaker capabilities using `parseRMakerCapabilities()`:
+
    ```typescript
    import { parseRMakerCapabilities } from "@/utils/rmakerCapabilities";
-   
+
    const versionInfo = await device.getDeviceVersionInfo();
    const provCapabilities = await device.getDeviceCapabilities();
    const rmakerCaps = parseRMakerCapabilities(versionInfo, provCapabilities);
    ```
 
 3. **Claiming Detection**: The function checks the `rmaker.cap` array in the version info:
+
    - `"claim"` → Assisted claiming
-   
+
    ```typescript
    if (rmakerCaps.hasClaim) {
      // Navigate to Claiming screen
@@ -447,11 +497,13 @@ Assisted claiming is a feature that allows devices to be claimed to a user accou
 
 The claiming step is integrated into BLE and QR Code provisioning methods with the following order:
 
-- **BLE Scanning** (`ScanBLE.tsx`): 
+- **BLE Scanning** (`ScanBLE.tsx`):
+
   - If POP required: Navigate to POP → After POP verification → Claiming (if supported) → WiFi
   - If no POP: Initialize session → Claiming (if supported) → WiFi
 
-- **QR Code Scanning** (`ScanQR.tsx`): 
+- **QR Code Scanning** (`ScanQR.tsx`):
+
   - If POP in QR: Set POP → Initialize session → Claiming (if supported) → WiFi
   - If POP required but not in QR: Initialize session → Claiming (if supported) → WiFi
   - If no POP: Initialize session → Claiming (if supported) → WiFi
@@ -479,6 +531,93 @@ await device.startAssistedClaiming((response: ESPClaimResponse) => {
 ```
 
 For more details, see the [ESPDevice.startAssistedClaiming](https://espressif.github.io/esp-rainmaker-app-sdk-ts/classes/ESPDevice.ESPDevice.html#startassistedclaiming) SDK documentation.
+
+</details>
+
+<details>
+<summary><strong>Challenge-Response Support</strong></summary>
+
+### Overview
+
+Challenge-response is a secure authentication mechanism that ensures only legitimate ESP devices can be associated with user accounts. This feature is automatically detected and used during the provisioning flow for BLE devices that support it.
+
+### How Challenge-Response Works
+
+1. **Server sends a challenge** - A random string generated by the server
+2. **Device signs the challenge** - Device uses its private key to sign the challenge
+3. **Server verifies the signature** - Server validates the signature using the device's public key
+4. **Authentication succeeds** - Device is authenticated and associated with the user account
+
+### How Challenge-Response is Detected
+
+1. **After Device Connection**: Once a device is connected via BLE, the app fetches device version info
+2. **Capability Check**: The app checks for `ch_resp` capability in `versionInfo.rmaker_extra.cap`
+3. **Transport Check**: Challenge-response is only supported for BLE transport (not SoftAP)
+
+```typescript
+import { checkChallengeResponseCapability } from "@/utils/challengeResponseHelper";
+
+const versionInfo = await device.getDeviceVersionInfo();
+const supportsChallengeResponse = checkChallengeResponseCapability(
+  versionInfo,
+  device.transport // Must be 'BLE'
+);
+```
+
+### Challenge-Response Flow
+
+When a device supports challenge-response, the provisioning flow changes:
+
+1. **Initiate User-Node Mapping**: Request challenge from server
+
+   ```typescript
+   const { challenge, request_id } = await device.initiateUserNodeMapping({});
+   ```
+
+2. **Send Challenge to Device**: Uses Protocol Buffers for binary communication
+
+   ```typescript
+   import { ChallengeResponseHelper } from "@/utils/challengeResponseHelper";
+
+   const deviceResponse = await ChallengeResponseHelper.sendChallengeToDevice(
+     device,
+     challenge
+   );
+   // Returns: { success, nodeId, signedChallenge }
+   ```
+
+3. **Verify with Server**: Server validates the device's signature
+
+   ```typescript
+   await device.verifyUserNodeMapping({
+     request_id,
+     challenge_response: deviceResponse.signedChallenge,
+     node_id: deviceResponse.nodeId,
+   });
+   ```
+
+4. **Set Network Credentials**: Direct credential setting (not `provision()`)
+
+   ```typescript
+   await device.setNetworkCredentials(ssid, password);
+   ```
+
+### Backward Compatibility
+
+The implementation is **fully backward compatible**:
+
+- If device doesn't support challenge-response → Traditional provisioning flow
+- If device uses SoftAP transport → Traditional provisioning flow
+- If challenge-response fails → Error is displayed (no automatic fallback)
+- No breaking changes to existing provisioning
+
+### Files Involved
+
+- `utils/challengeResponseHelper.ts` - Helper class and capability checking
+- `proto-ts/esp_rmaker_chal_resp.ts` - Protocol Buffer classes for device communication
+- `app/(device)/Provision.tsx` - Provisioning screen with dual-flow support
+
+For more details, see the [Challenge-Response Implementation Guide](/docs/CHALLENGE_RESPONSE.md).
 
 </details>
 
@@ -588,7 +727,11 @@ graph TD
     WiFi5 --> Provision
     WiFi6 --> Provision
 
-    Provision -->|Success| Home[Home Screen]
+    Provision --> ChResp{Challenge-Response?}
+    ChResp -->|Yes - BLE with ch_resp| CRFlow[Challenge-Response Flow]
+    ChResp -->|No| TradFlow[Traditional Flow]
+    CRFlow -->|Success| Home[Home Screen]
+    TradFlow -->|Success| Home
 
     Home -->|Select Device| Control[Control]
     Control -->|Device Settings| Settings[Settings]
@@ -604,14 +747,16 @@ graph TD
     classDef success fill:#5ce712,stroke:#333,stroke-width:2px;
     classDef management fill:#f3e5f5,stroke:#4a148c,stroke-width:2px;
     classDef danger fill:#ff4444,stroke:#333,stroke-width:2px;
+    classDef challengeResp fill:#4caf50,stroke:#2e7d32,stroke-width:2px;
 
     class Start,Selection entry;
-    class QR,BLE,SAP,Connect1,Connect2,Connect3,Cap1,Cap2,Cap3,WiFi1,WiFi2,WiFi3,WiFi4,WiFi5,WiFi6,Provision provisioning;
+    class QR,BLE,SAP,Connect1,Connect2,Connect3,Cap1,Cap2,Cap3,WiFi1,WiFi2,WiFi3,WiFi4,WiFi5,WiFi6,Provision,TradFlow provisioning;
     class POP1,POP2,POP3,Check1,Check2,Check3 auth;
     class Claiming1,Claiming2,Claiming3,Claiming4,Claiming5,Claiming6,Claim1,Claim2,Claim3,Claim4,Claim5,Claim6 claiming;
     class Home success;
     class Control,Settings management;
     class Reset danger;
+    class ChResp,CRFlow challengeResp;
 ```
 
 The device module now consists of three main flows:
@@ -627,10 +772,11 @@ The device module now consists of three main flows:
   - **Note**: Claiming happens **after** POP verification (if POP was required) or after session initialization (if no POP)
 - **Configuration**: WiFi Setup → Configure network credentials
 - **Completion**: Provision → Complete device setup → Home
+  - **Challenge-Response**: For BLE devices with `ch_resp` capability, the Provision screen uses challenge-response authentication before setting network credentials
 
-**Flow Order for BLE**: Connect → Check capabilities → **POP (if required)** → **Claiming (if supported)** → WiFi → Provision
+**Flow Order for BLE**: Connect → Check capabilities → **POP (if required)** → **Claiming (if supported)** → WiFi → Provision (**Challenge-Response if supported**)
 
-**Flow Order for QR**: Connect → Check capabilities → Set POP (if in QR) → Initialize session → **Claiming (if supported)** → WiFi → Provision
+**Flow Order for QR**: Connect → Check capabilities → Set POP (if in QR) → Initialize session → **Claiming (if supported)** → WiFi → Provision (**Challenge-Response if supported**)
 
 ### 2. **Device Management Flow**
 

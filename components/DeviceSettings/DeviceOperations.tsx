@@ -24,6 +24,7 @@ import { useToast } from "@/hooks/useToast";
 // Components
 import CollapsibleCard from "../Cards/CollapsibleCard";
 import { ConfirmationDialog } from "@/components";
+import { router } from "expo-router";
 
 interface DeviceOperationsProps {
   node: ESPRMNode;
@@ -117,9 +118,16 @@ const DeviceOperations: React.FC<DeviceOperationsProps> = ({
         ],
       });
 
+      // Show success toast for all operations
       toast.showSuccess(
         t("device.settings.systemOperationSuccess", { operation: param.name })
       );
+
+      // For factory reset, delete the node and navigate to home
+      if (param.type === SYSTEM_PARAM_TYPES.FACTORY_RESET) {
+        await node.delete();
+        router.dismissTo("/(group)/Home");
+      }
     } catch (error) {
       console.error("Error executing system operation:", error);
       toast.showError(
@@ -180,7 +188,6 @@ const DeviceOperations: React.FC<DeviceOperationsProps> = ({
    */
   const handleButtonPress = (param: ESPRMServiceParam) => {
       setConfirmDialog({ visible: true, param });
-      handleSystemOperation(param);
   };
 
   return (

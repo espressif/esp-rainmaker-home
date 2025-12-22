@@ -43,6 +43,7 @@
     "expo-symbols": "~0.2.2",
     "expo-system-ui": "~4.0.9",
     "expo-web-browser": "~14.0.2",
+    "google-protobuf": "^3.21.2",
     "i18next": "^25.1.2",
     "lucide-react-native": "^0.510.0",
     "marked": "^17.0.1",
@@ -71,6 +72,7 @@
   "devDependencies": {
     "@babel/core": "^7.25.2",
     "@react-native-community/cli": "latest",
+    "@types/google-protobuf": "^3.15.6",
     "@types/jest": "^29.5.12",
     "@types/react": "~18.3.12",
     "@types/react-test-renderer": "^18.3.0",

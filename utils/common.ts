@@ -6,8 +6,9 @@
 
 import * as WebBrowser from "expo-web-browser";
 import { CDF } from "@espressif/rainmaker-base-cdf";
-import { SUCESS, USER_PERMISSION } from "./constants";
+import { POLLING, SUCESS, USER_PERMISSION } from "./constants";
 import { UserCustomDataRequest } from "@espressif/rainmaker-base-sdk";
+import { PollOptions, PollResult } from "@/types/global";
 
 export const openUrl = (url: string) => {
     WebBrowser.openBrowserAsync(url);
@@ -262,4 +263,128 @@ export const getRandom4DigitString = () => {
   return Math.floor(Math.random() * 10000)
   .toString()
   .padStart(4, "0");
+};
+
+
+export const DEFAULT_POLLING_OPTIONS: Required<Omit<PollOptions, "label">> & {
+  label: string;
+} = {
+  maxAttempts: POLLING.MAX_ATTEMPTS,
+  intervalMs: POLLING.INTERVAL_MS,
+  label: POLLING.DEFAULT_LABEL,
+  enableLogging: POLLING.ENABLE_LOGGING,
+};
+
+/**
+ * Generic polling function that retries an async operation until success or max attempts.
+ *
+ * @param pollFn - Async function that returns the result or null/undefined if not ready
+ * @param options - Polling configuration options
+ * @returns PollResult with success status and data
+ *
+ * @example
+ * ```typescript
+ * const result = await pollUntilReady(
+ *   async () => {
+ *     await syncData();
+ *     const item = getItem(id);
+ *     return item?.config ? item.config : null;
+ *   },
+ *   { maxAttempts: 5, intervalMs: 2000, label: "node config" }
+ * );
+ *
+ * if (result.success) {
+ *   console.log("Got data:", result.data);
+ * }
+ * ```
+ */
+export async function pollUntilReady<T>(
+  pollFn: () => Promise<T | null | undefined>,
+  options: PollOptions = {}
+): Promise<PollResult<T>> {
+  const config = { ...DEFAULT_POLLING_OPTIONS, ...options };
+  const { maxAttempts, intervalMs, label, enableLogging } = config;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    if (enableLogging) {
+      console.log(
+        `Polling for ${label} (attempt ${attempt}/${maxAttempts})...`
+      );
+    }
+
+    try {
+      const result = await pollFn();
+
+      if (result !== null && result !== undefined) {
+        if (enableLogging) {
+          console.log(`${label} found on attempt ${attempt}`);
+        }
+        return {
+          success: true,
+          data: result,
+          attempts: attempt,
+        };
+      }
+    } catch (error) {
+      if (enableLogging) {
+        console.warn(`${label} attempt ${attempt} failed:`, error);
+      }
+    }
+
+    // Wait before next attempt (skip wait on last attempt)
+    if (attempt < maxAttempts) {
+      await delay(intervalMs);
+    }
+  }
+
+  if (enableLogging) {
+    console.warn(`Could not get ${label} after ${maxAttempts} attempts`);
+  }
+
+  return {
+    success: false,
+    data: null,
+    attempts: maxAttempts,
+    error: `Failed to get ${label} after ${maxAttempts} attempts`,
+  };
+}
+
+/**
+ * Promise-based delay utility
+ */
+export const delay = (ms: number): Promise<void> =>
+  new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
+ * Converts a Uint8Array to a Base64 encoded string.
+ *
+ * @param {Uint8Array} uint8Array - The Uint8Array to convert.
+ * @returns {string} The Base64 encoded string.
+ */
+export const uint8ArrayToBase64 = (uint8Array: Uint8Array): string => {
+  let binaryString = "";
+  for (let i = 0; i < uint8Array.length; i++) {
+    binaryString += String.fromCharCode(uint8Array[i]);
+  }
+
+  return btoa(binaryString);
+};
+
+/**
+ * Converts a Base64 encoded string to a Uint8Array.
+ *
+ * @param {string} base64 - The Base64 encoded string to convert.
+ * @returns {Uint8Array} The resulting Uint8Array.
+ */
+export const base64ToUint8Array = (base64: string): Uint8Array => {
+  const binaryString = atob(base64);
+
+  const len = binaryString.length;
+  const bytes = new Uint8Array(len);
+
+  for (let i = 0; i < len; i++) {
+    bytes[i] = binaryString.charCodeAt(i);
+  }
+
+  return bytes;
 };
