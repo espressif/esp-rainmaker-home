@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useCallback, useState, useEffect } from "react";
+import { useCallback, useState, useEffect, useRef } from "react";
 import {
   RefreshControl,
   ScrollView,
@@ -52,6 +52,8 @@ import {
   removeInvalidAgentFromCustomData,
   getAllAgents,
   canDeleteAgentBySource,
+  checkAgentExistenceAndAction,
+  sanitizeAgentID,
 } from "@/utils/agent/aggregation";
 import { useCDF } from "@/hooks/useCDF";
 import { getSelectedAgentId, getAgentsAndSelectedId, deleteConversationId, AGENT_SOURCE } from "@/utils/agent";
@@ -88,6 +90,7 @@ const Settings = () => {
   const [deleteDialogVisible, setDeleteDialogVisible] = useState(false);
   const [agentToDelete, setAgentToDelete] = useState<AgentConfig | null>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const processedAgentIdRef = useRef<string | null>(null);
 
   // Combined loading state - show loader only when fetching agents (not during actions)
   // Don't show loader during actions to avoid double loaders
@@ -159,13 +162,40 @@ const Settings = () => {
   );
 
   /**
-   * Effect: Auto-open modal when agentId is provided from route params
+   * Effect: Auto-activate agent if it exists, otherwise show add modal when agentId is provided from route params
    */
   useEffect(() => {
-    if (agentId) {
+    // Use utility function to sanitize and check if we should process this agentId
+    const processResult = sanitizeAgentID(
+      agentId,
+      processedAgentIdRef.current, // Pass value, not ref
+      isLoadingAgents,
+      agents
+    );
+
+    // Caller explicitly updates the ref
+    processedAgentIdRef.current = processResult.nextProcessedId;
+
+    if (!processResult.shouldProcess) {
+      return;
+    }
+
+    // Use utility function to check agent existence and determine action
+    const result = checkAgentExistenceAndAction(
+      processResult.trimmedAgentId,
+      agents,
+      selectedAgentId
+    );
+
+    if (result.shouldActivate && result.agent) {
+      // Agent exists - activate it directly
+      handleSelectAgent(result.agent);
+    } else if (result.shouldShowModal) {
+      // Agent doesn't exist - show add modal
       setIsAddDialogVisible(true);
     }
-  }, [agentId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [agentId, agents, isLoadingAgents, selectedAgentId]);
 
   /**
    * Handles showing the add agent dialog
