@@ -26,6 +26,7 @@ export default function AgentLayout() {
       <Stack.Screen name="ChatSettings" />
       <Stack.Screen name="Settings" />
       <Stack.Screen name="Configure" />
+      <Stack.Screen name="ViewConversation" />
     </Stack>
   );
 }

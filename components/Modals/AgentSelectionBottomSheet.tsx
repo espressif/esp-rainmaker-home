@@ -33,10 +33,9 @@ import { EmptyState, Button } from "@/components";
 // Utils
 import { getAllAgents } from "@/utils/agent/aggregation";
 import { useCDF } from "@/hooks/useCDF";
-import type { AggregatedAgent } from "@/utils/agent/types";
 
 // Types
-import { AgentSelectionBottomSheetProps } from "@/types/global";
+import type { AgentSelectionBottomSheetProps, AggregatedAgent } from "@/types/global";
 import { AGENT_SOURCE } from "@/utils/agent/constants";
 
 const { height: SCREEN_HEIGHT } = Dimensions.get("window");
@@ -47,7 +46,7 @@ const { height: SCREEN_HEIGHT } = Dimensions.get("window");
  * A bottom sheet component for selecting an agent.
  * Features:
  * - Slides up from bottom with animation
- * - Shows Your Agents and Common Agents in separate sections
+ * - Shows Your Agents and Public Agents in separate sections
  * - Highlights currently selected agent
  * - Auto-saves on selection
  */
@@ -199,9 +198,9 @@ const AgentSelectionBottomSheet: React.FC<AgentSelectionBottomSheetProps> = ({
                     t("device.panels.aiAgent.defaultAgent") || "Default Agent",
                     [defaultAgent]
                   )}
-                {/* User Agents */}
+                {/* Your Agents */}
                 {renderSection(
-                  t("device.panels.aiAgent.userAgents") || "User Agents",
+                  t("device.panels.aiAgent.userAgents") || "Your Agents",
                   userAgents
                 )}
                 {/* Custom Stored Agents */}
@@ -209,9 +208,9 @@ const AgentSelectionBottomSheet: React.FC<AgentSelectionBottomSheetProps> = ({
                   t("device.panels.aiAgent.customAgents") || "Custom Agents",
                   customAgentsWithoutDefault
                 )}
-                {/* Common Agents */}
+                {/* Public Agents */}
                 {renderSection(
-                  t("device.panels.aiAgent.commonAgents") || "Common Agents",
+                  t("device.panels.aiAgent.commonAgents") || "Public Agents",
                   templateAgents
                 )}
                 {allAgents.length === 0 && (

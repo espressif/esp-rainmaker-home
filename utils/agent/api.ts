@@ -7,7 +7,8 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ESPRMUser } from '@espressif/rainmaker-base-sdk';
 import { CDF } from '@espressif/rainmaker-base-cdf';
-import { getAgentConfig as fetchAgentConfig, ConnectedConnector } from '@/utils/apiHelper';
+import { getAgentConfig as fetchAgentConfig } from '@/utils/apiHelper';
+import type { ConnectedConnector } from '@/types/global';
 import { AGENTS_WEBSOCKET_BASE_URL, DEFAULT_AGENT_ID, RAINMAKER_MCP_CONNECTOR_URL } from '@/config/agent.config';
 import { TOKEN_STORAGE_KEYS } from './constants';
 import { getSelectedAgentId } from './storage';

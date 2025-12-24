@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import {
   View,
   Text,
@@ -30,7 +30,7 @@ import { useCDF } from "@/hooks/useCDF";
 import { useToast } from "@/hooks/useToast";
 
 // Components
-import { Header, ScreenWrapper } from "@/components";
+import { Header, ScreenWrapper, AgentTermsBottomSheet } from "@/components";
 
 // Utils
 import { testProps } from "@/utils/testProps";
@@ -45,6 +45,7 @@ import {
   getAgentNameFromCache,
   getAgentConfig,
 } from "@/utils/agent";
+import { getAgentTermsAccepted } from "@/utils/agent/storage";
 
 // Types
 import { AIDeviceData } from "@/types/global";
@@ -85,6 +86,7 @@ const Configure = observer(() => {
   const [agentName, setAgentName] = useState<string | null>(null);
   const [isLoadingAgentName, setIsLoadingAgentName] = useState(false);
   const [agentNameError, setAgentNameError] = useState<boolean>(false);
+  const [showTermsBottomSheet, setShowTermsBottomSheet] = useState(false);
 
   /**
    * Filters and processes AI Assistant devices from all nodes
@@ -92,6 +94,18 @@ const Configure = observer(() => {
   const aiDevices = useMemo(() => {
     return filterAIAssistantDevices(store?.nodeStore?.nodeList);
   }, [store?.nodeStore?.nodeList]);
+
+  /**
+   * Check if terms are accepted when component mounts
+   */
+  useEffect(() => {    
+    if (store?.userStore) {
+      const termsAccepted = getAgentTermsAccepted(store.userStore);
+      if (!termsAccepted) {
+        setShowTermsBottomSheet(true);
+      }
+    }
+  }, [store]);
 
   /**
    * Fetch agent name from cache or API when agent ID changes
@@ -506,6 +520,19 @@ const Configure = observer(() => {
           </View>
         )}
       </ScreenWrapper>
+
+      {/* Agent Terms Bottom Sheet */}
+      <AgentTermsBottomSheet
+        visible={showTermsBottomSheet}
+        onClose={() => {
+          setShowTermsBottomSheet(false);
+          router.replace("/(group)/Home");
+        }}
+        onComplete={() => {
+          setShowTermsBottomSheet(false);
+        }}
+        allowClose={true}
+      />
     </>
   );
 });

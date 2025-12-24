@@ -39,3 +39,5 @@ export const AGENT_SOURCE = {
 } as const;
 
 export const RAINMAKER_MCP_CONNECTOR_ID = "https://mcp.rainmaker.espressif.com/api/mcp::1h7ujqjs8140n17v0ahb4n51m2";
+
+export const DEFAULT_ANONYMOUS_NICKNAME = "Anonymous";

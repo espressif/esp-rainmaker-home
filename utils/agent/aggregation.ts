@@ -5,12 +5,11 @@
  */
 
 import { CDF } from '@espressif/rainmaker-base-cdf';
-import { getTemplateAgents, getUserAgents, getAgentConfig, Agent } from '@/utils/apiHelper';
+import { getTemplateAgents, getUserAgents, getAgentConfig } from '@/utils/apiHelper';
 import { getAgents, saveAgents } from './storage';
 import { AGENT_SOURCE, CUSTOM_DATA_KEYS } from './constants';
 import { DEFAULT_AGENT_ID } from '@/config/agent.config';
-import type { AgentConfig, AggregatedAgent, AgentValidationResult, AgentSource } from './types';
-import type { AgentExistenceCheckResult, SanitizeAgentIdResult } from '@/types/global';
+import type { AgentExistenceCheckResult, SanitizeAgentIdResult, AgentConfig, AggregatedAgent, AgentValidationResult, AgentSource, Agent } from '@/types/global';
 
 /**
  * Aggregates agents from all three sources:
@@ -66,7 +65,7 @@ export async function getAllAgents(
     // Deduplicate: custom data takes precedence
     const agentMap = new Map<string, number>();
     const result: AggregatedAgent[] = [];
-    
+
     // Separate default agent from custom agents
     const defaultAgent = customAggregated.find((a) => a.isDefault);
     const customAgentsWithoutDefault = customAggregated.filter((a) => !a.isDefault);
@@ -214,7 +213,7 @@ export async function removeInvalidAgentFromCustomData(
 
   try {
     const trimmedAgentId = agentId.trim();
-    
+
     // Don't remove default agent
     if (trimmedAgentId === DEFAULT_AGENT_ID) {
       return;
@@ -362,4 +361,3 @@ export function sanitizeAgentID(
   };
 }
 
- 
