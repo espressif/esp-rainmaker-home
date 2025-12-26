@@ -5,6 +5,35 @@ All notable changes to the ESP RainMaker Home app will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.4.1]
+ 
+### Added
+ 
+**AI Agent Conversations & Volume Control**
+ 
+- Added conversation support for AI Agents across both **Chat** and the **Device Panel**.
+- Introduced a new **conversation management UI** to better handle multiple conversations.
+- Added **volume control** for AI Agent devices if supported.
+- Enabled the ability to **resume past conversations directly from the Chat screen**.
+ 
+**Agent Onboarding Enhancements**
+ 
+- Added **AI Agent device identification** during the onboarding process.
+- Improved the **agent profile setup workflow** for a smoother onboarding experience.
+- Introduced a **Terms & Conditions bottom sheet** during profile setup for compliance.
+ 
+### Fixed
+ 
+**Bluetooth & QR Code Flow**
+ 
+- Fixed an issue where the **Bluetooth connection was not disconnected** when navigating back to the QR scan screen.
+- Ensured the **camera is properly closed** after QR code scan completion.
+ 
+**Agent Management & Error Handling**
+ 
+- Fixed error handling when attempting to add an **already added agent** in Chat.
+- Resolved issues causing **agent addition failures** and inconsistent error states.
+
 ## [3.4.0]
 
 ### Added
