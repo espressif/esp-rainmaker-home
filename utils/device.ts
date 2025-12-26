@@ -386,6 +386,32 @@ const getQRScanErrorType = (
   return "generic";
 };
 
+/**
+ * Checks if a device is an AI Agent based on BLE advertisement manufacturer data.
+ * 
+ * @param advertisementData - The advertisement data object from BLE scan
+ * @returns true if the device is an AI Agent, false otherwise
+ */
+const isAIAgentFromAdvertisement = (advertisementData: any): boolean => {
+  const mfgData = advertisementData?.kCBAdvDataManufacturerData;
+  if (!mfgData || !Array.isArray(mfgData) || mfgData.length < 9) {
+    return false;
+  }
+  // Offset 0: Android (data only), Offset 2: iOS (includes 2-byte ManufacturerId prefix)
+  for (const offset of [0, 2]) {
+    if (mfgData.length >= offset + 9) {
+      const deviceType = ((mfgData[offset + 6] ?? 0) << 8) | (mfgData[offset + 7] ?? 0);
+      const deviceSubtype = mfgData[offset + 8] ?? 0;
+      
+      // AI Agent: Device Type 0x0101 (USER_AUTH) with Subtype 0x01 (AI_AGENT)
+      if (deviceType === 0x0101 && deviceSubtype === 0x01) {
+        return true;
+      }
+    }
+  }
+  return false;
+};
+
 // Export constants and utility functions
 export { DEVICE_TYPE_LIST, deviceImages };
 
@@ -403,4 +429,5 @@ export {
   getBleScanErrorType,
   getMissingPermission,
   getQRScanErrorType,
+  isAIAgentFromAdvertisement,
 };

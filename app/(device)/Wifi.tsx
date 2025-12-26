@@ -51,9 +51,11 @@ import {
 } from "lucide-react-native";
 
 // Components
-import { Header, ScreenWrapper, Button } from "@/components";
+import { Header, ScreenWrapper, Button, AgentTermsBottomSheet } from "@/components";
 import { Checkbox } from "react-native-paper";
 import { testProps } from "@/utils/testProps";
+import { getAgentTermsAccepted } from "@/utils/agent/storage";
+import { isAIAgentFromAdvertisement } from "@/utils/device";
 
 // Helpers
 const createNetworkKey = (
@@ -228,12 +230,30 @@ const Wifi = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [shouldSave, setShouldSave] = useState(false);
   const [isModalVisible, setIsModalVisible] = useState(false);
+  const [showAgentTerms, setShowAgentTerms] = useState(false);
 
   // Device reference
   const device: ESPDevice = store.nodeStore.connectedDevice;
 
+  /**
+   * Check if device is an AI Agent based on advertisement data (QR flow only)
+   * Note: BLE flow handles terms in ScanBLE.tsx before reaching this screen
+   */
+  const isAIAgentDevice = (): boolean => {
+    const deviceAny = device as any;
+    return isAIAgentFromAdvertisement(deviceAny?.advertisementData);
+  };
+
   useEffect(() => {
     scanWifiNetworks();
+    
+    // Check if this is an AI Agent device and terms are not accepted
+    if (isAIAgentDevice()) {
+      const termsAccepted = getAgentTermsAccepted(store.userStore);
+      if (!termsAccepted) {
+        setShowAgentTerms(true);
+      }
+    }
   }, []);
 
   useEffect(() => {
@@ -312,6 +332,26 @@ const Wifi = () => {
   const handleWifiSelect = (ssid: string) => {
     setSelectedWifi(ssid);
     setIsModalVisible(false);
+  };
+
+  /**
+   * Handle agent terms completion - user accepted terms
+   */
+  const handleAgentTermsComplete = () => {
+    setShowAgentTerms(false);
+  };
+
+  /**
+   * Handle agent terms close - user declined, go back
+   */
+  const handleAgentTermsClose = () => {
+    setShowAgentTerms(false);
+    // Disconnect device and go back
+    if (device) {
+      device.disconnect();
+      store.nodeStore.connectedDevice = null;
+    }
+    router.back();
   };
 
   // Render Methods
@@ -469,6 +509,13 @@ const Wifi = () => {
           onSelect={handleWifiSelect}
           isLoading={isLoading}
           onRefresh={scanWifiNetworks}
+        />
+
+        {/* Agent Terms Bottom Sheet - shown for AI Agent devices when user profile not setup */}
+        <AgentTermsBottomSheet
+          visible={showAgentTerms}
+          onClose={handleAgentTermsClose}
+          onComplete={handleAgentTermsComplete}
         />
       </ScreenWrapper>
     </>

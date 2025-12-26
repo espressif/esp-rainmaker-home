@@ -35,14 +35,15 @@ import { useDevicePermissions } from "@/hooks/useDevicePermissions";
 import { Bluetooth, RotateCcw, CircleAlert } from "lucide-react-native";
 
 // Components
-import { Header, ScreenWrapper, ContentWrapper, BluetoothDisabledScreen, BLEPermissionScreen } from "@/components";
+import { Header, ScreenWrapper, ContentWrapper, BluetoothDisabledScreen, BLEPermissionScreen, AgentTermsBottomSheet } from "@/components";
 
 // Utils
 import { testProps } from "@/utils/testProps";
-import { deviceImages, getBleScanErrorType, getMissingPermission } from "@/utils/device";
+import { deviceImages, getBleScanErrorType, getMissingPermission, isAIAgentFromAdvertisement } from "@/utils/device";
 import { useToast } from "@/hooks/useToast";
 import { parseRMakerCapabilities } from "@/utils/rmakerCapabilities";
 import ESPAppUtilityAdapter from "@/adaptors/implementations/ESPAppUtilityAdapter";
+import { getAgentTermsAccepted } from "@/utils/agent/storage";
 
 // config
 import { DEVICE_TYPE_LIST } from "@/config/devices.config";
@@ -217,15 +218,13 @@ const NoDevicesFound = ({
             {...testProps("text_no_device_message")}
             style={[globalStyles.textGray, styles.noDeviceMessage]}
           >
-            {t("device.scan.ble.noDeviceMessage")}
-            <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
-              <Text
-                {...testProps("text_prefix_value")}
-                style={[globalStyles.fontMd, globalStyles.textPrimary, styles.prefixValue]}
-              >
-                {prefix}
-              </Text>
-            </View>
+            {t("device.scan.ble.noDeviceMessage")}{" "}
+            <Text
+              {...testProps("text_prefix_value")}
+              style={[globalStyles.fontMd, globalStyles.textPrimary, styles.prefixValue]}
+            >
+              {prefix}
+            </Text>
           </Text>
         </View>
       </View>
@@ -263,6 +262,8 @@ const Scan = () => {
     Record<string, boolean>
   >({});
   const [scannedDevices, setScannedDevices] = useState<ESPDevice[]>([]);
+  const [showAgentTerms, setShowAgentTerms] = useState(false);
+  const [pendingAIAgentDevice, setPendingAIAgentDevice] = useState<any>(null);
 
   // Filter out disabled device types
   const availableDevices = DEVICE_TYPE_LIST.filter(
@@ -398,7 +399,16 @@ const Scan = () => {
     setIsScanning(true);
 
     try {
+      // SDK filters devices by customer ID from advertisement data
       const deviceList = await store.userStore.user?.searchESPBLEDevices(1);
+      
+      // Parse advertisement data to detect AI Agent devices
+      deviceList?.forEach((device: any) => {
+        if (isAIAgentFromAdvertisement(device.advertisementData)) {
+          device._iconType = "ai-assistant";
+        }
+      });
+      
       if (deviceList && deviceList.length > 0) {
         setScannedDevices(deviceList as unknown as ESPDevice[]);
         setIsScanning(false);
@@ -509,6 +519,20 @@ const Scan = () => {
    * ESPDevice.initializeSession,
    */
   const handleBleDeviceConnect = async (device: ESPDevice) => {
+    const deviceWithIcon = device as any;
+    
+    // Check if this is an AI Agent device
+    if (deviceWithIcon._iconType === "ai-assistant") {
+      // Check if agent terms are accepted
+      const termsAccepted = getAgentTermsAccepted(store.userStore);
+      if (!termsAccepted) {
+        // Store the device and show terms bottom sheet
+        setPendingAIAgentDevice(device);
+        setShowAgentTerms(true);
+        return;
+      }
+    }
+    
     setConnectingDevice((prev) => ({
       ...prev,
       [device.name]: true,
@@ -569,6 +593,26 @@ const Scan = () => {
         [device.name]: false,
       }));
     }
+  };
+
+  /**
+   * Handle agent terms completion - proceed with device connection
+   */
+  const handleAgentTermsComplete = () => {
+    setShowAgentTerms(false);
+    if (pendingAIAgentDevice) {
+      // Terms accepted, now connect to the device
+      handleBleDeviceConnect(pendingAIAgentDevice);
+      setPendingAIAgentDevice(null);
+    }
+  };
+
+  /**
+   * Handle agent terms close - cancel the connection
+   */
+  const handleAgentTermsClose = () => {
+    setShowAgentTerms(false);
+    setPendingAIAgentDevice(null);
   };
 
   // Render
@@ -638,11 +682,11 @@ const Scan = () => {
                 style={globalStyles.shadowElevationForLightTheme} qaId="devices_found_scan_ble"
               >
                 <ScrollView {...testProps("scroll_scan_ble")} style={globalStyles.scannedDevicesList}>
-                  {scannedDevices.map((device, index) => (
+                  {scannedDevices.map((device: any, index) => (
                     <ScannedDeviceCard
                       key={index}
                       name={device.name}
-                      type={"light-1"}
+                      type={device._iconType || "light-1"}
                       onPress={() => handleBleDeviceConnect(device)}
                     />
                   ))}
@@ -679,6 +723,13 @@ const Scan = () => {
           ))}
         </ScrollView>
       </ScreenWrapper>
+
+      {/* Agent Terms Bottom Sheet - shown when AI Agent device is clicked by new user */}
+      <AgentTermsBottomSheet
+        visible={showAgentTerms}
+        onClose={handleAgentTermsClose}
+        onComplete={handleAgentTermsComplete}
+      />
     </>
   );
 };
