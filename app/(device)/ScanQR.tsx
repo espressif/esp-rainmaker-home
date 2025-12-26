@@ -632,7 +632,12 @@ const ScanQR = () => {
       return toast.showError(t("device.scan.qr.unableToConnectToDevice"));
     }
 
-    // Store connected device
+    // Copy advertisement data from deviceInterface to espDevice for AI Agent detection
+    if (deviceInterface.advertisementData) {
+      (espDevice as any).advertisementData = deviceInterface.advertisementData;
+    }
+
+    // Store connected device (with advertisement data for AI Agent detection on Wifi screen)
     store.nodeStore.connectedDevice = espDevice;
 
     // Handle QR provisioning (same flow for both iOS and Android)
@@ -825,6 +830,7 @@ const ScanQR = () => {
           )}
         </View>
       </View>
+
     </ScreenWrapper>
   );
 };
