@@ -78,5 +78,6 @@ export {
   getAllAgents,
   validateAgent,
   removeInvalidAgentFromCustomData,
+  checkAgentExistenceAndAction,
+  sanitizeAgentID,
 } from './aggregation';
-

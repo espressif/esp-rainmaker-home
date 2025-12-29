@@ -19,6 +19,7 @@ interface ChatHeaderProps {
   isConnecting: boolean;
   onConfigPress: () => void;
   onNewChat: () => void;
+  onOpenConversations: () => void;
 }
 
 /**
@@ -29,6 +30,7 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
   isConnecting,
   onConfigPress,
   onNewChat,
+  onOpenConversations,
 }) => {
   const { t } = useTranslation();
   const router = useRouter();
@@ -101,6 +103,7 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
         onClose={() => setShowMenu(false)}
         onNewChat={onNewChat}
         onSettings={handleSettingsPress}
+        onConversations={onOpenConversations}
       />
     </>
   );

@@ -17,9 +17,15 @@ import { useTranslation } from "react-i18next";
 import { useAgent } from "@/hooks/useAgent";
 // Utils
 import { RAINMAKER_MCP_CONNECTOR_URL } from "@/config/agent.config";
+import { getAgentTermsAccepted } from "@/utils/agent/storage";
 import { ConnectedConnector } from "@/utils/apiHelper";
 // Components
-import { Header, ScreenWrapper, ConfirmationDialog } from "@/components";
+import {
+  Header,
+  ScreenWrapper,
+  ConfirmationDialog,
+  AgentTermsBottomSheet,
+} from "@/components";
 
 /* ------------------------------ Constants ------------------------------- */
 
@@ -33,6 +39,7 @@ const ROUTES = {
 interface LoadingScreenProps {
   message?: string;
 }
+
 
 /* ------------------------------ Components ------------------------------- */
 
@@ -73,12 +80,14 @@ const TryAgentsId = () => {
   // Hooks
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { isInitialized, store, initUserCustomData } = useCDF();
+  const {
+    isInitialized,
+    store,
+    initUserCustomData,
+  } = useCDF();
   const { t } = useTranslation();
   const {
     agentConfig,
-    isLoadingConfig,
-    configError,
     loadAgentConfig,
     connectors,
     loadConnectors,
@@ -86,6 +95,8 @@ const TryAgentsId = () => {
   } = useAgent();
 
   // State
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [isConnectingConnector, setIsConnectingConnector] = useState(false);
   const [showConnectorWarningDialog, setShowConnectorWarningDialog] =
     useState(false);
@@ -93,10 +104,10 @@ const TryAgentsId = () => {
     ((value: boolean) => void) | null
   >(null);
   const [isAppReady, setIsAppReady] = useState(false);
-  
-  // Derived state
-  const isLoading = isLoadingConfig;
-  const error = configError;
+  const [isPipelineReady, setIsPipelineReady] = useState(false);
+  const [showTermsBottomSheet, setShowTermsBottomSheet] = useState(false);
+  const [isTermsAccepted, setIsTermsAccepted] = useState(false);
+  const [hasCheckedTerms, setHasCheckedTerms] = useState(false);
 
   // Refs
   const hasNavigatedRef = useRef(false);
@@ -110,30 +121,63 @@ const TryAgentsId = () => {
     setIsAppReady(true);
   }, [isInitialized, router, store?.userStore?.isHydrated]);
 
-  const initAgentConfiguration = useCallback(async () => {
-    if (!id || hasNavigatedRef.current) return;
-    if (!isAppReady) return;
+  /**
+   * Runs post-login pipeline once the app is ready.
+   * Ensures user is logged in and core data is initialized (nodes, custom data, etc).
+   */
+  useEffect(() => {
+    const runPipeline = async () => {
+      if (!isAppReady || !store || !router) {
+        return;
+      }
+      try {
+        await initUserCustomData();
+        const userInfo = store?.userStore?.userInfo;
+        if (!userInfo) {
+          router.replace("/(auth)/Login");
+          hasNavigatedRef.current = true;
+          return;
+        }
+        setIsPipelineReady(true);
+      } catch (error: any) {
+        console.error(
+          "\x1b[31m%s\x1b[0m",
+          `[ERROR] Post-login pipeline failed:`,
+          error
+        );
+        router.replace("/(auth)/Login");
+        hasNavigatedRef.current = true;
+      }
+    };
 
-    await initUserCustomData();
+    runPipeline();
+  }, [isAppReady, store, router]);
 
-    // Check if user is logged in - if not, redirect to login and do not proceed with routing
-    const userInfo = store?.userStore?.userInfo;
-    if (!userInfo) {
-      router.replace("/(auth)/Login");
-      hasNavigatedRef.current = true;
+  /**
+   * Ensures agent terms are accepted before proceeding to agent setup
+   */
+  useEffect(() => {
+    if (!isPipelineReady || !store?.userStore || hasCheckedTerms) {
       return;
     }
 
-    // App is initialized and user is logged in, fetch agent config and connectors
+    const termsAccepted = getAgentTermsAccepted(store.userStore);
+    setHasCheckedTerms(true);
+
+    if (termsAccepted) {
+      setIsTermsAccepted(true);
+    } else {
+      setIsLoading(false);
+      setShowTermsBottomSheet(true);
+    }
+  }, [hasCheckedTerms, isPipelineReady, store]);
+
+  const initAgentConfiguration = useCallback(async () => {
+    if (!id || hasNavigatedRef.current) return;
+    if (!isPipelineReady || !isTermsAccepted) return;
+
     loadAgentData();
-  }, [
-    id,
-    hasNavigatedRef.current,
-    isAppReady,
-    store,
-    router,
-    initUserCustomData,
-  ]);
+  }, [id, isPipelineReady, isTermsAccepted, store, router]);
 
   // Effects
   useEffect(() => {
@@ -151,7 +195,7 @@ const TryAgentsId = () => {
         timeoutRef.current = null;
       }
     };
-  }, [id, isInitialized, store, isAppReady]);
+  }, [id, isInitialized, store, isAppReady, initAgentConfiguration]);
 
   /**
    * Auto-connects Rainmaker MCP connector
@@ -206,6 +250,11 @@ const TryAgentsId = () => {
       setIsConnectingConnector(false);
       return true;
     } catch (error: any) {
+      console.error(
+        "\x1b[31m%s\x1b[0m",
+        `[ERROR] Failed to auto-connect Rainmaker MCP:`,
+        error
+      );
       setIsConnectingConnector(false);
       return false;
     }
@@ -268,7 +317,6 @@ const TryAgentsId = () => {
     config: any,
     connectedConnectors: ConnectedConnector[]
   ): Promise<boolean> => {
-
     // Check tools array (new API structure)
     const tools = config?.tools || [];
     
@@ -313,6 +361,9 @@ const TryAgentsId = () => {
       return;
     }
 
+    setIsLoading(true);
+    setError(null);
+
     try {
       // Fetch agent config using hook
       const config = await loadAgentConfig(id);
@@ -348,8 +399,18 @@ const TryAgentsId = () => {
         handleNavigation();
       }
     } catch (err: any) {
-      console.error("Failed to load agent data:", err);
-      // Error is already set by the hook via configError
+      console.error(
+        "\x1b[31m%s\x1b[0m",
+        `[ERROR] Failed to load agent data:`,
+        err
+      );
+      const errorMessage =
+        err?.message ||
+        t("agent.try.loadError") ||
+        "Failed to load agent configuration";
+      setError(errorMessage);
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -358,6 +419,11 @@ const TryAgentsId = () => {
    */
   const handleNavigation = () => {
     if (hasNavigatedRef.current || !id) {
+      return;
+    }
+
+    if (!isTermsAccepted) {
+      setShowTermsBottomSheet(true);
       return;
     }
 
@@ -371,12 +437,17 @@ const TryAgentsId = () => {
 
     try {
       hasNavigatedRef.current = true;
+
       router.replace({
         pathname: ROUTES.CONFIGURE,
         params: { id },
       } as any);
     } catch (error: any) {
-      console.error("Deep link navigation error:", error);
+      console.error(
+        "\x1b[31m%s\x1b[0m",
+        `[ERROR] Deep link navigation error:`,
+        error
+      );
       handleFallbackNavigation();
     }
   };
@@ -391,8 +462,30 @@ const TryAgentsId = () => {
         hasNavigatedRef.current = true;
       }
     } catch (fallbackError: any) {
-      console.error("Failed to navigate to home as fallback:", fallbackError);
+      console.error(
+        "\x1b[31m%s\x1b[0m",
+        `[ERROR] Failed to navigate to home as fallback:`,
+        fallbackError
+      );
     }
+  };
+
+  /**
+   * Handles completion of agent terms acceptance
+   */
+  const handleAgentTermsComplete = () => {
+    setShowTermsBottomSheet(false);
+    setIsTermsAccepted(true);
+    setIsLoading(true);
+    initAgentConfiguration();
+  };
+
+  /**
+   * Handles closing terms without acceptance (fallback to home)
+   */
+  const handleAgentTermsClose = () => {
+    setShowTermsBottomSheet(false);
+    handleFallbackNavigation();
   };
 
   // Show loading screen
@@ -423,6 +516,12 @@ const TryAgentsId = () => {
           onConfirm={handleConnectorWarningRetry}
           onCancel={handleConnectorWarningContinue}
           confirmColor={tokens.colors.primary}
+        />
+        <AgentTermsBottomSheet
+          visible={showTermsBottomSheet}
+          onClose={handleAgentTermsClose}
+          onComplete={handleAgentTermsComplete}
+          allowClose={false}
         />
       </>
     );
@@ -469,6 +568,12 @@ const TryAgentsId = () => {
           onCancel={handleConnectorWarningContinue}
           confirmColor={tokens.colors.primary}
         />
+        <AgentTermsBottomSheet
+          visible={showTermsBottomSheet}
+          onClose={handleAgentTermsClose}
+          onComplete={handleAgentTermsComplete}
+          allowClose={false}
+        />
       </>
     );
   }
@@ -497,6 +602,12 @@ const TryAgentsId = () => {
         onConfirm={handleConnectorWarningRetry}
         onCancel={handleConnectorWarningContinue}
         confirmColor={tokens.colors.primary}
+      />
+      <AgentTermsBottomSheet
+        visible={showTermsBottomSheet}
+        onClose={handleAgentTermsClose}
+        onComplete={handleAgentTermsComplete}
+        allowClose={false}
       />
     </>
   );

@@ -9,15 +9,7 @@ import { View } from "react-native";
 import { InfoRow } from "@/components";
 import { globalStyles } from "@/theme/globalStyleSheet";
 import { useTranslation } from "react-i18next";
-
-interface AgentInfoSectionProps {
-  agentId: string;
-  name: string;
-  createdByName?: string;
-  textModelId: string;
-  speechModelId: string;
-  conversationId?: string | null;
-}
+import { AgentInfoSectionProps } from "@/types/global";
 
 export const AgentInfoSection: React.FC<AgentInfoSectionProps> = ({
   agentId,

@@ -22,6 +22,7 @@ import {
   ESPRMGroup,
   ESPAutomation,
 } from "@espressif/rainmaker-base-sdk";
+import { AgentConfig } from "@/utils/agent";
 
 // ============================================================================
 // Common Types
@@ -125,6 +126,12 @@ export interface ScannedDeviceProps {
   type: string;
   isConnecting: boolean;
   onPress: () => void;
+}
+
+export interface BLEPermissionScreenProps {
+  status: "requesting" | "denied";
+  missingPermission: "ble" | "location" | "both" | "none";
+  testIdPrefix?: string;
 }
 
 // ============================================================================
@@ -942,87 +949,6 @@ export interface ChatMessage {
 }
 
 // ============================================================================
-// Agent/Chat Settings Types
-// ============================================================================
-
-export interface AgentConfigResponse {
-  agentId: string;
-  name: string;
-  textModelId: string;
-  speechModelId: string;
-  modelCapabilities: {
-    supportsText: boolean;
-    supportsVoice: boolean;
-  };
-  textModelCapabilities: {
-    supportsText: boolean;
-    supportsVoice: boolean;
-    displayName: string;
-    description: string;
-  };
-  speechModelCapabilities: {
-    supportsText: boolean;
-    supportsVoice: boolean;
-    displayName: string;
-    description: string;
-  };
-  requiredConnectors: Array<{
-    connectorUrl: string;
-    description: string;
-    type: string;
-    authType: string;
-    oauthMetadata?: any;
-  }>;
-  tools: Array<{
-    type: string;
-    name: string;
-    url: string;
-    timeout: number;
-    authType: string;
-    oauthMetadata?: any;
-  }>;
-  createdByName: string;
-}
-
-export interface ToolConnectionStatus {
-  isConnected: boolean;
-  isExpired: boolean;
-}
-
-// ============================================================================
-// Agent Settings Types
-// ============================================================================
-
-/**
- * Re-export AgentConfig from agent utils for convenience
- */
-export type { AgentConfig } from "@/utils/agent";
-
-/**
- * AI Device Data interface for agent configuration
- */
-export interface AIDeviceData {
-  node: ESPRMNode;
-  device: ESPRMDevice;
-  agentIdParam: ESPRMDeviceParam | null;
-  isUpdating: boolean;
-}
-
-/**
- * Agent Selection Bottom Sheet Props
- */
-export interface AgentSelectionBottomSheetProps {
-  /** Whether the bottom sheet is visible */
-  visible: boolean;
-  /** Callback when bottom sheet is closed */
-  onClose: () => void;
-  /** Callback when an agent is selected */
-  onSelect: (agentId: string) => void;
-  /** Currently selected agent ID */
-  currentAgentId?: string;
-}
-
-// ============================================================================
 // Polling Types
 // ============================================================================
 
@@ -1062,3 +988,62 @@ export interface DeviceChallengeResponse {
   /** The error message if failed */
   error?: string;
 }
+/**
+ * Result type for checking agent existence and action
+ */
+export interface AgentExistenceCheckResult {
+  /** Whether the agent exists in the list */
+  exists: boolean;
+  /** The agent if found, null otherwise */
+  agent: AgentConfig | null;
+  /** Whether the agent should be activated (exists and not already selected) */
+  shouldActivate: boolean;
+  /** Whether the add modal should be shown (agent doesn't exist) */
+  shouldShowModal: boolean;
+}
+
+/**
+ * Result type for sanitizing agentId
+ */
+export interface SanitizeAgentIdResult {
+  /** Whether the agentId should be processed */
+  shouldProcess: boolean;
+  /** The trimmed agentId */
+  trimmedAgentId: string;
+  /** The next processed ID value to store (caller should update ref) */
+  nextProcessedId: string | null;
+}
+// Re-export all agent-related types from utils/agent/types
+export type {
+  AgentConfig,
+  AgentConfigResponse,
+  ToolConnectionStatus,
+  AIDeviceData,
+  AgentSelectionBottomSheetProps,
+  AgentConversationsBottomSheetProps,
+  Agent,
+  UserProfile,
+  ConnectedConnector,
+  UsageQuota,
+  UsageLogEntry,
+  UsageHistory,
+  UsageByAgent,
+  ConversationMessage,
+  Conversation,
+  ConversationListItem,
+  AggregatedAgent,
+  AgentValidationResult,
+  AgentSource,
+  AgentSelectionItemProps,
+  AgentCardProps,
+  AgentInfoSectionProps,
+  AddAgentBottomSheetProps,
+  AgentTermsBottomSheetProps,
+  OAuthMetadata,
+  OAuthState,
+  ConversationData,
+  MessageDisplayConfig,
+  WebSocketMessage,
+  FontSizeLevel,
+  AgentTermsBottomSheetStyles, AgentConversationsSheetStyles 
+} from "@/utils/agent/types";

@@ -22,6 +22,7 @@ interface ChatMenuDropdownProps {
   onClose: () => void;
   onNewChat: () => void;
   onSettings: () => void;
+  onConversations: () => void;
 }
 
 /**
@@ -33,6 +34,7 @@ export const ChatMenuDropdown: React.FC<ChatMenuDropdownProps> = ({
   onClose,
   onNewChat,
   onSettings,
+  onConversations,
 }) => {
   const { t } = useTranslation();
 
@@ -46,6 +48,11 @@ export const ChatMenuDropdown: React.FC<ChatMenuDropdownProps> = ({
     onClose();
   };
 
+  const handleConversations = () => {
+    onConversations();
+    onClose();
+  };
+
   return (
     <Modal
       visible={visible}
@@ -54,7 +61,9 @@ export const ChatMenuDropdown: React.FC<ChatMenuDropdownProps> = ({
       onRequestClose={onClose}
     >
       <Pressable style={styles.backdrop} onPress={onClose}>
-        <View style={styles.menuContainer}>
+        <View
+          style={[styles.menuContainer, globalStyles.shadowElevationForLightTheme]}
+        >
           <TouchableOpacity
             style={styles.menuItem}
             onPress={handleNewChat}
@@ -62,6 +71,18 @@ export const ChatMenuDropdown: React.FC<ChatMenuDropdownProps> = ({
           >
             <Text style={styles.menuItemText}>
               {t("chatSettings.newChat")}
+            </Text>
+          </TouchableOpacity>
+
+          <View style={styles.separator} />
+
+          <TouchableOpacity
+            style={styles.menuItem}
+            onPress={handleConversations}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.menuItemText}>
+              {t("chatSettings.conversations") || "Conversations"}
             </Text>
           </TouchableOpacity>
 
@@ -95,7 +116,6 @@ const styles = StyleSheet.create({
     backgroundColor: tokens.colors.white,
     borderRadius: 12,
     minWidth: 180,
-    ...globalStyles.shadowElevationForLightTheme,
     overflow: "hidden",
   },
   menuItem: {

@@ -99,8 +99,8 @@ android {
         applicationId 'com.espressif.novahome'
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 31
-        versionName "3.4.0"
+        versionCode 32
+        versionName "3.4.1"
     }
     signingConfigs {
         debug {

@@ -9,6 +9,16 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { AGENTS_API_BASE_URL } from '@/config/agent.config';
 import { ESPRMUser } from '@espressif/rainmaker-base-sdk';
 import { TOKEN_STORAGE_KEYS } from './agent';
+import type {
+    Agent,
+    UserProfile,
+    ConnectedConnector,
+    UsageQuota,
+    UsageHistory,
+    UsageByAgent,
+    Conversation,
+    ConversationListItem,
+} from '@/utils/agent/types';
 
 export type HttpMethod = 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH';
 
@@ -139,105 +149,19 @@ export const getAgentConfig = async (agentId: string): Promise<any> => {
 
 // ==================== Type Definitions ====================
 
-export interface UserProfile {
-    userId: string;
-    email: string;
-    name?: string;
-    createdAt?: string;
-    updatedAt?: string;
-    [key: string]: any;
-}
-
-export interface Agent {
-    adminId: string;
-    agentId: string;
-    name: string;
-    toolConfiguration?: string;
-    modelId?: string;
-    createdByName?: string;
-}
-
-export interface ConnectedConnector {
-    connectorId: string;
-    connectorUrl: string;
-    hasToken: boolean;
-    authType?: 'oauth' | 'api_key' | null;
-    isExpired?: boolean;
-    storedAt?: number;
-    expiresAt?: number;
-    scope?: string;
-    hasKey?: boolean;
-}
-
-export interface UsageQuota {
-    userId: string;
-    currentUsage: number;
-    limit: number;
-    remaining: number;
-    percentage: number;
-    hasQuota: boolean;
-}
-
-export interface UsageLogEntry {
-    userId: string;
-    timestamp: number;
-    requestId: string;
-    modelId: string;
-    requestType: string;
-    inputTokens: number;
-    outputTokens: number;
-    normalizedCost: number;
-    actualCostUSD: number;
-    statusCode: number;
-    agentId?: string;
-    errorMessage?: string;
-}
-
-export interface UsageHistory {
-    userId: string;
-    items: UsageLogEntry[];
-    count: number;
-}
-
-export interface UsageByAgent {
-    userId: string;
-    agents: Record<string, number>;
-}
-
-export interface ConversationMessage {
-    role: 'user' | 'assistant';
-    content: string;
-    timestamp: number;
-    toolCalls?: Array<{
-        name: string;
-        input: Record<string, any>;
-        toolUseId: string;
-    }>;
-    toolResults?: Array<{
-        toolUseId: string;
-        result: any;
-    }>;
-}
-
-export interface Conversation {
-    conversationId: string;
-    userId: string;
-    agentId: string;
-    title: string;
-    createdAt: number;
-    updatedAt: number;
-    messageCount: number;
-    messages?: ConversationMessage[];
-}
-
-export interface ConversationListItem {
-    conversationId: string;
-    title: string;
-    agentId: string;
-    createdAt: number;
-    updatedAt: number;
-    messageCount: number;
-}
+// Re-export all agent-related types from utils/agent/types for backward compatibility
+export type {
+    Agent,
+    UserProfile,
+    ConnectedConnector,
+    UsageQuota,
+    UsageLogEntry,
+    UsageHistory,
+    UsageByAgent,
+    ConversationMessage,
+    Conversation,
+    ConversationListItem,
+} from '@/utils/agent/types';
 
 // ==================== User Profile APIs ====================
 
@@ -581,15 +505,27 @@ export async function getUsageByAgent(): Promise<UsageByAgent> {
  * List conversations for an agent
  */
 export async function listConversations(agentId: string): Promise<ConversationListItem[]> {
-    const response = await apiRequest<{ conversations?: ConversationListItem[] } | ConversationListItem[]>({
+    const response = await apiRequest<{ conversations?: any[] } | any[]>({
         path: `/user/agents/${agentId}/conversations`,
         method: 'GET',
     });
 
-    if (Array.isArray(response)) {
-        return response;
-    }
-    return (response as any).conversations || [];
+    const rawItems: any[] = Array.isArray(response)
+        ? response
+        : (response as any).conversations || [];
+
+    // Normalise fields in case backend returns them as strings
+    return rawItems.map((item) => ({
+        conversationId: item.conversationId,
+        title: item.title,
+        agentId: item.agentId,
+        createdAt: typeof item.createdAt === 'string' ? Number(item.createdAt) : item.createdAt,
+        updatedAt: typeof item.updatedAt === 'string' ? Number(item.updatedAt) : item.updatedAt,
+        messageCount:
+            typeof item.messageCount === 'string'
+                ? Number(item.messageCount)
+                : item.messageCount,
+    })) as ConversationListItem[];
 }
 
 /**

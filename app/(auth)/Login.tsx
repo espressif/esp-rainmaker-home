@@ -82,8 +82,7 @@ export default function LoginScreen() {
       createPlatformEndpoint: t("auth.login.settingUpAccount") || "Setting up account",
       fetchNodesAndGroups: t("auth.login.settingUpHomes") || "Setting up homes",
       updateRefreshTokensForAllAIDevices: t("auth.login.settingUpNodes") || "Setting up nodes",
-      initUserCustomData: t("auth.login.settingUpNodes") || "Setting up nodes",
-      getAgentTermsAccepted: t("auth.login.gettingProfile") || "Getting profile",
+      initUserCustomData: t("auth.login.settingUpNodes") || "Setting up nodes"
     };
     return stepMap[stepName] || stepName;
   };
@@ -247,7 +246,6 @@ export default function LoginScreen() {
           { name: "fetchNodesAndGroups", status: "pending" as const },
           { name: "updateRefreshTokensForAllAIDevices", status: "pending" as const },
           { name: "initUserCustomData", status: "pending" as const },
-          { name: "getAgentTermsAccepted", status: "pending" as const },
           { name: "getUserProfileAndRoute", status: "pending" as const },
         ];
 

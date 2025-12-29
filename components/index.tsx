@@ -47,6 +47,7 @@ export { default as ContentWrapper } from "./Layout/ContentWrapper";
 export { default as ScreenWrapper } from "./Layout/ScreenWrapper";
 export { default as PhonePair } from "./Layout/PhonePair";
 export { default as BluetoothDisabledScreen } from "./Layout/BluetoothDisabledScreen";
+export { default as BLEPermissionScreen } from "./Layout/BLEPermissionScreen";
 
 // Modals
 export { default as EditModal } from "./Modals/EditModal";
@@ -55,6 +56,7 @@ export { default as HomeTooltip } from "./Modals/HomeTooltip";
 export { default as SceneMenuBottomSheet } from "./Modals/SceneMenuBottomSheet";
 export { default as AddAgentBottomSheet } from "./Modals/AddAgentBottomSheet";
 export { default as AgentSelectionBottomSheet } from "./Modals/AgentSelectionBottomSheet";
+export { default as AgentTermsBottomSheet } from "./Modals/AgentTermsBottomSheet";
 
 // Navigation
 export { default as FooterTabs } from "./Navigations/FooterTabs";

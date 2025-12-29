@@ -4,7 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
+import { useFocusEffect } from "expo-router";
 import {
   View,
   Text,
@@ -14,6 +15,7 @@ import {
   ScrollView,
   Animated,
   ActivityIndicator,
+  AppState,
 } from "react-native";
 
 // Styles
@@ -30,16 +32,18 @@ import { useTranslation } from "react-i18next";
 import { useDevicePermissions } from "@/hooks/useDevicePermissions";
 
 // Icons
-import { Bluetooth, RotateCcw, BluetoothOff, MapPin } from "lucide-react-native";
+import { Bluetooth, RotateCcw, CircleAlert } from "lucide-react-native";
 
 // Components
-import { Header, ScreenWrapper, ContentWrapper, BluetoothDisabledScreen } from "@/components";
+import { Header, ScreenWrapper, ContentWrapper, BluetoothDisabledScreen, BLEPermissionScreen, AgentTermsBottomSheet } from "@/components";
 
 // Utils
 import { testProps } from "@/utils/testProps";
-import { deviceImages } from "@/utils/device";
+import { deviceImages, getBleScanErrorType, getMissingPermission, isAIAgentFromAdvertisement } from "@/utils/device";
 import { useToast } from "@/hooks/useToast";
 import { parseRMakerCapabilities } from "@/utils/rmakerCapabilities";
+import ESPAppUtilityAdapter from "@/adaptors/implementations/ESPAppUtilityAdapter";
+import { getAgentTermsAccepted } from "@/utils/agent/storage";
 
 // config
 import { DEVICE_TYPE_LIST } from "@/config/devices.config";
@@ -174,123 +178,26 @@ const ScanningAnimation = () => {
   );
 };
 
-/**
- * PermissionScreen
- *
- * Displays permission request screen when BLE or Location permissions are missing
- */
-const PermissionScreen = ({
-  status,
-  onRequestPermission,
-  missingPermission,
-}: {
-  status: "requesting" | "denied";
-  onRequestPermission: () => void;
-  missingPermission: "ble" | "location" | "both";
-}) => {
-  const { t } = useTranslation();
-
-  const getTitle = () => {
-    if (status === "requesting") {
-      return t("device.scan.ble.requestingPermission");
-    }
-    if (missingPermission === "ble") {
-      return t("device.scan.ble.noBlePermission");
-    }
-    if (missingPermission === "location") {
-      return t("device.scan.ble.noLocationPermission");
-    }
-    return t("device.scan.ble.permissionRequired");
-  };
-
-  const getDescription = () => {
-    if (missingPermission === "ble") {
-      return t("device.scan.ble.blePermissionRequired");
-    }
-    if (missingPermission === "location") {
-      return t("device.scan.ble.locationPermissionRequired");
-    }
-    return t("device.scan.ble.allPermissionsRequired");
-  };
-
-  const getIcon = () => {
-    if (missingPermission === "location") {
-      return <MapPin size={40} color={tokens.colors.gray} />;
-    }
-    return <BluetoothOff size={40} color={tokens.colors.gray} />;
-  };
-
-  return (
-    <View
-      {...testProps("view_permission_screen")}
-      style={[
-        globalStyles.container,
-        globalStyles.itemCenter,
-        { backgroundColor: tokens.colors.bg5 },
-      ]}
-    >
-      <View
-        {...testProps("view_permission_content")}
-        style={[
-          globalStyles.permissionContent,
-          {
-            ...globalStyles.shadowElevationForLightTheme,
-            backgroundColor: tokens.colors.white,
-          },
-        ]}
-      >
-        <View {...testProps("view_permission_icon")} style={globalStyles.permissionIconContainer}>
-          {getIcon()}
-        </View>
-        <Text {...testProps("text_permission_title_scan_ble")} style={[globalStyles.heading, globalStyles.permissionTitle]}>
-          {getTitle()}
-        </Text>
-        <Text
-          {...testProps("text_permission_msg_scan_ble")}
-          style={[globalStyles.textGray, globalStyles.permissionDescription]}
-        >
-          {getDescription()}
-        </Text>
-        {status === "denied" && (
-          <TouchableOpacity
-            {...testProps("button_permission")}
-            style={[
-              globalStyles.actionButton,
-              globalStyles.actionButtonPrimary,
-              globalStyles.permissionButton,
-            ]}
-            onPress={onRequestPermission}
-          >
-            <Bluetooth
-              size={20}
-              color={tokens.colors.white}
-              style={styles.buttonIcon}
-            />
-            <Text {...testProps("text_grant_permission_scan_ble")} style={globalStyles.actionButtonTextPrimary}>
-              {t("device.scan.ble.grantPermission")}
-            </Text>
-          </TouchableOpacity>
-        )}
-      </View>
-    </View>
-  );
-};
 
 /**
  * NoDevicesFound
  *
  * Displays a message when no devices are found with refresh icon to rescan
- * @param props - onScanAgain handler and optional style
+ * @param props - onScanAgain handler, device prefix, and optional style
  * @returns JSX component
  */
 const NoDevicesFound = ({
   onScanAgain,
+  devicePrefix,
   style,
 }: {
   onScanAgain: () => void;
+  devicePrefix?: string;
   style?: any;
 }) => {
   const { t } = useTranslation();
+  const prefix = devicePrefix;
+
   return (
     <ContentWrapper
       title={t("device.scan.ble.noDevicesFound")}
@@ -302,7 +209,25 @@ const NoDevicesFound = ({
       }
       qaId="no_devices_found_scan_ble"
     >
-      <View style={styles.emptyContainer} />
+      <View style={styles.emptyContainer}>
+        <View style={styles.noDeviceContent}>
+          <View style={styles.noDeviceIconContainer}>
+            <CircleAlert size={48} color={tokens.colors.primary} />
+          </View>
+          <Text
+            {...testProps("text_no_device_message")}
+            style={[globalStyles.textGray, styles.noDeviceMessage]}
+          >
+            {t("device.scan.ble.noDeviceMessage")}{" "}
+            <Text
+              {...testProps("text_prefix_value")}
+              style={[globalStyles.fontMd, globalStyles.textPrimary, styles.prefixValue]}
+            >
+              {prefix}
+            </Text>
+          </Text>
+        </View>
+      </View>
     </ContentWrapper>
   );
 };
@@ -320,6 +245,7 @@ const Scan = () => {
   const { store } = useCDF();
   const router = useRouter();
   const { t } = useTranslation();
+  const [devicePrefix] = useState<string>("PROV_");
   const {
     bleGranted,
     locationGranted,
@@ -336,59 +262,209 @@ const Scan = () => {
     Record<string, boolean>
   >({});
   const [scannedDevices, setScannedDevices] = useState<ESPDevice[]>([]);
+  const [showAgentTerms, setShowAgentTerms] = useState(false);
+  const [pendingAIAgentDevice, setPendingAIAgentDevice] = useState<any>(null);
 
   // Filter out disabled device types
   const availableDevices = DEVICE_TYPE_LIST.filter(
     (device) => !device.disabled
   );
 
-  // Determine permission status
-  const getPermissionStatus = (): "requesting" | "denied" => {
-    if (isChecking) return "requesting";
-    return "denied";
+
+  // Re-check permissions when app comes to foreground (user might have granted in settings)
+  useEffect(() => {
+    const subscription = AppState.addEventListener("change", (nextAppState) => {
+      if (nextAppState === "active") {
+        // Re-check permissions when app becomes active
+        checkPermissions();
+      }
+    });
+
+    return () => {
+      subscription.remove();
+    };
+  }, [checkPermissions]);
+
+  /**
+   * Handle scan again - reset state, disconnect device if connected, and trigger new scan
+   */
+  const handleScanAgain = () => {
+    setIsScanning(false);
+    setScannedDevices([]);
+    setConnectingDevice({});
+
+    const device = store.nodeStore.connectedDevice;
+    if (device) {
+      device.disconnect();
+      store.nodeStore.connectedDevice = null;
+    }
+    
+    hasAttemptedScanRef.current = false;
+    handleBleDeviceScan();
   };
 
-  const getMissingPermission = (): "ble" | "location" | "both" => {
-    if (bleGranted === false && locationGranted === false) return "both";
-    if (bleGranted === false) return "ble";
-    if (locationGranted === false) return "location";
-    return "ble"; // fallback
-  };
+  /**
+   * Utility function to handle BLE scan errors
+   * Uses a switch statement to categorize and handle different error types
+   *
+   * @param errorMessage - The error message to analyze
+   * @param errorCode - Optional error code from React Native rejection
+   */
+  const handleBleScanError = useCallback(
+    (errorMessage: string, errorCode?: string) => {
+      const errorType = getBleScanErrorType(errorMessage, errorCode);
 
-  // Handle permission request
-  const handleRequestPermission = () => {
-    requestPermissions();
-    // Re-check after a delay
-    setTimeout(() => {
-      checkPermissions();
-    }, 1000);
-  };
+      // Handle error based on type using switch statement
+      switch (errorType) {
+        case "permission": {
+          // Request permissions
+          ESPAppUtilityAdapter.requestAllPermissions();
+          toast.showError(
+            t("device.scan.ble.blePermissionRequired")
+          );
+          // Re-check permissions after a delay to allow permission dialog to be handled
+          setTimeout(() => {
+            checkPermissions();
+          }, 2000);
+          break;
+        }
+
+        case "bluetoothDisabled": {
+          // Bluetooth is disabled - UI will show BluetoothDisabledScreen automatically
+          // Just show a toast for additional feedback
+          toast.showError(
+            t("device.scan.ble.bluetoothDisabled")
+          );
+          break;
+        }
+
+        case "noDevices": {
+          // No devices found - UI will show NoDevicesFound screen automatically
+          // No toast needed as the screen already shows the message
+          break;
+        }
+
+        case "scanFailed": {
+          // BLE scanning failed error
+          toast.showError(
+            t("device.scan.ble.scanFailed")
+          );
+          break;
+        }
+
+        case "generic":
+        default: {
+          // Generic error - show a fallback message
+          toast.showError(
+            t("device.scan.ble.scanFailed")
+          );
+          break;
+        }
+      }
+    },
+    [t, toast, checkPermissions]
+  );
 
   /**
    * This function is used to scan for ble devices with the default prefix
    *
    * SDK function: ESPUser.searchESPDevices
+   * Default prefix: "PROV_"
    */
-  const handleBleDeviceScan = async () => {
-    setIsScanning(true);
-    try {
-      const deviceList = await store.userStore.user?.searchESPBLEDevices(1);
-      if (deviceList) {
-        setScannedDevices(deviceList as unknown as ESPDevice[]);
-      }
-    } catch (error) {
-      console.error(error);
-    } finally {
-      setIsScanning(false);
+  const handleBleDeviceScan = useCallback(async () => {
+    // Prevent multiple simultaneous scans
+    if (isScanning) {
+      return;
     }
-  };
+
+    // Safety checks: Re-check permissions and transport status from native
+    // This ensures we have the most up-to-date information before every scan
+    await checkPermissions();
+
+    // Safety checks: Verify all required permissions are granted
+    // The UI will automatically show PermissionScreen if permissions are missing
+    if (!allPermissionsGranted) {
+      // Request permissions if not granted
+      ESPAppUtilityAdapter.requestAllPermissions();
+      return;
+    }
+
+    // Safety checks: Verify Bluetooth transport is enabled
+    // The UI will automatically show BluetoothDisabledScreen if Bluetooth is disabled
+    if (bluetoothEnabled === false) {
+      return;
+    }
+
+    // All safety checks passed - proceed with scan
+    setIsScanning(true);
+
+    try {
+      // SDK filters devices by customer ID from advertisement data
+      const deviceList = await store.userStore.user?.searchESPBLEDevices(1);
+      
+      // Parse advertisement data to detect AI Agent devices
+      deviceList?.forEach((device: any) => {
+        if (isAIAgentFromAdvertisement(device.advertisementData)) {
+          device._iconType = "ai-assistant";
+        }
+      });
+      
+      if (deviceList && deviceList.length > 0) {
+        setScannedDevices(deviceList as unknown as ESPDevice[]);
+        setIsScanning(false);
+      } else {
+        // No devices found - stop scanning and show no devices screen
+        setIsScanning(false);
+        setScannedDevices([]);
+      }
+    } catch (error: any) {
+      console.error("[BLE Scan] Error:", error);
+      const errorMessage = error?.message || String(error);
+      const errorCode = error?.code || error?.name;
+
+      // Stop scanning immediately on error
+      setIsScanning(false);
+      setScannedDevices([]);
+
+      // Use utility function to handle error (pass both message and code)
+      handleBleScanError(errorMessage, errorCode);
+    }
+  }, [
+    isScanning,
+    store.userStore.user,
+    toast,
+    t,
+    handleBleScanError,
+    checkPermissions,
+    allPermissionsGranted,
+    bluetoothEnabled,
+  ]);
+
+  // Track if we've attempted a scan to prevent infinite retries
+  const hasAttemptedScanRef = useRef(false);
 
   useEffect(() => {
     // Only scan if permissions are granted and Bluetooth is enabled
-    if (allPermissionsGranted && bluetoothEnabled && store.userStore.user) {
+    // Don't scan if already scanning, if we have devices, or if we've already attempted a scan
+    if (
+      allPermissionsGranted &&
+      bluetoothEnabled &&
+      store.userStore.user &&
+      !isScanning &&
+      scannedDevices.length === 0 &&
+      !hasAttemptedScanRef.current
+    ) {
+      hasAttemptedScanRef.current = true;
       handleBleDeviceScan();
     }
-  }, [allPermissionsGranted, bluetoothEnabled, store.userStore.user]);
+  }, [
+    allPermissionsGranted,
+    bluetoothEnabled,
+    store.userStore.user,
+    handleBleDeviceScan,
+    isScanning,
+    scannedDevices.length,
+  ]);
 
   // Re-check Bluetooth state periodically when it's disabled
   useEffect(() => {
@@ -399,6 +475,30 @@ const Scan = () => {
       return () => clearInterval(interval);
     }
   }, [allPermissionsGranted, bluetoothEnabled, checkPermissions]);
+
+  // Reset state and disconnect device when screen comes into focus
+  useFocusEffect(
+    useCallback(() => {
+      // Reset scan state
+      setIsScanning(false);
+      setScannedDevices([]);
+      setConnectingDevice({});
+
+      // Disconnect device if connected
+      const device = store.nodeStore.connectedDevice;
+      if (device) {
+        try {
+          device.disconnect();
+          store.nodeStore.connectedDevice = null;
+        } catch (error) {
+          console.error("[BLE Scan] Error disconnecting device:", error);
+        }
+      }
+
+      // Don't automatically trigger scan - let the useEffect handle it
+      // This prevents infinite loops
+    }, [store])
+  );
 
   /**
    * This function is used to connect to a ble device
@@ -419,6 +519,20 @@ const Scan = () => {
    * ESPDevice.initializeSession,
    */
   const handleBleDeviceConnect = async (device: ESPDevice) => {
+    const deviceWithIcon = device as any;
+    
+    // Check if this is an AI Agent device
+    if (deviceWithIcon._iconType === "ai-assistant") {
+      // Check if agent terms are accepted
+      const termsAccepted = getAgentTermsAccepted(store.userStore);
+      if (!termsAccepted) {
+        // Store the device and show terms bottom sheet
+        setPendingAIAgentDevice(device);
+        setShowAgentTerms(true);
+        return;
+      }
+    }
+    
     setConnectingDevice((prev) => ({
       ...prev,
       [device.name]: true,
@@ -481,6 +595,26 @@ const Scan = () => {
     }
   };
 
+  /**
+   * Handle agent terms completion - proceed with device connection
+   */
+  const handleAgentTermsComplete = () => {
+    setShowAgentTerms(false);
+    if (pendingAIAgentDevice) {
+      // Terms accepted, now connect to the device
+      handleBleDeviceConnect(pendingAIAgentDevice);
+      setPendingAIAgentDevice(null);
+    }
+  };
+
+  /**
+   * Handle agent terms close - cancel the connection
+   */
+  const handleAgentTermsClose = () => {
+    setShowAgentTerms(false);
+    setPendingAIAgentDevice(null);
+  };
+
   // Render
   // Show Bluetooth disabled screen if Bluetooth is off
   if (allPermissionsGranted && bluetoothEnabled === false && !isChecking) {
@@ -498,8 +632,8 @@ const Scan = () => {
     );
   }
 
-  // Show permission screen if permissions are not granted
-  if (!allPermissionsGranted && !isChecking) {
+  // Show permission screen if permissions are not granted or checking
+  if (!allPermissionsGranted || isChecking) {
     return (
       <>
         <Header
@@ -508,30 +642,10 @@ const Scan = () => {
           qaId="header_scan_ble"
         />
         <ScreenWrapper style={globalStyles.scanContainer} qaId="screen_wrapper_scan_ble">
-          <PermissionScreen
-            status={getPermissionStatus()}
-            onRequestPermission={handleRequestPermission}
-            missingPermission={getMissingPermission()}
-          />
-        </ScreenWrapper>
-      </>
-    );
-  }
-
-  // Show loading while checking permissions
-  if (isChecking) {
-    return (
-      <>
-        <Header
-          label={t("device.scan.ble.title")}
-          rightSlot={<Bluetooth {...testProps("icon_bluetooth_scan_ble")} size={24} color={tokens.colors.bluetooth} />}
-          qaId="header_scan_ble"
-        />
-        <ScreenWrapper style={globalStyles.scanContainer} qaId="screen_wrapper_scan_ble">
-          <PermissionScreen
-            status="requesting"
-            onRequestPermission={handleRequestPermission}
-            missingPermission={getMissingPermission()}
+          <BLEPermissionScreen
+            status={isChecking ? "requesting" : "denied"}
+            missingPermission={getMissingPermission(bleGranted, locationGranted)}
+            testIdPrefix="scan_ble"
           />
         </ScreenWrapper>
       </>
@@ -568,11 +682,11 @@ const Scan = () => {
                 style={globalStyles.shadowElevationForLightTheme} qaId="devices_found_scan_ble"
               >
                 <ScrollView {...testProps("scroll_scan_ble")} style={globalStyles.scannedDevicesList}>
-                  {scannedDevices.map((device, index) => (
+                  {scannedDevices.map((device: any, index) => (
                     <ScannedDeviceCard
                       key={index}
                       name={device.name}
-                      type={"light-1"}
+                      type={device._iconType || "light-1"}
                       onPress={() => handleBleDeviceConnect(device)}
                     />
                   ))}
@@ -580,7 +694,8 @@ const Scan = () => {
               </ContentWrapper>
             ) : (
               <NoDevicesFound
-                onScanAgain={handleBleDeviceScan}
+                onScanAgain={handleScanAgain}
+                devicePrefix={devicePrefix}
                 style={globalStyles.shadowElevationForLightTheme}
               />
             )}
@@ -608,6 +723,13 @@ const Scan = () => {
           ))}
         </ScrollView>
       </ScreenWrapper>
+
+      {/* Agent Terms Bottom Sheet - shown when AI Agent device is clicked by new user */}
+      <AgentTermsBottomSheet
+        visible={showAgentTerms}
+        onClose={handleAgentTermsClose}
+        onComplete={handleAgentTermsComplete}
+      />
     </>
   );
 };
@@ -620,7 +742,30 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   emptyContainer: {
-    height: 60,
+    minHeight: 200,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingVertical: tokens.spacing._20,
+  },
+  noDeviceContent: {
+    alignItems: "center",
+    justifyContent: "center",
+    width: "100%",
+  },
+  noDeviceIconContainer: {
+    marginBottom: tokens.spacing._20,
+    padding: tokens.spacing._15,
+    borderRadius: 50,
+    backgroundColor: tokens.colors.bg4,
+  },
+  noDeviceMessage: {
+    marginBottom: tokens.spacing._15,
+    textAlign: "center",
+    paddingHorizontal: tokens.spacing._20,
+  },
+  prefixValue: {
+    fontWeight: "600",
+    fontFamily: "monospace",
   },
   buttonIcon: {
     marginRight: tokens.spacing._10,

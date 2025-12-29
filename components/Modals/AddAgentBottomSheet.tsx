@@ -8,7 +8,6 @@ import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
-  StyleSheet,
   Modal,
   TouchableOpacity,
   Pressable,
@@ -21,6 +20,7 @@ import {
 import { useTranslation } from "react-i18next";
 // Styles
 import { tokens } from "@/theme/tokens";
+import { globalStyles } from "@/theme/globalStyleSheet";
 
 // Icons
 import { X, AlertCircle } from "lucide-react-native";
@@ -32,22 +32,7 @@ import { Input } from "@/components";
 import { getAgentConfig } from "@/utils/agent";
 
 // Types
-import type { AgentConfig } from "@/types/global";
-
-interface AddAgentBottomSheetProps {
-  /** Whether the bottom sheet is visible */
-  visible: boolean;
-  /** Callback when bottom sheet is closed */
-  onClose: () => void;
-  /** Callback when agent is saved */
-  onSave: (name: string, agentId: string) => void;
-  /** Optional initial agent ID to pre-fill */
-  initialAgentId?: string;
-  /** Optional initial agent name to pre-fill */
-  initialAgentName?: string;
-  /** List of existing agents to check for duplicates */
-  existingAgents?: AgentConfig[];
-}
+import type { AddAgentBottomSheetProps } from "@/types/global";
 
 /**
  * AddAgentBottomSheet
@@ -213,20 +198,20 @@ const AddAgentBottomSheet: React.FC<AddAgentBottomSheetProps> = ({
       animationType="slide"
       onRequestClose={onClose}
     >
-      <Pressable style={styles.backdrop} onPress={handleBackdropPress}>
+      <Pressable style={globalStyles.bottomSheetBackdrop} onPress={handleBackdropPress}>
         <KeyboardAvoidingView
           behavior={Platform.OS === "ios" ? "padding" : "height"}
-          style={styles.keyboardAvoidingView}
+          style={globalStyles.bottomSheetKeyboardAvoidingView}
         >
-          <Pressable style={styles.content} onPress={handleContentPress}>
+          <Pressable style={globalStyles.bottomSheetContent} onPress={handleContentPress}>
             {/* Handle */}
-            <View style={styles.handle} />
+            <View style={globalStyles.bottomSheetHandle} />
 
             {/* Header */}
-            <View style={styles.header}>
-              <Text style={styles.title}>{t("aiSettings.addNewAgent")}</Text>
+            <View style={globalStyles.bottomSheetHeader}>
+              <Text style={globalStyles.bottomSheetTitle}>{t("aiSettings.addNewAgent")}</Text>
               <TouchableOpacity
-                style={styles.closeButton}
+                style={globalStyles.bottomSheetCloseButton}
                 onPress={onClose}
                 hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
               >
@@ -236,22 +221,22 @@ const AddAgentBottomSheet: React.FC<AddAgentBottomSheetProps> = ({
 
             {/* Error Banner */}
             {hasValidatedAgentId && agentIdError && (
-              <View style={styles.errorBanner}>
+              <View style={globalStyles.errorBanner}>
                 <AlertCircle size={20} color={tokens.colors.red} />
-                <Text style={styles.errorBannerText}>{agentIdError}</Text>
+                <Text style={globalStyles.errorBannerText}>{agentIdError}</Text>
               </View>
             )}
 
             {/* Form */}
             <ScrollView
-              style={styles.scrollView}
-              contentContainerStyle={styles.scrollContent}
+              style={globalStyles.bottomSheetScrollView}
+              contentContainerStyle={globalStyles.bottomSheetScrollContent}
               showsVerticalScrollIndicator={false}
               keyboardShouldPersistTaps="handled"
             >
-              <View style={styles.formContainer} key={formKey}>
+              <View style={globalStyles.bottomSheetFormContainer} key={formKey}>
                 <View
-                  style={styles.inputContainer}
+                  style={globalStyles.bottomSheetInputContainer}
                   pointerEvents={initialAgentName ? "none" : "auto"}
                 >
                   <Input
@@ -275,11 +260,11 @@ const AddAgentBottomSheet: React.FC<AddAgentBottomSheetProps> = ({
                 </View>
 
                 <View
-                  style={styles.inputContainer}
+                  style={globalStyles.bottomSheetInputContainer}
                   pointerEvents={initialAgentId ? "none" : "auto"}
                 >
                   {isValidatingAgentId && (
-                    <View style={styles.loadingContainer}>
+                    <View style={globalStyles.bottomSheetLoadingContainer}>
                       <ActivityIndicator
                         size="small"
                         color={tokens.colors.primary}
@@ -341,21 +326,21 @@ const AddAgentBottomSheet: React.FC<AddAgentBottomSheetProps> = ({
             </ScrollView>
 
             {/* Buttons */}
-            <View style={styles.buttonContainer}>
+            <View style={globalStyles.bottomSheetButtonContainer}>
               <TouchableOpacity
-                style={[styles.button, styles.cancelButton]}
+                style={[globalStyles.bottomSheetButton, globalStyles.bottomSheetCancelButton]}
                 onPress={onClose}
                 activeOpacity={0.7}
               >
-                <Text style={styles.cancelButtonText}>
+                <Text style={globalStyles.bottomSheetCancelButtonText}>
                   {t("common.cancel")}
                 </Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[
-                  styles.button,
-                  styles.saveButton,
-                  isSaveDisabled && styles.saveButtonDisabled,
+                  globalStyles.bottomSheetButton,
+                  globalStyles.bottomSheetSaveButton,
+                  isSaveDisabled && globalStyles.bottomSheetSaveButtonDisabled,
                 ]}
                 onPress={handleSave}
                 disabled={isSaveDisabled}
@@ -366,8 +351,8 @@ const AddAgentBottomSheet: React.FC<AddAgentBottomSheetProps> = ({
                 ) : (
                   <Text
                     style={[
-                      styles.saveButtonText,
-                      isSaveDisabled && styles.saveButtonTextDisabled,
+                      globalStyles.bottomSheetSaveButtonText,
+                      isSaveDisabled && globalStyles.bottomSheetSaveButtonTextDisabled,
                     ]}
                   >
                     {t("common.save")}
@@ -377,7 +362,7 @@ const AddAgentBottomSheet: React.FC<AddAgentBottomSheetProps> = ({
             </View>
 
             {/* Bottom safe area */}
-            <View style={styles.bottomSafeArea} />
+            <View style={globalStyles.bottomSheetBottomSafeArea} />
           </Pressable>
         </KeyboardAvoidingView>
       </Pressable>
@@ -385,152 +370,5 @@ const AddAgentBottomSheet: React.FC<AddAgentBottomSheetProps> = ({
   );
 };
 
-const styles = StyleSheet.create({
-  backdrop: {
-    flex: 1,
-    backgroundColor: "rgba(0, 0, 0, 0.5)",
-    justifyContent: "flex-end",
-  },
-  keyboardAvoidingView: {
-    flex: 1,
-    justifyContent: "flex-end",
-  },
-  content: {
-    backgroundColor: tokens.colors.white,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    paddingTop: 12,
-    maxHeight: "80%",
-    minHeight: 300,
-  },
-  handle: {
-    width: 40,
-    height: 4,
-    backgroundColor: tokens.colors.bg2,
-    borderRadius: 2,
-    alignSelf: "center",
-    marginBottom: 16,
-  },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 20,
-    paddingBottom: 16,
-  },
-  errorBanner: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: tokens.colors.bg1,
-    marginHorizontal: 20,
-    marginBottom: 16,
-    padding: tokens.spacing._10,
-    borderRadius: tokens.radius.sm,
-    borderLeftWidth: 4,
-    borderLeftColor: tokens.colors.red,
-    gap: tokens.spacing._10,
-  },
-  errorBannerText: {
-    flex: 1,
-    fontSize: tokens.fontSize.sm,
-    fontFamily: tokens.fonts.medium,
-    color: tokens.colors.red,
-  },
-  title: {
-    fontSize: tokens.fontSize.lg,
-    fontFamily: tokens.fonts.medium,
-    color: tokens.colors.text_primary,
-    flex: 1,
-  },
-  closeButton: {
-    padding: 4,
-  },
-  scrollView: {
-    maxHeight: 400,
-  },
-  scrollContent: {
-    paddingTop: 10,
-  },
-  formContainer: {
-    paddingHorizontal: 20,
-    paddingBottom: 20,
-  },
-  inputContainer: {
-    marginBottom: tokens.spacing._10,
-    position: "relative",
-  },
-  loadingContainer: {
-    position: "absolute",
-    right: tokens.spacing._15,
-    top: tokens.spacing._15,
-    zIndex: 10,
-  },
-  label: {
-    fontSize: tokens.fontSize.md,
-    fontFamily: tokens.fonts.medium,
-    color: tokens.colors.text_primary,
-    marginBottom: 8,
-  },
-  buttonContainer: {
-    flexDirection: "row",
-    paddingHorizontal: 20,
-    paddingBottom: 20,
-    gap: tokens.spacing._10,
-    justifyContent: "flex-end",
-    alignItems: "center",
-  },
-  button: {
-    borderRadius: tokens.radius.md,
-    paddingVertical: tokens.spacing._10,
-    paddingHorizontal: tokens.spacing._20,
-    alignItems: "center",
-    justifyContent: "center",
-    minHeight: 44,
-    minWidth: 100,
-  },
-  cancelButton: {
-    backgroundColor: "transparent",
-    borderWidth: 1.5,
-    borderColor: tokens.colors.bg3,
-  },
-  cancelButtonText: {
-    color: tokens.colors.text_primary,
-    fontSize: tokens.fontSize.md,
-    fontFamily: tokens.fonts.medium,
-    fontWeight: "600",
-  },
-  saveButton: {
-    backgroundColor: tokens.colors.primary,
-    borderWidth: 1.5,
-    borderColor: tokens.colors.primary,
-    shadowColor: tokens.colors.primary,
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  saveButtonDisabled: {
-    backgroundColor: tokens.colors.bg3,
-    borderColor: tokens.colors.bg3,
-    shadowOpacity: 0,
-    elevation: 0,
-    opacity: 0.6,
-  },
-  saveButtonText: {
-    color: tokens.colors.white,
-    fontSize: tokens.fontSize.md,
-    fontFamily: tokens.fonts.medium,
-    fontWeight: "600",
-  },
-  saveButtonTextDisabled: {
-    color: tokens.colors.text_secondary,
-  },
-  bottomSafeArea: {
-    height: 34, // Safe area for devices with home indicator
-  },
-});
 
 export default AddAgentBottomSheet;

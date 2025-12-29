@@ -7,8 +7,7 @@
 import { CDF } from "@espressif/rainmaker-base-cdf";
 import { ConnectedConnector } from "@/utils/apiHelper";
 import {
-  connectToolWithTokens,
-  getSelectedAgentId,
+  connectToolWithTokens
 } from "@/utils/agent";
 import { RAINMAKER_MCP_CONNECTOR_URL } from "@/config/agent.config";
 

@@ -5,7 +5,8 @@
  */
 
 // React Native Imports
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
+import { useFocusEffect } from "expo-router";
 import {
   View,
   Text,
@@ -15,6 +16,7 @@ import {
   Dimensions,
   Vibration,
   ActivityIndicator,
+  Image,
 } from "react-native";
 // Expo Imports
 import { CameraView, useCameraPermissions } from "expo-camera";
@@ -36,7 +38,7 @@ import { useDevicePermissions } from "@/hooks/useDevicePermissions";
 import { QrCode, Camera, CameraOff, RotateCcw } from "lucide-react-native";
 
 // Components
-import { Header, ScreenWrapper, BluetoothDisabledScreen } from "@/components";
+import { Header, ScreenWrapper, BluetoothDisabledScreen, BLEPermissionScreen } from "@/components";
 
 // adapters
 import { provisionAdapter } from "@/adaptors/implementations/ESPProvAdapter";
@@ -45,6 +47,7 @@ import { provisionAdapter } from "@/adaptors/implementations/ESPProvAdapter";
 import { testProps } from "@/utils/testProps";
 import { useToast } from "@/hooks/useToast";
 import { parseRMakerCapabilities } from "@/utils/rmakerCapabilities";
+import { getMissingPermission, getQRScanErrorType } from "@/utils/device";
 
 // Constants
 import {
@@ -109,19 +112,57 @@ const AnimatedGuide = ({ scanned }: { scanned: boolean }) => {
  */
 const ScannerOverlay = ({ isProcessing, scanned }: { isProcessing: boolean, scanned: boolean }) => {
   const [animation] = useState(new Animated.Value(0));
+  const animationRef = useRef<ReturnType<typeof Animated.loop> | null>(null);
   const { t } = useTranslation();
 
-  useEffect(() => {
-    Animated.loop(
+  // Start animation loop
+  const startAnimation = useCallback(() => {
+    // Stop any existing animation
+    if (animationRef.current) {
+      animationRef.current.stop();
+    }
+    // Reset animation value
+    animation.setValue(0);
+    // Start new animation loop - up to down, then down to up
+    animationRef.current = Animated.loop(
       Animated.sequence([
+        // Move from top to bottom (0 to 1)
         Animated.timing(animation, {
           toValue: 1,
           duration: 2000,
           useNativeDriver: true,
         }),
+        // Move from bottom to top (1 to 0)
+        Animated.timing(animation, {
+          toValue: 0,
+          duration: 2000,
+          useNativeDriver: true,
+        }),
       ])
-    ).start();
-  }, []);
+    );
+    animationRef.current.start();
+  }, [animation]);
+
+  // Start animation on mount
+  useEffect(() => {
+    startAnimation();
+    return () => {
+      // Cleanup animation on unmount
+      if (animationRef.current) {
+        animationRef.current.stop();
+      }
+    };
+  }, [startAnimation]);
+
+  // Restart animation when scanning restarts (scanned changes from true to false)
+  const prevScannedRef = useRef(scanned);
+  useEffect(() => {
+    // If scanned changed from true to false, restart animation
+    if (prevScannedRef.current === true && scanned === false) {
+      startAnimation();
+    }
+    prevScannedRef.current = scanned;
+  }, [scanned, startAnimation]);
 
   return (
     <View {...testProps("view_scanner_overlay")} style={globalStyles.scannerOverlay}>
@@ -142,7 +183,7 @@ const ScannerOverlay = ({ isProcessing, scanned }: { isProcessing: boolean, scan
                 right: 0,
                 bottom: 0,
               }}
-              size={150}
+              size={70}
               color="#1875D6"
             />
           ) : (
@@ -174,9 +215,9 @@ const ScannerOverlay = ({ isProcessing, scanned }: { isProcessing: boolean, scan
 };
 
 /**
- * PermissionScreen
+ * CameraPermissionScreen
  */
-const PermissionScreen = ({
+const CameraPermissionScreen = ({
   status,
   onRequestPermission,
 }: {
@@ -239,6 +280,7 @@ const PermissionScreen = ({
   );
 };
 
+
 /**
  * ScanQR
  */
@@ -249,8 +291,12 @@ const ScanQR = () => {
   const { t } = useTranslation();
   const [permission, requestPermission] = useCameraPermissions();
   const {
+    bleGranted,
+    locationGranted,
     bluetoothEnabled,
     isChecking: isCheckingBluetooth,
+    allPermissionsGranted,
+    requestPermissions: requestBluetoothPermissions,
     checkPermissions: checkBluetoothPermissions,
   } = useDevicePermissions();
   const [scanned, setScanned] = useState(false);
@@ -259,6 +305,9 @@ const ScanQR = () => {
     CAMERA_TYPE_BACK
   );
   const [isProcessing, setIsProcessing] = useState(false);
+  const [showScanAgain, setShowScanAgain] = useState(false);
+  const [isCameraActive, setIsCameraActive] = useState(true);
+  const [previewImageUri, setPreviewImageUri] = useState<string | null>(null);
   const cameraRef = useRef<CameraView>(null);
 
   const toggleCamera = () => {
@@ -268,12 +317,64 @@ const ScanQR = () => {
   };
 
   /**
+   * Capture preview image before closing camera
+   */
+  const capturePreviewImage = useCallback(async () => {
+    try {
+      const camera = cameraRef.current;
+      if (camera && isCameraActive) {
+        const photo = await camera.takePictureAsync({
+          quality: 0.5, // Lower quality for faster capture
+          skipProcessing: true, // Skip processing for faster capture
+        });
+        if (photo?.uri) {
+          setPreviewImageUri(photo.uri);
+        }
+      }
+    } catch (error) {
+      console.error("[QR Scan] Error capturing preview image:", error);
+      // If capture fails, just continue without preview image
+    }
+  }, [isCameraActive]);
+
+  /**
+   * Close camera with preview image capture
+   */
+  const closeCamera = useCallback(async () => {
+    // Capture preview image before closing
+    await capturePreviewImage();
+    // Small delay to ensure image is captured before closing
+    setTimeout(() => {
+      setIsCameraActive(false);
+    }, 100);
+  }, [capturePreviewImage]);
+
+  /**
    * Reset the scanning state and UI
    */
   const resetScanState = () => {
     setIsProcessing(false);
     setScanned(false);
     scannedRef.current = false;
+    // Show scan again button after reset
+    setShowScanAgain(true);
+    // Clear preview image and re-enable camera
+    setPreviewImageUri(null);
+    setIsCameraActive(true);
+  };
+
+  /**
+   * Handle scan again - reset state and disconnect device if connected
+   */
+  const handleScanAgain = () => {
+    resetScanState();
+    setShowScanAgain(false);
+    const device = store.nodeStore.connectedDevice;
+
+    if (device) {
+      device.disconnect();
+      store.nodeStore.connectedDevice = null;
+    }
   };
 
   /**
@@ -283,7 +384,6 @@ const ScanQR = () => {
     toast.showError(t("device.scan.qr.invalidQRCode"));
     setTimeout(() => {
       resetScanState();
-      cameraRef.current?.resumePreview();
     }, 2000);
   };
 
@@ -339,6 +439,8 @@ const ScanQR = () => {
       }
     } else if (rmakerCaps.requiresPop && !pop) {
       // If POP is required but not provided in QR code, navigate to POP screen
+      // Close camera with preview before navigation
+      await closeCamera();
       router.push({
         pathname: "/(device)/POP",
         params: {
@@ -362,14 +464,97 @@ const ScanQR = () => {
     // If device supports claiming, navigate to Claiming screen
     // This is determined by rmaker.cap array containing "claim"
     if (rmakerCaps.hasClaim) {
+      // Close camera with preview before navigation
+      await closeCamera();
       router.push({
         pathname: "/(device)/Claiming",
       });
       return;
     }
 
+    // Close camera with preview before navigation to WiFi screen
+    await closeCamera();
     navigateToWifi();
   };
+
+
+  /**
+   * Utility function to handle QR scan errors
+   * Uses a switch statement to categorize and handle different error types
+   *
+   * @param errorMessage - The error message to analyze
+   * @param t - Translation function
+   * @param toast - Toast notification utility
+   * @param resetScanState - Function to reset scan state
+   */
+  const handleQRScanError = useCallback(
+    (
+      errorMessage: string,
+      t: (key: string, params?: Record<string, string>) => string,
+      toast: ReturnType<typeof useToast>,
+      resetScanState: () => void
+    ) => {
+      // Determine error type based on error message content
+      const errorType = getQRScanErrorType(errorMessage);
+
+      // Handle error based on type using switch statement
+      switch (errorType) {
+        case "permission": {
+          // Request permissions using hook method
+          requestBluetoothPermissions();
+          toast.showError(t("device.scan.qr.bluetoothPermissionRequired"));
+          // Wait a bit then check if permission was granted and restart scan
+          setTimeout(async () => {
+            await checkBluetoothPermissions();
+            // Reset state regardless of permission status to show scan again button
+            resetScanState();
+          }, 1500);
+          break;
+        }
+        case "bluetoothDisabled": {
+          // Show Bluetooth disabled error
+          toast.showError(t("device.scan.qr.bluetoothDisabled"));
+          resetScanState();
+          break;
+        }
+        case "connection": {
+          // Show connection error
+          toast.showError(t("device.scan.qr.unableToConnectToDevice"));
+          resetScanState();
+          break;
+        }
+        case "session": {
+          // Show session initialization error
+          toast.showError(t("device.scan.qr.sessionInitFailed"));
+          resetScanState();
+          break;
+        }
+        case "generic":
+        default: {
+          // Generic error - but first check if BLE is actually disabled or permissions missing
+          // This handles cases where error message doesn't clearly indicate BLE issue
+          (async () => {
+            await checkBluetoothPermissions();
+            // Wait a bit for state to update, then check hook values
+            setTimeout(() => {
+              // Use hook values after state update
+              // Note: These values might be slightly stale, but will be updated on next render
+              if (bluetoothEnabled === false) {
+                toast.showError(t("device.scan.qr.bluetoothDisabled"));
+              } else if (!allPermissionsGranted) {
+                toast.showError(t("device.scan.qr.bluetoothPermissionRequired"));
+              } else {
+                toast.showError(t("device.scan.qr.invalidQRCode"));
+              }
+              resetScanState();
+            }, 200);
+          })();
+          break;
+        }
+      }
+    },
+    [checkBluetoothPermissions, requestBluetoothPermissions, bluetoothEnabled, allPermissionsGranted]
+  );
 
   /**
    * Handle Matter QR code commissioning
@@ -384,6 +569,8 @@ const ScanQR = () => {
         return resetScanState();
       }
 
+      // Close camera with preview before navigation
+      await closeCamera();
       // Navigate to Fabric Selection with QR data
       router.push({
         pathname: "/(matter)/FabricSelection",
@@ -392,7 +579,9 @@ const ScanQR = () => {
     } catch (error: unknown) {
       const errorMessage =
         error instanceof Error ? error.message : "Unknown error";
-      toast.showError(`Matter commissioning failed: ${errorMessage}`);
+      toast.showError(
+        t("device.scan.qr.matterCommissioningFailed", { error: errorMessage })
+      );
       resetScanState();
     }
   };
@@ -401,6 +590,25 @@ const ScanQR = () => {
    * Handle device provisioning process
    */
   const handleDeviceProvision = async (qrData: any) => {
+    // Check BLE permissions and state before attempting connection
+    // Refresh permissions state to ensure we have the latest values
+    await checkBluetoothPermissions();
+    
+    // If BLE permissions are not granted, show error and return
+    if (!allPermissionsGranted) {
+      requestBluetoothPermissions();
+      toast.showError(t("device.scan.qr.bluetoothPermissionRequired"));
+      resetScanState();
+      return;
+    }
+
+    // If Bluetooth is disabled, show error and return
+    if (bluetoothEnabled === false) {
+      toast.showError(t("device.scan.qr.bluetoothDisabled"));
+      resetScanState();
+      return;
+    }
+
     // Extract and set default values
     let { security = 2, name, pop, transport } = qrData;
 
@@ -424,7 +632,12 @@ const ScanQR = () => {
       return toast.showError(t("device.scan.qr.unableToConnectToDevice"));
     }
 
-    // Store connected device
+    // Copy advertisement data from deviceInterface to espDevice for AI Agent detection
+    if (deviceInterface.advertisementData) {
+      (espDevice as any).advertisementData = deviceInterface.advertisementData;
+    }
+
+    // Store connected device (with advertisement data for AI Agent detection on Wifi screen)
     store.nodeStore.connectedDevice = espDevice;
 
     // Handle QR provisioning (same flow for both iOS and Android)
@@ -449,7 +662,8 @@ const ScanQR = () => {
     // Check if it's a Matter QR code
     if (result.data.startsWith(MATTER_QR_CODE_PREFIX)) {
       setIsProcessing(true);
-      await cameraRef.current?.pausePreview();
+      // Close camera with preview when processing
+      await closeCamera();
       Vibration.vibrate(200);
 
       // Process Matter QR code with delay for better UX
@@ -476,7 +690,8 @@ const ScanQR = () => {
 
     // Start processing
     setIsProcessing(true);
-    await cameraRef.current?.pausePreview();
+    // Close camera with preview when processing
+    await closeCamera();
     Vibration.vibrate(200);
     // Process with delay for better UX
     setTimeout(async () => {
@@ -485,25 +700,11 @@ const ScanQR = () => {
       } catch (error: any) {
         console.error("[QR Scan] Provisioning error:", error);
         const errorMessage = error?.message || "Unknown error";
-        // Show specific error message if available, otherwise show generic error
-        if (errorMessage.includes("DEVICE_NOT_FOUND") || errorMessage.includes("connection")) {
-          toast.showError(t("device.scan.qr.unableToConnectToDevice"));
-        } else if (errorMessage.includes("session") || errorMessage.includes("SESSION")) {
-          toast.showError(t("device.scan.qr.sessionInitFailed"));
-        } else {
-          toast.showError(t("device.scan.qr.invalidQRCode"));
-        }
-      } finally {
-        resetScanState();
+
+        // Use utility function to handle error
+        handleQRScanError(errorMessage, t, toast, resetScanState);
       }
     }, 1000);
-  };
-
-  const handleScanAgain = () => {
-    setScanned(false);
-    cameraRef.current?.resumePreview();
-    setIsProcessing(false);
-    scannedRef.current = false;
   };
 
   // Re-check Bluetooth state periodically when it's disabled
@@ -516,6 +717,29 @@ const ScanQR = () => {
     }
   }, [bluetoothEnabled, isCheckingBluetooth]);
 
+  // Reset scan state and disconnect device when screen comes into focus
+  // Close camera when screen loses focus (navigating away)
+  useFocusEffect(
+    useCallback(() => {
+      // When screen comes into focus, reset and enable camera
+      handleScanAgain();
+      
+      // Cleanup: Close camera with preview when screen loses focus (navigating away)
+      return () => {
+        // Close camera with preview when navigating away from this screen
+        closeCamera().catch(console.error);
+      };
+    }, [])
+  );
+
+  // Additional cleanup on component unmount
+  useEffect(() => {
+    return () => {
+      // Ensure camera is closed when component unmounts
+      closeCamera().catch(console.error);
+    };
+  }, []);
+
   return (
     <ScreenWrapper style={{ ...globalStyles.screenWrapper, padding: 0 }} qaId="screen_wrapper_scan_qr">
       <Header
@@ -527,28 +751,45 @@ const ScanQR = () => {
       <View {...testProps("view_scan_qr_container")} style={styles.container}>
         <View {...testProps("view_scan_qr_content")} style={styles.content}>
           {!permission ? (
-            <PermissionScreen
+            <CameraPermissionScreen
               status="requesting"
               onRequestPermission={requestPermission}
             />
           ) : !permission.granted ? (
-            <PermissionScreen
+            <CameraPermissionScreen
               status="denied"
               onRequestPermission={requestPermission}
+            />
+          ) : !allPermissionsGranted ? (
+            <BLEPermissionScreen
+              status={isCheckingBluetooth ? "requesting" : "denied"}
+              missingPermission={getMissingPermission(bleGranted, locationGranted)}
+              testIdPrefix="scan_qr"
             />
           ) : bluetoothEnabled === false && !isCheckingBluetooth ? (
             <BluetoothDisabledScreen />
           ) : (
             <View style={globalStyles.scannerContainer}>
-              <CameraView
-                ref={cameraRef}
-                style={globalStyles.scanner}
-                facing={cameraType}
-                barcodeScannerSettings={{
-                  barcodeTypes: ["qr"],
-                }}
-                onBarcodeScanned={handleBarCodeScanned}
-              />
+              {/* Show preview image as background when camera is closed */}
+              {!isCameraActive && previewImageUri && (
+                <Image
+                  source={{ uri: previewImageUri }}
+                  style={[globalStyles.scanner, { position: "absolute" }]}
+                  resizeMode="cover"
+                />
+              )}
+              {/* Show camera when active */}
+              {isCameraActive && (
+                <CameraView
+                  ref={cameraRef}
+                  style={globalStyles.scanner}
+                  facing={cameraType}
+                  barcodeScannerSettings={{
+                    barcodeTypes: ["qr"],
+                  }}
+                  onBarcodeScanned={handleBarCodeScanned}
+                />
+              )}
               <ScannerOverlay isProcessing={isProcessing} scanned={scanned} />
 
               <View {...testProps("view_camera_controls")} style={globalStyles.cameraControlsContainer}>
@@ -561,7 +802,7 @@ const ScanQR = () => {
                   <RotateCcw size={24} color={tokens.colors.white} />
                 </TouchableOpacity>
 
-                {scanned && (
+                {(scanned || showScanAgain) && (
                   <TouchableOpacity
                     {...testProps("button_rescan")}
                     style={[
@@ -571,6 +812,7 @@ const ScanQR = () => {
                       isProcessing && styles.buttonDisabled,
                     ]}
                     onPress={handleScanAgain}
+                    disabled={isProcessing}
                   >
                     <QrCode
                       {...testProps("icon_button")}
@@ -588,6 +830,7 @@ const ScanQR = () => {
           )}
         </View>
       </View>
+
     </ScreenWrapper>
   );
 };

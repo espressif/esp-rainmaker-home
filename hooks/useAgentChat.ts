@@ -22,7 +22,14 @@ import {
   type WebSocketMessage,
   type MessageDisplayConfig,
 } from "@/utils/agent";
-import { getConnectedConnectors, ConnectedConnector, getUserProfile } from "@/utils/apiHelper";
+import {
+  getConnectedConnectors,
+  ConnectedConnector,
+  getUserProfile,
+  listConversations,
+  deleteConversationByAgent,
+  type ConversationListItem,
+} from "@/utils/apiHelper";
 import {
   checkRequiredConnectors,
   autoConnectRainmakerMCP,
@@ -94,6 +101,10 @@ export const useAgentChat = (onTimeout?: () => void) => {
   const [thinkingMessages, setThinkingMessages] = useState<string[]>([]);
   const [isThinking, setIsThinking] = useState(false);
   const [isConversationDone, setIsConversationDone] = useState(false);
+
+  // ==================== Conversations State ====================
+  const [conversations, setConversations] = useState<ConversationListItem[]>([]);
+  const [isLoadingConversations, setIsLoadingConversations] = useState(false);
 
   // ==================== WebSocket State ====================
   const [isConnected, setIsConnected] = useState(false);
@@ -1149,6 +1160,61 @@ export const useAgentChat = (onTimeout?: () => void) => {
     }
   }, []);
 
+  // ==================== Conversations Functions ====================
+  /**
+   * Loads conversations for the given agent.
+   *
+   * @description Fetches the list of conversations for the specified agent ID.
+   * Updates internal state and returns the list. On error, returns an empty array.
+   *
+   * @param {string} agentId - The agent ID to load conversations for.
+   * @returns {Promise<ConversationListItem[]>} Promise that resolves with the list of conversations.
+   */
+  const loadConversationsForAgent = useCallback(
+    async (agentId: string): Promise<ConversationListItem[]> => {
+      if (!agentId) {
+        return [];
+      }
+      try {
+        setIsLoadingConversations(true);
+        const items = await listConversations(agentId);
+        setConversations(items);
+        return items;
+      } catch (error) {
+        console.error("Failed to load conversations for agent:", error);
+        return [];
+      } finally {
+        setIsLoadingConversations(false);
+      }
+    },
+    []
+  );
+
+  /**
+   * Deletes a conversation for the given agent.
+   *
+   * @param {string} agentId - The agent ID.
+   * @param {string} conversationId - The conversation ID to delete.
+   * @returns {Promise<void>} Promise that resolves when deletion completes.
+   */
+  const deleteConversationForAgent = useCallback(
+    async (agentId: string, conversationId: string): Promise<void> => {
+      if (!agentId || !conversationId) {
+        return;
+      }
+      try {
+        await deleteConversationByAgent(agentId, conversationId);
+        setConversations((prev) =>
+          prev.filter((c) => c.conversationId !== conversationId)
+        );
+      } catch (error) {
+        console.error("Failed to delete conversation:", error);
+        throw error;
+      }
+    },
+    []
+  );
+
   return {
     // Agent state
     isInitializing,
@@ -1211,5 +1277,11 @@ export const useAgentChat = (onTimeout?: () => void) => {
     handleScrollEndDrag,
     handleMomentumScrollEnd,
     handleContentSizeChange,
+
+    // Conversations state
+    conversations,
+    isLoadingConversations,
+    loadConversationsForAgent,
+    deleteConversationForAgent,
   };
 };

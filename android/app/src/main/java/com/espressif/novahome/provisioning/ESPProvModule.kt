@@ -345,100 +345,72 @@
  
                  val resultArray = Arguments.createArray()
  
-                 bleDevices.values.forEach { espDevice ->
-                     // Check if device has manufacturer data before including it in results
-                     val bluetoothDevice = espDevice.bluetoothDevice
- 
-                     if (bluetoothDevice != null) {
-                         // Find the corresponding ScanResult for this device
-                         deviceList.find { it.bluetoothDevice.address == bluetoothDevice.address }
-                             ?.let { bleDevice ->
-                                 bleDevice.scanResult?.scanRecord?.let { scanRecord ->
-                                     Log.d(
-                                         TAG,
-                                         "Processing advertisement data for device: ${espDevice.deviceName}"
-                                     )
- 
-                                     // Check for manufacturer data specifically (like iOS kCBAdvDataManufacturerData)
-                                     val manufacturerDataMap = scanRecord.manufacturerSpecificData
- 
-                                     if (manufacturerDataMap != null && manufacturerDataMap.size() > 0) {
-                                         val manufacturerData = manufacturerDataMap.valueAt(0)
-                                         if (manufacturerData != null && manufacturerData.isNotEmpty()) {
-                                             // Device has manufacturer data, include it in results
- 
-                                             val resultMap = Arguments.createMap()
-                                             resultMap.putString("name", espDevice.deviceName)
-                                             resultMap.putString(
-                                                 "transport",
-                                                 espDevice.transportType.toString()
-                                             )
-                                             resultMap.putInt(
-                                                 "security",
-                                                 espDevice.securityType.ordinal
-                                             )
- 
-                                             val advertisementData = Arguments.createMap()
-                                             val manufacturerDataArray = Arguments.createArray()
- 
-                                             // Convert byte array to array of integers (similar to iOS Array(manufacturerData))
-                                             val dataBytes = mutableListOf<Int>()
-                                             manufacturerData.forEach { byte ->
-                                                 val intValue = byte.toInt() and 0xFF
-                                                 manufacturerDataArray.pushInt(intValue)
-                                                 dataBytes.add(intValue)
-                                             }
- 
-                                             advertisementData.putArray(
-                                                 "kCBAdvDataManufacturerData",
-                                                 manufacturerDataArray
-                                             )
- 
-                                             // Try to get other advertising data if available (API level dependent)
-                                             try {
-                                                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                                                     // Use getAdvertisingDataMap() for Android 13+ (API 33+)
-                                                     val advertisingDataMap =
-                                                         scanRecord.advertisingDataMap
- 
-                                                     advertisingDataMap.forEach { (key, value) ->
-                                                         // Convert other data types to appropriate format
-                                                         if (value is ByteArray && value.isNotEmpty()) {
-                                                             val dataArray = Arguments.createArray()
-                                                             val otherDataBytes =
-                                                                 mutableListOf<Int>()
-                                                             value.forEach { byte ->
-                                                                 val intValue = byte.toInt() and 0xFF
-                                                                 dataArray.pushInt(intValue)
-                                                                 otherDataBytes.add(intValue)
-                                                             }
-                                                             advertisementData.putArray(
-                                                                 "key_$key",
-                                                                 dataArray
-                                                             )
-                                                         }
-                                                     }
-                                                 }
-                                             } catch (e: Exception) {
-                                                 Log.w(
-                                                     TAG,
-                                                     "Error accessing advertisingDataMap: ${e.message}"
-                                                 )
-                                             }
- 
-                                             resultMap.putMap("advertisementData", advertisementData)
-                                             resultArray.pushMap(resultMap)
-                                         }
-                                     }
-                                 }
-                             }
-                     }
-                 }
- 
-                 promise?.resolve(resultArray)
-             }
- 
-             override fun onFailure(e: Exception?) {
+                bleDevices.values.forEach { espDevice ->
+                    val bluetoothDevice = espDevice.bluetoothDevice
+
+                    if (bluetoothDevice != null) {
+                        deviceList.find { it.bluetoothDevice.address == bluetoothDevice.address }
+                            ?.let { bleDevice ->
+                                bleDevice.scanResult?.scanRecord?.let { scanRecord ->
+                                    val manufacturerDataMap = scanRecord.manufacturerSpecificData
+
+                                    if (manufacturerDataMap != null && manufacturerDataMap.size() > 0) {
+                                        val manufacturerData = manufacturerDataMap.valueAt(0)
+                                        if (manufacturerData != null && manufacturerData.isNotEmpty()) {
+                                            val resultMap = Arguments.createMap()
+                                            resultMap.putString("name", espDevice.deviceName)
+                                            resultMap.putString(
+                                                "transport",
+                                                espDevice.transportType.toString()
+                                            )
+                                            resultMap.putInt(
+                                                "security",
+                                                espDevice.securityType.ordinal
+                                            )
+
+                                            val advertisementData = Arguments.createMap()
+                                            val manufacturerDataArray = Arguments.createArray()
+
+                                            // Convert byte array to integers
+                                            manufacturerData.forEach { byte ->
+                                                manufacturerDataArray.pushInt(byte.toInt() and 0xFF)
+                                            }
+
+                                            advertisementData.putArray(
+                                                "kCBAdvDataManufacturerData",
+                                                manufacturerDataArray
+                                            )
+
+                                            // Additional advertising data for API 33+
+                                            try {
+                                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                                                    scanRecord.advertisingDataMap.forEach { (key, value) ->
+                                                        if (value is ByteArray && value.isNotEmpty()) {
+                                                            val dataArray = Arguments.createArray()
+                                                            value.forEach { byte ->
+                                                                dataArray.pushInt(byte.toInt() and 0xFF)
+                                                            }
+                                                            advertisementData.putArray("key_$key", dataArray)
+                                                        }
+                                                    }
+                                                }
+                                            } catch (e: Exception) {
+                                                Log.w(TAG, "Error accessing advertisingDataMap: ${e.message}")
+                                            }
+
+                                            resultMap.putMap("advertisementData", advertisementData)
+                                            resultArray.pushMap(resultMap)
+                                        }
+                                    }
+                                }
+                            }
+                    }
+                }
+
+               promise?.resolve(resultArray)
+            }
+
+            override fun onFailure(e: Exception?) {
                  if (e != null) {
                      promise?.reject(e)
                  }
@@ -1200,66 +1172,68 @@
                              )
                          }
  
-                         if (scannedDeviceName == deviceName) {
-                             espProvisionManager?.stopBleScan()
-                             deviceList.add(BleDevice(scannedDeviceName, device, null))
- 
-                             val uuid = bluetoothDevices[device]
-                             if (uuid.isNullOrEmpty()) {
-                                 promise.reject("UUID_NOT_FOUND", "Service UUID not found")
-                                 return
-                             }
- 
-                             val espDevice = ESPDevice(
-                                 reactApplicationContext,
-                                 ESPConstants.TransportType.TRANSPORT_BLE,
-                                 securityType
-                             )
-                             espDevice.bluetoothDevice = device
-                             espDevice.deviceName = deviceName
-                             espDevice.primaryServiceUuid = uuid
-                             currentESPDevice = espDevice
- 
-                             val bleDevice =
-                                 deviceList.find { it.deviceName == espDevice.deviceName }
- 
-                             if (bleDevice == null) {
-                                 promise.reject(
-                                     "DEVICE_NOT_FOUND",
-                                     "Device not found in scanned list"
-                                 )
-                                 return
-                             }
- 
-                             if (uuid.isNullOrEmpty()) {
-                                 promise.resolve(1)
-                                 return
-                             }
- 
-                             // Create ESP device without connection
-                             espProvisionManager?.let { provisionManager ->
-                                 val espDevice = provisionManager.createESPDevice(
-                                     ESPConstants.TransportType.TRANSPORT_BLE,
-                                     ESPConstants.SecurityType.SECURITY_2
-                                 )
- 
-                                 cleanup()
- 
-                                 if (espDevice != null) {
-                                     espDevice.bluetoothDevice = bleDevice.bluetoothDevice
-                                     espDevice.deviceName = deviceName
-                                     espDevice.primaryServiceUuid = uuid
-                                     promise.resolve(createDeviceMap(espDevice))
-                                 } else {
-                                     Log.e(TAG, "Failed to create ESPDevice instance for BLE")
-                                     promise.reject(
-                                         "DEVICE_CREATION_FAILED",
-                                         "Failed to create ESPDevice"
-                                     )
-                                 }
-                             }
-                         }
-                     }
+                        if (scannedDeviceName == deviceName) {
+                            espProvisionManager?.stopBleScan()
+                            // Store scanResult for advertisement data
+                            deviceList.add(BleDevice(scannedDeviceName, device, scanResult))
+
+                            val uuid = bluetoothDevices[device]
+                            if (uuid.isNullOrEmpty()) {
+                                promise.reject("UUID_NOT_FOUND", "Service UUID not found")
+                                return
+                            }
+
+                            val espDevice = ESPDevice(
+                                reactApplicationContext,
+                                ESPConstants.TransportType.TRANSPORT_BLE,
+                                securityType
+                            )
+                            espDevice.bluetoothDevice = device
+                            espDevice.deviceName = deviceName
+                            espDevice.primaryServiceUuid = uuid
+                            currentESPDevice = espDevice
+
+                            val bleDevice =
+                                deviceList.find { it.deviceName == espDevice.deviceName }
+
+                            if (bleDevice == null) {
+                                promise.reject(
+                                    "DEVICE_NOT_FOUND",
+                                    "Device not found in scanned list"
+                                )
+                                return
+                            }
+
+                            if (uuid.isNullOrEmpty()) {
+                                promise.resolve(1)
+                                return
+                            }
+
+                            // Create ESP device without connection
+                            espProvisionManager?.let { provisionManager ->
+                                val espDevice = provisionManager.createESPDevice(
+                                    ESPConstants.TransportType.TRANSPORT_BLE,
+                                    ESPConstants.SecurityType.SECURITY_2
+                                )
+
+                                cleanup()
+
+                                if (espDevice != null) {
+                                    espDevice.bluetoothDevice = bleDevice.bluetoothDevice
+                                    espDevice.deviceName = deviceName
+                                    espDevice.primaryServiceUuid = uuid
+                                    // Pass scanResult to include advertisement data
+                                    promise.resolve(createDeviceMap(espDevice, scanResult))
+                                } else {
+                                    Log.e(TAG, "Failed to create ESPDevice instance for BLE")
+                                    promise.reject(
+                                        "DEVICE_CREATION_FAILED",
+                                        "Failed to create ESPDevice"
+                                    )
+                                }
+                            }
+                        }
+                    }
  
                      override fun scanCompleted() {
                          // BLE scan completed
@@ -1322,21 +1296,38 @@
              promise.reject("SCAN_ERROR", e.message ?: "Error during scan")
          }
      }
- 
- 
-     /**
-      * Utility method to create a device map for sending to React Native.
-      *
-      * @param device The ESPDevice instance.
-      * @return WritableMap containing the device details.
-      */
-     private fun createDeviceMap(device: ESPDevice): WritableMap {
-         return Arguments.createMap().apply {
-             putString("name", device.deviceName)
-             putString("transport", device.transportType.name)
-             putInt("security", device.securityType.ordinal)
-         }
-     }
+
+    /**
+     * Utility method to create a device map for sending to React Native.
+     *
+     * @param device The ESPDevice instance.
+     * @param scanResult Optional ScanResult containing advertisement data.
+     * @return WritableMap containing the device details.
+     */
+    private fun createDeviceMap(device: ESPDevice, scanResult: ScanResult? = null): WritableMap {
+        return Arguments.createMap().apply {
+            putString("name", device.deviceName)
+            putString("transport", device.transportType.name)
+            putInt("security", device.securityType.ordinal)
+            
+            // Include advertisement data if available
+            scanResult?.scanRecord?.let { scanRecord ->
+                val manufacturerDataMap = scanRecord.manufacturerSpecificData
+                if (manufacturerDataMap != null && manufacturerDataMap.size() > 0) {
+                    val manufacturerData = manufacturerDataMap.valueAt(0)
+                    if (manufacturerData != null && manufacturerData.isNotEmpty()) {
+                        val advertisementData = Arguments.createMap()
+                        val manufacturerDataArray = Arguments.createArray()
+                        manufacturerData.forEach { byte ->
+                            manufacturerDataArray.pushInt(byte.toInt() and 0xFF)
+                        }
+                        advertisementData.putArray("kCBAdvDataManufacturerData", manufacturerDataArray)
+                        putMap("advertisementData", advertisementData)
+                    }
+                }
+            }
+        }
+    }
  
      data class BleDevice(
          val deviceName: String,
@@ -1344,10 +1335,39 @@
          val scanResult: ScanResult?
      )
  
-     /**
-      * Cleans up resources and unregisters event listeners.
-      */
-     fun cleanup() {
-         EventBus.getDefault().unregister(this)
-     }
- }
+    /**
+     * Disconnects the specified ESP device.
+     *
+     * @param deviceName The name of the device to disconnect.
+     */
+    @ReactMethod
+    fun disconnect(deviceName: String) {
+        val espDevice = when {
+            bleDevices.containsKey(deviceName) || deviceList.any { it.deviceName == deviceName } -> {
+                espProvisionManager?.espDevice
+            }
+
+            softAPDevices.containsKey(deviceName) -> {
+                softAPDevices[deviceName]
+            }
+
+            else -> null
+        }
+
+        if (espDevice != null) {
+            try {
+                espDevice.disconnectDevice()
+                Log.d(TAG, "Device disconnected: $deviceName")
+            } catch (e: Exception) {
+                Log.e(TAG, "Error disconnecting device: ${e.message}")
+            }
+        }
+    }
+
+    /**
+     * Cleans up resources and unregisters event listeners.
+     */
+    fun cleanup() {
+        EventBus.getDefault().unregister(this)
+    }
+}

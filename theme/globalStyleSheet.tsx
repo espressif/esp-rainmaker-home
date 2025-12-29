@@ -7,6 +7,10 @@
 import { StyleSheet } from "react-native";
 import { tokens } from "./tokens";
 import { verticalScale } from "@/utils/styling";
+import type {
+  AgentTermsBottomSheetStyles,
+  AgentConversationsSheetStyles,
+} from "@/types/global";
 
 export const globalStyles = StyleSheet.create({
   // Typography
@@ -850,6 +854,147 @@ export const globalStyles = StyleSheet.create({
   },
   drawerTextContainer: {
     flex: 1,
+  },
+
+  // Bottom Sheet Styles (reusable)
+  bottomSheetBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    justifyContent: "flex-end",
+  },
+  bottomSheetKeyboardAvoidingView: {
+    flex: 1,
+    justifyContent: "flex-end",
+  },
+  bottomSheetContent: {
+    backgroundColor: tokens.colors.white,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingTop: 12,
+    maxHeight: "80%",
+    minHeight: 300,
+  },
+  bottomSheetHandle: {
+    width: 40,
+    height: 4,
+    backgroundColor: tokens.colors.bg2,
+    borderRadius: 2,
+    alignSelf: "center",
+    marginBottom: 16,
+  },
+  bottomSheetHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 20,
+    paddingBottom: 16,
+  },
+  bottomSheetTitle: {
+    fontSize: tokens.fontSize.lg,
+    fontFamily: tokens.fonts.medium,
+    color: tokens.colors.text_primary,
+    flex: 1,
+  },
+  bottomSheetCloseButton: {
+    padding: 4,
+  },
+  bottomSheetScrollView: {
+    maxHeight: 400,
+  },
+  bottomSheetScrollContent: {
+    paddingTop: 10,
+  },
+  bottomSheetFormContainer: {
+    paddingHorizontal: 20,
+    paddingBottom: 20,
+  },
+  bottomSheetInputContainer: {
+    marginBottom: tokens.spacing._10,
+    position: "relative",
+  },
+  bottomSheetLoadingContainer: {
+    position: "absolute",
+    right: tokens.spacing._15,
+    top: tokens.spacing._15,
+    zIndex: 10,
+  },
+  bottomSheetButtonContainer: {
+    flexDirection: "row",
+    paddingHorizontal: 20,
+    paddingBottom: 20,
+    gap: tokens.spacing._10,
+    justifyContent: "flex-end",
+    alignItems: "center",
+  },
+  bottomSheetButton: {
+    borderRadius: tokens.radius.md,
+    paddingVertical: tokens.spacing._10,
+    paddingHorizontal: tokens.spacing._20,
+    alignItems: "center",
+    justifyContent: "center",
+    minHeight: 44,
+    minWidth: 100,
+  },
+  bottomSheetCancelButton: {
+    backgroundColor: "transparent",
+    borderWidth: 1.5,
+    borderColor: tokens.colors.bg3,
+  },
+  bottomSheetCancelButtonText: {
+    color: tokens.colors.text_primary,
+    fontSize: tokens.fontSize.md,
+    fontFamily: tokens.fonts.medium,
+    fontWeight: "600",
+  },
+  bottomSheetSaveButton: {
+    backgroundColor: tokens.colors.primary,
+    borderWidth: 1.5,
+    borderColor: tokens.colors.primary,
+    shadowColor: tokens.colors.primary,
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  bottomSheetSaveButtonDisabled: {
+    backgroundColor: tokens.colors.bg3,
+    borderColor: tokens.colors.bg3,
+    shadowOpacity: 0,
+    elevation: 0,
+    opacity: 0.6,
+  },
+  bottomSheetSaveButtonText: {
+    color: tokens.colors.white,
+    fontSize: tokens.fontSize.md,
+    fontFamily: tokens.fonts.medium,
+    fontWeight: "600",
+  },
+  bottomSheetSaveButtonTextDisabled: {
+    color: tokens.colors.text_secondary,
+  },
+  bottomSheetBottomSafeArea: {
+    height: 34, // Safe area for devices with home indicator
+  },
+  errorBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: tokens.colors.bg1,
+    marginHorizontal: 20,
+    marginBottom: 16,
+    padding: tokens.spacing._10,
+    borderRadius: tokens.radius.sm,
+    borderLeftWidth: 4,
+    borderLeftColor: tokens.colors.red,
+    gap: tokens.spacing._10,
+  },
+  errorBannerText: {
+    flex: 1,
+    fontSize: tokens.fontSize.sm,
+    fontFamily: tokens.fonts.medium,
+    color: tokens.colors.red,
   },
 
   // Agent Terms Styles
@@ -2255,6 +2400,91 @@ export const globalStyles = StyleSheet.create({
     backgroundColor: "transparent",
   },
 
+  // Agent Card Styles
+  agentCard: {
+    backgroundColor: tokens.colors.white,
+    borderRadius: tokens.radius.md,
+    padding: tokens.spacing._15,
+    borderWidth: 1,
+    borderColor: tokens.colors.borderColor,
+    position: "relative",
+    marginBottom: tokens.spacing._10,
+  },
+  agentCardSelected: {
+    borderColor: tokens.colors.primary,
+    borderWidth: 2,
+  },
+  agentCardSelectedBackground: {
+    backgroundColor: tokens.colors.primary,
+  },
+  agentCardHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  agentCardInfo: {
+    flex: 1,
+    marginRight: tokens.spacing._10,
+  },
+  agentCardName: {
+    fontSize: tokens.fontSize.md,
+    fontFamily: tokens.fonts.medium,
+    color: tokens.colors.text_primary,
+    marginBottom: tokens.spacing._5,
+  },
+  agentCardNameSelected: {
+    color: tokens.colors.white,
+  },
+  agentCardId: {
+    fontSize: tokens.fontSize.sm,
+    fontFamily: tokens.fonts.regular,
+    color: tokens.colors.text_secondary,
+  },
+  agentCardIdSelected: {
+    color: tokens.colors.white,
+  },
+  agentCardActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: tokens.spacing._10,
+  },
+  agentCardSelectedBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: tokens.colors.primary,
+    paddingHorizontal: tokens.spacing._10,
+    paddingVertical: tokens.spacing._5,
+    borderRadius: tokens.radius.sm,
+    gap: tokens.spacing._5,
+  },
+  agentCardSelectedText: {
+    color: tokens.colors.white,
+    fontSize: tokens.fontSize.xs,
+    fontFamily: tokens.fonts.medium,
+  },
+  agentCardDefaultTagContainer: {
+    position: "absolute",
+    bottom: 0,
+    right: 0,
+  },
+  agentCardDefaultTag: {
+    color: tokens.colors.bg2,
+    fontSize: tokens.fontSize.xxs,
+    fontFamily: tokens.fonts.regular,
+    paddingHorizontal: tokens.spacing._10,
+    paddingVertical: tokens.spacing._5,
+    borderRadius: tokens.radius.sm,
+  },
+  agentCardDeleteButton: {
+    paddingHorizontal: tokens.spacing._10,
+    paddingVertical: tokens.spacing._5,
+  },
+  agentCardDeleteButtonText: {
+    color: tokens.colors.red,
+    fontSize: tokens.fontSize.sm,
+    fontFamily: tokens.fonts.medium,
+  },
+
   // Guide Styles
   centerContent: {
     flex: 1,
@@ -2359,6 +2589,206 @@ export const getChatMarkdownStyles = (
     },
   };
 };
+
+// Agent Terms Bottom Sheet Styles
+export const agentTermsBottomSheetStyles: AgentTermsBottomSheetStyles =
+  StyleSheet.create({
+    backdrop: {
+      flex: 1,
+      backgroundColor: "rgba(0, 0, 0, 0.35)",
+      justifyContent: "flex-end",
+    },
+    keyboardView: {
+      flexGrow: 0,
+    },
+    bottomSheet: {
+      backgroundColor: tokens.colors.white,
+      borderTopLeftRadius: 24,
+      borderTopRightRadius: 24,
+      paddingHorizontal: tokens.spacing._20,
+      paddingTop: tokens.spacing._15,
+      paddingBottom: tokens.spacing._30,
+      shadowColor: "#000",
+      shadowOpacity: 0.12,
+      shadowOffset: { width: 0, height: -4 },
+      shadowRadius: 12,
+      elevation: 10,
+    },
+    header: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      marginBottom: tokens.spacing._10,
+    },
+    title: {
+      fontSize: tokens.fontSize.lg,
+      fontWeight: "bold",
+      color: tokens.colors.text_primary,
+      flex: 1,
+    },
+    closeButton: {
+      padding: tokens.spacing._5,
+    },
+    handle: {
+      width: 48,
+      height: 5,
+      backgroundColor: tokens.colors.bg2,
+      borderRadius: 3,
+      alignSelf: "center",
+      marginTop: tokens.spacing._10,
+      marginBottom: tokens.spacing._10,
+    },
+    content: {
+      gap: tokens.spacing._20,
+      marginTop: tokens.spacing._20,
+    },
+    subtitle: {
+      fontSize: tokens.fontSize.sm,
+      color: tokens.colors.text_secondary,
+      textAlign: "center",
+      marginBottom: tokens.spacing._5,
+    },
+    inputContainer: {
+      marginTop: 0,
+    },
+    consentContainer: {
+      width: "100%",
+      marginTop: tokens.spacing._10,
+      marginBottom: tokens.spacing._5,
+      flexDirection: "row",
+      alignItems: "center",
+    },
+    consentTextContainer: {
+      flex: 1,
+      paddingTop: 2,
+    },
+    consentText: {
+      fontSize: tokens.fontSize.sm,
+      color: tokens.colors.gray,
+      lineHeight: 20,
+    },
+    linkText: {
+      fontSize: tokens.fontSize.sm,
+      color: tokens.colors.primary,
+      textDecorationLine: "underline",
+    },
+    continueButton: {
+      marginTop: tokens.spacing._15,
+      marginBottom: 0,
+    },
+  });
+
+// Agent Conversations Bottom Sheet Styles
+export const agentConversationsSheetStyles: AgentConversationsSheetStyles =
+  StyleSheet.create({
+  backdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.3)",
+    justifyContent: "flex-end",
+  },
+  sheetContainer: {
+    backgroundColor: tokens.colors.white,
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 20,
+    borderRadius: tokens.radius.md,
+    borderWidth: tokens.border.defaultWidth,
+    borderColor: tokens.colors.borderColor,
+    shadowColor: tokens.colors.primary,
+    shadowOffset: {
+      width: 0,
+      height: 6,
+    },
+    shadowOpacity: 0.15,
+    shadowRadius: 10,
+    elevation: 6,
+  },
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 12,
+  },
+  headerTitle: {
+    fontSize: tokens.fontSize.lg,
+    fontFamily: tokens.fonts.medium,
+    color: tokens.colors.text_primary,
+  },
+  closeText: {
+    fontSize: tokens.fontSize.sm,
+    fontFamily: tokens.fonts.medium,
+    color: tokens.colors.text_secondary,
+  },
+  loadingContainer: {
+    paddingVertical: 20,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  loadingText: {
+    marginTop: 8,
+    fontSize: tokens.fontSize.sm,
+    color: tokens.colors.text_secondary,
+  },
+  emptyContainer: {
+    paddingVertical: 24,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  emptyText: {
+    fontSize: tokens.fontSize.sm,
+    color: tokens.colors.text_secondary,
+    textAlign: "center",
+  },
+  listContent: {
+    paddingBottom: 8,
+  },
+  itemContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 10,
+    paddingHorizontal: 8,
+    borderRadius: 10,
+    marginBottom: 4,
+  },
+  itemContainerActive: {
+    backgroundColor: tokens.colors.bg3,
+  },
+  itemTextContainer: {
+    flex: 1,
+    marginRight: 8,
+  },
+  itemTitle: {
+    fontSize: tokens.fontSize.md,
+    fontFamily: tokens.fonts.medium,
+    color: tokens.colors.text_primary,
+  },
+  itemSubtitle: {
+    marginTop: 2,
+    fontSize: tokens.fontSize.xs,
+    color: tokens.colors.text_secondary,
+  },
+  itemActions: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  activeBadge: {
+    fontSize: tokens.fontSize.xs,
+    fontFamily: tokens.fonts.medium,
+    color: tokens.colors.success,
+  },
+  deleteButton: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  deleteButtonText: {
+    fontSize: tokens.fontSize.xs,
+    fontFamily: tokens.fonts.medium,
+    color: tokens.colors.red,
+  },
+});
 
 // Agent Selection Bottom Sheet Styles
 export const agentSelectionSheetStyles = StyleSheet.create({

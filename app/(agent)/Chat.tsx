@@ -20,8 +20,13 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { tokens } from "@/theme/tokens";
 import { globalStyles } from "@/theme/globalStyleSheet";
-import { ScreenWrapper, ConfirmationDialog } from "@/components";
+import {
+  ScreenWrapper,
+  ConfirmationDialog,
+  AgentTermsBottomSheet,
+} from "@/components";
 import MessageDisplayConfigBottomSheet from "@/components/Modals/MessageDisplayConfigBottomSheet";
+import { getAgentTermsAccepted } from "@/utils/agent/storage";
 import {
   ChatMessage,
   ChatInput,
@@ -33,8 +38,9 @@ import { useCDF } from "@/hooks/useCDF";
 import { useAgentChat } from "@/hooks/useAgentChat";
 import { loadPreviousMessages } from "@/utils/chat/messageLoader";
 import { getFontSizes } from "@/utils/chat/fontSizes";
-import { deleteConversationId } from "@/utils/agent";
-import type { ChatMessage as ChatMessageType } from "@/types/global";
+import { getSelectedAgentId, deleteConversationId } from "@/utils/agent";
+import { AgentConversationsBottomSheet } from "@/components/Chat/AgentConversationsBottomSheet";
+import { ChatMessage as ChatMessageType } from "@/types/global";
 
 const Chat = () => {
   const { t } = useTranslation();
@@ -96,6 +102,11 @@ const Chat = () => {
   } = useAgentChat();
 
   const [showConfigBottomSheet, setShowConfigBottomSheet] = useState(false);
+  const [showTermsBottomSheet, setShowTermsBottomSheet] = useState(false);
+  const [showConversationsBottomSheet, setShowConversationsBottomSheet] =
+    useState(false);
+  const [currentAgentId, setCurrentAgentId] = useState<string | null>(null);
+
 
   // Initialize chat
   useEffect(() => {
@@ -112,6 +123,15 @@ const Chat = () => {
       loadMessageDisplayConfig();
       loadFontSize();
 
+      // Check if terms are accepted
+      if (store?.userStore) {
+        const termsAccepted = getAgentTermsAccepted(store.userStore);
+        if (!termsAccepted) {
+          setShowTermsBottomSheet(true);
+          return; // Don't initialize chat until terms are accepted
+        }
+      }
+
       // Reinitialize chat when returning from ChatSettings (after first initialization)
       if (hasInitializedRef.current) {
         disconnect();
@@ -125,10 +145,16 @@ const Chat = () => {
 
   const initializeChat = async () => {
     await initializeAgent(async () => {
-      // Step 1: Initialize WebSocket connection
+      // Step 1: Determine current agent and store it
+      if (store?.userStore) {
+        const agentId = await getSelectedAgentId(store.userStore);
+        setCurrentAgentId(agentId);
+      }
+
+      // Step 2: Initialize WebSocket connection
       await initializeWebSocket();
 
-      // Step 2: Load previous conversation messages
+      // Step 3: Load previous conversation messages
       if (store?.userStore) {
         await loadPreviousMessages(
           store.userStore,
@@ -139,14 +165,12 @@ const Chat = () => {
     });
   };
 
-  // Handle profile not found - redirect to AgentTerms
+  // Handle profile not found - show terms bottom sheet
   useEffect(() => {
     if (isProfileNotFound) {
-      router.replace({
-        pathname: "/(auth)/AgentTerms",
-      } as any);
+      setShowTermsBottomSheet(true);
     }
-  }, [isProfileNotFound, router]);
+  }, [isProfileNotFound]);
 
   const sendMessage = useCallback(
     (messageText?: string) => {
@@ -206,6 +230,26 @@ const Chat = () => {
     }
   }, [disconnect, clearMessages, store, initializeChat]);
 
+  const handleSelectConversation = useCallback(
+    async () => {
+      try {
+        // Close the conversations bottom sheet immediately after selection
+        setShowConversationsBottomSheet(false);
+
+        // Disconnect WebSocket and clear messages for clean state
+        disconnect();
+        clearMessages();
+
+        // Reinitialize chat which will use the updated conversation ID
+        await initializeChat();
+      } catch (error) {
+        console.error("Error switching conversation:", error);
+        await initializeChat();
+      }
+    },
+    [disconnect, clearMessages, initializeChat]
+  );
+
   const renderMessage = useCallback(
     ({ item }: { item: ChatMessageType }) => {
         return (
@@ -237,6 +281,7 @@ const Chat = () => {
         isConnecting={isConnecting}
         onConfigPress={() => setShowConfigBottomSheet(true)}
         onNewChat={handleNewChat}
+        onOpenConversations={() => setShowConversationsBottomSheet(true)}
       />
       <KeyboardAvoidingView
         style={{ flex: 1 }}
@@ -342,6 +387,32 @@ const Chat = () => {
         onConfirm={handleConnectorWarningRetry}
         onCancel={handleConnectorWarningContinue}
         confirmColor={tokens.colors.primary}
+      />
+
+      {/* Agent Terms Bottom Sheet */}
+      <AgentTermsBottomSheet
+        visible={showTermsBottomSheet}
+        onClose={() => {
+          setShowTermsBottomSheet(false);
+          router.back();
+        }}
+        onComplete={() => {
+          setShowTermsBottomSheet(false);
+          // Initialize chat after terms are accepted
+          if (!hasInitializedRef.current) {
+            hasInitializedRef.current = true;
+          }
+          initializeChat();
+        }}
+        allowClose={true}
+      />
+
+      {/* Agent Conversations Bottom Sheet */}
+      <AgentConversationsBottomSheet
+        visible={showConversationsBottomSheet}
+        agentId={currentAgentId}
+        onClose={() => setShowConversationsBottomSheet(false)}
+        onSelectConversation={handleSelectConversation}
       />
     </GestureHandlerRootView>
   );

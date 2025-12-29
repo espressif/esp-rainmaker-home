@@ -58,6 +58,9 @@ export const ESPRM_REFRESH_TOKEN_PARAM_TYPE = "esp.param.refresh-token";
 export const ESPRM_USER_TOKEN_PARAM_TYPE = "esp.param.user-token";
 export const ESPRM_BASE_URL_PARAM_TYPE = "esp.param.base-url";
 
+// PARAM NAMES
+export const VOLUME_PARAM_NAME = "Volume";
+
 // SUPPORTED PARAM UI TYPES
 export const ESPRM_UI_TEXT_PARAM_TYPE = "esp.ui.text";
 export const ESPRM_UI_TOGGLE_PARAM_TYPE = "esp.ui.toggle";

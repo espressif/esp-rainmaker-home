@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useCallback, useState, useEffect } from "react";
+import { useCallback, useState, useEffect, useRef } from "react";
 import {
   RefreshControl,
   ScrollView,
@@ -24,7 +24,7 @@ import {
 import { useTranslation } from "react-i18next";
 import { useToast } from "@/hooks/useToast";
 import { useFocusEffect } from "@react-navigation/native";
-import { useLocalSearchParams } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 
 // Icons
 import { MessageSquare, RefreshCw } from "lucide-react-native";
@@ -36,6 +36,7 @@ import {
   Button,
   ConfirmationDialog,
   AddAgentBottomSheet,
+  AgentTermsBottomSheet,
 } from "@/components";
 import { AgentCard } from "@/components/Agent";
 
@@ -52,9 +53,12 @@ import {
   removeInvalidAgentFromCustomData,
   getAllAgents,
   canDeleteAgentBySource,
+  checkAgentExistenceAndAction,
+  sanitizeAgentID,
 } from "@/utils/agent/aggregation";
 import { useCDF } from "@/hooks/useCDF";
 import { getSelectedAgentId, getAgentsAndSelectedId, deleteConversationId, AGENT_SOURCE } from "@/utils/agent";
+import { getAgentTermsAccepted } from "@/utils/agent/storage";
 
 /**
  * Settings Component
@@ -72,6 +76,7 @@ import { getSelectedAgentId, getAgentsAndSelectedId, deleteConversationId, AGENT
 const Settings = () => {
   const { t } = useTranslation();
   const toast = useToast();
+  const router = useRouter();
   const { store } = useCDF();
   const { agentId, agentName } = useLocalSearchParams<{
     agentId?: string;
@@ -88,6 +93,8 @@ const Settings = () => {
   const [deleteDialogVisible, setDeleteDialogVisible] = useState(false);
   const [agentToDelete, setAgentToDelete] = useState<AgentConfig | null>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const processedAgentIdRef = useRef<string | null>(null);
+  const [showTermsBottomSheet, setShowTermsBottomSheet] = useState(false);
 
   // Combined loading state - show loader only when fetching agents (not during actions)
   // Don't show loader during actions to avoid double loaders
@@ -154,18 +161,53 @@ const Settings = () => {
    */
   useFocusEffect(
     useCallback(() => {
+      // Check if terms are accepted
+      if (store?.userStore) {
+        const termsAccepted = getAgentTermsAccepted(store.userStore);
+        if (!termsAccepted) {
+          setShowTermsBottomSheet(true);
+          return; // Don't fetch agents until terms are accepted
+        }
+      }
       fetchAgents();
-    }, [fetchAgents])
+    }, [fetchAgents, store])
   );
 
   /**
-   * Effect: Auto-open modal when agentId is provided from route params
+   * Effect: Auto-activate agent if it exists, otherwise show add modal when agentId is provided from route params
    */
   useEffect(() => {
-    if (agentId) {
+    // Use utility function to sanitize and check if we should process this agentId
+    const processResult = sanitizeAgentID(
+      agentId,
+      processedAgentIdRef.current, // Pass value, not ref
+      isLoadingAgents,
+      agents
+    );
+
+    // Caller explicitly updates the ref
+    processedAgentIdRef.current = processResult.nextProcessedId;
+
+    if (!processResult.shouldProcess) {
+      return;
+    }
+
+    // Use utility function to check agent existence and determine action
+    const result = checkAgentExistenceAndAction(
+      processResult.trimmedAgentId,
+      agents,
+      selectedAgentId
+    );
+
+    if (result.shouldActivate && result.agent) {
+      // Agent exists - activate it directly
+      handleSelectAgent(result.agent);
+    } else if (result.shouldShowModal) {
+      // Agent doesn't exist - show add modal
       setIsAddDialogVisible(true);
     }
-  }, [agentId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [agentId, agents, isLoadingAgents, selectedAgentId]);
 
   /**
    * Handles showing the add agent dialog
@@ -504,9 +546,9 @@ const Settings = () => {
                         "Default Agent",
                       grouped.defaultAgent
                     )}
-                    {/* User Agents */}
+                    {/* Your Agents */}
                     {renderSection(
-                      t("device.panels.aiAgent.userAgents") || "User Agents",
+                      t("device.panels.aiAgent.userAgents") || "Your Agents",
                       grouped.userAgents
                     )}
                     {/* Custom Stored Agents */}
@@ -515,10 +557,10 @@ const Settings = () => {
                         "Custom Agents",
                       grouped.customAgents
                     )}
-                    {/* Common Agents */}
+                    {/* Public Agents */}
                     {renderSection(
                       t("device.panels.aiAgent.commonAgents") ||
-                        "Common Agents",
+                        "Public Agents",
                       grouped.templateAgents
                     )}
                   </>
@@ -563,6 +605,21 @@ const Settings = () => {
         onCancel={handleCloseDeleteDialog}
         confirmColor={tokens.colors.red}
         isLoading={actionLoading === agentToDelete?.id}
+      />
+
+      {/* Agent Terms Bottom Sheet */}
+      <AgentTermsBottomSheet
+        visible={showTermsBottomSheet}
+        onClose={() => {
+          setShowTermsBottomSheet(false);
+          router.back();
+        }}
+        onComplete={() => {
+          setShowTermsBottomSheet(false);
+          // Fetch agents after terms are accepted
+          fetchAgents();
+        }}
+        allowClose={true}
       />
     </>
   );
