@@ -21,9 +21,6 @@ import com.facebook.react.bridge.Arguments
 import com.facebook.react.uimanager.ReactShadowNode
 import com.facebook.react.uimanager.ViewManager
 import com.facebook.react.bridge.Promise
-import org.greenrobot.eventbus.EventBus
-import org.greenrobot.eventbus.Subscribe
-import org.greenrobot.eventbus.ThreadMode
 import org.bouncycastle.operator.ContentSigner
 import org.bouncycastle.operator.jcajce.JcaContentSignerBuilder
 import org.bouncycastle.pkcs.jcajce.JcaPKCS10CertificationRequestBuilder
@@ -55,10 +52,6 @@ class ESPMatterModule(reactContext: ReactApplicationContext) :
     override fun getName() = "ESPMatterModule"
 
     override fun onCatalystInstanceDestroy() {
-        if (EventBus.getDefault().isRegistered(this)) {
-            EventBus.getDefault().unregister(this)
-            Log.d(TAG, "[Bridge] EventBus unregistered")
-        }
         super.onCatalystInstanceDestroy()
     }
 
@@ -108,10 +101,6 @@ class ESPMatterModule(reactContext: ReactApplicationContext) :
             putString(AppConstants.KEY_MATTER_NODE_ID_CAMEL, matterNodeIdValue)
         }
 
-        EventBus.getDefault().post(
-            MatterEvent(AppConstants.EVENT_MATTER_NOC_RESPONSE, bundle)
-        )
-
         return AppConstants.MESSAGE_NOC_RESPONSE_SENT
     }
 
@@ -141,219 +130,9 @@ class ESPMatterModule(reactContext: ReactApplicationContext) :
             putString(AppConstants.KEY_ERROR_MESSAGE_CAMEL, errorMessageValue)
         }
 
-        EventBus.getDefault().post(
-            MatterEvent(AppConstants.EVENT_MATTER_CONFIRM_RESPONSE, bundle)
-        )
-
         return AppConstants.MESSAGE_CONFIRM_RESPONSE_SENT
     }
-
-    private fun sendNOCChainResponseInternal(
-        deviceId: String,
-        rootCert: String,
-        operationalCert: String,
-        ipkValue: String,
-        intermediateCert: String?,
-        adminVendorId: String?
-    ): WritableMap {
-
-        val bundle = android.os.Bundle().apply {
-            putString(AppConstants.KEY_DEVICE_ID, deviceId)
-            putString(AppConstants.KEY_ROOT_CERT, rootCert)
-            putString(AppConstants.KEY_OPERATIONAL_CERT, operationalCert)
-            putString(AppConstants.KEY_IPK_VALUE, ipkValue)
-            intermediateCert?.let { putString(AppConstants.KEY_INTERMEDIATE_CERT, it) }
-            adminVendorId?.let { putString(AppConstants.KEY_ADMIN_VENDOR_ID, it) }
-        }
-
-        EventBus.getDefault().post(
-            MatterEvent(AppConstants.EVENT_MATTER_NOC_RESPONSE, bundle)
-        )
-
-        return WritableNativeMap().apply {
-            putBoolean("success", true)
-            putString("message", "NOC chain response sent via EventBus")
-        }
-    }
-
-    init {
-        EventBus.getDefault().register(this)
-        Log.d(TAG, "[Bridge] EventBus registered successfully")
-    }
-
-    /**
-     * EventBus subscriber - receives MatterEvent from ChipClient and forwards to React Native
-     * This is exactly like ESP App SDK implementation
-     */
-    @Subscribe(threadMode = ThreadMode.MAIN)
-    fun onMatterEvent(event: MatterEvent) {
-
-        val bundle: android.os.Bundle? = event.data
-        val bridgeEvent = Arguments.createMap()
-
-        when (event.eventType) {
-            AppConstants.EVENT_MATTER_NOC_REQUEST -> {
-                val requestBody = bundle?.getString(AppConstants.KEY_REQUEST_BODY) ?: "{}"
-                bridgeEvent.putString(
-                    AppConstants.KEY_EVENT_TYPE,
-                    AppConstants.EVENT_MATTER_NOC_REQUEST
-                )
-                bridgeEvent.putString(AppConstants.KEY_REQUEST_BODY_CAMEL, requestBody)
-                bundle?.getString(AppConstants.KEY_REQUEST_ID_CAMEL)?.let {
-                    bridgeEvent.putString(AppConstants.KEY_REQUEST_ID_CAMEL, it)
-                }
-            }
-
-            AppConstants.EVENT_COMMISSIONING_CONFIRM_REQUEST -> {
-                bridgeEvent.putString(
-                    AppConstants.KEY_EVENT_TYPE,
-                    AppConstants.EVENT_COMMISSIONING_CONFIRM_REQUEST
-                )
-
-                val requestData = Arguments.createMap()
-
-                val requestBodyJson = bundle?.getString(AppConstants.KEY_REQUEST_BODY) ?: "{}"
-                var rainmakerNodeIdFromJson = ""
-                var challengeFromJson = ""
-                var challengeResponseFromJson = ""
-
-                try {
-                    val jsonObject = JSONObject(requestBodyJson)
-                    rainmakerNodeIdFromJson =
-                        jsonObject.optString(AppConstants.KEY_RAINMAKER_NODE_ID, "")
-                    challengeFromJson = jsonObject.optString(AppConstants.KEY_CHALLENGE, "")
-                    challengeResponseFromJson =
-                        jsonObject.optString(AppConstants.KEY_CHALLENGE_RESPONSE, "")
-                } catch (error: Exception) {
-                    Log.e(TAG, "[Bridge] Failed to parse request_body JSON: ${error.message}")
-                }
-
-                val rainmakerNodeId = rainmakerNodeIdFromJson.ifEmpty {
-                    bundle?.getString(AppConstants.KEY_RAINMAKER_NODE_ID_CAMEL)
-                        ?: ""
-                }
-
-                val challenge = when {
-                    challengeFromJson.isNotEmpty() -> challengeFromJson
-                    bundle?.getString(AppConstants.KEY_CHALLENGE_CAMEL)?.isNotEmpty() == true ->
-                        bundle.getString(AppConstants.KEY_CHALLENGE_CAMEL) ?: ""
-
-                    challengeResponseFromJson.isNotEmpty() -> challengeResponseFromJson
-                    bundle?.getString(AppConstants.KEY_CHALLENGE_RESPONSE_CAMEL)
-                        ?.isNotEmpty() == true ->
-                        bundle.getString(AppConstants.KEY_CHALLENGE_RESPONSE_CAMEL) ?: ""
-
-                    else -> ""
-                }
-
-                val challengeResponse = when {
-                    bundle?.getString(AppConstants.KEY_CHALLENGE_RESPONSE_CAMEL)
-                        ?.isNotEmpty() == true ->
-                        bundle.getString(AppConstants.KEY_CHALLENGE_RESPONSE_CAMEL) ?: ""
-
-                    challengeResponseFromJson.isNotEmpty() -> challengeResponseFromJson
-                    else -> ""
-                }
-
-                val requestId = bundle?.getString(AppConstants.KEY_REQUEST_ID_CAMEL) ?: ""
-
-                requestData.putString(AppConstants.KEY_RAINMAKER_NODE_ID_CAMEL, rainmakerNodeId)
-                requestData.putString(
-                    AppConstants.KEY_MATTER_NODE_ID_CAMEL,
-                    bundle?.getString(AppConstants.KEY_MATTER_NODE_ID_CAMEL) ?: ""
-                )
-                requestData.putString(AppConstants.KEY_CHALLENGE_CAMEL, challenge)
-                requestData.putString(AppConstants.KEY_CHALLENGE_RESPONSE_CAMEL, challengeResponse)
-                requestData.putString(
-                    AppConstants.KEY_DEVICE_ID_CAMEL,
-                    bundle?.getString(AppConstants.KEY_DEVICE_ID_CAMEL) ?: ""
-                )
-                requestData.putString(AppConstants.KEY_REQUEST_ID_CAMEL, requestId)
-
-                bridgeEvent.putMap(AppConstants.KEY_REQUEST_DATA, requestData)
-            }
-
-            AppConstants.EVENT_MATTER_CONFIRM_RESPONSE -> {
-                bridgeEvent.putString(
-                    AppConstants.KEY_EVENT_TYPE,
-                    AppConstants.EVENT_REACT_CONFIRM_RESPONSE
-                )
-
-                val status = bundle?.getString(AppConstants.KEY_STATUS) ?: AppConstants.STATUS_ERROR
-                val description = bundle?.getString(AppConstants.KEY_DESCRIPTION) ?: ""
-                val requestId = bundle?.getString(AppConstants.KEY_REQUEST_ID_CAMEL) ?: ""
-                val deviceId = bundle?.getString(AppConstants.KEY_DEVICE_ID) ?: ""
-                val matterNodeId = bundle?.getString(AppConstants.KEY_MATTER_NODE_ID) ?: ""
-                val rainmakerNodeId = bundle?.getString(AppConstants.KEY_RAINMAKER_NODE_ID) ?: ""
-                val errorCode = bundle?.getString(AppConstants.KEY_ERROR_CODE) ?: ""
-                val errorMessage = bundle?.getString(AppConstants.KEY_ERROR_MESSAGE) ?: ""
-                val isRainmakerNode =
-                    bundle?.getBoolean(AppConstants.KEY_IS_RAINMAKER_NODE) ?: false
-
-                bridgeEvent.putString(AppConstants.KEY_STATUS, status)
-                bridgeEvent.putString(AppConstants.KEY_DESCRIPTION, description)
-                bridgeEvent.putBoolean(AppConstants.KEY_IS_RAINMAKER_NODE_CAMEL, isRainmakerNode)
-                bridgeEvent.putString(AppConstants.KEY_RAINMAKER_NODE_ID_CAMEL, rainmakerNodeId)
-                bridgeEvent.putString(AppConstants.KEY_MATTER_NODE_ID_CAMEL, matterNodeId)
-                bridgeEvent.putString(AppConstants.KEY_DEVICE_ID_CAMEL, deviceId)
-                bridgeEvent.putString(AppConstants.KEY_REQUEST_ID_CAMEL, requestId)
-                bridgeEvent.putString(AppConstants.KEY_ERROR_CODE_CAMEL, errorCode)
-                bridgeEvent.putString(AppConstants.KEY_ERROR_MESSAGE_CAMEL, errorMessage)
-            }
-
-            AppConstants.EVENT_COMMISSIONING_COMPLETE -> {
-                bridgeEvent.putString(
-                    AppConstants.KEY_EVENT_TYPE,
-                    AppConstants.EVENT_COMMISSIONING_COMPLETE
-                )
-
-                val status =
-                    bundle?.getString(AppConstants.KEY_STATUS) ?: AppConstants.STATUS_SUCCESS
-                val deviceId = bundle?.getString(AppConstants.KEY_DEVICE_ID) ?: ""
-                val deviceName = bundle?.getString(AppConstants.KEY_DEVICE_NAME) ?: ""
-                val fabricName = bundle?.getString(AppConstants.KEY_FABRIC_NAME) ?: ""
-                val message = bundle?.getString(AppConstants.KEY_MESSAGE)
-                    ?: AppConstants.GPS_COMMISSIONING_SUCCESS
-                val source = bundle?.getString(AppConstants.KEY_SOURCE)
-                    ?: AppConstants.GPS_COMMISSIONING_SOURCE
-
-                bridgeEvent.putString(AppConstants.KEY_STATUS, status)
-                bridgeEvent.putString(AppConstants.KEY_DEVICE_ID_CAMEL, deviceId)
-                bridgeEvent.putString(AppConstants.KEY_DEVICE_NAME_CAMEL, deviceName)
-                bridgeEvent.putString(AppConstants.KEY_FABRIC_NAME_CAMEL, fabricName)
-                bridgeEvent.putString(AppConstants.KEY_MESSAGE_CAMEL, message)
-                bridgeEvent.putString(AppConstants.KEY_SOURCE_CAMEL, source)
-            }
-
-            AppConstants.EVENT_COMMISSIONING_ERROR -> {
-                bridgeEvent.putString(
-                    AppConstants.KEY_EVENT_TYPE,
-                    AppConstants.EVENT_COMMISSIONING_ERROR
-                )
-
-                val status = bundle?.getString(AppConstants.KEY_STATUS) ?: AppConstants.STATUS_ERROR
-                val deviceId = bundle?.getString(AppConstants.KEY_DEVICE_ID) ?: ""
-                val errorMessage = bundle?.getString(AppConstants.KEY_ERROR_MESSAGE) ?: ""
-
-                bridgeEvent.putString(AppConstants.KEY_STATUS, status)
-                bridgeEvent.putString(AppConstants.KEY_DEVICE_ID_CAMEL, deviceId)
-                bridgeEvent.putString(AppConstants.KEY_ERROR_MESSAGE_CAMEL, errorMessage)
-            }
-
-            AppConstants.EVENT_MATTER_NOC_RESPONSE -> {
-                return
-            }
-
-            else -> {
-                return
-            }
-        }
-
-        reactApplicationContext
-            .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
-            .emit(AppConstants.EVENT_MATTER_COMMISSIONING, bridgeEvent)
-    }
-
+    
     /**
      * Helper function to convert Bundle to HashMap for JSON serialization
      */
@@ -367,7 +146,9 @@ class ESPMatterModule(reactContext: ReactApplicationContext) :
 
     @ReactMethod
     fun startEcosystemCommissioning(
-        onboardingPayload: String, fabricDetails: ReadableMap, promise: Promise
+        onboardingPayload: String,
+        fabricDetails: ReadableMap,
+        promise: Promise
     ) {
         Log.d(TAG, "Onboarding Payload: $onboardingPayload")
 
@@ -679,57 +460,78 @@ class ESPMatterModule(reactContext: ReactApplicationContext) :
     }
 
     /**
-     * Send NOC response back to ChipClient via EventBus
+     * Handles results from Headless JS tasks (ISSUE_NOC or CONFIRM_COMMISSION).
      */
     @ReactMethod
-    fun sendNocResponse(responseData: ReadableMap, promise: Promise) {
+    fun handleHeadlessTaskResult(taskType: String, resultJson: String) {
         try {
-            val message = sendNocResponseInternal(responseData)
-            promise.resolve(message)
-        } catch (e: Exception) {
-            promise.reject("NOC_RESPONSE_ERROR", e)
-        }
-    }
+            val resultData = JSONObject(resultJson)
+            val success = resultData.optBoolean("success", false)
 
-    /**
-     * Send confirm node response back to ChipClient via EventBus
-     */
-    @ReactMethod
-    fun sendConfirmResponse(responseData: ReadableMap, promise: Promise) {
-        try {
-            val message = sendConfirmResponseInternal(responseData)
-            promise.resolve(message)
-        } catch (e: Exception) {
-            promise.reject("CONFIRM_RESPONSE_ERROR", e)
-        }
-    }
+            when (taskType) {
+                // ISSUE_NOC: Only error cases reach here. Success path uses postMessage flow.
+                "ISSUE_NOC" -> {
+                    if (!success) {
+                        val error = resultData.optString("error", "Unknown error")
+                        Log.e(TAG, "NOC issuance failed: $error, commissioning may timeout")
+                    }
+                }
 
-    /**
-     * Send NOC chain response back to ChipClient when in GPS commissioning mode (Legacy method)
-     */
-    @ReactMethod
-    fun sendNOCChainResponse(
-        deviceId: String,
-        rootCert: String,
-        operationalCert: String,
-        ipkValue: String,
-        intermediateCert: String?,
-        adminVendorId: String?,
-        promise: Promise
-    ) {
-        try {
-            val result = sendNOCChainResponseInternal(
-                deviceId = deviceId,
-                rootCert = rootCert,
-                operationalCert = operationalCert,
-                ipkValue = ipkValue,
-                intermediateCert = intermediateCert,
-                adminVendorId = adminVendorId
-            )
-            promise.resolve(result)
+                "CONFIRM_COMMISSION" -> {
+                    if (success) {
+                        val requestId = resultData.optString("requestId", "")
+                        val nodeId = resultData.optString("nodeId", "")
+                        val responseObj = resultData.optJSONObject("response")
+                        val isRainmakerNode = responseObj?.optBoolean("isRainmakerNode", false) ?: false
+                        val rainmakerNodeId = responseObj?.optString("rainmakerNodeId", "") ?: ""
+                        val matterNodeId = responseObj?.optString("matterNodeId", "") ?: ""
 
+                        val chipClient = FabricSessionManager.getCurrentChipClient()
+                        val deviceName = chipClient?.lastCommissionedDeviceName
+                            ?: AppConstants.DEFAULT_MATTER_DEVICE_NAME
+
+                        val params = Arguments.createMap().apply {
+                            putString(AppConstants.KEY_EVENT_TYPE, AppConstants.EVENT_COMMISSIONING_COMPLETE)
+                            putString(AppConstants.KEY_STATUS, responseObj?.optString("status", "success") ?: "success")
+                            putString(AppConstants.KEY_DESCRIPTION, responseObj?.optString("description", "") ?: "")
+                            putString(AppConstants.KEY_REQUEST_ID_CAMEL, requestId)
+                            putString("nodeId", nodeId)
+                            putString(AppConstants.KEY_MATTER_NODE_ID_CAMEL, matterNodeId)
+                            putString(AppConstants.KEY_RAINMAKER_NODE_ID_CAMEL, rainmakerNodeId)
+                            putBoolean(AppConstants.KEY_IS_RAINMAKER_NODE_CAMEL, isRainmakerNode)
+                            putString(AppConstants.KEY_DEVICE_NAME_CAMEL, deviceName)
+                            putBoolean(AppConstants.KEY_SUCCESS, true)
+                            putString(AppConstants.KEY_SOURCE_CAMEL, "HEADLESS_JS")
+                        }
+
+                        reactApplicationContext
+                            .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
+                            .emit(AppConstants.EVENT_MATTER_COMMISSIONING, params)
+
+                        chipClient?.onCommissioningFullyComplete()
+                    } else {
+                        val error = resultData.optString("error", "Unknown error")
+                        Log.e(TAG, "CONFIRM_COMMISSION failed: $error")
+
+                        val params = Arguments.createMap().apply {
+                            putString(AppConstants.KEY_EVENT_TYPE, AppConstants.EVENT_COMMISSIONING_ERROR)
+                            putString(AppConstants.KEY_ERROR_MESSAGE_CAMEL, error)
+                            putBoolean(AppConstants.KEY_SUCCESS, false)
+                            putString(AppConstants.KEY_SOURCE_CAMEL, "HEADLESS_JS")
+                        }
+
+                        reactApplicationContext
+                            .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
+                            .emit(AppConstants.EVENT_MATTER_COMMISSIONING, params)
+
+                        FabricSessionManager.getCurrentChipClient()?.onCommissioningFailed(error)
+                    }
+                }
+
+                else -> Log.w(TAG, "Unknown task type: $taskType")
+            }
         } catch (e: Exception) {
-            promise.reject("NOC_RESPONSE_ERROR", "Failed to send NOC chain response: ${e.message}")
+            Log.e(TAG, "Error handling task result: ${e.message}", e)
         }
     }
 

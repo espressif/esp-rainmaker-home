@@ -206,9 +206,39 @@ export const MATTER_COMMISSIONING_EVENT = "MatterCommissioningEvent";
 export const MATTER_EVENT_COMMISSIONING_COMPLETE = "COMMISSIONING_COMPLETE";
 export const MATTER_EVENT_CONFIRM_NODE_REQUEST = "CONFIRM_NODE_REQUEST";
 export const MATTER_EVENT_NODE_NOC_REQUEST = "NODE_NOC_REQUEST";
+export const MATTER_EVENT_COMMISSIONING_CONFIRMATION_REQUEST =
+  "COMMISSIONING_CONFIRMATION_REQUEST";
 export const MATTER_EVENT_COMMISSIONING_CONFIRMATION_RESPONSE =
   "COMMISSIONING_CONFIRMATION_RESPONSE";
 export const MATTER_EVENT_COMMISSIONING_ERROR = "COMMISSIONING_ERROR";
+
+// HeadlessJS handled event types (bypasses postMessage to native)
+export const HEADLESS_HANDLED_TYPES = [
+  "COMMISSIONING_CONFIRMATION_RESPONSE",
+];
+
+// HeadlessJS Task Types
+export const HEADLESS_TASK_ISSUE_NOC = "ISSUE_NOC";
+export const HEADLESS_TASK_CONFIRM_COMMISSION = "CONFIRM_COMMISSION";
+
+// Commissioning Status Values
+export const STATUS_PENDING = "pending";
+export const STATUS_SUCCESS = "success";
+
+// Metadata Keys
+export const METADATA_KEY_CHALLENGE = "challenge";
+export const METADATA_KEY_CHALLENGE_RESPONSE = "challengeResponse";
+export const METADATA_KEY_CHALLENGE_RESPONSE_SNAKE = "challenge_response";
+export const METADATA_KEY_IS_RAINMAKER_NODE = "is_rainmaker_node";
+export const METADATA_KEY_RAINMAKER_NODE_ID = "rainmaker_node_id";
+export const METADATA_KEY_MATTER_NODE_ID = "matterNodeId";
+
+// HeadlessJS Error Messages
+export const HEADLESS_ERROR_MISSING_TASK_DATA = "Missing required task data";
+export const HEADLESS_ERROR_USER_NOT_AUTHENTICATED = "User not authenticated. Cannot issue NOC.";
+export const HEADLESS_ERROR_UNKNOWN = "Unknown error";
+export const HEADLESS_ERROR_NATIVE_MODULE_UNAVAILABLE = "Native module method not available";
+export const HEADLESS_COMMISSIONING_DESCRIPTION = "Matter node commissioning in progress";
 
 // Matter Commissioning Status constants
 export const MATTER_STATUS_PREPARING = "Preparing...";

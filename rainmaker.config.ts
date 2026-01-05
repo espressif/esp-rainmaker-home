@@ -11,6 +11,7 @@ import ESPLocalControlAdapter from "@/adaptors/implementations/ESPLocalControlAd
 import { ESPNotificationAdapter } from "@/adaptors/implementations/ESPNotificationAdapter";
 import { espOauthAdapter } from "@/adaptors/implementations/ESPOauthAdapter";
 import ESPAppUtilityAdapter from "./adaptors/implementations/ESPAppUtilityAdapter";
+import { matterAdapter } from "@/adaptors/implementations/ESPMatterAdapter";
 
 export const SDKConfig = {
   baseUrl: "https://api.rainmaker.espressif.com",
@@ -28,3 +29,9 @@ export const SDKConfig = {
 };
 
 export const CDFConfig = { autoSync: true };
+
+export const matterSDKConfig = {
+  ...SDKConfig,
+  matterAdapter: matterAdapter,
+  matterVendorId: "0x131B", // Espressif Matter Vendor ID
+};
