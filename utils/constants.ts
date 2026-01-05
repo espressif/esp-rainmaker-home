@@ -256,9 +256,6 @@ export const CAMERA_TYPE_BACK = "back";
 export const ESP_CHALLENGE_RESPONSE_CONSTANTS = {
   // Device communication endpoints (only challenge-response needed)
   CH_RESP_ENDPOINT: "ch_resp",
-  // Expected signature length
-  SIGNATURE_LENGTH_BYTES: 256,
-  SIGNATURE_LENGTH_HEX: 512,
   // Challenge-response capability
   CHALLENGE_RESPONSE_CAPABILITY: "ch_resp",
 };
