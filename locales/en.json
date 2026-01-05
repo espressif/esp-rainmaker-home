@@ -80,7 +80,6 @@
       "deviceUnsuccessfulStatus": "Device returned unsuccessful status",
       "missingResponsePayload": "Missing response payload from device",
       "invalidResponsePayload": "Invalid response payload - missing signed challenge or node ID",
-      "invalidSignatureLength": "Invalid signature length: {{length}} bytes (expected 256)",
       "parseResponseFailed": "Failed to parse device response: {{message}}",
       "noConnectedDevice": "No connected device available",
       "noResponseFromDevice": "No response received from device",
