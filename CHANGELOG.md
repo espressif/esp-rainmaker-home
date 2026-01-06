@@ -5,6 +5,22 @@ All notable changes to the ESP RainMaker Home app will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.4.2]
+
+### Enhanced
+
+**Matter Commissioning Background Execution & Error Handling**
+
+* Added background task execution for Matter commissioning to ensure reliability when the app is paused or system dialogs are shown.
+* Improved error handling and propagation during Matter commissioning flows with clearer failure reasons.
+
+### Fixed
+
+**Challenge–Response Authentication**
+
+* Fixed an issue where a signature length check in the Challenge–Response workflow caused valid ECDSA keys to fail authentication.
+* Removed incorrect assumptions about fixed-length signatures to ensure ECDSA compatibility.
+
 ## [3.4.1]
  
 ### Added

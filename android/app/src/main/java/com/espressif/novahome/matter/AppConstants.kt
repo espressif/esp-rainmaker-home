@@ -140,6 +140,15 @@ object AppConstants {
     const val STATUS_SUCCESS = "success"
     const val STATUS_ERROR = "error"
 
+    // Headless JS Task identifiers
+    const val TASK_ISSUE_NOC = "MatterIssueNocTask"
+    const val TASK_CONFIRM_COMMISSION = "MatterConfirmCommissionTask"
+
+    // Headless JS Task extra keys
+    const val EXTRA_TASK_NAME = "taskName"
+    const val EXTRA_TASK_DATA = "taskData"
+    const val EXTRA_NODE_ID = "nodeId"
+
     const val MESSAGE_NOC_CHAIN_RECEIVED = "NOC chain received successfully"
     const val MESSAGE_NOC_RESPONSE_SENT = "NOC response sent successfully"
     const val MESSAGE_CONFIRM_RESPONSE_SENT = "Confirm response sent successfully"

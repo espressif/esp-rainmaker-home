@@ -123,6 +123,11 @@
             </intent-filter>
         </service>
 
+        <!-- Headless JS Task Service for Matter Commissioning -->
+        <service
+            android:name=".matter.MatterHeadlessTaskService"
+            android:exported="false" />
+
         <!-- ESP Matter Commissioning Service for Google Play Services -->
         <service
             android:name=".matter.ESPMatterCommissioningService"

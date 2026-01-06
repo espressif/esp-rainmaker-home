@@ -28,8 +28,6 @@ import { createTamagui, TamaguiProvider } from "tamagui";
 import { Provider as PaperProvider } from "react-native-paper";
 // hooks
 import { useTranslation } from "react-i18next";
-// adapters
-import { matterAdapter } from "@/adaptors/implementations/ESPMatterAdapter";
 // components
 import { FooterTabs } from "@/components";
 import { ToastContainer } from "@/components";
@@ -37,7 +35,36 @@ import { ToastContainer } from "@/components";
 import { Home, Calendar, User, History, Zap } from "lucide-react-native";
 // SDK configuration
 import { ESPRMMatterBase } from "@espressif/rainmaker-matter-sdk";
-import { SDKConfig } from "@/rainmaker.config";
+import { matterSDKConfig } from "@/rainmaker.config";
+
+import { AppRegistry } from "react-native";
+import {
+  MatterIssueNocTask,
+  MatterConfirmCommissionTask,
+} from "@/tasks/matterCommissioningTask";
+
+AppRegistry.registerHeadlessTask(
+  "MatterIssueNocTask",
+  () => async (taskData: any) => {
+    try {
+      await MatterIssueNocTask(taskData);
+    } catch (error) {
+      console.error("[HeadlessJS] MatterIssueNocTask failed:", error);
+      throw error;
+    }
+  }
+);
+AppRegistry.registerHeadlessTask(
+  "MatterConfirmCommissionTask",
+  () => async (taskData: any) => {
+    try {
+      await MatterConfirmCommissionTask(taskData);
+    } catch (error) {
+      console.error("[HeadlessJS] MatterConfirmCommissionTask failed:", error);
+      throw error;
+    }
+  }
+);
 
 const InnerLayout = () => {
   const { t } = useTranslation();
@@ -132,11 +159,7 @@ const _layout = () => {
   React.useEffect(() => {
     // Configure Matter SDK with complete config + Matter-specific settings
     // This will internally call super.configure() to configure ESPRMBase
-    ESPRMMatterBase.configure({
-      ...SDKConfig, // Complete SDK config including authUrl, clientId, etc.
-      matterAdapter,
-      matterVendorId: "0x131B",
-    });
+    ESPRMMatterBase.configure(matterSDKConfig);
   }, []);
 
   return (

@@ -79,15 +79,6 @@ export class ChallengeResponseHelper {
         };
       }
 
-      if (resp.payload.length !== 256) {
-        return {
-          success: false,
-          error: i18n.t("error.challengeResponse.invalidSignatureLength", {
-            length: resp.payload.length,
-          }),
-        };
-      }
-
       return {
         success: true,
         nodeId: resp.node_id,
@@ -157,14 +148,6 @@ export class ChallengeResponseHelper {
    */
   static validateChallengeResponse(response: DeviceChallengeResponse): boolean {
     if (!response.success || !response.nodeId || !response.signedChallenge) {
-      return false;
-    }
-
-    // Validate hex string format (should be 512 characters for 256 bytes)
-    if (
-      response.signedChallenge.length !==
-      ESP_CHALLENGE_RESPONSE_CONSTANTS.SIGNATURE_LENGTH_HEX
-    ) {
       return false;
     }
 
