@@ -5,6 +5,17 @@ All notable changes to the ESP RainMaker Home app will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.5.0]
+
+### Added
+
+**Time Series Visualization Support**
+
+- Added support for **time series** and **simple time series** data visualization using **bar** and **line** charts.
+- Introduced support for **predefined time intervals** and **aggregated views**.
+- Enabled **custom date range selection** using a calendar for flexible data analysis.
+
+
 ## [3.4.2]
 
 ### Enhanced
