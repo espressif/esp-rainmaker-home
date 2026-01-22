@@ -673,7 +673,38 @@
       "checkOTAUpdateError": "Failed to check for updates",
       "otaUpdateStartError": "Failed to start update",
       "failedToUpdateTimezone": "Failed to update timezone",
-      "noReadmeURLProvided": "No README URL provided"
+       "noReadmeURLProvided": "No README URL provided"
+    },
+    "chart": {
+      "title": "Chart",
+      "errorLoadingData": "Error loading data: {{message}}",
+      "retry": "Retry",
+      "value": "Value",
+      "loadingChartData": "Loading chart data...",
+      "notSupportedForDuration": "Not supported for this duration",
+      "noDataAvailable": "No data available",
+      "interval": "Interval",
+      "types": "Types",
+      "selectDateRange": "Select Date Range",
+      "simpleTimeSeries": "Simple Time Series",
+      "valueUpdated": "Value Updated",
+      "valueUpdatedSuccessfully": "Value updated successfully",
+      "failedToUpdateValue": "Failed to Update Value",
+      "updateError": "An error occurred while updating the value",
+      "chartHeader": {
+        "cancel": "Cancel",
+        "save": "Save",
+        "saving": "Saving...",
+        "enterValue": "Enter value"
+      },
+      "aggregation": {
+        "raw": "Raw",
+        "avg": "Avg",
+        "min": "Min",
+        "max": "Max",
+        "count": "Count",
+        "latest": "Latest"
+      }
     }
   },
   "scene": {
@@ -979,7 +1010,6 @@
     "goToSettings": "Go to Settings",
     "rainmakerMCPNotConnected": "Rainmaker MCP Not Connected",
     "rainmakerMCPWarning": "Rainmaker MCP connector is not connected. Do you want to continue or retry?",
-    "retry": "Retry",
     "continue": "Continue",
     "agentError": "Agent does not exist or something went wrong",
     "connectingConnector": "Connecting Rainmaker MCP...",
@@ -1145,6 +1175,8 @@
     "retry": "Retry",
     "ok": "OK",
     "close": "Close",
-    "continue": "Continue"
+    "continue": "Continue",
+    "confirm": "Confirm",
+    "clear": "Clear"
   }
 }

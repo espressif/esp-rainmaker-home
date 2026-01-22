@@ -199,7 +199,14 @@ export const tokens = {
     _30: scale(30),
     _40: scale(40),
   },
+
   border: {
     defaultWidth: 1.5,
   },
+
+  iconSize: {
+    _15: scale(15),
+    _20: scale(20),
+  },
+
 };

@@ -185,6 +185,10 @@ export const CDF_EXTERNAL_PROPERTIES = {
 } as const;
 
 export const ESPRM_PARAM_WRITE_PROPERTY = "write";
+export const ESPRM_PARAM_READ_PROPERTY = "read";
+export const ESPRM_PARAM_TIME_SERIES_PROPERTY = "time_series";
+export const ESPRM_PARAM_SIMPLE_TIME_SERIES_PROPERTY = "simple_ts";
+
 export const SCHEDULE_DAYS = ["M", "T", "W", "Th", "F", "S", "Su"];
 
 export const NODE_TYPE = {
@@ -270,3 +274,38 @@ export const POLLING = {
   DEFAULT_LABEL: "Polling",
   NODE_CONFIG_LABEL: "Node config",
 };
+// TIME SERIES CONSTANTS
+export const TIME_SERIES_PERIODS = ["1H", "1D", "7D", "4W", "1Y"] as const;
+
+// Time Series Period Values
+export const TIME_SERIES_PERIOD_1H = "1H";
+export const TIME_SERIES_PERIOD_1D = "1D";
+export const TIME_SERIES_PERIOD_7D = "7D";
+export const TIME_SERIES_PERIOD_4W = "4W";
+export const TIME_SERIES_PERIOD_1Y = "1Y";
+
+// Aggregation Values
+export const AGGREGATION_RAW = "raw";
+export const AGGREGATION_AVG = "avg";
+export const AGGREGATION_MIN = "min";
+export const AGGREGATION_MAX = "max";
+export const AGGREGATION_COUNT = "count";
+export const AGGREGATION_LATEST = "latest";
+
+export const TIME_SERIES_AGGREGATIONS = [AGGREGATION_RAW, AGGREGATION_AVG, AGGREGATION_MIN, AGGREGATION_MAX, AGGREGATION_COUNT, AGGREGATION_LATEST] as const;
+
+// Chart Types
+export const CHART_TYPE_AREA = "area";
+export const CHART_TYPE_BAR = "bar";
+export const CHART_TYPE_LINE = "line";
+
+// TIME SERIES DISPLAY TEXT
+export const TIME_SERIES_LABELS = {
+  LAST_HOUR: "Last Hour",
+  TODAY: "Today",
+  LAST_7_DAYS: "Last 7 Days",
+  LAST_4_WEEKS: "Last 4 Weeks",
+  LAST_YEAR: "Last Year",
+  CURRENT_PERIOD: "Current Period"
+} as const;
+
