@@ -14,7 +14,7 @@ import { HueCircle } from "@/components";
 import { PushButton } from "@/components";
 import { DropdownSelector } from "@/components";
 import { TriggerButton } from "@/components";
-import { TextInput } from "@/components";
+import { TextInput, Temperature } from "@/components";
 
 import {
   // DATA TYPES
@@ -30,6 +30,7 @@ import {
   ESPRM_HUE_PARAM_TYPE,
   ESPRM_POWER_PARAM_TYPE,
   ESPRM_SATURATION_PARAM_TYPE,
+  ESPRM_TEMPERATURE_PARAM_TYPE,
 
   // SUPPORTED PARAM UI TYPES
   ESPRM_UI_DROPDOWN_PARAM_TYPE,
@@ -44,6 +45,12 @@ import {
 } from "@/utils/constants";
 
 export const PARAM_CONTROLS = [
+  {
+    name: "Temperature",
+    types: [ESPRM_TEMPERATURE_PARAM_TYPE],
+    control: Temperature,
+    dataTypes: [DATA_TYPE_INT, DATA_TYPE_FLOAT],
+  },
   {
     name: "Text",
     types: [ESPRM_UI_TEXT_PARAM_TYPE],

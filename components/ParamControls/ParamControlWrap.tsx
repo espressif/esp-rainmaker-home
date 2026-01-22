@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useEffect, ReactElement } from "react";
+import React, { useEffect, ReactElement, useMemo } from "react";
 import { View, GestureResponderEvent } from "react-native";
 
 // Components
@@ -20,6 +20,10 @@ import {
   getParamBounds,
   ParamControlChildProps,
 } from "./lib/types";
+import {
+  ESPRM_PARAM_TIME_SERIES_PROPERTY,
+  ESPRM_PARAM_SIMPLE_TIME_SERIES_PROPERTY,
+} from "@/utils/constants";
 
 /**
  * ParamControlWrap
@@ -35,6 +39,7 @@ const ParamControlWrap = observer(
     param,
     disabled = false,
     setUpdating,
+    onOpenChart,
     children,
     style,
   }: ParamControlProps) => {
@@ -47,6 +52,15 @@ const ParamControlWrap = observer(
         state.value = value;
       },
     }));
+
+    const isTimeSeriesParam = useMemo(
+      () =>
+        [
+          ESPRM_PARAM_TIME_SERIES_PROPERTY,
+          ESPRM_PARAM_SIMPLE_TIME_SERIES_PROPERTY,
+        ].some((property) => param.properties?.includes(property)),
+      [param.properties]
+    );
 
     useEffect(() => {
       state.value = param.value;
@@ -93,8 +107,9 @@ const ParamControlWrap = observer(
               label: param.name,
               value: state.value,
               onValueChange: handleValueChange,
-              disabled: disabled,
+              disabled: !isTimeSeriesParam && disabled,
               meta: getParamBounds(param),
+              onOpenChart: onOpenChart ? () => onOpenChart(param) : null
             }
           );
         })}

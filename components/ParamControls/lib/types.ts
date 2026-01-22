@@ -16,6 +16,7 @@ export interface ParamControlProps {
   isSelected?: boolean;
   onSelect?: (selected: boolean) => void;
   onValueChange?: (value: any) => void;
+  onOpenChart?: (param: ESPRMDeviceParam) => void;
   children: React.ReactNode;
   style?: StyleProp<ViewStyle>;
 }
@@ -26,6 +27,7 @@ export interface ParamControlChildProps {
   onValueChange?: (event: GestureResponderEvent | null, newValue: any, validate?: boolean) => void;
   disabled?: boolean;
   meta?: any
+  onOpenChart?: (() => void) | null;
 }
 
 // Helper function to ensure value is within bounds

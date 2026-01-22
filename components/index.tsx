@@ -66,6 +66,7 @@ export { default as Tabs } from "./Navigations/Tabs";
 // Param Controls
 export { default as ParamControlWrap } from "./ParamControls/ParamControlWrap";
 export { default as TextInput } from "./ParamControls/TextInput";
+export { default as Temperature } from "./ParamControls/Temperature";
 export { default as ToggleSwitch } from "./ParamControls/ToggleSwitch";
 export { default as PowerButton } from "./ParamControls/PowerButton";
 export { default as Slider } from "./ParamControls/Slider";
@@ -105,3 +106,6 @@ export { default as FloatingChatButton } from "./Chat/FloatingChatButton";
 
 // schedule
 export * from "./Schedule"
+
+// Generic UI
+export { default as BadgeText } from "./BadgeText";

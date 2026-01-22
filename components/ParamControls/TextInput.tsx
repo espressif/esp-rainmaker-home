@@ -64,7 +64,7 @@ const TextInput = observer(
     return (
       <>
         <TouchableOpacity
-          style={[styles.container, disabled && styles.disabled]}
+          style={[styles.container]}
           onPress={handleEdit}
           disabled={disabled}
         >
@@ -75,7 +75,7 @@ const TextInput = observer(
                 {value || "Enter text"}
               </Text>
             </View>
-            <Edit3 size={20} color={tokens.colors.gray} />
+            {!disabled && <Edit3 size={20} color={tokens.colors.gray} />}
           </View>
         </TouchableOpacity>
 

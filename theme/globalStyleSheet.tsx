@@ -11,6 +11,7 @@ import type {
   AgentTermsBottomSheetStyles,
   AgentConversationsSheetStyles,
 } from "@/types/global";
+import { chartStyles } from "./chartStyleSheet";
 
 export const globalStyles = StyleSheet.create({
   // Typography
@@ -455,6 +456,32 @@ export const globalStyles = StyleSheet.create({
     fontSize: tokens.fontSize.xs,
     fontFamily: tokens.fonts.medium,
     color: tokens.colors.primary,
+  },
+  // Generic badge styles
+  badgeContainer: {
+    position: "absolute",
+    top: 10,
+    right: 10,
+    zIndex: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: tokens.colors.white,
+    paddingHorizontal: tokens.spacing._10,
+    paddingVertical: tokens.spacing._5,
+    borderRadius: tokens.radius.sm,
+    borderWidth: 1,
+    borderColor: tokens.colors.borderColor,
+    shadowColor: tokens.colors.black,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  badgeText: {
+    fontSize: tokens.fontSize.xs,
+    color: tokens.colors.text_secondary,
+    fontFamily: tokens.fonts.medium,
+    marginRight: tokens.spacing._5,
   },
   removeButton: {
     padding: tokens.spacing._5,
@@ -2523,6 +2550,9 @@ export const globalStyles = StyleSheet.create({
     fontSize: tokens.fontSize.sm,
     fontFamily: tokens.fonts.medium,
   },
+
+  // Chart Styles
+  ...chartStyles,
 });
 
 // Chat Markdown Styles Helper
