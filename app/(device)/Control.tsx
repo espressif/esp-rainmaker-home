@@ -33,7 +33,6 @@ import { testProps } from "@/utils/testProps";
 import Fallback from "@/app/(device)/device_panels/Fallback";
 import LightControl from "@/app/(device)/device_panels/Light";
 import SwitchControl from "@/app/(device)/device_panels/Switch";
-import TemperatureControl from "@/app/(device)/device_panels/Temperature";
 import AiAgentControl from "@/app/(device)/device_panels/AiAgent";
 
 // Utils
@@ -102,7 +101,6 @@ const Control = () => {
   const CONTROL_PANELS: Record<string, React.FC<any>> = {
     light: LightControl,
     switch: SwitchControl,
-    temperature: TemperatureControl,
     "ai-agent": AiAgentControl,
   };
 

@@ -1047,3 +1047,314 @@ export type {
   FontSizeLevel,
   AgentTermsBottomSheetStyles, AgentConversationsSheetStyles 
 } from "@/utils/agent/types";
+// Time Series Types
+// ============================================================================
+
+/**
+ * Time series period options for chart display
+ */
+export type TimeSeriesPeriod = "1H" | "1D" | "7D" | "4W" | "1Y" | null;
+
+/**
+ * Aggregation method options for time series data
+ */
+export type AggregationMethod = "raw" | "avg" | "min" | "max" | "count" | "latest";
+
+/**
+ * Parameters for building time series data request
+ */
+export interface TimeSeriesRequestParams {
+  /** Selected time period (1D, 7D, 4W, 1Y) - null when using custom range */
+  period: TimeSeriesPeriod | null;
+  /** Aggregation method (ignored for simple time series) */
+  aggregation?: AggregationMethod;
+  /** Optional start time (Unix timestamp in milliseconds). Will be converted to seconds for API */
+  startTime?: number;
+  /** Optional end time (Unix timestamp in milliseconds). Will be converted to seconds for API */
+  endTime?: number;
+  /** Optional result count limit */
+  resultCount?: number;
+  /** Optional flag to order results in descending order */
+  descOrder?: boolean;
+  /** Optional timezone string (e.g., "Asia/Kolkata") */
+  timezone?: string;
+  /** Flag indicating if this is a simple time series param (only start/end time, no aggregation/intervals) */
+  isSimpleTimeSeries?: boolean;
+  /** Optional dynamic aggregation interval (day, month, year) - overrides period-based interval */
+  aggregationInterval?: AggregationIntervalType;
+}
+
+/**
+ * Aggregation interval types for time series data
+ */
+export type AggregationIntervalType = "minute" | "hour" | "day" | "week" | "month" | "year";
+
+/**
+ * Validation error class for time series operations
+ */
+export class TimeSeriesValidationError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "TimeSeriesValidationError";
+  }
+}
+
+// ============================================================================
+// Chart Types
+// ============================================================================
+
+/**
+ * High-level state of the chart view
+ */
+export type ChartState = "loading" | "error" | "unsupported" | "empty" | "ready";
+
+/**
+ * Props for TimeNavigator component
+ */
+export interface TimeNavigatorProps {
+  /** The selected time period */
+  period?: TimeSeriesPeriod;
+  /** The time offset from current time (0 = current period, 1 = previous period, etc.) */
+  offset?: number;
+  /** Whether data is currently loading */
+  loading?: boolean;
+  /** Callback when previous period button is pressed */
+  onPrevious: () => void;
+  /** Callback when next period button is pressed */
+  onNext: () => void;
+  /** Whether navigation to next period is allowed */
+  canNavigateNext: boolean;
+  /** Optional pre-formatted label to display instead of deriving from period/offset */
+  label?: string;
+}
+
+/** Represents a single data point in a chart */
+export interface ChartDataPoint {
+  /** The numeric value of the data point (null for missing data) */
+  value: number | null;
+  /** The label/timestamp for the data point */
+  label: string;
+  /** Optional timestamp in milliseconds */
+  timestamp?: number;
+}
+
+
+
+/**
+ * Props interface for ChartHeader component
+ */
+export interface ChartHeaderProps {
+  /** Label to show for the parameter */
+  label: string;
+  /** Parameter object that exposes current value and setValue */
+  param: any | null;
+  /** Whether the parameter is writeable */
+  isWriteable?: boolean;
+  /** Disable editing state (e.g. while loading chart data) */
+  disabled?: boolean;
+}
+
+/**
+ * Props interface for ChartMessage component
+ */
+export interface ChartMessageProps {
+  /** Message text to display in the chart area */
+  text: string;
+}
+
+/**
+ * Normalized chart data point with required timestamp and value.
+ * Used internally by GenericChart after data normalization.
+ */
+export interface NormalizedChartDataPoint extends Record<string, unknown> {
+  /** Timestamp in milliseconds (required) */
+  timestamp: number;
+  /** Numeric value (required, non-null) */
+  value: number;
+}
+
+/** Props interface for GenericChart component */
+export interface GenericChartProps {
+  /** Chart data points with timestamp and value */
+  data: ChartDataPoint[];
+  /** Height of the chart */
+  height?: number;
+  /** Optional start time for the chart domain */
+  startTime?: number | null;
+  /** Optional end time for the chart domain */
+  endTime?: number | null;
+  /** Chart type: "line" or "bar" */
+  type?: "line" | "bar";
+}
+
+/**
+ * Props for AggregationDropdown component
+ */
+export interface AggregationDropdownProps {
+  /** Currently selected aggregation method */
+  aggregation: AggregationMethod;
+  /** Available aggregation methods */
+  aggregations: AggregationMethod[];
+  /** Whether data is currently loading */
+  loading: boolean;
+  /** Whether the aggregation tooltip is visible */
+  tooltipVisible: boolean;
+  /** Current tooltip anchor position */
+  tooltipPosition: { x: number; y: number };
+  /** Setter for tooltip visibility */
+  setTooltipVisible: (visible: boolean) => void;
+  /** Setter for tooltip position */
+  setTooltipPosition: (position: { x: number; y: number }) => void;
+  /** Ref to the aggregation button */
+  buttonRef: React.RefObject<any>;
+  /** Ref to the chart container */
+  chartContainerRef: React.RefObject<any>;
+  /** Handler when an aggregation is selected */
+  onSelectAggregation: (agg: string) => void;
+}
+
+// ============================================================================
+// Time Series Data Hook Types
+// ============================================================================
+
+/**
+ * Return type for useTimeSeriesData hook
+ */
+export interface UseTimeSeriesDataResult {
+  /** Array of chart data points */
+  data: ChartDataPoint[];
+  /** Whether data is currently being fetched */
+  loading: boolean;
+  /** Error object if fetch failed, null otherwise */
+  error: Error | null;
+  /** Function to fetch time series data for a given period and aggregation */
+  fetchData: (period: TimeSeriesPeriod | null, aggregation: AggregationMethod, startTime: number, endTime: number, aggregationInterval?: AggregationIntervalType) => Promise<void>;
+}
+
+// ============================================================================
+// Date Range Calendar Types
+// ============================================================================
+
+/**
+ * Date range selection result
+ */
+export interface DateRange {
+  /** Start timestamp in Unix milliseconds */
+  start: number;
+  /** End timestamp in Unix milliseconds */
+  end: number;
+  /** Suggested aggregation interval based on range duration */
+  aggregationInterval: AggregationIntervalType;
+}
+
+/**
+ * Props for DateRangeCalendarBottomSheet component
+ */
+export interface DateRangeCalendarBottomSheetProps {
+  /** Whether the bottom sheet is visible */
+  visible: boolean;
+  /** Callback when bottom sheet is closed */
+  onClose: () => void;
+  /** Callback when date range is selected */
+  onSelect: (range: DateRange) => void;
+  /** Initial selected range (optional) */
+  range?: DateRange;
+  /** Aggregation method - "raw" has 31 day limit */
+  aggregation?: "raw" | string;
+  /** Minimum date (timestamp in ms) - dates before this are disabled */
+  minDate?: number;
+  /** Maximum date (timestamp in ms) - dates after this are disabled */
+  maxDate?: number;
+  /** Week start day (0 = Sunday, 1 = Monday, etc.) - only for week interval */
+  weekStart?: number;
+  /** Flag to indicate simple time series (no interval restrictions) */
+  isSimpleTimeSeries?: boolean;
+  /** @deprecated Position to anchor (kept for backward compatibility) */
+  anchorPosition?: { x: number; y: number };
+}
+
+/**
+ * Methods exposed via ref for DateRangeCalendarBottomSheet
+ */
+export interface DateRangeCalendarBottomSheetRef {
+  /** Clears the current date selection */
+  clearSelection: () => void;
+}
+
+// ============================================================================
+// Aggregation Tooltip Types
+// ============================================================================
+
+/**
+ * Props for AggregationTooltip component
+ */
+export interface AggregationTooltipProps {
+  /** Whether the tooltip is visible */
+  visible: boolean;
+  /** Callback when tooltip is closed */
+  onClose: () => void;
+  /** Position to anchor the tooltip */
+  anchorPosition?: { x: number; y: number };
+  /** List of available aggregation types */
+  aggregations: string[];
+  /** Callback when an aggregation is selected */
+  onSelectAggregation: (agg: string) => void;
+  /** Currently selected aggregation */
+  selectedAggregation: string;
+}
+
+/**
+ * Props for ChartPeriodSelector component
+ */
+export interface ChartPeriodSelectorProps {
+  /** Available time series periods */
+  periods: TimeSeriesPeriod[];
+  /** Currently selected period (null when using custom range) */
+  selectedPeriod: TimeSeriesPeriod | null;
+  /** Currently selected custom date range, if any */
+  customDateRange: DateRange | null;
+  /** Whether data is currently loading */
+  loading: boolean;
+  /** Handler called when a period is selected */
+  onSelect: (period: TimeSeriesPeriod) => void;
+}
+
+/**
+ * Props for PeriodTab component
+ */
+export interface PeriodTabProps {
+  /** The time series period to display */
+  period: TimeSeriesPeriod;
+  /** Whether this period tab is currently active */
+  isActive: boolean;
+  /** Whether data is currently loading */
+  loading: boolean;
+  /** Handler called when the tab is pressed */
+  onPress: () => void;
+}
+
+/**
+ * Props for ActiveValueIndicator component
+ */
+export interface ActiveValueIndicatorProps {
+  xPosition: any;
+  yPosition: any;
+  bottom: number;
+  top: number;
+  lineColor: string;
+  indicatorColor: any;
+}
+
+/**
+ * Props for ChartValueDisplayToolTip component
+ */
+export interface ChartValueDisplayToolTipProps {
+  activeValue: any;
+  activeTimestamp: any;
+  xPosition: any;
+  yPosition: any;
+  chartLeft: number;
+  chartRight: number;
+  chartTop: number;
+  chartBottom: number;
+}

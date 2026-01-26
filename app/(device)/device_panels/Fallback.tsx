@@ -14,7 +14,7 @@ import { tokens } from "@/theme/tokens";
 import { PARAM_CONTROLS } from "@/config/params.config";
 
 // SDK
-import { ESPRMDevice } from "@espressif/rainmaker-base-sdk";
+import { ESPRMDevice, ESPRMDeviceParam } from "@espressif/rainmaker-base-sdk";
 import { observer, useLocalObservable } from "mobx-react-lite";
 
 // components
@@ -25,6 +25,8 @@ import { testProps } from "@/utils/testProps";
 
 // Types
 import { DeviceFallbackProps } from "@/types/global";
+import { ESPRM_PARAM_WRITE_PROPERTY } from "@/utils/constants";
+import { router } from "expo-router";
 
 /**
  * DeviceFallback
@@ -36,7 +38,7 @@ import { DeviceFallbackProps } from "@/types/global";
  * @param props - Component props containing the device node
  * @returns JSX component displaying device information
  */
-const DeviceFallback = observer(
+const DeviceFallback = observer( 
   ({ node, device: deviceProp }: DeviceFallbackProps) => {
     const state = useLocalObservable(() => ({
       updating: false,
@@ -58,6 +60,18 @@ const DeviceFallback = observer(
     // 1. Device Data
     const device: ESPRMDevice = deviceProp;
     const params = device?.params || [];
+
+    // Handler to open chart for time series params
+    const handleOpenChart = (param: ESPRMDeviceParam) => {
+      router.push({
+        pathname: "/(device)/Chart",
+        params: {
+          nodeId: node.id,
+          deviceName: device.name,
+          paramName: param.name,
+        },
+      } as any);
+    };
 
     // 2. Render
     return (
@@ -83,21 +97,22 @@ const DeviceFallback = observer(
         } {...testProps("scroll_fallback")}
       >
         {params.map((param) => {
-          let control = _paramsMap[param.uiType];
-          if (!control) return null;
-
-          if (
-            param.uiType == "esp.ui.slider" &&
-            _paramsMap[param.type] !== undefined
-          ) {
-            control = _paramsMap[param.type];
+          // Check for control using type
+          let control = param.type ? _paramsMap[param.type] : null;
+          
+          // If no control found via type, try uiType as fallback
+          if (!control && param.uiType) {
+            control = _paramsMap[param.uiType];
           }
+          
+          // Return null only if neither uiType nor type has a valid control
+          if (!control) return null;
 
           if (control.derivedMeta && control.derivedMeta.length > 0) {
             control.derivedMeta.forEach((_param: any) => {
               const [name, type] = Object.entries(_param)[0];
               const derivedParam = params.find((p) => p.type === type);
-              if (derivedParam) {
+              if (derivedParam && param.bounds) {
                 param.bounds[name] = derivedParam.value;
               }
             });
@@ -107,8 +122,9 @@ const DeviceFallback = observer(
             <ParamControlWrap
               key={param.name}
               param={param}
-              disabled={!node.connectivityStatus?.isConnected}
+              disabled={!node.connectivityStatus?.isConnected || !param.properties?.includes(ESPRM_PARAM_WRITE_PROPERTY)}
               setUpdating={state.setUpdating}
+              onOpenChart={handleOpenChart}
               style={{
                 marginBottom: 10,
                 ...globalStyles.shadowElevationForLightTheme,

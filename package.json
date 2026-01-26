@@ -1,7 +1,7 @@
 {
   "name": "NOVA",
   "main": "expo-router/entry",
-  "version": "3.4.2",
+  "version": "3.5.0",
   "scripts": {
     "start": "expo start",
     "android": "expo run:android",
@@ -12,7 +12,7 @@
   },
   "dependencies": {
     "@espressif/rainmaker-base-cdf": "1.2.1",
-    "@espressif/rainmaker-base-sdk": "2.1.0",
+    "@espressif/rainmaker-base-sdk": "2.1.1",
     "@espressif/rainmaker-matter-sdk": "1.0.2",
     "@expo/vector-icons": "^14.0.2",
     "@react-native-async-storage/async-storage": "^2.1.2",
@@ -21,6 +21,7 @@
     "@react-native-picker/picker": "^2.6.1",
     "@react-navigation/bottom-tabs": "^7.2.0",
     "@react-navigation/native": "^7.0.14",
+    "@shopify/react-native-skia": "1.5.0",
     "@tamagui/config": "1.126.12",
     "@tamagui/core": "1.126.12",
     "@tamagui/toast": "1.126.12",
@@ -35,6 +36,7 @@
     "expo-dev-client": "~5.0.20",
     "expo-font": "~13.0.4",
     "expo-haptics": "~14.0.1",
+    "expo-linear-gradient": "~14.0.2",
     "expo-linking": "~7.0.5",
     "expo-network": "~7.0.5",
     "expo-router": "~4.0.21",
@@ -52,6 +54,7 @@
     "react-dom": "18.3.1",
     "react-i18next": "^15.5.1",
     "react-native": "0.76.9",
+    "react-native-calendars": "^1.1313.0",
     "react-native-color-picker": "^0.6.0",
     "react-native-gesture-handler": "~2.20.2",
     "react-native-markdown-display": "^7.0.2",
@@ -67,7 +70,8 @@
     "react-native-websocket": "^1.0.2",
     "react-native-webview": "13.12.5",
     "react-test-renderer": "18.2.0",
-    "tamagui": "1.126.12"
+    "tamagui": "1.126.12",
+    "victory-native": "^41.20.2"
   },
   "devDependencies": {
     "@babel/core": "^7.25.2",

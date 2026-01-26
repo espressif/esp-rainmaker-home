@@ -109,8 +109,7 @@ export const DEVICE_TYPE_LIST = [
       temperature: { icon: "temperature" },
     },
     defaultIcon: "temperature",
-    disabled: false,
-    controlPanel: "temperature",
+    disabled: false
   },
   {
     label: "Sensor",
