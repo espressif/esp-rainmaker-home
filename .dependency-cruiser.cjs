@@ -27,7 +27,7 @@ module.exports = {
         pathNot:
           "^(src/sdk-adaptors|src/native-adaptors|src/tasks|src/integrations|config)/",
       },
-      to: { path: "^node_modules/@espressif/" },
+      to: { path: "^node_modules/@espressif/(?!rainmaker-base-cdf(?:/|$))" },
     },
     {
       name: "no-sdk-adaptors-in-product-layer",

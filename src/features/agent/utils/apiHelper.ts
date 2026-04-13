@@ -8,7 +8,6 @@ import axios, { AxiosInstance, AxiosRequestConfig, AxiosResponse } from 'axios';
 import StorageAdapter from '@native-adaptors/implementations/ESPAsyncStorage';
 import { AGENTS_API_BASE_URL } from '@/config/agent.config';
 import { ESPCDF } from '@store';
-import UserStore from '@store/store/userStore';
 import { TOKEN_STORAGE_KEYS } from './constants';
 import type {
     Agent,
@@ -80,7 +79,7 @@ export const apiRequest = async <T = any>(
         const instance = ESPCDF.instance;
         const adaptorId = instance?.getActiveAdaptorIdentifier();
         if (instance && adaptorId) {
-            authToken = await UserStore.getActiveAdaptorAccessToken(
+            authToken = await ESPCDF.instance?.userStore.getActiveAdaptorAccessToken(
                 instance,
                 adaptorId
             );

@@ -16,7 +16,7 @@ import type {
     ESPCDFNodeOperation,
     ESPCDFPropertyChangeCallback,
 } from "@store";
-import { EVENT_NODE_PARAMS_CHANGED } from "@store/utils/constants";
+import { EVENT_NODE_PARAMS_CHANGED } from "@store";
 import { ESPRMNGBaseAdaptorIdentifier } from "@config/sdk.identifiers";
 import { HEADLESS_ERROR_UNKNOWN } from "@shared/utils/constants";
 import { mapShadowDocumentToNodeUpdateEvents } from "../utils/common";

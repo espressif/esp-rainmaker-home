@@ -9,7 +9,7 @@ import {
   EVENT_NODE_CONNECTED,
   EVENT_NODE_DISCONNECTED,
   EVENT_NODE_PARAMS_CHANGED,
-} from "@store/utils/constants";
+} from "@store";
 
 const NOT_AUTHORIZED_MARKER = "NotAuthorizedException:";
 
