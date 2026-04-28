@@ -19,6 +19,7 @@ import {
   GroupStoreCallbacks,
   ESPCDFCreateHomeRequestParams,
   AddDeviceParams,
+  AddOnNetworkDeviceParams,
   ESPCDFSubscribeToNodeUpdatesRequestParams,
   ESPCDFMatterPrecommissionInfo,
   ESPCDFAssumeRoleRequest,
@@ -344,6 +345,34 @@ export class ESPCDFUser implements ESPCDFUserInterface {
       return null;
     }
     return this.operations.addDevice(this, params, this.__storeCallbacks);
+  }
+
+  /**
+   * Add a device that is already on the user's local network using the
+   * challenge-response flow (LAN HTTP). The device is identified by mDNS
+   * discovery and verified through a cloud-issued challenge that the device
+   * signs with its credentials.
+   * @param params - Discovered device, group id, and (optionally) POP
+   * @returns Provisioned ESPCDFNode or `null` if the active adaptor does not
+   *          support on-network provisioning or the verification did not yield
+   *          a fetchable node.
+   */
+  async addOnNetworkDevice(
+    params: AddOnNetworkDeviceParams
+  ): Promise<ESPCDFNode | null> {
+    if (!this.__storeCallbacks || !this.operations.addOnNetworkDevice) {
+      return null;
+    }
+    return this.runAndEmit(
+      "addOnNetworkDevice",
+      () =>
+        this.operations.addOnNetworkDevice!(
+          this,
+          params,
+          this.__storeCallbacks!
+        ),
+      (node) => node
+    );
   }
 
   async subscribeToNodeUpdates(params: ESPCDFSubscribeToNodeUpdatesRequestParams): Promise<void> {

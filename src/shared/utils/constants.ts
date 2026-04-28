@@ -126,11 +126,25 @@ export const ESPRM_AGENT_AUTH_SERVICE = "esp.service.agent-auth";
 export const ESPRM_RMAKER_USER_AUTH_SERVICE = "esp.service.rmaker-user-auth";
 
 export const MDNS_SERVICE_TYPE_ESP_LOCAL_CTRL = "_esp_local_ctrl._tcp.";
+/** Service announced by unprovisioned RainMaker firmware running the on-network challenge-response flow. */
+export const MDNS_SERVICE_TYPE_ESP_RMAKER_CHAL_RESP = "_esp_rmaker_chal_resp._tcp.";
 export const MDNS_DOMAIN_LOCAL = "local.";
 
 // DISCOVERY EVENTS
 export const DISCOVERY_UPDATE_EVENT = "DiscoveryUpdate";
 export const DISCOVERY_LOST_EVENT = "DiscoveryLost";
+
+// MDNS TXT RECORD KEYS (emitted by native discovery modules for chal-resp services)
+export const MDNS_TXT_KEY_NODE_ID = "node_id";
+export const MDNS_TXT_KEY_SEC_VERSION = "sec_version";
+export const MDNS_TXT_KEY_POP_REQUIRED = "pop_required";
+export const MDNS_TXT_KEY_CH_RESP = "ch_resp";
+
+// ON-NETWORK DISCOVERY DEFAULTS
+export const ON_NETWORK_DEFAULT_CH_RESP_ENDPOINT = "ch_resp";
+export const ON_NETWORK_DEFAULT_SEC_VERSION = 0;
+export const ON_NETWORK_HTTP_TIMEOUT_MS = 15000;
+export const ON_NETWORK_DISCOVERY_DURATION_MS = 5000;
 
 // TOAST TYPES
 export const TOAST_TYPE_SUCCESS = "success";

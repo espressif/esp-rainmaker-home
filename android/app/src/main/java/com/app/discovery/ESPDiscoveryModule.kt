@@ -18,6 +18,7 @@ import com.facebook.react.bridge.WritableNativeMap
 import com.facebook.react.modules.core.DeviceEventManagerModule
 import com.facebook.react.uimanager.ReactShadowNode
 import com.facebook.react.uimanager.ViewManager
+import com.app.discovery.mDNSManager.DiscoveredService
 
 /**
  * `ESPDiscoveryModule` provides functionality for discovering ESP devices over mDNS.
@@ -50,11 +51,9 @@ class ESPDiscoveryModule(reactContext: ReactApplicationContext) :
             reactContext.applicationContext,
             serviceType, // Service type set in startDiscovery method
             object : mDNSManager.mDNSEvenListener {
-                override fun deviceFound(baseUrls: HashMap<String, String>) {
-                    for ((nodeId, url) in baseUrls) {
-                        nodeBaseUrlMap[nodeId] = url
-                        sendDeviceEvent(nodeId, url)
-                    }
+                override fun deviceFound(service: DiscoveredService) {
+                    nodeBaseUrlMap[service.nodeId] = service.baseUrl
+                    sendDeviceEvent(service)
                 }
 
                 override fun deviceLost(nodeId: String) {
@@ -100,6 +99,7 @@ class ESPDiscoveryModule(reactContext: ReactApplicationContext) :
             domain = DEFAULT_MDNS_DOMAIN_LOCAL
         }
 
+        Log.d(TAG, "startDiscovery called: serviceType=$serviceType, domain=$domain, mdnsManager=${mdnsManager != null}")
         mdnsManager?.discoverServices(serviceType, domain)
     }
 
@@ -108,19 +108,31 @@ class ESPDiscoveryModule(reactContext: ReactApplicationContext) :
      */
     @ReactMethod
     fun stopDiscovery() {
+        Log.d(TAG, "stopDiscovery called, mdnsManager=${mdnsManager != null}")
         mdnsManager?.stopDiscovery()
     }
 
     /**
-     * Sends an event to the React Native layer with the discovered device details.
+     * Sends a `DiscoveryUpdate` event to React Native with the resolved service.
      *
-     * @param nodeId The unique identifier for the discovered node.
-     * @param baseUrl The base URL of the discovered node.
+     * Backwards-compatible payload: existing consumers continue to read
+     * `nodeId`/`baseUrl`. Additional fields (`host`, `port`, `txt`) let JS-side
+     * features drive direct LAN HTTP flows (e.g. on-network challenge-response
+     * provisioning) without further native round-trips.
      */
-    private fun sendDeviceEvent(nodeId: String, baseUrl: String) {
+    private fun sendDeviceEvent(service: DiscoveredService) {
+        val txtMap = WritableNativeMap().apply {
+            for ((key, value) in service.txt) {
+                putString(key, value)
+            }
+        }
         val eventData = WritableNativeMap().apply {
-            putString("nodeId", nodeId)
-            putString("baseUrl", baseUrl)
+            putString("nodeId", service.nodeId)
+            putString("serviceName", service.serviceName)
+            putString("baseUrl", service.baseUrl)
+            putString("host", service.host)
+            putInt("port", service.port)
+            putMap("txt", txtMap)
         }
         try {
             reactApplicationContext

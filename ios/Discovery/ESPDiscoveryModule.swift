@@ -77,16 +77,44 @@ class ESPDiscoveryModule: RCTEventEmitter {
     resolvedNodeIdByServiceKey.removeAll()
   }
   
-  private func sendDeviceEvent(nodeId: String, baseUrl: String) {
-    // Validate inputs before sending event
+  /// Emits a `DiscoveryUpdate` event with full discovery payload.
+  ///
+  /// Backwards-compatible: existing consumers continue to read `nodeId`/`baseUrl`.
+  /// Additional fields are populated from the resolved Bonjour service so JS can
+  /// drive flows that need direct LAN HTTP communication (e.g. on-network
+  /// challenge-response provisioning) without further native round-trips.
+  ///
+  /// - Parameters:
+  ///   - nodeId: Stable id (TXT `node_id` if present, else service name).
+  ///   - serviceName: Raw mDNS service instance name (always preserved
+  ///                  separately from `nodeId` so the UI can show both).
+  ///   - baseUrl: `http://<host>:<port>` for legacy local control flows.
+  ///   - host: Numeric IP of the resolved service (preferred for HTTP).
+  ///   - port: TCP port advertised by the service.
+  ///   - txt: Raw TXT key/value dictionary (UTF-8 strings) from the service.
+  private func sendDeviceEvent(
+    nodeId: String,
+    serviceName: String,
+    baseUrl: String,
+    host: String,
+    port: Int,
+    txt: [String: String]
+  ) {
     guard !nodeId.isEmpty, !baseUrl.isEmpty else {
       return
     }
-    
-    let eventData: [String: Any] = ["nodeId": nodeId, "baseUrl": baseUrl]
+
+    let eventData: [String: Any] = [
+      "nodeId": nodeId,
+      "serviceName": serviceName,
+      "baseUrl": baseUrl,
+      "host": host,
+      "port": port,
+      "txt": txt,
+    ]
     sendEvent(withName: "DiscoveryUpdate", body: eventData)
   }
-  
+
 }
 
 extension ESPDiscoveryModule: NetServiceBrowserDelegate {
@@ -111,7 +139,8 @@ extension ESPDiscoveryModule: NetServiceBrowserDelegate {
 
 extension ESPDiscoveryModule: NetServiceDelegate {
   func netServiceDidResolveAddress(_ sender: NetService) {
-    var nodeId = nodeIdFromTxtRecord(sender)
+    let txt = txtRecordDictionary(sender)
+    var nodeId = nodeIdFromTxtRecord(txt)
     if nodeId.isEmpty {
       nodeId = sender.name
     }
@@ -129,7 +158,14 @@ extension ESPDiscoveryModule: NetServiceDelegate {
 
     let baseUrl = "http://\(host):\(sender.port)"
     resolvedNodeIdByServiceKey[Self.serviceKey(sender)] = nodeId
-    sendDeviceEvent(nodeId: nodeId, baseUrl: baseUrl)
+    sendDeviceEvent(
+      nodeId: nodeId,
+      serviceName: sender.name,
+      baseUrl: baseUrl,
+      host: host,
+      port: sender.port,
+      txt: txt
+    )
   }
   
   func netService(_ sender: NetService, didNotResolve errorDict: [String: NSNumber]) {
@@ -141,16 +177,29 @@ extension ESPDiscoveryModule: NetServiceDelegate {
   }
 
   /// Bonjour TXT `node_id` (case-insensitive), same as RainMaker Android `mDNSManager`.
-  /// Uses `txtRecordData` + `dictionary(fromTXTRecord:)` for compatibility (no `txtRecordDictionary()` on all targets).
-  private func nodeIdFromTxtRecord(_ service: NetService) -> String {
-    guard let txtData = service.txtRecordData() else { return "" }
-    let dict = NetService.dictionary(fromTXTRecord: txtData)
-    for (key, valueData) in dict where key.lowercased() == "node_id" {
-      guard let raw = String(data: valueData, encoding: .utf8) else { continue }
-      let trimmed = raw.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines)
+  private func nodeIdFromTxtRecord(_ txt: [String: String]) -> String {
+    for (key, value) in txt where key.lowercased() == "node_id" {
+      let trimmed = value.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines)
       if !trimmed.isEmpty { return trimmed }
     }
     return ""
+  }
+
+  /// Decode TXT record into a `[String: String]` of UTF-8 values.
+  ///
+  /// Used both for `node_id` lookup and to surface TXT data (e.g. `pop_required`,
+  /// `sec_version`, `ch_resp`) to the JS layer for on-network provisioning.
+  /// Uses `txtRecordData` + `dictionary(fromTXTRecord:)` for broad availability.
+  private func txtRecordDictionary(_ service: NetService) -> [String: String] {
+    guard let txtData = service.txtRecordData() else { return [:] }
+    let raw = NetService.dictionary(fromTXTRecord: txtData)
+    var out: [String: String] = [:]
+    for (key, valueData) in raw {
+      if let value = String(data: valueData, encoding: .utf8) {
+        out[key] = value
+      }
+    }
+    return out
   }
 
   /// Prefer numeric IP for `baseUrl` to match Android `InetAddress.getHostAddress()`.

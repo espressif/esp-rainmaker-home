@@ -116,6 +116,56 @@ export interface ESPCDFChallengeResponseVerificationRequest {
 }
 
 /**
+ * On-network device discovered via mDNS (Bonjour / NSD).
+ *
+ * Captures everything required to talk to the device directly over LAN HTTP
+ * for the on-network challenge-response provisioning flow:
+ * - `host`/`port`: numeric IP and TCP port the device advertises.
+ * - `popRequired`: true if the device demands a Proof-of-Possession before
+ *   it will accept a challenge.
+ * - `secVersion`: security version advertised in TXT records (typically 0/1/2).
+ * - `chRespEndpoint`: HTTP path under which the device exposes its
+ *   challenge-response handler (defaults to `ch_resp`).
+ * - `nodeId`: stable identifier the device announces (TXT `node_id` or service
+ *   instance name fallback). Already known to RainMaker cloud.
+ * - `serviceName`: raw mDNS service instance name (used as a display label).
+ */
+export interface ESPCDFOnNetworkDevice {
+  /** RainMaker node id advertised in TXT `node_id`. */
+  nodeId: string;
+  /** Service instance name (display fallback when `nodeId` is technical). */
+  serviceName: string;
+  /** Numeric host (e.g. `192.168.1.42`). */
+  host: string;
+  /** TCP port advertised by the service. */
+  port: number;
+  /** Security version from TXT `sec_version` (defaults to 0 if missing). */
+  secVersion: number;
+  /** Whether the device requires a POP before accepting the challenge. */
+  popRequired: boolean;
+  /** HTTP path on the device for challenge-response (defaults to `ch_resp`). */
+  chRespEndpoint: string;
+}
+
+/**
+ * Parameters for `user.addOnNetworkDevice` (challenge-response over LAN HTTP).
+ *
+ * No Wi-Fi credentials are required — the device is already on the network;
+ * provisioning only performs cloud-driven user-node mapping verified through
+ * a signed challenge.
+ */
+export interface AddOnNetworkDeviceParams {
+  /** Discovered mDNS device record. */
+  device: ESPCDFOnNetworkDevice;
+  /** Group / home id to attach the node to once verified. */
+  groupId: string;
+  /** Optional POP value; required when `device.popRequired` is true. */
+  pop?: string;
+  /** Optional progress callback (mirrors `addDevice`). */
+  onProgress?: (response: ESPCDFProvisionResponse) => void;
+}
+
+/**
  * Provisioning device interface - represents a device during provisioning
  * This interface unifies device provisioning across different SDKs
  */
@@ -262,6 +312,20 @@ export interface ESPCDFProvisioningDeviceOperations {
    * @returns Promise resolving to boolean indicating support
    */
   checkChallengeResponseSupport(): Promise<boolean>;
+
+  /**
+   * Check whether this device represents an "on-network" target (already on
+   * the user's Wi-Fi, discovered via mDNS). Used by `useProvision` to pick
+   * the LAN-HTTP challenge-response flow vs. the BLE/SoftAP Wi-Fi flow —
+   * same dispatch pattern as `checkChallengeResponseSupport` for chal-resp
+   * vs. MQTT.
+   *
+   * Optional: adaptors / device transformers that don't construct on-network
+   * provisioning devices may omit this method; the entity wrapper defaults
+   * to `false`.
+   * @returns Promise resolving to `true` for on-network devices, `false` otherwise.
+   */
+  checkOnNetworkProvisioning?(): Promise<boolean>;
 }
 
 /**
@@ -346,4 +410,19 @@ export const ESPCDFProvProgressMessages = {
   SETTING_NODE_TIMEZONE: "Setting node timezone",
   /** Message indicating the successful node timeZone setup. */
   NODE_TIMEZONE_SETUP_SUCCEED: "Node timezone setup succeed",
+} as const;
+
+/**
+ * Progress messages emitted during the on-network (LAN HTTP)
+ * challenge-response provisioning flow.
+ */
+export const ESPCDFOnNetworkProgressMessages = {
+  /** Cloud is being asked to issue a challenge for the discovered node. */
+  INITIATING_NODE_ASSOCIATION: "Initiating node association",
+  /** Challenge has been issued and is being relayed to the device. */
+  SENDING_CHALLENGE_TO_DEVICE: "Sending challenge to device",
+  /** Cloud is verifying the signed challenge returned by the device. */
+  VERIFYING_NODE_ASSOCIATION: "Verifying node association",
+  /** Mapping has been confirmed by the cloud. */
+  USER_NODE_MAPPING_SUCCEED: "User node mapping succeed",
 } as const;

@@ -16,3 +16,4 @@ export { useWifiStorage } from "./useWifiStorage";
 export { useDeviceSelection } from "./useDeviceSelection";
 export { useDeviceParamsSelection } from "./useDeviceParamsSelection";
 export { useDevicePermissions } from "./useDevicePermissions";
+export { useOnNetworkDiscovery } from "./useOnNetworkDiscovery";

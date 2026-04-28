@@ -15,4 +15,5 @@ export {
   useWifiStorage,
   useDeviceSelection,
   useDeviceParamsSelection,
+  useOnNetworkDiscovery,
 } from "./hooks";
