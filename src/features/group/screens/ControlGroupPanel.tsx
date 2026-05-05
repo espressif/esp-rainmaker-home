@@ -40,7 +40,7 @@ const ControlGroupPanel = observer(() => {
     groupTitle,
     homogeneousDeviceType,
     isConnected,
-    paramRows,
+    paramBroadcastRows,
     handleEditGroup,    
     handleBroadcastParam,
   } = useGroupControl({
@@ -50,7 +50,7 @@ const ControlGroupPanel = observer(() => {
   });
 
   const invalid =
-    !deviceGroup || !homogeneousDeviceType || paramRows.length === 0;
+    !deviceGroup || !homogeneousDeviceType || paramBroadcastRows.length === 0;
 
   return (
     <>
@@ -108,22 +108,22 @@ const ControlGroupPanel = observer(() => {
                 containerStyle={styles.offlineBannerInScroll}
               />
             ) : null}
-            {paramRows.map(({ refParam, targets }) => (
-              <View key={refParam.name} style={styles.paramCard}>
+            {paramBroadcastRows.map(({ referenceParam, broadcastTargets }) => (
+              <View key={referenceParam.name} style={styles.paramCard}>
                 <ParamWrap
-                  param={refParam}
+                  param={referenceParam}
                   disabled={!isConnected}
                   setUpdating={setUpdating}
                   onValueChange={(value: unknown) =>
-                    handleBroadcastParam(refParam, targets, value, {
+                    handleBroadcastParam(broadcastTargets, value, {
                       onSetParamsError: () => {
                         toast.showError(t("group.errors.fallback"));
                       },
                     })
                   }
-                  qaId={`control_group_panel_param_${refParam.name}`}
+                  qaId={`control_group_panel_param_${referenceParam.name}`}
                 >
-                  <ParameterControl param={refParam} />
+                  <ParameterControl param={referenceParam} />
                 </ParamWrap>
               </View>
             ))}

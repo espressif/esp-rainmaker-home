@@ -164,6 +164,16 @@ export const GROUP_TYPE_HOME = "home";
 export const GROUP_TYPE_GROUP = "group";
 export const GROUP_TYPE_SUBGROUP = "subgroup";
 
+// GROUP CONTROL — cloud group/subgroup broadcast payload (device type → control envelope)
+export const GROUP_CONTROL_PAYLOAD_PARAMS_ENVELOPE_KEY = "params";
+
+// GROUP PARAM BROADCAST RELATED CONSTANTS
+export const GROUP_PARAM_BROADCAST_ENVELOPE_TOP_LEVEL_KEY = "__espcdfGroupControlBroadcast";
+export const GROUP_PARAM_BROADCAST_FIELD_VALUE = "value";
+export const GROUP_PARAM_BROADCAST_FIELD_TARGETS = "targets";
+export const GROUP_PARAM_BROADCAST_TARGET_ROW_DEVICE_KEY = "device";
+export const GROUP_PARAM_BROADCAST_TARGET_ROW_PARAM_KEY = "param";
+
 // DEVICE SELECTION LIST (layout variant; not i18n)
 export const DEVICE_SELECTION_LIST_VARIANT_SCENE = "scene";
 export const DEVICE_SELECTION_LIST_VARIANT_SCHEDULE = "schedule";

@@ -23,6 +23,7 @@ import { transformToESPCDFAutomation } from "./transformToESPCDFAutomation";
 import { transformToESPAutomationActions } from "../utils/automation";
 import { ESPRM_SCENES_SERVICE, ESPRM_PARAM_SCENES, ESPRM_SCHEDULES_SERVICE, ESPRM_PARAM_SCHEDULES } from "../constants";
 import { deepClone } from "@shared/utils/common";
+import { parseGroupParamBroadcastEnvelope } from "@shared/utils/groupParamBroadcastEnvelope";
 
 export function transformToESPCDFGroup(
     group: ESPRMGroup,
@@ -550,14 +551,18 @@ export function transformToESPCDFGroup(
         },
 
         /**
-         * Applies a device-name → param map across nodes via {@link ESPRMUser.setMultipleNodesParams}
-         * (same batching path as scenes/schedules). Matches group control UI ({@link ESPCDFGroup.setParams}).
-         *
-         * Request shape follows SDK {@link NodePayload}: each device maps to a `DeviceParams[]` merged on the server.
+         * Applies group-level param updates: consumes the CDF broadcast envelope from the UI and
+         * maps each row’s CDF device + param to SDK param names in {@link ESPRMUser.setMultipleNodesParams} batch rows.
+         * @param payload Broadcast envelope from the UI, or void when the shape is not recognized
+         * @returns Result of {@link ESPRMUser.setMultipleNodesParams} or void when batch is empty
          */
         async setParams(
             payload: Record<string, Record<string, unknown>>,
         ): Promise<unknown> {
+            const broadcast = parseGroupParamBroadcastEnvelope(payload);
+            if (!broadcast) {
+                return Promise.resolve();
+            }
             const nodes = await group.getNodesWithDetails();
             const batch: MultipleNodePayload[] = [];
             for (const node of nodes) {
@@ -568,15 +573,27 @@ export function transformToESPCDFGroup(
                     "";
                 if (!nodeId) continue;
                 const devices = node.nodeConfig?.devices ?? [];
-                const namesOnNode = new Set(devices.map((d) => d.name));
-                const slice: Record<string, Record<string, unknown>> = {};
-                for (const [deviceName, paramsByName] of Object.entries(payload)) {
-                    if (!namesOnNode.has(deviceName)) continue;
-                    slice[deviceName] = paramsByName;
+                const mergeByDeviceName: Record<string, Record<string, unknown>> = {};
+                for (const row of broadcast.targets) {
+                    const sdkDevice = devices.find((d) => d.name === row.device.name);
+                    if (!sdkDevice) continue;
+                    const cdfParam = row.param;
+                    const matchingParam =
+                        sdkDevice.params?.find(
+                            (p) => p.name === cdfParam.name && p.type === cdfParam.type,
+                        ) ??
+                        sdkDevice.params?.find((p) => p.type === cdfParam.type);
+                    if (!matchingParam) continue;
+                    if (!mergeByDeviceName[sdkDevice.name]) {
+                        mergeByDeviceName[sdkDevice.name] = {};
+                    }
+                    mergeByDeviceName[sdkDevice.name][matchingParam.name] = broadcast.value;
                 }
                 const nodePayload: NodePayload = {};
-                for (const [deviceName, paramsByName] of Object.entries(slice)) {
-                    nodePayload[deviceName] = [paramsByName as DeviceParams];
+                for (const [deviceName, paramsByName] of Object.entries(mergeByDeviceName)) {
+                    if (Object.keys(paramsByName).length > 0) {
+                        nodePayload[deviceName] = [paramsByName as DeviceParams];
+                    }
                 }
                 if (Object.keys(nodePayload).length > 0) {
                     batch.push({ nodeId, payload: nodePayload });

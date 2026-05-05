@@ -60,8 +60,7 @@ export {
   useGroupControl,
   type UseGroupControlResult,
   type UseGroupControlOptions,
-  type ParamBroadcastRow,
-  type ParamBroadcastTarget,
+  type GroupControlParamBroadcastRow,
 } from "./useGroupControl";
 export {
   useRoomControl,

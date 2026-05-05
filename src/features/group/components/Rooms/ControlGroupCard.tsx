@@ -26,7 +26,6 @@ import {
   findDeviceOfType,
   resolveHomogeneousDeviceType,
   stripGroupControlSubgroupDisplayName,
-  type ParamBroadcastTarget,
 } from "@features/group/utils/controlGroupHelpers";
 import { ESPRM_POWER_PARAM_TYPE, ERROR_CODES } from "@shared/utils/constants";
 import { globalStyles } from "@shared/theme/globalStyleSheet";
@@ -135,18 +134,16 @@ const ControlGroupCard = observer(
      * Toggles power for all members via {@link broadcastGroupParam} (same transport as ControlGroupPanel).
      */
     const handleGroupPower = (value: boolean) => {
-      const powerRef = entriesWithPower[0]?.device.params?.find(
-        (pr) => pr.type === ESPRM_POWER_PARAM_TYPE
-      );
-      if (!powerRef) return;
-      const targets: ParamBroadcastTarget[] = [];
-      for (const { device } of entriesWithPower) {
-        const p = device.params?.find(
-          (pr) => pr.type === ESPRM_POWER_PARAM_TYPE
-        );
-        if (p) targets.push({ param: p, deviceName: device.name });
-      }
-      broadcastGroupParam(group, powerRef, targets, value, {
+      const broadcastTargets = entriesWithPower
+        .map(({ device }) => {
+          const param = device.params?.find(
+            (pr) => pr.type === ESPRM_POWER_PARAM_TYPE
+          );
+          return param ? { device, param } : null;
+        })
+        .filter((row): row is NonNullable<typeof row> => row != null);
+      if (broadcastTargets.length === 0) return;
+      broadcastGroupParam(group, broadcastTargets, value, {
         onSetParamsError: (err: unknown) => {
           const code = (err as { code?: string })?.code;
           const key =
