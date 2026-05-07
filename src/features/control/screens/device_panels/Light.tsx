@@ -409,7 +409,7 @@ const styles = StyleSheet.create({
     display: "flex",
     flexDirection: "column",
     alignItems: "center",
-    gap: 10,
+    gap: 0,
     justifyContent: "center",
     height: "100%",
   },

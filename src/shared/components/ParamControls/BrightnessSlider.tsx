@@ -18,6 +18,7 @@ import {
   comparableRoundedParamNumber,
 } from "./lib/types";
 import { paramControlStyles as styles } from "./lib/styles";
+import { useDragBubble } from "./lib/useDragBubble";
 import { tokens } from "@shared/theme/tokens";
 
 /**
@@ -38,6 +39,7 @@ const BrightnessSlider = observer(
     onValueChange = () => {},
     disabled,
     meta = BRIGHTNESS_DEFAULTS,
+    compact = false,
   }: ParamControlChildProps) => {
     const rawMin = meta?.min;
     const rawMax = meta?.max;
@@ -63,10 +65,14 @@ const BrightnessSlider = observer(
       : min;
     const sliderValue = useMemo(() => [clamped], [clamped]);
 
+    const { isDragging, onSlideStart, onSlideTick, onSlideEnd } =
+      useDragBubble();
+
     const commitValue = (
       event: GestureResponderEvent | null,
       newValue: number,
     ) => {
+      onSlideTick();
       if (disabled) return;
       const roundedValue = Math.round(newValue);
       const cur = comparableRoundedParamNumber(value);
@@ -76,41 +82,116 @@ const BrightnessSlider = observer(
       onValueChange(event, roundedValue);
     };
 
+    const thumbPercent = max > min ? ((clamped - min) / (max - min)) * 100 : 0;
+
     return (
-      <View style={[styles.container, disabled && styles.disabled]}>
-        <View style={[styles.header, disabled && styles.disabledText]}>
-          <Text style={styles.title}>{label}</Text>
-          <Text style={styles.value}>{clamped}%</Text>
+      <View
+        style={[
+          styles.container,
+          compact && styles.containerCompact,
+          disabled && styles.disabled,
+        ]}
+      >
+        {compact ? (
+          <View style={styles.compactHeader}>
+            <Text
+              style={[styles.compactTitle, disabled && styles.disabledText]}
+              numberOfLines={1}
+            >
+              {label}
+            </Text>
+            <Text style={styles.compactValue}>{clamped}%</Text>
+          </View>
+        ) : (
+          <>
+            <Text
+              style={[styles.sliderLabel, disabled && styles.disabledText]}
+            >
+              {label}
+            </Text>
+
+            <View style={styles.rangeRow}>
+              <Text style={styles.value}>{min}%</Text>
+              <Text style={styles.value}>{max}%</Text>
+            </View>
+          </>
+        )}
+
+        <View style={styles.sliderWrapper}>
+          {isDragging && (
+            <View
+              style={[
+                styles.bubbleContainer,
+                {
+                  left: `${thumbPercent}%`,
+                  transform: [{ translateX: -24 }],
+                },
+              ]}
+            >
+              <View style={styles.bubble}>
+                <Text style={styles.bubbleText}>{clamped}%</Text>
+              </View>
+              <View style={styles.bubbleArrow} />
+            </View>
+          )}
+
+          <View style={styles.sliderContainer}>
+            <Slider
+              value={sliderValue}
+              min={min}
+              max={max}
+              step={step}
+              onSlideMove={commitValue}
+              onSlideStart={onSlideStart}
+              onSlideEnd={onSlideEnd}
+              disabled={disabled}
+              style={styles.slider}
+            >
+              <Slider.Track
+                style={[
+                  styles.track,
+                  styles.trackSmall,
+                  { backgroundColor: tokens.colors.bg2 },
+                ]}
+              >
+                <Slider.TrackActive
+                  style={[
+                    styles.trackActive,
+                    styles.trackSmall,
+                    { backgroundColor: tokens.colors.blue },
+                  ]}
+                />
+              </Slider.Track>
+              <Slider.Thumb
+                index={0}
+                style={[
+                  styles.thumb,
+                  styles.thumbSmall,
+                  disabled && styles.disabled,
+                ]}
+                size="$1.5"
+                borderWidth={1}
+              />
+            </Slider>
+          </View>
         </View>
 
-        <View style={styles.sliderContainer}>
-          <Slider
-            value={sliderValue}
-            min={min}
-            max={max}
-            step={step}
-            onSlideMove={commitValue}
-            disabled={disabled}
-            style={styles.slider}
-          >
-            <Slider.Track
-              style={{ ...styles.track, backgroundColor: tokens.colors.bg2 }}
+        {!compact && (
+          <View style={styles.thumbValueContainer}>
+            <Text
+              style={[
+                styles.thumbValueText,
+                {
+                  left: `${thumbPercent}%`,
+                  transform: [{ translateX: -(40 * thumbPercent) / 100 }],
+                  opacity: isDragging ? 0 : 1,
+                },
+              ]}
             >
-              <Slider.TrackActive
-                style={{
-                  ...styles.trackActive,
-                  backgroundColor: tokens.colors.blue,
-                }}
-              />
-            </Slider.Track>
-            <Slider.Thumb
-              index={0}
-              style={[styles.thumb, disabled && styles.disabled]}
-              size="$1.5"
-              borderWidth={1}
-            />
-          </Slider>
-        </View>
+              {clamped}%
+            </Text>
+          </View>
+        )}
       </View>
     );
   }

@@ -14,7 +14,14 @@ export const paramControlStyles = StyleSheet.create({
     width: '100%',
     ...globalStyles.bgWhite,
     ...globalStyles.radiusSm,
-    padding: tokens.spacing._15,
+    paddingHorizontal: tokens.spacing._15,
+    paddingVertical: 0,
+  },
+
+  // Compact container override: restores normal vertical padding for the
+  // one-row layout used by group/scene/schedule list cards.
+  containerCompact: {
+    paddingVertical: tokens.spacing._10,
   },
 
   // Text Input
@@ -64,19 +71,23 @@ export const paramControlStyles = StyleSheet.create({
   // Slider Styles
   sliderContainer: {
     position: 'relative',
-    height: 20,
+    height: 30,
     ...globalStyles.justifyCenter,
   },
 
   slider: {
     width: '100%',
-    height: 20,
+    height: 30,
   },
 
   track: {
     backgroundColor: tokens.colors.bg2,
-    height: 4,
+    height: 25,
     ...globalStyles.radiusSm,
+  },
+
+  trackSmall: {
+    height: 10,
   },
 
   trackActive: {
@@ -84,8 +95,8 @@ export const paramControlStyles = StyleSheet.create({
   },
 
   thumb: {
-    width: 18,
-    height: 18,
+    width: 25,
+    height: 25,
     borderRadius: '50%',
     backgroundColor: tokens.colors.white,
     borderWidth: 1,
@@ -98,12 +109,112 @@ export const paramControlStyles = StyleSheet.create({
     elevation: 5,
   },
 
+  sliderLabel: {
+    ...globalStyles.fontMd,
+    ...globalStyles.fontMedium,
+    ...globalStyles.textBlack,
+    textAlign: 'left' as const,
+    marginBottom: 6,
+  },
+
+  compactHeader: {
+    flexDirection: 'row' as const,
+    justifyContent: 'space-between' as const,
+    alignItems: 'center' as const,
+    marginBottom: 4,
+  },
+
+  compactTitle: {
+    ...globalStyles.fontMd,
+    ...globalStyles.fontMedium,
+    ...globalStyles.textBlack,
+    flexShrink: 1,
+  },
+
+  compactValue: {
+    ...globalStyles.fontSm,
+    ...globalStyles.textGray,
+    ...globalStyles.fontMedium,
+    marginLeft: 8,
+  },
+
+  rangeRow: {
+    flexDirection: 'row' as const,
+    justifyContent: 'space-between' as const,
+    marginBottom: 4,
+  },
+
+  sliderWrapper: {
+    position: 'relative' as const,
+  },
+
+  bubbleContainer: {
+    position: 'absolute' as const,
+    top: -38,
+    alignItems: 'center' as const,
+    zIndex: 100,
+  },
+
+  bubble: {
+    backgroundColor: tokens.colors.blue,
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    minWidth: 48,
+    alignItems: 'center' as const,
+  },
+
+  bubbleText: {
+    color: tokens.colors.white,
+    fontSize: 14,
+    fontWeight: '600' as const,
+  },
+
+  bubbleArrow: {
+    width: 0,
+    height: 0,
+    borderLeftWidth: 6,
+    borderRightWidth: 6,
+    borderTopWidth: 6,
+    borderLeftColor: 'transparent',
+    borderRightColor: 'transparent',
+    borderTopColor: tokens.colors.blue,
+  },
+
+  thumbValueContainer: {
+    position: 'relative' as const,
+    height: 20,
+    marginTop: 2,
+  },
+
+  thumbValueText: {
+    ...globalStyles.fontSm,
+    ...globalStyles.textGray,
+    ...globalStyles.fontMedium,
+    position: 'absolute' as const,
+    textAlign: 'center' as const,
+    width: 40,
+    marginTop: 2,
+  },
+
+  gradientOverlay: {
+    position: 'absolute' as const,
+    left: 0,
+    right: 0,
+    zIndex: 1,
+  },
+
+  thumbSmall: {
+    width: 20,
+    height: 20,
+  },
+
   // Gradient Slider Styles
   gradientSvg: {
     position: 'absolute',
     left: 0,
     right: 0,
-    height: 4,
+    height: 25,
     ...globalStyles.radiusSm,
     zIndex: 1,
   },
@@ -170,17 +281,12 @@ export const paramControlStyles = StyleSheet.create({
 
   // Push Button Styles
   pushButton: {
-    padding: tokens.spacing._20,
+    paddingVertical: tokens.spacing._10,
+    paddingHorizontal: tokens.spacing._15,
     borderRadius: tokens.radius.md,
     ...globalStyles.alignCenter,
     ...globalStyles.justifyCenter,
     backgroundColor: tokens.colors.bg2,
-    margin: tokens.spacing._10,
-    elevation: 3,
-    shadowColor: tokens.colors.black,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
   },
 
   pushButtonActive: {
@@ -188,7 +294,7 @@ export const paramControlStyles = StyleSheet.create({
   },
 
   pushButtonText: {
-    ...globalStyles.fontLg,
+    ...globalStyles.fontMd,
     ...globalStyles.fontMedium,
     color: tokens.colors.gray,
   },
@@ -262,11 +368,11 @@ export const paramControlStyles = StyleSheet.create({
   // Trigger Button Styles
   triggerButton: {
     backgroundColor: tokens.colors.bg2,
-    padding: tokens.spacing._15,
+    paddingVertical: tokens.spacing._10,
+    paddingHorizontal: tokens.spacing._15,
     ...globalStyles.radiusMd,
     ...globalStyles.alignCenter,
     ...globalStyles.justifyCenter,
-    margin: tokens.spacing._10,
   },
 
   triggerButtonActive: {
