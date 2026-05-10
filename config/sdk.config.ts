@@ -122,6 +122,7 @@ export function getRMNGSDKConfig(): ESPRMNGBaseConfig {
       override?.iotEndpoint ??
       rmngSdk.iotEndpoint,
     customStorageAdapter: asyncStorageAdapter,
+    localControlAdapter: ESPLocalControlAdapter as ESPRMNGBaseConfig["localControlAdapter"],
     // Native bridge uses async isConnected(); rmng-base-sdk MQTTTransport types are sync.
     mqttAdapter: ESPMQTTAdapter as unknown as ESPRMNGBaseConfig["mqttAdapter"],
     provisionAdapter: rmngCompatibleProvisionAdapter as ESPRMNGBaseConfig["provisionAdapter"],
@@ -177,7 +178,7 @@ export const SDK_FEATURE_MAP: Record<
     onNetworkProvisioning: true,
   },
   [ESPRMNG_BASE_SDK_ID]: {
-    scenes: false, schedules: true, automations: true, localControl: false,
+    scenes: false, schedules: true, automations: true, localControl: true,
     notifications: true, groupSharing: true, subGroupSharing: true, transferGroupSharing: false, ota: false,
     controlGroups: true,
     aiAgent: false, thirdPartyAuth: false, voiceAssistants: false,
