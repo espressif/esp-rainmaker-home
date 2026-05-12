@@ -85,6 +85,8 @@ export const ESPRM_REFRESH_TOKEN_PARAM_TYPE = "esp.param.refresh-token";
 export const ESPRM_USER_TOKEN_PARAM_TYPE = "esp.param.user-token";
 export const ESPRM_BASE_URL_PARAM_TYPE = "esp.param.base-url";
 export const ESPRM_CHANNEL_PARAM_TYPE = "esp.param.channel";
+export const ESPRM_LOCAL_CONTROL_TYPE_PARAM_TYPE = "esp.param.local_control_type";
+export const ESPRM_LOCAL_CONTROL_POP_PARAM_TYPE = "esp.param.local_control_pop";
 
 /**
  * `extractDeviceType` values with no meaningful power param for card UI: DeviceCard uses node
@@ -122,6 +124,7 @@ export const USER_PERMISSION = "user";
 export const ESPRM_SYSTEM_SERVICE = "esp.service.system";
 export const ESPRM_SCENES_SERVICE = "esp.service.scenes";
 export const ESPRM_SCHEDULES_SERVICE = "esp.service.schedule";
+export const ESPRM_LOCAL_CONTROL_SERVICE = "esp.service.local_control";
 export const ESPRM_AGENT_AUTH_SERVICE = "esp.service.agent-auth";
 export const ESPRM_RMAKER_USER_AUTH_SERVICE = "esp.service.rmaker-user-auth";
 
@@ -172,6 +175,10 @@ export const QA_DEVICE_SELECTION_VIEW_SELECTED_DEVICES = "view_selected_devices"
 export const QA_DEVICE_SELECTION_TEXT_SELECTED_DEVICES = "text_selected_devices";
 export const QA_DEVICE_SELECTION_VIEW_NON_SELECTED_DEVICES = "view_non_selected_devices";
 export const QA_DEVICE_SELECTION_TEXT_SELECT_DEVICES = "text_select_devices";
+
+// DEVICE CONTROL PANEL — QA / test ids
+export const QA_DEVICE_PANEL_NO_PARAMS_EMPTY_STATE =
+  "empty_state_device_fallback_no_params";
 
 // LIGHT CONTROL SCREEN
 export const COLOR_TAB = "Colour";

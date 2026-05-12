@@ -516,7 +516,8 @@
     },
     "control": {
       "title": "Device Control",
-      "deviceNotFound": "Device not found"
+      "deviceNotFound": "Device not found",
+      "fallbackNoParams": "No parameters configured \n for this device."
     },
     "pop": {
       "title": "Proof of Possession",

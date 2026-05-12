@@ -4,7 +4,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { ScrollView, RefreshControl } from "react-native";
+import {
+  ScrollView,
+  RefreshControl,
+} from "react-native";
 
 // Styles
 import { globalStyles } from "@shared/theme/globalStyleSheet";
@@ -17,6 +20,7 @@ import { PARAM_CONTROLS } from "@/config/params.config";
 import { observer, useLocalObservable } from "mobx-react-lite";
 
 // components
+import { DevicePanelNoParamsEmptyState } from "@features/control/components";
 import { ParamControlWrap } from "@shared/components";
 
 // Utils
@@ -33,7 +37,7 @@ import { ESPCDFDevice, ESPCDFDeviceParam } from "@store";
  *
  * A fallback component that displays device information and parameters when a specific
  * device panel is not available. Shows basic device info like name, type, connection status,
- * and a list of all available parameters.
+ * and a list of all available parameters. When there are no parameters, shows a centered empty state.
  * @param props - `node` and `device` for generic param list rendering
  * @returns Scrollable list of device fields and supported param controls
  */
@@ -75,6 +79,10 @@ const DeviceFallback = observer(
       } as any);
     };
 
+
+    if (params.length === 0) {
+      return <DevicePanelNoParamsEmptyState />;
+    }
     // 2. Render
     return (
       <ScrollView
