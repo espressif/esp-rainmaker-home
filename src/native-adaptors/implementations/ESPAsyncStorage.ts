@@ -7,8 +7,14 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { ESPCDFStorageAdapterInterface } from "@store";
 import { RUNTIME_CONFIG_STORAGE_KEYS } from '@config/runtime.keys.config';
+import { LANGUAGE_STORAGE_KEY } from "@shared/utils/constants";
 
-const PROTECTED_KEYS = Object.values(RUNTIME_CONFIG_STORAGE_KEYS);
+// Device-level preferences that must survive `clear()` (logout wipes user data,
+// not app settings such as the language override).
+const PROTECTED_KEYS = [
+  ...Object.values(RUNTIME_CONFIG_STORAGE_KEYS),
+  LANGUAGE_STORAGE_KEY,
+];
 
 export const asyncStorageAdapter: ESPCDFStorageAdapterInterface = {
   setItem: async (name: string, value: string) => {

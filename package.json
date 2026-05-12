@@ -56,6 +56,7 @@
     "expo-haptics": "~55.0.14",
     "expo-linear-gradient": "~55.0.13",
     "expo-linking": "~55.0.14",
+    "expo-localization": "~55.0.16",
     "expo-navigation-bar": "~55.0.12",
     "expo-network": "~55.0.13",
     "expo-router": "~55.0.13",

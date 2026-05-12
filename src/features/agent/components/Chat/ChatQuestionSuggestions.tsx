@@ -6,6 +6,7 @@
 
 import React from "react";
 import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
+import { useTranslation } from "react-i18next";
 import { tokens } from "@shared/theme/tokens";
 import { globalStyles } from "@shared/theme/globalStyleSheet";
 
@@ -14,21 +15,21 @@ interface ChatQuestionSuggestionsProps {
   onQuestionPress: (question: string) => void;
 }
 
-const DEFAULT_QUESTIONS = [
-  "Can you show all my devices?",
-  "Please turn on the Bedroom Fan",
-  "Please set a schedule to turn on all my lights at 6pm everyday",
-];
-
 /**
  * Question suggestions component for default agent
  */
 export const ChatQuestionSuggestions: React.FC<
   ChatQuestionSuggestionsProps
-> = ({ questions = DEFAULT_QUESTIONS, onQuestionPress }) => {
+> = ({ questions, onQuestionPress }) => {
+  const { t } = useTranslation();
+  const defaultQuestions = [
+    t("chat.suggestions.showDevices"),
+    t("chat.suggestions.turnOnFan"),
+    t("chat.suggestions.setSchedule"),
+  ];
   return (
     <View style={styles.questionSuggestionsContainer}>
-      {questions.map((question, index) => (
+      {(questions ?? defaultQuestions).map((question, index) => (
         <TouchableOpacity
           key={index}
           style={styles.questionSuggestionButton}

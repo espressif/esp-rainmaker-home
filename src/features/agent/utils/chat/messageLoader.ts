@@ -5,6 +5,7 @@
  */
 
 
+import i18n from "@/i18n";
 import { ESPCDFUser } from "@store";
 import {
   getConversationId,
@@ -90,7 +91,7 @@ export const addDefaultWelcomeMessage = (
 ): void => {
   const welcomeMessage: ChatMessage = {
     id: `welcome-${Date.now()}`,
-    text: "How can I help you today?",
+    text: i18n.t("chat.welcomeMessage"),
     isUser: false,
     timestamp: new Date(),
     messageType: "assistant",

@@ -1928,6 +1928,21 @@ export const globalStyles = StyleSheet.create({
     color: tokens.colors.warn,
   },
 
+  infoBannerContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: tokens.spacing._10,
+    padding: tokens.spacing._15,
+    borderRadius: tokens.radius.sm,
+    backgroundColor: tokens.colors.white,
+  },
+  infoBannerText: {
+    flex: 1,
+    fontSize: tokens.fontSize.xs,
+    fontFamily: tokens.fonts.regular,
+    color: tokens.colors.primary,
+  },
+
   // Shadow styles and elevation
   shadowElevationForLightTheme: {
     borderRadius: tokens.radius.md,

@@ -229,6 +229,7 @@
       "thirdPartyIntegration": {
         "title": "Voice Assistants and Integrations"
       },
+      "logoutButton": "Log Out",
       "logoutModal": {
         "message": "Are you sure you want to log out? If you log out from the application, the agents which are configured from your account will also get logged out.",
         "confirmButton": "Yes, Log Out",
@@ -240,7 +241,15 @@
       "personalInformation": "Personal Information",
       "accountSecurity": "Account and Security",
       "aiSettings": "Agents Settings",
+      "language": "Language",
       "aboutUs": "About Us"
+    },
+    "language": {
+      "title": "Language",
+      "systemDefault": "System default",
+      "english": "English",
+      "chinese": "简体中文",
+      "helper": "Choose 'System default' to follow your phone's language. Your selection takes effect immediately."
     },
     "personalInfo": {
       "title": "Personal Information",
@@ -1210,6 +1219,12 @@
       "deleteErrorMessage": "Failed to delete the conversation. Please try again.",
       "activateErrorTitle": "Failed to open conversation",
       "activateErrorMessage": "Something went wrong while opening the conversation."
+    },
+    "welcomeMessage": "How can I help you today?",
+    "suggestions": {
+      "showDevices": "Can you show all my devices?",
+      "turnOnFan": "Please turn on the Bedroom Fan",
+      "setSchedule": "Please set a schedule to turn on all my lights at 6pm everyday"
     }
   },
   "chatSettings": {

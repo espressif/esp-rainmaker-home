@@ -10,7 +10,7 @@ import { Header, ScreenWrapper } from "@shared/components";
 import { SettingsItem, SettingsSection } from "@features/user/components";
 import { globalStyles } from "@shared/theme/globalStyleSheet";
 import { useTranslation } from "react-i18next";
-import { Info, Shield, User } from "lucide-react-native";
+import { Globe, Info, Shield, User } from "lucide-react-native";
 import { tokens } from "@shared/theme/tokens";
 import {
   SettingItemConfig,
@@ -21,6 +21,7 @@ import {
 type RouteMap = {
   handlePersonalInfo: "/(user)/PersonalInfo";
   handleAccountSecurity: "/(user)/AccountSecurity";
+  handleLanguage: "/(user)/Language";
   handleAboutUs: "/(user)/AboutUs";
 };
 
@@ -47,6 +48,13 @@ const Settings: React.FC = () => {
       action: "handleAccountSecurity",
     },
     {
+      id: "language",
+      icon: <Globe size={20} color={tokens.colors.primary} />,
+      title: t("user.settings.language"),
+      type: "navigation",
+      action: "handleLanguage",
+    },
+    {
       id: "about-us",
       icon: <Info size={20} color={tokens.colors.primary} />,
       title: t("user.settings.aboutUs"),
@@ -60,6 +68,7 @@ const Settings: React.FC = () => {
     const routes: RouteMap = {
       handlePersonalInfo: "/(user)/PersonalInfo",
       handleAccountSecurity: "/(user)/AccountSecurity",
+      handleLanguage: "/(user)/Language",
       handleAboutUs: "/(user)/AboutUs",
     };
     router.push(routes[action]);
@@ -69,6 +78,7 @@ const Settings: React.FC = () => {
     const handlers: ActionHandlers = {
       handlePersonalInfo: () => handleNavigation("handlePersonalInfo"),
       handleAccountSecurity: () => handleNavigation("handleAccountSecurity"),
+      handleLanguage: () => handleNavigation("handleLanguage"),
       handleAboutUs: () => handleNavigation("handleAboutUs"),
     };
     return handlers[action];

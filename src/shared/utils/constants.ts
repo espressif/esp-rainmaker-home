@@ -18,10 +18,16 @@ export const HOME_NAME_MAX_LENGTH = 32;
 
 // LINKS — defaults; override via WEBSITE_LINK / TERMS_OF_USE_LINK / PRIVACY_POLICY_LINK (.env → app.config extra.websiteLinks)
 const DEFAULT_WEBSITE_LINK = "https://rainmaker.espressif.com";
-const DEFAULT_TERMS_OF_USE_LINK =
-  "https://rainmaker.espressif.com/docs/terms-of-use.html";
-const DEFAULT_PRIVACY_POLICY_LINK =
-  "https://rainmaker.espressif.com/docs/privacy-policy.html";
+
+// Legal pages are served per UI language. Link values — env overrides and
+// the defaults below — may carry a {lang} placeholder substituted with the
+// active UI language at resolve time; a plain URL (no placeholder) applies
+// to all languages.
+const LEGAL_LINK_LANG_PLACEHOLDER = "{lang}";
+const DEFAULT_TERMS_OF_USE_LINK_TEMPLATE =
+  "https://rainmaker.espressif.com/{lang}/terms-of-use?region=global";
+const DEFAULT_PRIVACY_POLICY_LINK_TEMPLATE =
+  "https://rainmaker.espressif.com/{lang}/privacy-policy?region=global";
 
 const websiteLinksFromEnv = (Constants.expoConfig?.extra?.websiteLinks ||
   {}) as {
@@ -32,10 +38,44 @@ const websiteLinksFromEnv = (Constants.expoConfig?.extra?.websiteLinks ||
 
 export const WEBSITE_LINK =
   websiteLinksFromEnv.website?.trim() || DEFAULT_WEBSITE_LINK;
-export const TERMS_OF_USE_LINK =
-  websiteLinksFromEnv.termsOfUse?.trim() || DEFAULT_TERMS_OF_USE_LINK;
-export const PRIVACY_POLICY_LINK =
-  websiteLinksFromEnv.privacyPolicy?.trim() || DEFAULT_PRIVACY_POLICY_LINK;
+
+/**
+ * Fills a legal-link template's `{lang}` placeholder with the supported UI
+ * language for the given tag — regional tags map to their base (`zh-CN` →
+ * `zh`), anything unsupported falls back to English. Do not call at module
+ * scope: the language constants it reads are declared later in this file.
+ */
+const resolveLegalLink = (template: string, language?: string): string => {
+  const base = (language || "").toLowerCase().split("-")[0];
+  const lang = (SUPPORTED_LANGUAGE_CODES as readonly string[]).includes(base)
+    ? base
+    : LANGUAGE_DEFAULT;
+  return template.split(LEGAL_LINK_LANG_PLACEHOLDER).join(lang);
+};
+
+/**
+ * Terms of use URL for the given UI language (callers pass `i18n.language`).
+ * Uses the `TERMS_OF_USE_LINK` env override when set, else the default
+ * template.
+ */
+export const getTermsOfUseLink = (language?: string): string =>
+  resolveLegalLink(
+    websiteLinksFromEnv.termsOfUse?.trim() ||
+      DEFAULT_TERMS_OF_USE_LINK_TEMPLATE,
+    language
+  );
+
+/**
+ * Privacy policy URL for the given UI language (callers pass `i18n.language`).
+ * Uses the `PRIVACY_POLICY_LINK` env override when set, else the default
+ * template.
+ */
+export const getPrivacyPolicyLink = (language?: string): string =>
+  resolveLegalLink(
+    websiteLinksFromEnv.privacyPolicy?.trim() ||
+      DEFAULT_PRIVACY_POLICY_LINK_TEMPLATE,
+    language
+  );
 
 // TOAST TYPES
 export const SUCESS = "success";
@@ -549,3 +589,40 @@ export const MATTER_DATA_VALUE_TYPE_UTF8_STRING = "UTF8String";
 export const MATTER_DATA_VALUE_TYPE_OCTET_STRING = "OctetString";
 export const MATTER_DATA_VALUE_TYPE_STRUCTURE = "Structure";
 export const MATTER_DATA_VALUE_TYPE_ARRAY = "Array";
+
+// LANGUAGE / i18n
+/** Supported locale (ISO 639-1) for English bundle. */
+export const LANGUAGE_CODE_EN = "en";
+/** Supported locale (ISO 639-1) for Simplified Chinese bundle. */
+export const LANGUAGE_CODE_ZH = "zh";
+/** Sentinel value used in persisted storage / UI to mean "follow device language". */
+export const LANGUAGE_CODE_SYSTEM = "system";
+/** Fallback when device locale does not match any supported bundle. */
+export const LANGUAGE_DEFAULT = LANGUAGE_CODE_EN;
+/** AsyncStorage key for the user-selected language override. */
+export const LANGUAGE_STORAGE_KEY = "@app/language";
+
+/** ISO codes shipped as full translation bundles (must match `i18n.ts` resources). */
+export const SUPPORTED_LANGUAGE_CODES = [
+  LANGUAGE_CODE_EN,
+  LANGUAGE_CODE_ZH,
+] as const;
+export type SupportedLanguageCode = (typeof SUPPORTED_LANGUAGE_CODES)[number];
+
+/**
+ * Maps regional / script-tagged BCP-47 codes (e.g. `zh-CN`, `zh-Hans`, `en-US`) to one of the
+ * `SUPPORTED_LANGUAGE_CODES`. Anything not listed falls back to `LANGUAGE_DEFAULT`.
+ */
+export const LANGUAGE_REGIONAL_MAP: Record<string, SupportedLanguageCode> = {
+  en: LANGUAGE_CODE_EN,
+  "en-US": LANGUAGE_CODE_EN,
+  "en-GB": LANGUAGE_CODE_EN,
+  zh: LANGUAGE_CODE_ZH,
+  "zh-CN": LANGUAGE_CODE_ZH,
+  "zh-Hans": LANGUAGE_CODE_ZH,
+  "zh-Hans-CN": LANGUAGE_CODE_ZH,
+  "zh-SG": LANGUAGE_CODE_ZH,
+  "zh-Hant": LANGUAGE_CODE_ZH,
+  "zh-TW": LANGUAGE_CODE_ZH,
+  "zh-HK": LANGUAGE_CODE_ZH,
+};

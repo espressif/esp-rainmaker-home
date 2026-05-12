@@ -6,6 +6,8 @@
 
 // Banners
 export { default as EmptyState } from "./Banners/EmptyState";
+export { default as InfoBanner } from "./Banners/InfoBanner";
+export type { InfoBannerProps } from "./Banners/InfoBanner";
 export { default as WarningBanner } from "./Banners/WarningBanner";
 export type { WarningBannerProps } from "./Banners/WarningBanner";
 

@@ -166,13 +166,15 @@ Feature flags use a **two-level gating** system:
 
 ### Legal & Website Links
 
-These URLs appear in the app's settings / about screen.
+These URLs appear in the app's settings / about screen and the signup / agent consent sheets.
 
-| Variable              | Description         | Default                                                    |
-| --------------------- | ------------------- | ---------------------------------------------------------- |
-| `WEBSITE_LINK`        | Product website URL | `https://rainmaker.espressif.com`                          |
-| `TERMS_OF_USE_LINK`   | Terms of use URL    | `https://rainmaker.espressif.com/docs/terms-of-use.html`   |
-| `PRIVACY_POLICY_LINK` | Privacy policy URL  | `https://rainmaker.espressif.com/docs/privacy-policy.html` |
+| Variable              | Description                 | Default                                                                |
+| --------------------- | --------------------------- | ---------------------------------------------------------------------- |
+| `WEBSITE_LINK`        | Product website URL         | `https://rainmaker.espressif.com`                                       |
+| `TERMS_OF_USE_LINK`   | Terms of use URL template   | `https://rainmaker.espressif.com/{lang}/terms-of-use?region=global`     |
+| `PRIVACY_POLICY_LINK` | Privacy policy URL template | `https://rainmaker.espressif.com/{lang}/privacy-policy?region=global`   |
+
+The legal links support a `{lang}` placeholder, replaced at runtime with the active UI language (`en` / `zh`), so both language versions of a page are served from one configured URL — e.g. with `TERMS_OF_USE_LINK=https://rainmaker.espressif.com/{lang}/terms-of-use?region=china` in `.env`, an English UI resolves to `https://rainmaker.espressif.com/en/terms-of-use?region=china`. A plain URL without the placeholder applies to all languages.
 
 ---
 
