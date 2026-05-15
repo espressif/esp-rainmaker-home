@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  *
  * Transforms RMNG automation to unified ESPCDFAutomation per RMNG_AUTOMATION_CDF_REFERENCE.md.
- * RMNG: conditions.and = trigger IDs; actions.targets = { node, device, param, value }.
+ * RMNG: conditions.and = trigger IDs; actions.targets = { node, path: "<deviceId>.<paramId>", value }.
  * CDF: events = event objects { deviceName, param, check, value } for UI; actions = { nodeId, deviceName, param, value }.
  *
  * Trigger ownership (update events):

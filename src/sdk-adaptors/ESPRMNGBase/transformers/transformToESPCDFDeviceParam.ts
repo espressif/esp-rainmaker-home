@@ -11,14 +11,14 @@ export function transformToESPCDFDeviceParam(
         },
     };
     return new ESPCDFDeviceParam({
-        name: param.name || "",
+        name: param.id || "",
         dataType: param.dataType || "string",
         type: param.type || "",
         value: param.value,
         properties: param.properties || ["read", "write"],
         uiType: param.uiType,
         bounds: param.bounds,
-        deviceName: (param as any).deviceName, // Preserve deviceName
+        deviceName: param.deviceId,
         operations: operations,
         _raw: param,
     });

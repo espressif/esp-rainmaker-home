@@ -11,13 +11,13 @@ export function transformToESPCDFServiceParam(
         },
     };
     return new ESPCDFServiceParam({
-        name: param.name || "",
+        name: param.id || "",
         dataType: param.dataType || "string",
         type: param.type || "",
         value: param.value,
         properties: param.properties || ["read", "write"],
         bounds: param.bounds,
-        serviceName: (param as any).serviceName, // Preserve serviceName
+        serviceName: param.serviceId,
         operations: operations,
         _raw: param,
     });

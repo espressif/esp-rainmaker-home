@@ -23,7 +23,7 @@ export function transformToESPCDFDevice(
   device: ESPRMNGDevice,
   options?: { nodeMetadata?: Record<string, unknown> },
 ): ESPCDFDevice {
-  const deviceLabel = device.name || device.type || "unknown-device";
+  const deviceLabel = device.id || device.type || "unknown-device";
 
   const mapDeviceParams = (rawParams: unknown) =>
     safeTransform<ESPRMNGDeviceParam, ESPCDFDeviceParam>(
@@ -53,7 +53,7 @@ export function transformToESPCDFDevice(
   const displayName = resolveDeviceDisplayName(options?.nodeMetadata, device, "");
 
   return new ESPCDFDevice({
-    name: device.name || "",
+    name: device.id || "",
     type: device.type || "",
     params,
     displayName,

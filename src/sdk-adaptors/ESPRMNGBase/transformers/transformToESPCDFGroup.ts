@@ -204,12 +204,12 @@ export function transformToESPCDFGroup(
         },
         async removeSharingFor(username: string): Promise<ESPCDFAPIResponse> {
             const sharingInfo = cdfGroup._raw.sharingInfo as
-                | { email?: string; phone?: string; user_id: string }[]
+                | { email?: string; phone_number?: string; user_id: string }[]
                 | undefined;
             const member = sharingInfo?.find(
                 (u) =>
                     u.email === username ||
-                    u.phone === username ||
+                    u.phone_number === username ||
                     u.user_id === username,
             );
             if (!member) {
@@ -521,7 +521,7 @@ async function resolveAutomationTriggerDetails(
     if (typeof getNodeFn !== "function") return [];
 
     const resolved: ResolvedAutomationEvents = [];
-    const nodeTriggersCache: Record<string, { id?: string; device?: string; param?: string; operator?: string; value?: unknown }[]> = {};
+    const nodeTriggersCache: Record<string, { id?: string; path?: string; operator?: string; value?: unknown }[]> = {};
 
     for (const triggerId of andIds) {
         if (typeof triggerId !== "string") continue;
@@ -537,14 +537,13 @@ async function resolveAutomationTriggerDetails(
                     continue;
                 }
                 const list = await getTriggersFn.call(node);
-                nodeTriggersCache[nid] = Array.isArray(list) ? (list as { id?: string; device?: string; param?: string; operator?: string; value?: unknown }[]) : [];
+                nodeTriggersCache[nid] = Array.isArray(list) ? (list as { id?: string; path?: string; operator?: string; value?: unknown }[]) : [];
             }
             const t = nodeTriggersCache[nid].find((tr) => tr.id === triggerId);
             if (t) {
                 resolved.push(triggerItemToCdfEvent({
                     id: t.id ?? "",
-                    device: t.device ?? "",
-                    param: t.param ?? "",
+                    path: t.path ?? "",
                     operator: apiOperatorToTriggerOperator(t.operator),
                     value: t.value,
                 }));

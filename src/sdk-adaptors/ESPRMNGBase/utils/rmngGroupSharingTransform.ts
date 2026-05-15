@@ -23,7 +23,7 @@ import {
 export interface RmngGroupSharingListUser {
     access_type?: string;
     email?: string;
-    phone?: string;
+    phone_number?: string;
     user_id?: string;
     subgroups?: string[];
 }
@@ -37,7 +37,7 @@ export function rmngSharingListUserToCdfEntry(
     user: RmngGroupSharingListUser,
 ): ESPCDFGroupSharingUserInfoInterface {
     return {
-        username: user.email || user.phone || user.user_id || "",
+        username: user.email || user.phone_number || user.user_id || "",
     };
 }
 
