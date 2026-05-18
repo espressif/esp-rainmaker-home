@@ -12,40 +12,22 @@ import {
     ESPCDFGroupSharingStatus,
 } from "@store";
 import type { ESPRMNGSharingRequest } from "@espressif/rmng-base-sdk";
+import { normalizeRmngSdkResponseToCdf, type RmngSdkApiBody } from "../utils/common";
 
+/**
+ * Maps RMNG accept/decline success bodies to the CDF API response contract.
+ * HTTP status denotes failure; a resolved promise is treated as success.
+ *
+ * @param res - SDK `SuccessResponse` (`message` optional).
+ * @returns CDF API response for the app layer.
+ */
 function normalizeRmngProcessSharingResponse(res: unknown): ESPCDFAPIResponse {
-    if (res && typeof res === "object" && "status" in res) {
-        const r = res as Record<string, unknown>;
-        const st = r.status;
-        const stNorm = typeof st === "string" ? st.toLowerCase() : "";
-        const isSuccess =
-            stNorm === "success" ||
-            stNorm.includes("accepted successfully") ||
-            stNorm.includes("rejected successfully") ||
-            stNorm.includes("successfully");
-        if (isSuccess) {
-            return {
-                status: "success",
-                description:
-                    (typeof r.description === "string" && r.description) ||
-                    (typeof r.message === "string" && r.message) ||
-                    (typeof st === "string" ? st : undefined),
-            };
-        }
-
-        const description =
-            (typeof r.description === "string" && r.description) ||
-            (typeof r.message === "string" && r.message) ||
-            `RMNG group sharing request failed with status: ${String(st)}`;
-
-        const err = new Error(description);
-        // Attach extra context for debugging without changing the public API.
-        (err as any).status = st;
-        (err as any).raw = res;
-        throw err;
-    }
-
-    throw new Error("RMNG group sharing request returned an unexpected response");
+    const body =
+        res && typeof res === "object" ? (res as RmngSdkApiBody) : undefined;
+    return normalizeRmngSdkResponseToCdf(
+        body,
+        "Group sharing request processed successfully",
+    );
 }
 
 /**
