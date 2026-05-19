@@ -104,17 +104,15 @@ export function transformToESPCDFSchedule(
         return results;
     };
 
-    const toScheduleResponse = (data: NodeResult[]): ESPCDFAPIResponse<NodeResult[]> => ({
-        status: SUCCESS,
-        data,
-    });
+    const asSyncResponse = (data: NodeResult[]): ESPCDFAPIResponse =>
+        data as unknown as ESPCDFAPIResponse;
 
     const operations: ESPCDFScheduleOperation = {
         async add(): Promise<ESPCDFAPIResponse> {
-            return toScheduleResponse(await performPerNode("add"));
+            return asSyncResponse(await performPerNode("add"));
         },
         async edit(data: ESPCDFScheduleEditInput): Promise<ESPCDFAPIResponse> {
-            return toScheduleResponse(
+            return asSyncResponse(
                 await performPerNode("edit", {
                     name: data.name,
                     triggers: data.triggers,
@@ -127,13 +125,13 @@ export function transformToESPCDFSchedule(
             );
         },
         async remove(): Promise<ESPCDFAPIResponse> {
-            return toScheduleResponse(await performPerNode("remove"));
+            return asSyncResponse(await performPerNode("remove"));
         },
         async enable(): Promise<ESPCDFAPIResponse> {
-            return toScheduleResponse(await performPerNode("enable", { enabled: true }));
+            return asSyncResponse(await performPerNode("enable", { enabled: true }));
         },
         async disable(): Promise<ESPCDFAPIResponse> {
-            return toScheduleResponse(await performPerNode("disable", { enabled: false }));
+            return asSyncResponse(await performPerNode("disable", { enabled: false }));
         },
     };
 
