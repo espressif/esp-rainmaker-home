@@ -49,6 +49,15 @@ function normalizeRmngProcessSharingResponse(res: unknown): ESPCDFAPIResponse {
 }
 
 /**
+ * Get the primary username from the RMNG sharing request.
+ * Prioritize phone number over email if present.
+ * @param rmRequest - The RMNG sharing request.
+ * @returns The primary username.
+ */
+function getPrimaryUsername(rmRequest: ESPRMNGSharingRequest): string {
+    return rmRequest.primaryPhoneNumber || rmRequest.primaryEmail || "";
+}
+/**
  * Maps an RMNG received sharing request (`listSharingRequests`) to CDF.
  * RMNG returns a flat list (no pagination / fetchNext).
  */
@@ -80,7 +89,7 @@ export function transformToESPCDFGroupSharingRequest(
         groupIds: [effectiveGroupId],
         groupnames: [],
         username: "",
-        primaryUsername: "",
+        primaryUsername: getPrimaryUsername(rmRequest),
         transfer: false,
         newRole: rmRequest.accessType ?? "",
         metadata: {

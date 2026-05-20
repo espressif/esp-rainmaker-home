@@ -7,6 +7,11 @@ import { transformToESPCDFSchedule } from "./transformToESPCDFSchedule";
 import { apiOperatorToTriggerOperator, cdfActionsToTargets, cdfEventsToTriggerItems, triggerItemToCdfEvent } from "../utils/automation";
 import { throwNormalizedRmngShareError } from "../utils/common";
 import { ESPCDF } from "@store";
+import { GROUP_CONTROL_PAYLOAD_PARAMS_ENVELOPE_KEY } from "@shared/utils/constants";
+import {
+    parseGroupParamBroadcastEnvelope,
+    resolveGroupParamBroadcastTypeKey,
+} from "@shared/utils/groupParamBroadcastEnvelope";
 
 type TriggerNodeLike = { getTriggers?(): Promise<unknown[]>; setTriggers?(items: unknown[]): Promise<unknown> };
 
@@ -326,7 +331,33 @@ export function transformToESPCDFGroup(
         async setParams(
             payload: Record<string, Record<string, unknown>>,
         ): Promise<unknown> {
-            return group.setParams(payload);
+            const broadcast = parseGroupParamBroadcastEnvelope(payload);
+            if (!broadcast) {
+                return group.setParams(payload);
+            }
+            // Accumulate one param entry per device type (RMNG cloud payload key).
+            const paramsByDeviceType: Record<string, Record<string, unknown>> = {};
+            for (const targetRow of broadcast.targets) {
+                const deviceType = targetRow.device.type;
+                if (!deviceType) continue;
+                const paramTypeKey = resolveGroupParamBroadcastTypeKey(targetRow.param);
+                if (!paramsByDeviceType[deviceType]) {
+                    paramsByDeviceType[deviceType] = {};
+                }
+                paramsByDeviceType[deviceType][paramTypeKey] = broadcast.value;
+            }
+            // Build the RMNG cloud wire payload: { [deviceType]: { params: { [paramType]: value } } }.
+            const rmngGroupPayload: Record<string, Record<string, unknown>> = {};
+            for (const [deviceType, paramEntries] of Object.entries(paramsByDeviceType)) {
+                if (Object.keys(paramEntries).length === 0) continue;
+                rmngGroupPayload[deviceType] = {
+                    [GROUP_CONTROL_PAYLOAD_PARAMS_ENVELOPE_KEY]: paramEntries,
+                };
+            }
+            if (Object.keys(rmngGroupPayload).length === 0) {
+                return Promise.resolve();
+            }
+            return group.setParams(rmngGroupPayload);
         },
     };
 
