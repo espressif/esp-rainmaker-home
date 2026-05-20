@@ -19,8 +19,8 @@ import {
   GROUP_TYPE_HOME,
   ensureDefaultHomeForNewOrMigratedUser,
 } from "@store";
-import { transformToESPCDFNode } from "./transformers/transformToESPCDFNode";
-import type { CreateGroupRequest, ESPRMGroup, ESPRMNode, ESPRMUser } from "@espressif/rainmaker-base-sdk";
+import { transformToESPCDFNodes } from "./transformers/transformToESPCDFNode";
+import type { CreateGroupRequest, ESPRMGroup, ESPRMUser } from "@espressif/rainmaker-base-sdk";
 
 const USER_PERMISSION = "user";
 
@@ -104,7 +104,7 @@ async function fetchNodesForGroup(group: ESPCDFGroup): Promise<ESPCDFNode[]> {
   const raw = (group as { _raw?: ESPRMGroup })._raw;
   if (!raw) return [];
   const nodes = await raw.getNodesWithDetails();
-  return nodes.map((n: ESPRMNode) => transformToESPCDFNode(n));
+  return transformToESPCDFNodes(nodes, "groupSync.fetchNodesForGroup");
 }
 
 export async function setCurrentHome(

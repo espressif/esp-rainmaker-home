@@ -10,7 +10,6 @@ import { ESPRMServiceParam } from "@espressif/rainmaker-base-sdk";
 export function transformToESPCDFServiceParam(
     param: ESPRMServiceParam,
 ): ESPCDFServiceParam {
-    // Create ESPCDFDeviceParam entity instance
     const operations = {
         setValue: async (value: any) => {
             return param.setValue(value);
@@ -21,7 +20,7 @@ export function transformToESPCDFServiceParam(
         dataType: param.dataType || "string",
         type: param.type || "",
         value: param.value,
-        properties: param.properties || ["read", "write"],
+        properties: Array.isArray( param.properties) ?  param.properties : [],
         bounds: param.bounds,
         serviceName: (param as any).serviceName, // Preserve serviceName
         operations: operations,

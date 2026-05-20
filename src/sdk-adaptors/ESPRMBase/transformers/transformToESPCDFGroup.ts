@@ -8,7 +8,6 @@ import { ESPCDFGroupSharingInfoInterface, ESPCDFNode, ESPCDFScene, ESPCDFSchedul
 import { ESPCDFGroup } from "@store";
 import {
     ESPRMGroup,
-    ESPRMNode,
     ESPRMUser,
     ESPAutomationDetails,
     ESPAutomation,
@@ -17,7 +16,7 @@ import {
     type MultipleNodePayload,
     type NodePayload,
 } from "@espressif/rainmaker-base-sdk";
-import { transformToESPCDFNode } from "./transformToESPCDFNode";
+import { transformToESPCDFNodes } from "./transformToESPCDFNode";
 import { transformToESPCDFScene } from "./transformToESPCDFScene";
 import { transformToESPCDFSchedule } from "./transformToESPCDFSchedule";
 import { transformToESPCDFAutomation } from "./transformToESPCDFAutomation";
@@ -33,7 +32,7 @@ export function transformToESPCDFGroup(
     const operations: ESPCDFGroupOperation = {
         async getNodes(): Promise<ESPCDFNode[]> {
             const nodes = await group.getNodesWithDetails();
-            return nodes.map((node: ESPRMNode) => transformToESPCDFNode(node));
+            return transformToESPCDFNodes(nodes, "group.getNodes");
         },
         async getSubGroups(): Promise<ESPCDFGroup[]> {
             const subGroups = await group.getSubGroups();
@@ -190,7 +189,7 @@ export function transformToESPCDFGroup(
                 const getAllNodes = async (currentGroup: ESPRMGroup): Promise<ESPCDFNode[]> => {
                     // Fetch nodes from cloud for current group
                     const nodes = await currentGroup.getNodesWithDetails();
-                    const transformedNodes = nodes.map((node: ESPRMNode) => transformToESPCDFNode(node));
+                    const transformedNodes = transformToESPCDFNodes(nodes, "group.getScenes");
 
                     // Fetch subgroups from cloud and recursively get their nodes
                     const subGroups = await currentGroup.getSubGroups();
@@ -328,7 +327,7 @@ export function transformToESPCDFGroup(
                 const getAllNodes = async (currentGroup: ESPRMGroup): Promise<ESPCDFNode[]> => {
                     // Fetch nodes from cloud for current group
                     const nodes = await currentGroup.getNodesWithDetails();
-                    const transformedNodes = nodes.map((node: ESPRMNode) => transformToESPCDFNode(node));
+                    const transformedNodes = transformToESPCDFNodes(nodes, "group.getSchedules");
 
                     // Fetch subgroups from cloud and recursively get their nodes
                     const subGroups = await currentGroup.getSubGroups();
@@ -595,7 +594,7 @@ export function transformToESPCDFGroup(
         id: group.id,
         name: group.name || '',
         nodeIds: group.nodes || [],
-        nodeDetails: group.nodeDetails?.map((node: ESPRMNode) => transformToESPCDFNode(node)) || [],
+        nodeDetails: transformToESPCDFNodes(group.nodeDetails || [], "group.nodeDetails"),
         subGroups: group.subGroups?.map((subGroup: ESPRMGroup) => transformToESPCDFGroup(subGroup, user, identifier)) || [],
         parentId: group.parentGroupId || '',
         isPrimaryUser: group.isPrimaryUser || false,

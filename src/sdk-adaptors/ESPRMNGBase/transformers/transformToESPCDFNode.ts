@@ -1,3 +1,9 @@
+/*
+ * SPDX-FileCopyrightText: 2026 Espressif Systems (Shanghai) CO LTD
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
 import {
     ESPCDFNode,
     ESPCDF,
@@ -5,14 +11,16 @@ import {
     ESPCDFNodeInfoInterface,
     ESPCDFAPIResponse,
 } from "@store";
-import { ESPRMNGNode } from "@espressif/rmng-base-sdk";
+import { ESPRMNGDevice, ESPRMNGNode, ESPRMNGService } from "@espressif/rmng-base-sdk";
 import type {
     ESPCDFNodeOperation,
     ESPCDFPropertyChangeCallback,
 } from "@store";
 import { EVENT_NODE_PARAMS_CHANGED } from "@store/utils/constants";
 import { ESPRMNGBaseAdaptorIdentifier } from "@config/sdk.identifiers";
+import { HEADLESS_ERROR_UNKNOWN } from "@shared/utils/constants";
 import { mapShadowDocumentToNodeUpdateEvents } from "../utils/common";
+import { safeTransform } from "@sdk-adaptors/shared/utils/safeTransform";
 import { transformToESPCDFDevice } from "./transformToESPCDFDevice";
 import { transformToESPCDFService } from "./transformToESPCDFService";
 import { ianaTzToEspPosixTz } from "@shared/utils/timezone";
@@ -20,7 +28,9 @@ import { ianaTzToEspPosixTz } from "@shared/utils/timezone";
 const MQTT_TRANSPORT_KEY = "mqtt";
 
 /**
- * Creates a property change callback that syncs CDF node property updates to raw ESPRMNode
+ * Builds a no-op property-change handler for RMNG nodes until raw-node sync is implemented.
+ * @param _rawNode - Mutable SDK node backing the CDF entity (reserved for future sync).
+ * @returns Callback registered on the CDF node for property change events.
  */
 const createPropertyChangeSyncCallback = (
     _rawNode: ESPRMNGNode,
@@ -31,9 +41,13 @@ const createPropertyChangeSyncCallback = (
 };
 
 /**
- * Transform ESPRMNGNode to ESPCDFNode (minimal CDF shell; devices/connectivity/metadata come from elsewhere).
+ * Transforms one RMNG SDK node into a CDF node with resilient device/service mapping.
+ * Malformed devices or services are skipped so the node still renders when the payload is partial.
+ * @param node - Raw RMNG SDK node.
+ * @returns Transformed CDF node.
  */
 export function transformToESPCDFNode(node: ESPRMNGNode): ESPCDFNode {
+    const nodeId = node.nodeId;
     const operations: ESPCDFNodeOperation = {
         setMultipleParams: async (_params: Record<string, any>) => {
             return node.setParams(_params);
@@ -107,6 +121,36 @@ export function transformToESPCDFNode(node: ESPRMNGNode): ESPCDFNode {
         });
     });
 
+    const devices = safeTransform<ESPRMNGDevice, ReturnType<typeof transformToESPCDFDevice>>(
+        node.devices,
+        "node.devices",
+        (device) => transformToESPCDFDevice(device),
+        ({ index, error }) => {
+            const message = error instanceof Error ? error.message : HEADLESS_ERROR_UNKNOWN;
+            console.warn("Node device transform skipped", {
+                nodeId,
+                index,
+                reason: message,
+            });
+        },
+        { skipElement: (device) => !device },
+    );
+
+    const services = safeTransform<ESPRMNGService, ReturnType<typeof transformToESPCDFService>>(
+        node.services,
+        "node.services",
+        (service) => transformToESPCDFService(service),
+        ({ index, error }) => {
+            const message = error instanceof Error ? error.message : HEADLESS_ERROR_UNKNOWN;
+            console.warn("Node service transform skipped", {
+                nodeId,
+                index,
+                reason: message,
+            });
+        },
+        { skipElement: (service) => !service },
+    );
+
     const cdfNode = new ESPCDFNode({
         identifier: ESPRMNGBaseAdaptorIdentifier,
         id: node.nodeId,
@@ -115,8 +159,8 @@ export function transformToESPCDFNode(node: ESPRMNGNode): ESPCDFNode {
             configVersion: node.config.config_version ?? "",
             info: node.config.info as ESPCDFNodeInfoInterface,
         }),
-        devices: node.devices.map(device => transformToESPCDFDevice(device)),
-        services: node.services.map(service => transformToESPCDFService(service)),
+        devices,
+        services,
         connectivityStatus: node.connectivityStatus,
         metadata: {},
         operations: operations,
@@ -131,4 +175,38 @@ export function transformToESPCDFNode(node: ESPRMNGNode): ESPCDFNode {
     cdfNode.onPropertyChange(syncCallback);
 
     return cdfNode;
+}
+
+/**
+ * Transforms a batch of RMNG SDK nodes to CDF nodes.
+ * Invalid nodes are skipped and reported as partial failures.
+ * @param nodes - Raw SDK nodes.
+ * @param context - Context label for partial failure logs.
+ * @returns Successfully transformed CDF nodes.
+ */
+export function transformToESPCDFNodes(
+    nodes: ESPRMNGNode[],
+    context: string,
+): ESPCDFNode[] {
+    const failures: { nodeId: string; index: number; reason: string }[] = [];
+
+    const transformedNodes = safeTransform<ESPRMNGNode, ESPCDFNode>(
+        nodes,
+        context,
+        (n) => transformToESPCDFNode(n),
+        ({ index, context: ctx, error }) => {
+            const message = error instanceof Error ? error.message : HEADLESS_ERROR_UNKNOWN;
+            failures.push({
+                nodeId: nodes[index]?.nodeId ?? "",
+                index,
+                reason: `${ctx}: ${message}`,
+            });
+        },
+    );
+
+    if (failures.length > 0) {
+        console.warn("Node transform partial failures", failures);
+    }
+
+    return transformedNodes;
 }

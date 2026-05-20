@@ -27,6 +27,7 @@ import { observer } from "mobx-react-lite";
 // Components
 import { PowerButton } from "@shared/components/ParamControls";
 import { ParamControlWrap } from "@shared/components";
+import { DevicePanelNoParamsEmptyState } from "@features/control/components";
 
 // Utils
 import { testProps } from "@shared/utils/testProps";
@@ -91,6 +92,10 @@ const Switch: React.FC<ControlPanelProps> = ({ node, device }) => {
       setRefreshing(false);
     }
   };
+
+  if (device?.params?.length === 0) {
+    return <DevicePanelNoParamsEmptyState />;
+  }
 
   // Render
   return (

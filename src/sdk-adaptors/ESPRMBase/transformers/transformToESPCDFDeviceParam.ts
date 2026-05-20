@@ -10,7 +10,6 @@ import { ESPRMDeviceParam, ESPRawTSDataRequest, ESPTSDataRequest } from "@espres
 export function transformToESPCDFDeviceParam(
     param: ESPRMDeviceParam,
 ): ESPCDFDeviceParam {
-    // Create ESPCDFDeviceParam entity instance
     const operations = {
         setValue: async (value: any) => {
             return param.setValue(value);
@@ -30,7 +29,7 @@ export function transformToESPCDFDeviceParam(
         dataType: param.dataType || "string",
         type: param.type || "",
         value: param.value,
-        properties: param.properties || ["read", "write"],
+        properties: Array.isArray( param.properties) ?  param.properties : [],
         uiType: param.uiType,
         bounds: param.bounds,
         deviceName: (param as any).deviceName, // Preserve deviceName

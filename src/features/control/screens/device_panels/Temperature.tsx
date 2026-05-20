@@ -32,7 +32,7 @@ import { ControlPanelProps } from "@src/types/global";
 import { ESPRM_TEMPERATURE_PARAM_TYPE } from "@shared/utils/constants";
 
 // Components
-import { RoundedSlider } from "@features/control/components";
+import { RoundedSlider, DevicePanelNoParamsEmptyState } from "@features/control/components";
 
 // Utils
 import { testProps } from "@shared/utils/testProps";
@@ -147,6 +147,10 @@ const Temperature: React.FC<ControlPanelProps> = ({ node, device }) => {
       centerContentSize: Math.round(centerContentSize),
     };
   }, []);
+
+  if (device?.params?.length === 0) {
+    return <DevicePanelNoParamsEmptyState />;
+  }
 
   // Render
   return (

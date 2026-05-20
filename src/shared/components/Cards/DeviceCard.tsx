@@ -39,6 +39,9 @@ import {
   ESPRM_TEMPERATURE_PARAM_TYPE,
   MATTER_METADATA_KEY,
   MATTER_METADATA_DEVICE_NAME_KEY,
+  ESPRM_LOCAL_CONTROL_SERVICE,
+  ESPRM_LOCAL_CONTROL_TYPE_PARAM_TYPE,
+  ESPRM_LOCAL_CONTROL_POP_PARAM_TYPE,
 } from "@shared/utils/constants";
 
 // Styles
@@ -101,7 +104,18 @@ const DeviceCard: React.FC<DeviceCardProps> = ({
     | Record<string, ESPCDFTransportConfig>
     | undefined;
   const localTransport = availableTransports?.[ESPCDFNodeTransport.LOCAL];
+  const localControlService = node.services?.find(
+    (service) => service.type === ESPRM_LOCAL_CONTROL_SERVICE
+  );
+  const hasLocalControlParams = Boolean(
+    localControlService?.params?.some(
+      (param) =>
+        param.type === ESPRM_LOCAL_CONTROL_TYPE_PARAM_TYPE ||
+        param.type === ESPRM_LOCAL_CONTROL_POP_PARAM_TYPE
+    )
+  );
   const isAvailableLocally = Boolean(
+    hasLocalControlParams &&
     localTransport?.metadata?.baseUrl != null &&
     String(localTransport.metadata.baseUrl).trim().length > 0,
   );
@@ -225,6 +239,17 @@ const DeviceCard: React.FC<DeviceCardProps> = ({
     return paramTypeMap[ESPRM_POWER_PARAM_TYPE]?.value;
   };
 
+  /**
+   * Formats temperature value for card display safely.
+   * Returns null when value is not a finite number.
+   */
+  const getFormattedTemperature = (): string | null => {
+    const temperatureValue = paramTypeMap[ESPRM_TEMPERATURE_PARAM_TYPE]?.value;
+    return typeof temperatureValue === "number" && Number.isFinite(temperatureValue)
+      ? `${temperatureValue.toFixed(1)}°C`
+      : null;
+  };
+
   const getDeviceName = (node: ESPCDFNode) => {
     // Check if node metadata contains Matter key
     const metadata = node.metadata;
@@ -287,10 +312,9 @@ const DeviceCard: React.FC<DeviceCardProps> = ({
             />
           </Switch>
         )}
-        {paramTypeMap[ESPRM_TEMPERATURE_PARAM_TYPE]?.value && (
+        {getFormattedTemperature() && (
           <Text style={styles.textValue} numberOfLines={1}>
-            {paramTypeMap[ESPRM_TEMPERATURE_PARAM_TYPE]?.value.toFixed(1)}
-            °C
+            {getFormattedTemperature()}
           </Text>
         )}
       </View>

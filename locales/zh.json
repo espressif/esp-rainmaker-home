@@ -516,7 +516,8 @@
     },
     "control": {
       "title": "设备控制",
-      "deviceNotFound": "设备未找到"
+      "deviceNotFound": "设备未找到",
+      "fallbackNoParams": "此设备未配置参数。"
     },
     "pop": {
       "title": "所有权证明",

@@ -2,7 +2,7 @@ import { ESPCDFGroupSharingInfoInterface, ESPCDFNode, ESPCDFScene, ESPCDFSchedul
 import { ESPCDFGroup } from "@store";
 import { ESPRMNGAutomation, ESPRMNGGroup, ESPRMNGNode, ESPRMNGUser } from "@espressif/rmng-base-sdk";
 import { transformToESPCDFAutomation, type ResolvedAutomationEvents } from "./transformToESPCDFAutomation";
-import { transformToESPCDFNode } from "./transformToESPCDFNode";
+import { transformToESPCDFNodes } from "./transformToESPCDFNode";
 import { transformToESPCDFSchedule } from "./transformToESPCDFSchedule";
 import { apiOperatorToTriggerOperator, cdfActionsToTargets, cdfEventsToTriggerItems, triggerItemToCdfEvent } from "../utils/automation";
 import { throwNormalizedRmngShareError } from "../utils/common";
@@ -385,7 +385,7 @@ async function gatherUniqueNodesFromGroupSubtree(
 
 /**
  * Builds {@link ESPCDFNode}s for this group: walks the group subtree (see gatherUniqueNodesFromGroupSubtree),
- * then maps each RMNG node with transformToESPCDFNode.
+ * then maps each RMNG node with transformToESPCDFNodes.
  */
 async function buildCdfNodesFromGroup(
     group: ESPRMNGGroup,
@@ -395,7 +395,7 @@ async function buildCdfNodesFromGroup(
     const seenNodeIds: Record<string, true> = {};
     const nodes: ESPRMNGNode[] = [];
     await gatherUniqueNodesFromGroupSubtree(group, seenNodeIds, nodes);
-    return nodes.map((node) => transformToESPCDFNode(node));
+    return transformToESPCDFNodes(nodes, "group.buildCdfNodesFromGroup");
 }
 
 async function resolveAutomationTriggerDetails(

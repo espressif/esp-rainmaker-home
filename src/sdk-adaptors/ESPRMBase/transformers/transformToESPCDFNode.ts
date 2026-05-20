@@ -4,11 +4,20 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { ESPCDFNodeConfig, ESPCDFNodeOperation } from "@store";
-import { ESPCDFNode } from "@store";
-import { ESPRMNode, ESPRMDevice, ESPRMService } from "@espressif/rainmaker-base-sdk";
-
-import type { ESPCDFAPIDataResponse, ESPCDFOTAUpdateStatusResponse, ESPCDFPropertyChangeCallback, ESPCDFPropertyChangeEvent } from "@store";
+import {
+    ESPCDFNode,
+    ESPCDFNodeConfig,
+    ESPCDFNodeOperation,
+    type ESPCDFAPIDataResponse,
+    type ESPCDFOTAUpdateStatusResponse,
+    type ESPCDFPropertyChangeCallback,
+    type ESPCDFPropertyChangeEvent,
+} from "@store";
+import { ESPRMDevice, ESPRMNode, ESPRMService } from "@espressif/rainmaker-base-sdk";
+import {
+    HEADLESS_ERROR_UNKNOWN,
+} from "@shared/utils/constants";
+import { safeTransform } from "@sdk-adaptors/shared/utils/safeTransform";
 import { transformToESPCDFDevice } from "./transformToESPCDFDevice";
 import { transformToESPCDFService } from "./transformToESPCDFService";
 
@@ -16,6 +25,8 @@ import { transformToESPCDFService } from "./transformToESPCDFService";
  * Creates a property change callback that syncs CDF node property updates to raw ESPRMNode
  * This subscribes to typed property change events and updates the raw node accordingly
  * Using fixed event types provides better type safety and maintainability
+ * @param rawNode - Mutable SDK node backing the CDF entity.
+ * @returns Callback invoked on each CDF property change event.
  */
 const createPropertyChangeSyncCallback = (rawNode: ESPRMNode): ESPCDFPropertyChangeCallback => {
     return (event: ESPCDFPropertyChangeEvent) => {
@@ -89,17 +100,55 @@ const createPropertyChangeSyncCallback = (rawNode: ESPRMNode): ESPCDFPropertyCha
     };
 };
 
+/**
+ * Transforms one RM base SDK node into a CDF node entity.
+ * Assumes the SDK supplies a well-formed node.
+ * @param node - Raw RM base SDK node.
+ * @returns Transformed CDF node.
+ */
 export function transformToESPCDFNode(
     node: ESPRMNode,
 ): ESPCDFNode {
-    const devices = node.nodeConfig?.devices?.map((device: ESPRMDevice) =>
-        transformToESPCDFDevice(device, { nodeMetadata: node.metadata })
-    ) || [];
-    const services = node.nodeConfig?.services?.map((service: ESPRMService) => transformToESPCDFService(service)) || [];
+    const nodeId = node.id;
+
+    const devices = safeTransform<ESPRMDevice, ReturnType<typeof transformToESPCDFDevice>>(
+        node.nodeConfig?.devices,
+        "node.devices",
+        (device) =>
+            transformToESPCDFDevice(device, {
+                nodeMetadata: node.metadata as Record<string, unknown> | undefined,
+            }),
+        ({ index, error }) => {
+            const message = error instanceof Error ? error.message : HEADLESS_ERROR_UNKNOWN;
+            console.warn("Node device transform skipped", {
+                nodeId,
+                index,
+                reason: message,
+            });
+        },
+        { skipElement: (device) => !device },
+    );
+
+    const services = safeTransform<ESPRMService, ReturnType<typeof transformToESPCDFService>>(
+        node.nodeConfig?.services,
+        "node.services",
+        (service) => transformToESPCDFService(service),
+        ({ index, error }) => {
+            const message = error instanceof Error ? error.message : HEADLESS_ERROR_UNKNOWN;
+            console.warn("Node service transform skipped", {
+                nodeId,
+                index,
+                reason: message,
+            });
+        },
+        { skipElement: (service) => !service },
+    );
+
     const nodeConfig: ESPCDFNodeConfig = {
         configVersion: node.nodeConfig?.configVersion!,
         info: node.nodeConfig?.info,
     };
+
     const operations: ESPCDFNodeOperation = {
         setMultipleParams: async (params: Record<string, any>) => {
             return node.setMultipleParams(params);
@@ -134,16 +183,18 @@ export function transformToESPCDFNode(
     };
 
     const cdfNode = new ESPCDFNode({
-        identifier: node.id,
-        id: node.id,
+        identifier: nodeId,
+        id: nodeId,
         type: node.type,
         nodeConfig: nodeConfig,
         devices: devices,
         services: services,
         connectivityStatus: node.connectivityStatus,
         metadata: node.metadata,
+        tags: node.tags,
+        role: node.role,
         operations: operations,
-        isPrimaryUser: node.isPrimaryUser || true,
+        isPrimaryUser: node.isPrimaryUser ?? true,
         transportOrder: node.transportOrder,
         availableTransports: node.availableTransports,
         _raw: node,
@@ -155,4 +206,38 @@ export function transformToESPCDFNode(
     cdfNode.onPropertyChange(syncCallback);
 
     return cdfNode;
+}
+
+/**
+ * Transforms a batch of SDK nodes to CDF nodes.
+ * Invalid nodes are skipped and reported as partial failures.
+ * @param nodes - Raw SDK nodes.
+ * @param context - Context label for partial failure logs.
+ * @returns Successfully transformed CDF nodes.
+ */
+export function transformToESPCDFNodes(
+    nodes: ESPRMNode[],
+    context: string
+): ESPCDFNode[] {
+    const failures: { nodeId: string; index: number; reason: string }[] = [];
+
+    const transformedNodes = safeTransform<ESPRMNode, ESPCDFNode>(
+        nodes,
+        context,
+        (node) => transformToESPCDFNode(node),
+        ({ index, context: ctx, error }) => {
+            const message = error instanceof Error ? error.message : HEADLESS_ERROR_UNKNOWN;
+            failures.push({
+                nodeId: nodes[index].id,
+                index,
+                reason: `${ctx}: ${message}`,
+            });
+        },
+    );
+
+    if (failures.length > 0) {
+        console.warn("Node transform partial failures", failures);
+    }
+
+    return transformedNodes;
 }
