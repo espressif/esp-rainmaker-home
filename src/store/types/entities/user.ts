@@ -11,7 +11,8 @@ import {
 } from "../../types";
 import type { GroupStoreCallbacks } from "../callbacks";
 import type {
-  ESPCDFProvisionResponse
+  ESPCDFProvisionResponse,
+  AddOnNetworkDeviceParams,
 } from "../provision";
 import { ESPCDFGroup } from "../../entities/ESPCDFGroup";
 import { ESPCDFGroupSharingRequest } from "../../entities/ESPCDFGroupSharingRequest";
@@ -44,6 +45,7 @@ export type ESPCDFUserOperationType =
   | "setCurrentHome"
   | "createHome"
   | "addDevice"
+  | "addOnNetworkDevice"
   | "subscribeToNodeUpdates"
   | "unsubscribeFromNodeUpdates"
   | "getGroupsAndFabrics"
@@ -122,6 +124,16 @@ export interface ESPCDFUserOperation {
   addDevice?(
     user: ESPCDFUserInterface,
     params: AddDeviceParams,
+    callbacks: GroupStoreCallbacks
+  ): Promise<ESPCDFNode | null>;
+  /**
+   * Add a device that is already on the user's local network using the
+   * challenge-response flow over LAN HTTP. No Wi-Fi credentials are required.
+   * Optional: adaptors that do not implement on-network provisioning may omit it.
+   */
+  addOnNetworkDevice?(
+    user: ESPCDFUserInterface,
+    params: AddOnNetworkDeviceParams,
     callbacks: GroupStoreCallbacks
   ): Promise<ESPCDFNode | null>;
   /**

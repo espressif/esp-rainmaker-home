@@ -26,6 +26,7 @@ import { ESPRMUser, ESPSecurity, ESPTransport, ESPRMEventType, UserCustomDataReq
 import { ESPRMBaseAdaptorIdentifier } from "../constants";
 import { syncHomeWithNodes as esprmSyncHomeWithNodes, setCurrentHome as esprmSetCurrentHome, createHome as esprmCreateHome } from "../groupSync";
 import { addDeviceProvision } from "../addDeviceProvision";
+import { addOnNetworkDeviceProvision } from "../addOnNetworkDeviceProvision";
 import { transformToESPCDFGroup } from "./transformToESPCDFGroup";
 import { transformToESPCDFGroupSharingRequest } from "./transformToESPCDFGroupSharingRequest";
 import { transformToESPCDFProvisioningDevice } from "./transformToESPCDFProvisioningDevice";
@@ -343,6 +344,9 @@ export function transformToESPCDFUser(
         },
         async addDevice(user, params, callbacks) {
             return addDeviceProvision(user as ESPCDFUser, params, callbacks);
+        },
+        async addOnNetworkDevice(user, params, callbacks) {
+            return addOnNetworkDeviceProvision(user as ESPCDFUser, params, callbacks);
         },
 
         async subscribeToNodeUpdates(params: ESPCDFSubscribeToNodeUpdatesRequestParams): Promise<void> {

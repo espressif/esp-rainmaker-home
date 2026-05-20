@@ -150,4 +150,19 @@ export class ESPCDFProvisioningDevice implements ESPCDFProvisioningDeviceInterfa
   async checkChallengeResponseSupport(): Promise<boolean> {
     return this.operations.checkChallengeResponseSupport();
   }
+
+  /**
+   * Indicates whether this device is in "on-network" provisioning mode
+   * (already on the user's Wi-Fi, talked to via LAN HTTP at the chal-resp
+   * endpoint). Same dispatch pattern as `checkChallengeResponseSupport` —
+   * `useProvision` calls this to decide which stage list to render and
+   * which `addDevice` variant to invoke.
+   *
+   * Defaults to `false` for adaptors that do not implement the operation, so
+   * existing BLE / SoftAP transformers don't need any change.
+   * @returns `true` for mDNS-discovered on-network devices, else `false`.
+   */
+  async checkOnNetworkProvisioning(): Promise<boolean> {
+    return this.operations.checkOnNetworkProvisioning?.() ?? false;
+  }
 }

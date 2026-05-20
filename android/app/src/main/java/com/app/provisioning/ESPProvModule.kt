@@ -1300,14 +1300,14 @@ import com.app.utils.ESPAppUtilityModule
                  promise.reject("INVALID_TRANSPORT", "Transport type not supported")
              }
  
-         } catch (e: Exception) {
-             Log.e(TAG, "Error during scan: ${e.message}")
-             promise.reject("SCAN_ERROR", e.message ?: "Error during scan")
-         }
-     }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error during scan: ${e.message}")
+            promise.reject("SCAN_ERROR", e.message ?: "Error during scan")
+        }
+    }
 
-    /**
-     * Utility method to create a device map for sending to React Native.
+   /**
+    * Utility method to create a device map for sending to React Native.
      *
      * @param device The ESPDevice instance.
      * @param scanResult Optional ScanResult containing advertisement data.

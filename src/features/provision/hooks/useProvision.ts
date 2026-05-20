@@ -32,8 +32,10 @@ import {
   ProvisionStage,
   getProvisionStages,
   getChallengeResponseStages,
+  getOnNetworkProvisionStages,
   MESSAGE_STAGE_MAP,
   CHAL_RESP_MESSAGE_STAGE_MAP,
+  ON_NETWORK_MESSAGE_STAGE_MAP,
   extractErrorMessage,
   getLocalizedErrorMessage,
 } from "@features/provision/utils/provisionHelper";
@@ -70,9 +72,16 @@ export const useProvision = (): UseProvisionReturn => {
   const toast = useToast();
   const { t } = useTranslation();
   const { store, syncHomeWithNodes } = useCDF();
-  const { ssid, password } = useLocalSearchParams();
+  const { ssid, password } = useLocalSearchParams<{
+    ssid?: string;
+    password?: string;
+  }>();
 
-  // State
+  // State — always start with the default 5-stage list. The actual flow
+  // (chal-resp / on-network / MQTT) is detected inside `startProvisioning`
+  // via async device methods, and `setStages` is called once the right
+  // branch is known. This mirrors the existing chal-resp pattern instead
+  // of reading route params up front.
   const [stages, setStages] = useState<ProvisionStage[]>(() =>
     getProvisionStages(t)
   );
@@ -82,11 +91,15 @@ export const useProvision = (): UseProvisionReturn => {
   const stepsScrollViewRef = useRef<ScrollView>(null);
   const stagesRef = useRef<ProvisionStage[]>(stages);
   const isChallengeResponseFlowRef = useRef(false);
+  const isOnNetworkFlowRef = useRef(false);
   const provisionedNodeRef = useRef<ESPCDFNode | null>(null);
   const hasStartedProvisioningRef = useRef(false);
 
   // Data
   const device: ESPCDFProvisioningDevice = store?.nodeStore?.connectedDevice as ESPCDFProvisioningDevice;
+  const onNetworkDeviceInfo = store?.nodeStore?.onNetworkDeviceInfo;
+  const onNetworkDevicePop: string | undefined =
+    store?.nodeStore?.onNetworkDevicePop;
   const currentHomeId = store?.groupStore?.currentHomeId;
   const user = store?.userStore?.user;
 
@@ -235,18 +248,12 @@ export const useProvision = (): UseProvisionReturn => {
   const markFinalProvisionStageComplete = useCallback(() => {
     setStages((prevStages) => {
       const newStages = [...prevStages];
-      if (isChallengeResponseFlowRef.current) {
-        const stage3 = newStages[2];
-        if (stage3) {
-          stage3.status = "success";
-          stage3.error = undefined;
-        }
-      } else {
-        const stage5 = newStages[4];
-        if (stage5) {
-          stage5.status = "success";
-          stage5.error = undefined;
-        }
+      // On-network has 2 stages; chal-resp 3; default 5. Tick the last stage.
+      const lastIdx = newStages.length - 1;
+      const lastStage = newStages[lastIdx];
+      if (lastStage) {
+        lastStage.status = "success";
+        lastStage.error = undefined;
       }
       stagesRef.current = newStages;
       return newStages;
@@ -307,8 +314,17 @@ export const useProvision = (): UseProvisionReturn => {
 
     switch (response.status) {
       case ESPCDFProvisionResponseStatus.SUCCEED:
-        // Challenge flow: stage 3 completes in handleAddDeviceSuccess with Continue.
-        if (!isChallengeResponseFlowRef.current) {
+        // On-network flow: stage 1 completes when cloud confirms the mapping;
+        // stage 2 ("Setting up Node") completes via Continue (same as chal-resp).
+        if (isOnNetworkFlowRef.current) {
+          if (ON_NETWORK_MESSAGE_STAGE_MAP[message] !== undefined) {
+            updateChallengeResponseStage(
+              ON_NETWORK_MESSAGE_STAGE_MAP[message]!,
+              false
+            );
+          }
+        } else if (!isChallengeResponseFlowRef.current) {
+          // Default flow: stage 3 completes in handleAddDeviceSuccess with Continue.
           if (message === ESPCDFProvProgressMessages.DEVICE_PROVISIONED) {
             updateStageStatus(message);
             markStage3AsComplete();
@@ -319,7 +335,15 @@ export const useProvision = (): UseProvisionReturn => {
         break;
 
       case ESPCDFProvisionResponseStatus.ON_PROGRESS:
-        if (message === ESPCDFProvProgressMessages.DECODED_NODE_ID) {
+        if (
+          isOnNetworkFlowRef.current &&
+          ON_NETWORK_MESSAGE_STAGE_MAP[message] !== undefined
+        ) {
+          updateChallengeResponseStage(
+            ON_NETWORK_MESSAGE_STAGE_MAP[message]!,
+            false
+          );
+        } else if (message === ESPCDFProvProgressMessages.DECODED_NODE_ID) {
           updateStageStatus(message);
         } else if (
           isChallengeResponseFlowRef.current &&
@@ -354,7 +378,7 @@ export const useProvision = (): UseProvisionReturn => {
     const stage = currentStages[loadingStageIndex];
     if (!stage) return;
 
-    if (isChallengeResponseFlowRef.current) {
+    if (isOnNetworkFlowRef.current || isChallengeResponseFlowRef.current) {
       updateChallengeResponseStage(stage.id, true, errorMessage);
     } else {
       const stageIdToMessage: Record<number, string> = {
@@ -391,7 +415,61 @@ export const useProvision = (): UseProvisionReturn => {
         handleProvisionError(new Error(t("device.errors.missingProvisionData") || "Missing provision data"));
         return;
       }
-      const isChallengeResponseSupported = await device?.checkChallengeResponseSupport();
+
+      // Dispatch the provisioning flow off the device model — same pattern
+      // chal-resp / MQTT already use. On-network is treated as a third
+      // branch alongside chal-resp and traditional MQTT, with the choice
+      // owned by `device.checkOnNetworkProvisioning()` rather than by a
+      // route param.
+      const isOnNetwork = await device.checkOnNetworkProvisioning();
+      if (isOnNetwork) {
+        isOnNetworkFlowRef.current = true;
+        setStages(getOnNetworkProvisionStages(t));
+        stagesRef.current = getOnNetworkProvisionStages(t);
+
+        console.log("[useProvision] on-network branch: starting", {
+          hasDeviceInfo: !!onNetworkDeviceInfo,
+          currentHomeId,
+          hasPop: !!onNetworkDevicePop,
+        });
+        if (!onNetworkDeviceInfo) {
+          hasStartedProvisioningRef.current = false;
+          handleProvisionError(
+            new Error(
+              t("device.errors.missingProvisionData") ||
+                "Missing provision data"
+            )
+          );
+          return;
+        }
+        const node = await user.addOnNetworkDevice({
+          device: onNetworkDeviceInfo,
+          groupId: currentHomeId,
+          pop: onNetworkDevicePop,
+          onProgress: handleProvisionUpdate,
+        });
+        console.log(
+          "[useProvision] on-network addOnNetworkDevice returned",
+          { gotNode: !!node, nodeId: node?.id }
+        );
+
+        if (node) {
+          // Clear stashed device info before navigating away.
+          store.nodeStore.onNetworkDeviceInfo = null;
+          store.nodeStore.onNetworkDevicePop = null;
+          store.nodeStore.connectedDevice = null;
+          await handleAddDeviceSuccess(node);
+        } else {
+          hasStartedProvisioningRef.current = false;
+          toast.showError(
+            t("device.errors.nodeNotFound") ||
+              "Device not found after provisioning"
+          );
+        }
+        return;
+      }
+
+      const isChallengeResponseSupported = await device.checkChallengeResponseSupport();
       if (isChallengeResponseSupported) {
         isChallengeResponseFlowRef.current = true;
         setStages(getChallengeResponseStages(t));
@@ -421,7 +499,7 @@ export const useProvision = (): UseProvisionReturn => {
       hasStartedProvisioningRef.current = false; // Reset on error so it can retry
       handleProvisionError(error);
     }
-  }, [user, device, currentHomeId, ssid, password, t, handleProvisionUpdate, handleAddDeviceSuccess, handleProvisionError, toast]);
+  }, [user, device, onNetworkDeviceInfo, onNetworkDevicePop, store, currentHomeId, ssid, password, t, handleProvisionUpdate, handleAddDeviceSuccess, handleProvisionError, toast]);
 
   // Handle continue
   const handleContinue = useCallback(() => {
@@ -440,11 +518,17 @@ export const useProvision = (): UseProvisionReturn => {
 
   // Start provisioning on mount - only once
   useEffect(() => {
-    if (ssid && device && !hasStartedProvisioningRef.current) {
-      startProvisioning();
-    }
+    if (hasStartedProvisioningRef.current) return;
+    if (!device) return;
+    // `startProvisioning` itself dispatches the flow off the device model
+    // (`device.checkOnNetworkProvisioning()` / `checkChallengeResponseSupport()`)
+    // and consumes `ssid`/`password` only on flows that actually need them.
+    // BLE/SoftAP flows always navigate into this screen with `ssid` already
+    // set; on-network flows never set `ssid` (the device is already on Wi-Fi),
+    // so the single `device`-set trigger handles both branches cleanly.
+    startProvisioning();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ssid, device]); // Removed startProvisioning from deps to prevent re-runs
+  }, [ssid, device]);
 
   return {
     stages,

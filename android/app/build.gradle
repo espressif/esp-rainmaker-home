@@ -242,7 +242,7 @@ dependencies {
     implementation fileTree(include: ['*.jar'], dir: 'libs')
 
     implementation("com.facebook.react:react-android")
-    implementation("com.github.espressif:esp-idf-provisioning-android:lib-2.2.3")
+    implementation("com.github.espressif:esp-idf-provisioning-android:lib-2.4.4")
     implementation ("org.greenrobot:eventbus:3.3.1")
     implementation 'com.google.android.gms:play-services-cast:22.1.0'
     implementation 'com.google.firebase:firebase-analytics-ktx:22.1.2'

@@ -12,6 +12,7 @@ import android.net.nsd.NsdServiceInfo;
 import android.util.Log;
 
 import java.net.InetAddress;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -93,8 +94,14 @@ public class mDNSManager {
         if (serviceType != null) {
             serviceType = serviceType.trim();
         }
+        Log.d(TAG, "discoverServices: about to call NsdManager.discoverServices(" + serviceType + ")");
         initializeDiscoveryListener(serviceType);
-        mNsdManager.discoverServices(serviceType, NsdManager.PROTOCOL_DNS_SD, discoveryListener);
+        try {
+            mNsdManager.discoverServices(serviceType, NsdManager.PROTOCOL_DNS_SD, discoveryListener);
+            Log.d(TAG, "discoverServices: NsdManager.discoverServices invoked");
+        } catch (Exception e) {
+            Log.e(TAG, "discoverServices: NsdManager.discoverServices threw", e);
+        }
     }
 
     /**
@@ -205,16 +212,28 @@ public class mDNSManager {
                 resolvedNsdServices.add(serviceInfo);
 
                 int hostPort = serviceInfo.getPort();
-                String nodeId = nodeIdFromTxt(serviceInfo);
+                Map<String, String> txtRecord = txtRecordToMap(serviceInfo);
+                // Raw mDNS service instance name (e.g. `ESP-Device-188B0EB1B4AC`).
+                // Always preserved separately from the resolved `nodeId` so the
+                // UI can show both in flows like on-network provisioning.
+                String serviceName = serviceInfo.getServiceName();
+                String nodeId = txtRecord.getOrDefault(KEY_NODE_ID, "");
                 if (nodeId.isEmpty()) {
-                    nodeId = serviceInfo.getServiceName();
+                    nodeId = serviceName;
                 }
 
-                HashMap<String, String> baseUrls = new HashMap<>();
                 if (!nodeId.isEmpty()) {
-                    String baseUrl = "http://" + hostAddress.getHostAddress() + ":" + hostPort;
-                    baseUrls.put(nodeId, baseUrl);
-                    listener.deviceFound(baseUrls);
+                    String host = hostAddress.getHostAddress();
+                    String baseUrl = "http://" + host + ":" + hostPort;
+                    DiscoveredService discovered = new DiscoveredService(
+                        nodeId,
+                        serviceName,
+                        baseUrl,
+                        host,
+                        hostPort,
+                        txtRecord
+                    );
+                    listener.deviceFound(discovered);
                 } else {
                     Log.e(TAG, "Could not determine node id for resolved service");
                 }
@@ -280,34 +299,69 @@ public class mDNSManager {
      * Prefer TXT {@code node_id}; otherwise use the service instance name (RainMaker-style fallback).
      */
     private static String nodeIdForLostService(NsdServiceInfo s) {
-        String fromTxt = nodeIdFromTxt(s);
+        String fromTxt = txtRecordToMap(s).getOrDefault(KEY_NODE_ID, "");
         if (!fromTxt.isEmpty()) {
             return fromTxt;
         }
         return s.getServiceName();
     }
 
-    /** TXT {@code node_id} (case-insensitive key), same field as RainMaker Android. */
-    private static String nodeIdFromTxt(NsdServiceInfo s) {
+    /**
+     * Decode TXT records into a {@code Map<String, String>} of UTF-8 values
+     * (case-insensitive normalised to lowercase keys).
+     *
+     * <p>Used both for {@code node_id} lookup and to expose chal-resp metadata
+     * ({@code pop_required}, {@code sec_version}, {@code ch_resp}, ...) to the
+     * React Native layer for on-network provisioning flows.
+     */
+    private static Map<String, String> txtRecordToMap(NsdServiceInfo s) {
+        Map<String, String> out = new HashMap<>();
         Map<String, byte[]> attr = s.getAttributes();
         if (attr == null) {
-            return "";
+            return out;
         }
         for (Map.Entry<String, byte[]> e : attr.entrySet()) {
             String key = e.getKey();
             byte[] value = e.getValue();
-            if (key != null && key.equalsIgnoreCase(KEY_NODE_ID) && value != null && value.length > 0) {
-                return new String(value);
+            if (key == null || value == null) {
+                continue;
             }
+            out.put(key.toLowerCase(), new String(value, StandardCharsets.UTF_8));
         }
-        return "";
+        return out;
+    }
+
+    /** Discovered service payload, including TXT records and reachable host/port. */
+    public static class DiscoveredService {
+        public final String nodeId;
+        public final String serviceName;
+        public final String baseUrl;
+        public final String host;
+        public final int port;
+        public final Map<String, String> txt;
+
+        public DiscoveredService(
+            String nodeId,
+            String serviceName,
+            String baseUrl,
+            String host,
+            int port,
+            Map<String, String> txt
+        ) {
+            this.nodeId = nodeId;
+            this.serviceName = serviceName;
+            this.baseUrl = baseUrl;
+            this.host = host;
+            this.port = port;
+            this.txt = txt;
+        }
     }
 
     /**
      * Listener interface for mDNS events.
      */
     public interface mDNSEvenListener {
-        void deviceFound(HashMap<String, String> baseUrls);
+        void deviceFound(DiscoveredService service);
 
         void deviceLost(String nodeId);
     }

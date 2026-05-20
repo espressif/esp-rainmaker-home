@@ -114,6 +114,7 @@ export default {
         enableVoiceAssistants: process.env.ENABLE_VOICE_ASSISTANTS !== 'false',
         enableCdfAutoSync: process.env.ENABLE_CDF_AUTOSYNC !== 'false',
         enableControlGroups: process.env.ENABLE_CONTROL_GROUPS !== 'false',
+        enableOnNetworkProvisioning: process.env.ENABLE_ON_NETWORK_PROVISIONING !== 'false',
       }
 
     }

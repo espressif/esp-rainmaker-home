@@ -7,9 +7,10 @@
 import { useRouter } from "expo-router";
 import { useTranslation } from "react-i18next";
 import { useCDF } from "@shared/hooks/useCDF";
-import { QrCode, Bluetooth, HouseWifi } from "lucide-react-native";
+import { QrCode, Bluetooth, HouseWifi, Wifi } from "lucide-react-native";
 import { tokens } from "@shared/theme/tokens";
 import { testProps } from "@shared/utils/testProps";
+import { getFeatures } from "@config/features.config";
 
 export interface DeviceOption {
   icon: React.ReactNode;
@@ -35,6 +36,8 @@ export const useAddDeviceSelection = (): UseAddDeviceSelectionReturn => {
   const { t } = useTranslation();
   const { store } = useCDF();
   const currentHome = store.getCurrentHome();
+
+  const features = getFeatures();
 
   const deviceOptions: DeviceOption[] = [
     {
@@ -73,6 +76,28 @@ export const useAddDeviceSelection = (): UseAddDeviceSelectionReturn => {
       description: t("device.addDeviceSelection.softAPDescription"),
       onClick: () => router.push("/(provision)/ScanSoftAP"),
     },
+    ...(features.onNetworkProvisioning
+      ? [
+          {
+            icon: (
+              <Wifi
+                {...testProps("icon_on_network")}
+                size={24}
+                color={tokens.colors.primary}
+              />
+            ),
+            label: t("device.addDeviceSelection.onNetworkOption"),
+            description: t(
+              "device.addDeviceSelection.onNetworkDescription"
+            ),
+            // Cast: Expo typed-routes are regenerated at build time; the new
+            // file `(provision)/OnNetworkDiscovery.tsx` may not be in the
+            // current typed-route union until the next dev server start.
+            onClick: () =>
+              router.push("/(provision)/OnNetworkDiscovery" as never),
+          } satisfies DeviceOption,
+        ]
+      : []),
   ];
 
   return {
