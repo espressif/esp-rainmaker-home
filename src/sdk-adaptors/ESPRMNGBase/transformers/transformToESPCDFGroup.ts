@@ -6,6 +6,16 @@ import { transformToESPCDFNodes } from "./transformToESPCDFNode";
 import { transformToESPCDFSchedule } from "./transformToESPCDFSchedule";
 import { apiOperatorToTriggerOperator, cdfActionsToTargets, cdfEventsToTriggerItems, triggerItemToCdfEvent } from "../utils/automation";
 import { throwNormalizedRmngShareError } from "../utils/common";
+import {
+    ESPRMNG_GROUP_SHARING_SCOPE_PARENT,
+    ESPRMNG_GROUP_SHARING_SCOPE_SUBGROUP_ROOM,
+} from "../utils/constants";
+import { buildCdfGroupSharingInfoFromRmngUsers } from "../utils/rmngGroupSharingTransform";
+import {
+    GROUP_USER_ACCESS_PRIMARY,
+    GROUP_USER_ACCESS_SECONDARY,
+    GROUP_USER_ACCESS_SUBGROUP,
+} from "@shared/utils/constants";
 import { ESPCDF } from "@store";
 import { GROUP_CONTROL_PAYLOAD_PARAMS_ENVELOPE_KEY } from "@shared/utils/constants";
 import {
@@ -28,12 +38,73 @@ type CdfEntry = {
     devicesCount: number;
 };
 
+/**
+ * Builds CDF sharing info for a nested subgroup (room). RMNG SDK rejects
+ * {@link ESPRMNGGroup.prototype.getSharingInfo} on child groups; we list the parent
+ * group's users and derive primary vs room-scoped secondary members.
+ * @param group - Nested RMNG group (room) with `parentId` set
+ * @param cdfGroup - CDF group instance whose `_raw.sharingInfo` is updated for remove-member UX
+ * @returns Sharing info payload aligned with {@link ESPCDFGroupSharingInfoInterface}
+ */
+async function buildRmngSubgroupSharingInfoFromParentUsers(
+    group: ESPRMNGGroup,
+    cdfGroup: ESPCDFGroup,
+): Promise<ESPCDFGroupSharingInfoInterface> {
+    if (!group.parentId?.trim()) {
+        throw new Error("RMNG subgroup missing parentId for sharing info");
+    }
+    /**
+     *  Create a temporary new RMNG group instance to get the sharing info from the parent group.
+     *  As rmng-backend does not support getSharingInfo on child groups.
+     */
+    const parentGroup = new ESPRMNGGroup({
+        groupId: group.parentId,
+        groupName: group.groupName ?? "",
+        nodeIds: [],
+    });
+    const listResponse = await parentGroup.getSharingInfo();
+    const allUsers = listResponse?.users ?? [];
+    cdfGroup._raw.sharingInfo = allUsers;
+
+    const scopedSubgroupId = group.groupId;
+
+    return buildCdfGroupSharingInfoFromRmngUsers({
+        groupId: scopedSubgroupId,
+        users: allUsers,
+        scope: ESPRMNG_GROUP_SHARING_SCOPE_SUBGROUP_ROOM,
+        scopedSubgroupId,
+    });
+}
+
+/**
+ * Maps RMNG SDK `accessType` (and optional parent inheritance) to CDF `ESPCDFGroup.accessType`.
+ *
+ * @param group RMNG group instance from the user’s group list
+ * @param inheritedUserAccess When the SDK omits `accessType` on a nested subgroup, reuse the parent home’s resolved access
+ * @returns One of {@link GROUP_USER_ACCESS_PRIMARY}, {@link GROUP_USER_ACCESS_SECONDARY}, {@link GROUP_USER_ACCESS_SUBGROUP}
+ */
+function resolveRmngGroupUserAccessTypeForCdf(
+    group: ESPRMNGGroup,
+    inheritedUserAccess?: string,
+): string {
+    const fromSdk = group.accessType ?? inheritedUserAccess;
+    if (
+        fromSdk === GROUP_USER_ACCESS_PRIMARY ||
+        fromSdk === GROUP_USER_ACCESS_SECONDARY ||
+        fromSdk === GROUP_USER_ACCESS_SUBGROUP
+    ) {
+        return fromSdk;
+    }
+    return GROUP_USER_ACCESS_PRIMARY;
+}
 
 export function transformToESPCDFGroup(
     group: ESPRMNGGroup,
     user: ESPRMNGUser,
     identifier: string,
+    inheritedUserAccess?: string,
 ): ESPCDFGroup {
+    const accessType = resolveRmngGroupUserAccessTypeForCdf(group, inheritedUserAccess);
     const operations: ESPCDFGroupOperation = {
         async getNodes(): Promise<ESPCDFNode[]> {
             const cdf = await ESPCDF.instance;
@@ -47,7 +118,7 @@ export function transformToESPCDFGroup(
             }
             const subgroups = group.subgroups;
             return subgroups?.map((subgroup: ESPRMNGGroup) =>
-                transformToESPCDFGroup(subgroup, user, identifier)
+                transformToESPCDFGroup(subgroup, user, identifier, accessType),
             ) || [];
         },
         async createSubGroup(options: { name: string; nodeIds?: string[]; description?: string; customData?: Record<string, any>; type?: string; mutuallyExclusive?: boolean; metadata?: Record<string, any> }): Promise<ESPCDFGroup> {
@@ -59,22 +130,25 @@ export function transformToESPCDFGroup(
                 await Promise.all(options.nodeIds.map((nodeId) => subgroup.addNode(nodeId)));
             }
             subgroup.nodeIds = options.nodeIds;
-            return transformToESPCDFGroup(subgroup, user, identifier);
+            return transformToESPCDFGroup(subgroup, user, identifier, accessType);
         },
         async getSharingInfo(_options: { metadata?: boolean; withSubGroups?: boolean; withParentGroups?: boolean }): Promise<ESPSDKAdaptorAPIDataResponse<ESPCDFGroupSharingInfoInterface>> {
-            const { users = [] } = await group.getSharingInfo()
-            cdfGroup._raw.shardingInfo = users
+            if (isSubgroup(group)) {
+                const data = await buildRmngSubgroupSharingInfoFromParentUsers(group, cdfGroup);
+                return Promise.resolve({
+                    data,
+                    status: "success",
+                });
+            }
+            const listResponse = await group.getSharingInfo();
+            const users = listResponse?.users ?? [];
+            cdfGroup._raw.sharingInfo = users;
             return Promise.resolve({
-                data: {
+                data: buildCdfGroupSharingInfoFromRmngUsers({
                     groupId: group.groupId,
-                    mutuallyExclusive: true,
-                    primaryUsers: users.filter((u) => u.access_type === "primary").map((u) => ({
-                        username: u.email || u.phone || u.user_id,
-                    })),
-                    secondaryUsers: users.filter((u) => u.access_type === "secondary").map((u) => ({
-                        username: u.email || u.phone || u.user_id,
-                    })),
-                },
+                    users,
+                    scope: ESPRMNG_GROUP_SHARING_SCOPE_PARENT,
+                }),
                 status: "success",
             });
         },
@@ -114,7 +188,9 @@ export function transformToESPCDFGroup(
             try {
                 return await group.share({
                     userCode: params.toUserName,
-                    accessType: params.makePrimary ? "primary" : "secondary",
+                    accessType: params.makePrimary
+                        ? GROUP_USER_ACCESS_PRIMARY
+                        : GROUP_USER_ACCESS_SECONDARY,
                 });
             } catch (error) {
                 throwNormalizedRmngShareError(error);
@@ -123,14 +199,14 @@ export function transformToESPCDFGroup(
         async transfer(params: { toUserName: string }): Promise<any> {
             return group.share({
                 userCode: params.toUserName,
-                accessType: "primary",
-            });;
+                accessType: GROUP_USER_ACCESS_PRIMARY,
+            });
         },
         async removeSharingFor(username: string): Promise<ESPCDFAPIResponse> {
-            const shardingInfo = cdfGroup._raw.shardingInfo as
+            const sharingInfo = cdfGroup._raw.sharingInfo as
                 | { email?: string; phone?: string; user_id: string }[]
                 | undefined;
-            const member = shardingInfo?.find(
+            const member = sharingInfo?.find(
                 (u) =>
                     u.email === username ||
                     u.phone === username ||
@@ -373,8 +449,13 @@ export function transformToESPCDFGroup(
         parentId: isSubgroup(group) ? group.parentId : undefined,
         mutuallyExclusive: true, // Hardcoded as mutually exclusive by default (homes)
         type: isSubgroup(group) ? "room" : "home", // Hardcoded as home by default (homes)
-        isPrimaryUser: true, // Hardcoded as primary user by default (homes)
-        subGroups: isSubgroup(group) ? [] : group.subgroups?.map((subgroup: ESPRMNGGroup) => transformToESPCDFGroup(subgroup, user, identifier)) || [],
+        isPrimaryUser: accessType === GROUP_USER_ACCESS_PRIMARY,
+        accessType,
+        subGroups: isSubgroup(group)
+            ? []
+            : group.subgroups?.map((subgroup: ESPRMNGGroup) =>
+                  transformToESPCDFGroup(subgroup, user, identifier, accessType),
+              ) || [],
         operations: operations,
         _raw: group,
     });

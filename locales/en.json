@@ -932,7 +932,9 @@
       "automationEnabled": "Automation Enabled",
       "automationEnabledMessage": "Automation has been enabled successfully",
       "automationDisabled": "Automation Disabled",
-      "automationDisabledMessage": "Automation has been disabled successfully"
+      "automationDisabledMessage": "Automation has been disabled successfully",
+      "notSupportedSubgroupAccessTitle": "Automations unavailable for room-only access",
+      "notSupportedSubgroupAccessDescription": "You currently have access only to selected rooms in this home. Automations require full home access because they can operate across devices and rooms. Ask the home owner to share the complete home to use automations."
     },
     "createAutomation": {
       "title": "Create Automation",
@@ -1012,7 +1014,8 @@
       "refreshFailed": "Failed to refresh automations",
       "failedToFetchAutomation": "Failed to fetch automation",
       "failedToActionAutomation": "Failed to {{action}} automation",
-      "failedToCreateAutomation": "Failed to create automation"
+      "failedToCreateAutomation": "Failed to create automation",
+      "rmngEnableDisableNotSupported": "Enabling and disabling automations is not supported for RMNG."
     }
   },
   "schedule": {

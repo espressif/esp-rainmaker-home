@@ -174,6 +174,11 @@ export const GROUP_PARAM_BROADCAST_FIELD_TARGETS = "targets";
 export const GROUP_PARAM_BROADCAST_TARGET_ROW_DEVICE_KEY = "device";
 export const GROUP_PARAM_BROADCAST_TARGET_ROW_PARAM_KEY = "param";
 
+// GROUP USER ACCESS 
+export const GROUP_USER_ACCESS_PRIMARY = "primary";
+export const GROUP_USER_ACCESS_SECONDARY = "secondary";
+export const GROUP_USER_ACCESS_SUBGROUP = "subgroup";
+
 // DEVICE SELECTION LIST (layout variant; not i18n)
 export const DEVICE_SELECTION_LIST_VARIANT_SCENE = "scene";
 export const DEVICE_SELECTION_LIST_VARIANT_SCHEDULE = "schedule";
@@ -257,6 +262,10 @@ export const ERROR_CODES = {
   GEO_COORDINATES_MISSING: "error.geo.coordinates_missing",
   GEO_COORDINATES_INVALID: "error.geo.coordinates_invalid",
 } as const;
+
+/** i18next key under `automation.errors` in locales (RMNG adaptor; feature layer translates with `t()`). */
+export const AUTOMATION_RMNG_ENABLE_DISABLE_UNSUPPORTED_I18N_KEY =
+  "automation.errors.rmngEnableDisableNotSupported";
 
 // Chat Constants
 export const MAX_MESSAGES_IN_MEMORY = 500;

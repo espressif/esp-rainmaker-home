@@ -24,7 +24,14 @@ import {
 } from "@store";
 import type { ESPCDFAutomationEvent } from "@store";
 import { ESPRMNGAutomation, ESPRMNGNode } from "@espressif/rmng-base-sdk";
-import { targetsToCdfActions, cdfActionsToTargets, cdfEventsToTriggerItems, parseTriggerId } from "../utils/automation";
+import { AUTOMATION_RMNG_ENABLE_DISABLE_UNSUPPORTED_I18N_KEY } from "@shared/utils/constants";
+import {
+    targetsToCdfActions,
+    cdfActionsToTargets,
+    cdfEventsToTriggerItems,
+    parseTriggerId,
+} from "../utils/automation";
+
 
 /** Resolved event objects for UI (deviceName, param, check, value). Used when trigger details are resolved in getAutomations. */
 export type ResolvedAutomationEvents = {
@@ -127,9 +134,15 @@ export function transformToESPCDFAutomation(
             }
             return { status: res.status, description: res.description ?? "" };
         },
-        async enable(enabled: boolean): Promise<ESPCDFAPIResponse> {
-            const res = await automation.update({ enabled });
-            return { status: res.status, description: res.description ?? "" };
+        /**
+         * RMNG currently does not support the enable/disable functionality for automation.
+         * Throws an `Error` carrying `description` as an i18next key (`automation.errors.*`) for the UI layer to translate.
+         */
+        async enable(_enabled: boolean): Promise<ESPCDFAPIResponse> {
+            const description = AUTOMATION_RMNG_ENABLE_DISABLE_UNSUPPORTED_I18N_KEY;
+            const error = new Error(description) as Error & { description: string };
+            error.description = description;
+            throw error;
         },
     };
 

@@ -888,7 +888,9 @@
       "automationEnabled": "自动化已启用",
       "automationEnabledMessage": "自动化已成功启用",
       "automationDisabled": "自动化已禁用",
-      "automationDisabledMessage": "自动化已成功禁用"
+      "automationDisabledMessage": "自动化已成功禁用",
+      "notSupportedSubgroupAccessTitle": "Automations unavailable for room-only access",
+      "notSupportedSubgroupAccessDescription": "You currently have access only to selected rooms in this home. Automations require full home access because they can operate across devices and rooms. Ask the home owner to share the complete home to use automations."
     },
     "createAutomation": {
       "title": "创建自动化",
@@ -968,7 +970,8 @@
       "refreshFailed": "刷新自动化失败",
       "failedToFetchAutomation": "获取自动化失败",
       "failedToActionAutomation": "{{action}} 自动化失败",
-      "failedToCreateAutomation": "创建自动化失败"
+      "failedToCreateAutomation": "创建自动化失败",
+      "rmngEnableDisableNotSupported": "RMNG 暂不支持启用或禁用自动化。"
     }
   },
   "schedule": {

@@ -24,6 +24,10 @@ import { transformToESPAutomationActions } from "../utils/automation";
 import { ESPRM_SCENES_SERVICE, ESPRM_PARAM_SCENES, ESPRM_SCHEDULES_SERVICE, ESPRM_PARAM_SCHEDULES } from "../constants";
 import { deepClone } from "@shared/utils/common";
 import { parseGroupParamBroadcastEnvelope } from "@shared/utils/groupParamBroadcastEnvelope";
+import {
+    GROUP_USER_ACCESS_PRIMARY,
+    GROUP_USER_ACCESS_SECONDARY,
+} from "@shared/utils/constants";
 
 export function transformToESPCDFGroup(
     group: ESPRMGroup,
@@ -615,6 +619,10 @@ export function transformToESPCDFGroup(
         subGroups: group.subGroups?.map((subGroup: ESPRMGroup) => transformToESPCDFGroup(subGroup, user, identifier)) || [],
         parentId: group.parentGroupId || '',
         isPrimaryUser: group.isPrimaryUser || false,
+        accessType:
+            group.isPrimaryUser === true
+                ? GROUP_USER_ACCESS_PRIMARY
+                : GROUP_USER_ACCESS_SECONDARY,
         description: group.description || '',
         customData: group.customData || {},
         metadata: group.metadata || {},

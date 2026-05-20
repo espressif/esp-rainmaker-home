@@ -126,6 +126,11 @@ export interface ESPCDFGroupInterface {
   nodeDetails?: ESPCDFNodeInterface[];
   subGroups?: ESPCDFGroupInterface[];
   isPrimaryUser?: boolean;
+  /**
+   * Normalized user access to this group: RMNG maps SDK `accessType`; classic RM maps from
+   * `isPrimaryUser` (`primary` | `secondary`). RM has no subgroup-share mode.
+   */
+  accessType?: string;
   totalNodes?: number;
   parentId?: string;
   type?: string;
