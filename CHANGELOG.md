@@ -5,6 +5,37 @@ All notable changes to the ESP RainMaker Home app will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.3.0]
+
+### Added
+
+#### On Network Provisioning
+- Added manual-add flow to provision RainMaker devices already on the user's Wi-Fi
+- mDNS discovery via native Android and iOS modules
+- Local ownership claim over the network using HTTP challenge-response
+- New OnNetworkDiscovery screen and discovery hook; CDF extended for on-network devices
+
+#### RMNG Local Control
+- Wired local control adapter into the RMNG SDK configuration
+- Enabled local control in the RMNG SDK feature map
+- Subscribe and unsubscribe local discovery from the user transformer
+
+---
+
+### Enhanced
+
+- Moved in-app CDF to the external `@espressif/rainmaker-base-cdf` package; existing `@store` imports unchanged
+- Aligned RMNG adaptor with updated backend request and response shapes (entity IDs, automation paths, profile/group-user fields, HTTP status codes, optional `message`)
+- Updated RMNG group control payload and sharing request handling (broadcast envelopes, primary user in sharing requests)
+- Improved slider UX with drag value bubble, compact mode on device fallback panel, and expanded layout in scene, schedule, group, and automation flows
+- Improved SDK node transformation resilience when device payloads are partial
+
+### Fixed
+
+- [RMNG] Schedule enable/disable success toast and toggle UI now stay in sync without a manual refresh
+- [RMNG] Refresh node config when IoT shadow `ncfg` version changes
+- [RMNG] Clear errors for unsupported automation enable/disable and shared subgroups; fixed subgroup share and unshare for the primary user
+
 ## [4.2.0]
 
 ### Added

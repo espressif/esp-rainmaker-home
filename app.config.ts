@@ -2,7 +2,7 @@ export default {
   expo: {
     name: process.env.APP_NAME || "ESP RainMaker Home",
     slug: process.env.APP_SLUG || "esp-rainmaker-home",
-    version: process.env.APP_VERSION || "4.2.0",
+    version: process.env.APP_VERSION || "4.3.0",
     orientation: "portrait",
     icon: "./src/assets/images/logo.png",
     userInterfaceStyle: "automatic",
