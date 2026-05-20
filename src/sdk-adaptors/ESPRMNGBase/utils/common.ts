@@ -4,12 +4,21 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { ESPCDFNodeUpdateEvent } from "@store";
+import type { ESPCDFAPIResponse, ESPCDFNodeUpdateEvent } from "@store";
 import {
   EVENT_NODE_CONNECTED,
   EVENT_NODE_DISCONNECTED,
   EVENT_NODE_PARAMS_CHANGED,
 } from "@store";
+import { SUCESS } from "@shared/utils/constants";
+
+/** RMNG API success body after HTTP 2xx (optional message; no body `status`). */
+export type RmngSdkApiBody = {
+  message?: string;
+  /** Legacy body field; prefer {@link RmngSdkApiBody.message}. */
+  description?: string;
+  status?: string;
+};
 
 const NOT_AUTHORIZED_MARKER = "NotAuthorizedException:";
 
@@ -26,8 +35,9 @@ function loginErrorSearchText(error: unknown): string {
     if (orig && typeof orig === "object") {
       const rd = (orig as Record<string, unknown>).responseData;
       if (rd && typeof rd === "object") {
-        const st = (rd as Record<string, unknown>).status;
-        if (typeof st === "string") parts.push(st);
+        const body = rd as Record<string, unknown>;
+        if (typeof body.message === "string") parts.push(body.message);
+        if (typeof body.status === "string") parts.push(body.status);
       }
     }
     if (parts.length > 0) return parts.join("");
@@ -78,8 +88,8 @@ export function throwNormalizedRmngShareError(
 ): never {
   const e = error as RmngHttpError;
   const rd = e.responseData;
-  const apiBodyStatus = typeof rd?.status === "string" ? rd.status : undefined;
   const apiBodyMessage = typeof rd?.message === "string" ? rd.message : undefined;
+  const apiBodyStatus = typeof rd?.status === "string" ? rd.status : undefined;
   const rawCode = rd?.error_code ?? rd?.errorCode;
   const errorCode =
     rawCode !== undefined && rawCode !== null ? String(rawCode) : undefined;
@@ -90,8 +100,8 @@ export function throwNormalizedRmngShareError(
       : "";
 
   const description =
-    apiBodyStatus ||
     apiBodyMessage ||
+    apiBodyStatus ||
     (fromHttpMessage || e.message || fallbackMessage);
 
   const out = new Error(description) as NormalizedRmngShareError;
@@ -100,6 +110,28 @@ export function throwNormalizedRmngShareError(
   if (typeof e.status === "number") out.status = e.status;
   if (rd && typeof rd === "object") out.responseData = rd;
   throw out;
+}
+
+/**
+ * Maps a resolved RMNG SDK API body (HTTP already succeeded) to the CDF API response contract.
+ *
+ * @param res - Optional SDK response body (`message` only on success).
+ * @param fallbackDescription - Used when the body has no `message` / legacy `description`.
+ * @returns CDF shape with `status: "success"` for the app layer.
+ */
+export function normalizeRmngSdkResponseToCdf(
+  res?: RmngSdkApiBody | null,
+  fallbackDescription = "",
+): ESPCDFAPIResponse {
+  const description =
+    (typeof res?.message === "string" && res.message) ||
+    (typeof res?.description === "string" && res.description) ||
+    fallbackDescription;
+
+  return {
+    status: SUCESS,
+    description,
+  };
 }
 
 /** IoT shadow timestamps are often Unix seconds; `handleNodeConnected` expects ms. */

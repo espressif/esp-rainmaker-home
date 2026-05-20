@@ -5,7 +5,7 @@ import { transformToESPCDFAutomation, type ResolvedAutomationEvents } from "./tr
 import { transformToESPCDFNodes } from "./transformToESPCDFNode";
 import { transformToESPCDFSchedule } from "./transformToESPCDFSchedule";
 import { apiOperatorToTriggerOperator, cdfActionsToTargets, cdfEventsToTriggerItems, triggerItemToCdfEvent } from "../utils/automation";
-import { throwNormalizedRmngShareError } from "../utils/common";
+import { normalizeRmngSdkResponseToCdf, throwNormalizedRmngShareError } from "../utils/common";
 import {
     ESPRMNG_GROUP_SHARING_SCOPE_PARENT,
     ESPRMNG_GROUP_SHARING_SCOPE_SUBGROUP_ROOM,
@@ -154,7 +154,7 @@ export function transformToESPCDFGroup(
         },
         async delete(): Promise<ESPCDFAPIResponse> {
             const response = await group.delete();
-            return { status: "success", description: response.status };
+            return normalizeRmngSdkResponseToCdf(response, "Group deleted successfully");
         },
         async updateMetadata(_metadata: Record<string, any>): Promise<ESPCDFAPIResponse> {
             throw new Error("RMNGBase SDK does not support updateMetadata");
@@ -182,7 +182,8 @@ export function transformToESPCDFGroup(
             throw new Error("RMNGBase SDK does not support removeNodes for group");
         },
         async leave(): Promise<ESPCDFAPIResponse> {
-            return await group.leave();
+            const response = await group.leave();
+            return normalizeRmngSdkResponseToCdf(response, "Left group successfully");
         },
         async share(params: { toUserName: string; makePrimary: boolean }): Promise<any> {
             try {

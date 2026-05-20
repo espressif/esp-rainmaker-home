@@ -19,7 +19,7 @@ import type {
 import { EVENT_NODE_PARAMS_CHANGED } from "@store";
 import { ESPRMNGBaseAdaptorIdentifier } from "@config/sdk.identifiers";
 import { HEADLESS_ERROR_UNKNOWN } from "@shared/utils/constants";
-import { mapShadowDocumentToNodeUpdateEvents } from "../utils/common";
+import { mapShadowDocumentToNodeUpdateEvents, normalizeRmngSdkResponseToCdf } from "../utils/common";
 import { safeTransform } from "@sdk-adaptors/shared/utils/safeTransform";
 import { refreshRmngNodeIfShadowNcfgVersionChanged } from "../utils/rmngNcfgVersionShadowRefresh";
 import { runNcfgShadowHandlerCoalesced } from "../utils/rmngNcfgShadowCoalesce";
@@ -52,27 +52,12 @@ export function transformToESPCDFNode(node: ESPRMNGNode): ESPCDFNode {
     const nodeId = node.nodeId;
     const operations: ESPCDFNodeOperation = {
         setMultipleParams: async (_params: Record<string, any>) => {
-            return node.setParams(_params);
+            const res = await node.setParams(_params);
+            return normalizeRmngSdkResponseToCdf(res, "Parameters updated successfully");
         },
         delete: async (): Promise<ESPCDFAPIResponse> => {
             const res = await node.delete();
-            const raw =
-                res && typeof res === "object"
-                    ? String((res as { status?: string }).status ?? "").toLowerCase()
-                    : "";
-            if (raw === "success" || raw.includes("success")) {
-                return res as ESPCDFAPIResponse;
-            }
-            return {
-                status: "success",
-                description:
-                    (res &&
-                        typeof res === "object" &&
-                        typeof (res as { description?: string }).description ===
-                            "string" &&
-                        (res as { description: string }).description) ||
-                    "",
-            };
+            return normalizeRmngSdkResponseToCdf(res, "Node deleted successfully");
         },
         setTimeZone: async (_timeZone: string) => {
             const posix = ianaTzToEspPosixTz(_timeZone);
@@ -80,9 +65,10 @@ export function transformToESPCDFNode(node: ESPRMNGNode): ESPCDFNode {
             if (posix) {
                 timePayload["TZ-POSIX"] = posix;
             }
-            return node.setParams({
+            const res = await node.setParams({
                 Time: timePayload,
             });
+            return normalizeRmngSdkResponseToCdf(res, "Time zone updated successfully");
         },
         updateMetadata: async (_metadata: Record<string, any>) => {
             throw new Error("RMNGBase SDK does not support node updateMetadata");
