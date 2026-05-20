@@ -11,7 +11,7 @@ import {
   ESPCDFNodeTransport,
 } from "@store";
 import { DISCOVERY_LOST_EVENT } from "@shared/utils/constants";
-import { handleNodeTransportUpdate } from "../../../store/services/nodeEventHandlers";
+import { handleNodeTransportUpdate } from "@store";
 
 let discoveryLostSubscription: ReturnType<
   typeof DeviceEventEmitter.addListener

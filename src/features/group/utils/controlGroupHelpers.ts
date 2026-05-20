@@ -11,7 +11,7 @@ import {
   type GroupParamBroadcastOptions,
   type GroupParamBroadcastTargetRow,
 } from "@shared/utils/groupParamBroadcastEnvelope";
-import { getValidHomes } from "@store/utils/home";
+import { getValidHomes } from "@store";
 
 /**
  * Group-control subgroups are identified by this prefix on the subgroup storage name

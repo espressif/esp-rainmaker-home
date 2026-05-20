@@ -16,7 +16,7 @@ import {
     ESPCDFScheduleOperation,
 } from "@store";
 import { ESPRMNGUser } from "@espressif/rmng-base-sdk";
-import { SUCCESS } from "@store/utils/constants";
+import { SUCCESS } from "@store";
 
 /** Response shape expected by ScheduleStoreSynchronizer (node_id + status per node). */
 type NodeResult = { node_id: string; status: string };
