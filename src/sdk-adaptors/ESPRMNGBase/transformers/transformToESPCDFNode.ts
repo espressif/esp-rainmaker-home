@@ -21,6 +21,8 @@ import { ESPRMNGBaseAdaptorIdentifier } from "@config/sdk.identifiers";
 import { HEADLESS_ERROR_UNKNOWN } from "@shared/utils/constants";
 import { mapShadowDocumentToNodeUpdateEvents } from "../utils/common";
 import { safeTransform } from "@sdk-adaptors/shared/utils/safeTransform";
+import { refreshRmngNodeIfShadowNcfgVersionChanged } from "../utils/rmngNcfgVersionShadowRefresh";
+import { runNcfgShadowHandlerCoalesced } from "../utils/rmngNcfgShadowCoalesce";
 import { transformToESPCDFDevice } from "./transformToESPCDFDevice";
 import { transformToESPCDFService } from "./transformToESPCDFService";
 import { ianaTzToEspPosixTz } from "@shared/utils/timezone";
@@ -107,9 +109,24 @@ export function transformToESPCDFNode(node: ESPRMNGNode): ESPCDFNode {
             event.state?.reported !== undefined;
 
         if (isShadowDoc) {
-            for (const ev of mapShadowDocumentToNodeUpdateEvents(node.nodeId, event)) {
-                listen(ev);
-            }
+            void (async () => {
+                const isPrimary = await runNcfgShadowHandlerCoalesced(node.nodeId, async () => {
+                    try {
+                        await refreshRmngNodeIfShadowNcfgVersionChanged(node.nodeId, event);
+                    } catch (err) {
+                        console.warn(
+                            `[ncfg_ver][app] refreshRmngNodeIfShadowNcfgVersionChanged failed nodeId=${node.nodeId}`,
+                            err,
+                        );
+                    }
+                });
+                if (!isPrimary) return;
+
+                const events = mapShadowDocumentToNodeUpdateEvents(node.nodeId, event);
+                for (const ev of events) {
+                    listen(ev);
+                }
+            })();
             return;
         }
 
