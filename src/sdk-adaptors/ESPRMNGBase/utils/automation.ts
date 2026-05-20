@@ -1,4 +1,4 @@
-import { ActionTarget, TriggerItem, TriggerOperator } from "@espressif/rmng-base-sdk";
+import { ActionTarget, TriggerItem, TriggerOperator, buildPath, parsePath } from "@espressif/rmng-base-sdk";
 import {
     ESPCDFAutomationAction,
     ESPCDFAutomationConditionOperator,
@@ -39,12 +39,15 @@ export function targetsToCdfActions(
     targets: ActionTarget[] | undefined
 ): ESPCDFAutomationAction[] {
     if (!Array.isArray(targets)) return [];
-    return targets.map((t) => ({
-        nodeId: t.node,
-        deviceName: t.device,
-        param: t.param,
-        value: t.value,
-    }));
+    return targets.map((t) => {
+        const { deviceId, paramId } = parsePath(t.path);
+        return {
+            nodeId: t.node,
+            deviceName: deviceId,
+            param: paramId,
+            value: t.value,
+        };
+    });
 }
 
 export function cdfActionsToTargets(
@@ -53,8 +56,7 @@ export function cdfActionsToTargets(
     if (!Array.isArray(actions)) return [];
     return actions.map((a) => ({
         node: a.nodeId,
-        device: a.deviceName,
-        param: a.param,
+        path: buildPath(a.deviceName, a.param),
         value: a.value,
     }));
 }
@@ -97,9 +99,10 @@ export function backendOperatorToCdfOperator(op: string | undefined): ESPCDFAuto
 
 /** Converts a single RMNG TriggerItem to CDF node-params event shape. */
 export function triggerItemToCdfEvent(item: TriggerItem): ESPCDFAutomationNodeParamsEvent {
+    const { deviceId, paramId } = parsePath(item.path);
     return {
-        deviceName: item.device ?? "",
-        param: item.param ?? "",
+        deviceName: deviceId,
+        param: paramId,
         check: backendOperatorToCdfOperator(item.operator),
         value: item.value,
     };
@@ -142,8 +145,7 @@ export function cdfEventsToTriggerItems(
         triggerIds.push(id);
         triggerItems.push({
             id,
-            device: e.deviceName ?? "",
-            param: e.param ?? "",
+            path: buildPath(e.deviceName ?? "", e.param ?? ""),
             operator: operatorToBackend(e.check),
             value: e.value,
         });

@@ -47,8 +47,6 @@ import { startRmngLocalDiscoverySubscription } from "../utils/rmngLocalDiscovery
 
 /** Matches User API `POST /v1/app-platforms/{id}/clients` path segment. */
 const RMNG_APP_PLATFORM_ID = "virtual-app";
-/** Request body field when no push token exists; server still returns `user_code`. */
-const RMNG_REGISTER_CLIENT_TOKEN_PLACEHOLDER = "TOKEN";
 
 /**
  * Transforms ESPRMNGUser from the RainMaker SDK to ESPCDFUser format.
@@ -411,11 +409,10 @@ export function transformToESPCDFUser(
 
     const syncRmngUserCode = async (): Promise<void> => {
         try {
-            const userCode = await esprmngUser.registerClient(
-                RMNG_APP_PLATFORM_ID,
-                RMNG_REGISTER_CLIENT_TOKEN_PLACEHOLDER
-            );
-            cdfUser.userInfo.userCode = userCode;
+            const profile = await esprmngUser.getProfile();
+            if (profile.user_code) {
+                cdfUser.userInfo.userCode = profile.user_code;
+            }
         } catch (error) {
             console.warn("[transformToESPCDFUser] Failed to fetch RMNG user code:", error);
         }

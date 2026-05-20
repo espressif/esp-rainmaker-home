@@ -20,7 +20,7 @@ import { transformToESPCDFServiceParam } from "./transformToESPCDFServiceParam";
 export function transformToESPCDFService(
     service: ESPRMNGService,
 ): ESPCDFService {
-    const serviceLabel = service.name || service.type || "unknown-service";
+    const serviceLabel = service.id || service.type || "unknown-service";
 
     const mapServiceParams = (rawParams: unknown) =>
         safeTransform<ESPRMNGServiceParam, ESPCDFServiceParam>(
@@ -48,7 +48,7 @@ export function transformToESPCDFService(
     };
 
     return new ESPCDFService({
-        name: service.name || "",
+        name: service.id || "",
         type: service.type || "",
         params,
         operations: operations,
