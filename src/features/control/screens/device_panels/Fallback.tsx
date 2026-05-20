@@ -137,7 +137,7 @@ const DeviceFallback = observer(
                 backgroundColor: tokens.colors.white,
               }}
             >
-              <control.control />
+              <control.control compact />
             </ParamControlWrap>
           );
         })}

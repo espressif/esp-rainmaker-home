@@ -49,7 +49,7 @@ const Temperature = observer(
     // Render
     return (
       <TouchableOpacity
-        style={[styles.container]}
+        style={[styles.container, styles.containerCompact]}
         onPress={handlePress}
         disabled={disabled}
       >

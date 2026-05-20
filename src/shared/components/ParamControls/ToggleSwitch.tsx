@@ -45,7 +45,13 @@ const ToggleSwitch = observer(
 
     // Render
     return (
-      <View style={[styles.container, disabled && styles.disabled]}>
+      <View
+        style={[
+          styles.container,
+          styles.containerCompact,
+          disabled && styles.disabled,
+        ]}
+      >
         <View style={styles.content}>
           <View style={styles.textContainer}>
             <Text style={styles.title}>{label}</Text>

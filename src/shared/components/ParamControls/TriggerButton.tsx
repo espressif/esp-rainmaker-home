@@ -52,7 +52,13 @@ const TriggerButton = observer(
 
     // Render
     return (
-      <View style={[styles.container, disabled && styles.disabled]}>
+      <View
+        style={[
+          styles.container,
+          styles.containerCompact,
+          disabled && styles.disabled,
+        ]}
+      >
         <View style={styles.header}>
           <Text style={styles.title}>{label}</Text>
           <Text style={styles.value}>{isActive ? "Active" : "Inactive"}</Text>

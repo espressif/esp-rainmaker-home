@@ -147,6 +147,7 @@ const styles = StyleSheet.create({
   /** Same as device_panels/Fallback ParamControlWrap wrapper. */
   paramCard: {
     marginBottom: 10,
+    paddingVertical: tokens.spacing._10,
     ...globalStyles.shadowElevationForLightTheme,
     backgroundColor: tokens.colors.white,
   },
