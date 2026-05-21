@@ -96,6 +96,45 @@ export const getChallengeResponseStages = (t: any): ProvisionStage[] => [
 ];
 
 /**
+ * Stages displayed during the on-network (LAN HTTP) provisioning flow.
+ *
+ * The device is already on the user's Wi-Fi, so we omit the Wi-Fi credential
+ * and Wi-Fi connection confirmation steps. Mirrors what the iOS / Android
+ * native apps surface for the same flow.
+ */
+export const getOnNetworkProvisionStages = (t: any): ProvisionStage[] => [
+  {
+    id: 1,
+    title: t("device.provision.onNetwork.confirmingNodeAssociationTitle"),
+    status: "pending",
+    description: t(
+      "device.provision.onNetwork.confirmingNodeAssociationDescription"
+    ),
+  },
+  {
+    id: 2,
+    title: t("device.provision.onNetwork.settingUpNodeTitle"),
+    status: "pending",
+    description: t("device.provision.onNetwork.settingUpNodeDescription"),
+  },
+];
+
+/**
+ * Maps on-network progress messages (from the SDK adaptor) to UI stage ids.
+ *
+ * Stage 2 (`Setting up the Node`) is marked complete by `handleAddDeviceSuccess`
+ * once the cloud-side `addOnNetworkDevice` call returns a fetched node and the
+ * Continue button becomes enabled — same convention as the challenge-response
+ * flow.
+ */
+export const ON_NETWORK_MESSAGE_STAGE_MAP: Record<string, number> = {
+  "Initiating node association": 1,
+  "Sending challenge to device": 1,
+  "Verifying node association": 1,
+  "User node mapping succeed": 1,
+};
+
+/**
  * Message to stage mapping for traditional flow
  */
 export const MESSAGE_STAGE_MAP: Record<string, number> = {

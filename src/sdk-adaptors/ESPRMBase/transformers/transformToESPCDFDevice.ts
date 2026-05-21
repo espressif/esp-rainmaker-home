@@ -6,29 +6,52 @@
 
 import { ESPCDFDevice, ESPCDFDeviceParam } from "@store";
 import { ESPRMDevice, ESPRMDeviceParam } from "@espressif/rainmaker-base-sdk";
+import { HEADLESS_ERROR_UNKNOWN } from "@shared/utils/constants";
+import { safeTransform } from "@sdk-adaptors/shared/utils/safeTransform";
 import { transformToESPCDFDeviceParam } from "./transformToESPCDFDeviceParam";
 import { resolveDeviceDisplayName } from "../utils/device";
 
+/**
+ * Transforms RM base device into CDF device with resilient param handling.
+ * Malformed individual params are skipped so nodes still render when some params
+ * are missing or invalid (all missing, device-only, service-only, or partial).
+ * @param device - Raw RM base device.
+ * @param options - Optional node metadata used for display name resolution.
+ * @returns CDF device with mapped params and operations.
+ */
 export function transformToESPCDFDevice(
   device: ESPRMDevice,
   options?: { nodeMetadata?: Record<string, unknown> },
 ): ESPCDFDevice {
-  const params: ESPCDFDeviceParam[] = device.params?.map((param: ESPRMDeviceParam) =>
-    transformToESPCDFDeviceParam(param)
-  ) || [];
+  const deviceLabel = device.name || device.type || "unknown-device";
+
+  const mapDeviceParams = (rawParams: unknown) =>
+    safeTransform<ESPRMDeviceParam, ESPCDFDeviceParam>(
+      rawParams,
+      "device.params",
+      (param) => transformToESPCDFDeviceParam(param),
+      ({ index, error }) => {
+        const message = error instanceof Error ? error.message : HEADLESS_ERROR_UNKNOWN;
+        console.warn("Device param transform skipped", {
+          device: deviceLabel,
+          index,
+          reason: message,
+        });
+      },
+      { skipElement: (param) => !param },
+    );
+
+  const params = mapDeviceParams(device.params);
 
   const operations = {
     getParams: async () => {
-      const params = await device.getParams();
-      return params?.map((param: ESPRMDeviceParam) =>
-        transformToESPCDFDeviceParam(param)
-      ) || [];
+      const latestParams = await device.getParams();
+      return mapDeviceParams(latestParams ?? []);
     },
   };
 
   const displayName = resolveDeviceDisplayName(options?.nodeMetadata, device, "");
 
-  // Create ESPCDFDevice entity instance
   return new ESPCDFDevice({
     name: device.name || "",
     type: device.type || "",

@@ -2,11 +2,26 @@ import { ESPCDFGroupSharingInfoInterface, ESPCDFNode, ESPCDFScene, ESPCDFSchedul
 import { ESPCDFGroup } from "@store";
 import { ESPRMNGAutomation, ESPRMNGGroup, ESPRMNGNode, ESPRMNGUser } from "@espressif/rmng-base-sdk";
 import { transformToESPCDFAutomation, type ResolvedAutomationEvents } from "./transformToESPCDFAutomation";
-import { transformToESPCDFNode } from "./transformToESPCDFNode";
+import { transformToESPCDFNodes } from "./transformToESPCDFNode";
 import { transformToESPCDFSchedule } from "./transformToESPCDFSchedule";
 import { apiOperatorToTriggerOperator, cdfActionsToTargets, cdfEventsToTriggerItems, triggerItemToCdfEvent } from "../utils/automation";
-import { throwNormalizedRmngShareError } from "../utils/common";
+import { normalizeRmngSdkResponseToCdf, throwNormalizedRmngShareError } from "../utils/common";
+import {
+    ESPRMNG_GROUP_SHARING_SCOPE_PARENT,
+    ESPRMNG_GROUP_SHARING_SCOPE_SUBGROUP_ROOM,
+} from "../utils/constants";
+import { buildCdfGroupSharingInfoFromRmngUsers } from "../utils/rmngGroupSharingTransform";
+import {
+    GROUP_USER_ACCESS_PRIMARY,
+    GROUP_USER_ACCESS_SECONDARY,
+    GROUP_USER_ACCESS_SUBGROUP,
+} from "@shared/utils/constants";
 import { ESPCDF } from "@store";
+import { GROUP_CONTROL_PAYLOAD_PARAMS_ENVELOPE_KEY } from "@shared/utils/constants";
+import {
+    parseGroupParamBroadcastEnvelope,
+    resolveGroupParamBroadcastTypeKey,
+} from "@shared/utils/groupParamBroadcastEnvelope";
 
 type TriggerNodeLike = { getTriggers?(): Promise<unknown[]>; setTriggers?(items: unknown[]): Promise<unknown> };
 
@@ -23,12 +38,73 @@ type CdfEntry = {
     devicesCount: number;
 };
 
+/**
+ * Builds CDF sharing info for a nested subgroup (room). RMNG SDK rejects
+ * {@link ESPRMNGGroup.prototype.getSharingInfo} on child groups; we list the parent
+ * group's users and derive primary vs room-scoped secondary members.
+ * @param group - Nested RMNG group (room) with `parentId` set
+ * @param cdfGroup - CDF group instance whose `_raw.sharingInfo` is updated for remove-member UX
+ * @returns Sharing info payload aligned with {@link ESPCDFGroupSharingInfoInterface}
+ */
+async function buildRmngSubgroupSharingInfoFromParentUsers(
+    group: ESPRMNGGroup,
+    cdfGroup: ESPCDFGroup,
+): Promise<ESPCDFGroupSharingInfoInterface> {
+    if (!group.parentId?.trim()) {
+        throw new Error("RMNG subgroup missing parentId for sharing info");
+    }
+    /**
+     *  Create a temporary new RMNG group instance to get the sharing info from the parent group.
+     *  As rmng-backend does not support getSharingInfo on child groups.
+     */
+    const parentGroup = new ESPRMNGGroup({
+        groupId: group.parentId,
+        groupName: group.groupName ?? "",
+        nodeIds: [],
+    });
+    const listResponse = await parentGroup.getSharingInfo();
+    const allUsers = listResponse?.users ?? [];
+    cdfGroup._raw.sharingInfo = allUsers;
+
+    const scopedSubgroupId = group.groupId;
+
+    return buildCdfGroupSharingInfoFromRmngUsers({
+        groupId: scopedSubgroupId,
+        users: allUsers,
+        scope: ESPRMNG_GROUP_SHARING_SCOPE_SUBGROUP_ROOM,
+        scopedSubgroupId,
+    });
+}
+
+/**
+ * Maps RMNG SDK `accessType` (and optional parent inheritance) to CDF `ESPCDFGroup.accessType`.
+ *
+ * @param group RMNG group instance from the user’s group list
+ * @param inheritedUserAccess When the SDK omits `accessType` on a nested subgroup, reuse the parent home’s resolved access
+ * @returns One of {@link GROUP_USER_ACCESS_PRIMARY}, {@link GROUP_USER_ACCESS_SECONDARY}, {@link GROUP_USER_ACCESS_SUBGROUP}
+ */
+function resolveRmngGroupUserAccessTypeForCdf(
+    group: ESPRMNGGroup,
+    inheritedUserAccess?: string,
+): string {
+    const fromSdk = group.accessType ?? inheritedUserAccess;
+    if (
+        fromSdk === GROUP_USER_ACCESS_PRIMARY ||
+        fromSdk === GROUP_USER_ACCESS_SECONDARY ||
+        fromSdk === GROUP_USER_ACCESS_SUBGROUP
+    ) {
+        return fromSdk;
+    }
+    return GROUP_USER_ACCESS_PRIMARY;
+}
 
 export function transformToESPCDFGroup(
     group: ESPRMNGGroup,
     user: ESPRMNGUser,
     identifier: string,
+    inheritedUserAccess?: string,
 ): ESPCDFGroup {
+    const accessType = resolveRmngGroupUserAccessTypeForCdf(group, inheritedUserAccess);
     const operations: ESPCDFGroupOperation = {
         async getNodes(): Promise<ESPCDFNode[]> {
             const cdf = await ESPCDF.instance;
@@ -42,7 +118,7 @@ export function transformToESPCDFGroup(
             }
             const subgroups = group.subgroups;
             return subgroups?.map((subgroup: ESPRMNGGroup) =>
-                transformToESPCDFGroup(subgroup, user, identifier)
+                transformToESPCDFGroup(subgroup, user, identifier, accessType),
             ) || [];
         },
         async createSubGroup(options: { name: string; nodeIds?: string[]; description?: string; customData?: Record<string, any>; type?: string; mutuallyExclusive?: boolean; metadata?: Record<string, any> }): Promise<ESPCDFGroup> {
@@ -54,28 +130,31 @@ export function transformToESPCDFGroup(
                 await Promise.all(options.nodeIds.map((nodeId) => subgroup.addNode(nodeId)));
             }
             subgroup.nodeIds = options.nodeIds;
-            return transformToESPCDFGroup(subgroup, user, identifier);
+            return transformToESPCDFGroup(subgroup, user, identifier, accessType);
         },
         async getSharingInfo(_options: { metadata?: boolean; withSubGroups?: boolean; withParentGroups?: boolean }): Promise<ESPSDKAdaptorAPIDataResponse<ESPCDFGroupSharingInfoInterface>> {
-            const { users = [] } = await group.getSharingInfo()
-            cdfGroup._raw.shardingInfo = users
+            if (isSubgroup(group)) {
+                const data = await buildRmngSubgroupSharingInfoFromParentUsers(group, cdfGroup);
+                return Promise.resolve({
+                    data,
+                    status: "success",
+                });
+            }
+            const listResponse = await group.getSharingInfo();
+            const users = listResponse?.users ?? [];
+            cdfGroup._raw.sharingInfo = users;
             return Promise.resolve({
-                data: {
+                data: buildCdfGroupSharingInfoFromRmngUsers({
                     groupId: group.groupId,
-                    mutuallyExclusive: true,
-                    primaryUsers: users.filter((u) => u.access_type === "primary").map((u) => ({
-                        username: u.email || u.phone || u.user_id,
-                    })),
-                    secondaryUsers: users.filter((u) => u.access_type === "secondary").map((u) => ({
-                        username: u.email || u.phone || u.user_id,
-                    })),
-                },
+                    users,
+                    scope: ESPRMNG_GROUP_SHARING_SCOPE_PARENT,
+                }),
                 status: "success",
             });
         },
         async delete(): Promise<ESPCDFAPIResponse> {
             const response = await group.delete();
-            return { status: "success", description: response.status };
+            return normalizeRmngSdkResponseToCdf(response, "Group deleted successfully");
         },
         async updateMetadata(_metadata: Record<string, any>): Promise<ESPCDFAPIResponse> {
             throw new Error("RMNGBase SDK does not support updateMetadata");
@@ -103,13 +182,16 @@ export function transformToESPCDFGroup(
             throw new Error("RMNGBase SDK does not support removeNodes for group");
         },
         async leave(): Promise<ESPCDFAPIResponse> {
-            return await group.leave();
+            const response = await group.leave();
+            return normalizeRmngSdkResponseToCdf(response, "Left group successfully");
         },
         async share(params: { toUserName: string; makePrimary: boolean }): Promise<any> {
             try {
                 return await group.share({
                     userCode: params.toUserName,
-                    accessType: params.makePrimary ? "primary" : "secondary",
+                    accessType: params.makePrimary
+                        ? GROUP_USER_ACCESS_PRIMARY
+                        : GROUP_USER_ACCESS_SECONDARY,
                 });
             } catch (error) {
                 throwNormalizedRmngShareError(error);
@@ -118,17 +200,17 @@ export function transformToESPCDFGroup(
         async transfer(params: { toUserName: string }): Promise<any> {
             return group.share({
                 userCode: params.toUserName,
-                accessType: "primary",
-            });;
+                accessType: GROUP_USER_ACCESS_PRIMARY,
+            });
         },
         async removeSharingFor(username: string): Promise<ESPCDFAPIResponse> {
-            const shardingInfo = cdfGroup._raw.shardingInfo as
-                | { email?: string; phone?: string; user_id: string }[]
+            const sharingInfo = cdfGroup._raw.sharingInfo as
+                | { email?: string; phone_number?: string; user_id: string }[]
                 | undefined;
-            const member = shardingInfo?.find(
+            const member = sharingInfo?.find(
                 (u) =>
                     u.email === username ||
-                    u.phone === username ||
+                    u.phone_number === username ||
                     u.user_id === username,
             );
             if (!member) {
@@ -326,7 +408,33 @@ export function transformToESPCDFGroup(
         async setParams(
             payload: Record<string, Record<string, unknown>>,
         ): Promise<unknown> {
-            return group.setParams(payload);
+            const broadcast = parseGroupParamBroadcastEnvelope(payload);
+            if (!broadcast) {
+                return group.setParams(payload);
+            }
+            // Accumulate one param entry per device type (RMNG cloud payload key).
+            const paramsByDeviceType: Record<string, Record<string, unknown>> = {};
+            for (const targetRow of broadcast.targets) {
+                const deviceType = targetRow.device.type;
+                if (!deviceType) continue;
+                const paramTypeKey = resolveGroupParamBroadcastTypeKey(targetRow.param);
+                if (!paramsByDeviceType[deviceType]) {
+                    paramsByDeviceType[deviceType] = {};
+                }
+                paramsByDeviceType[deviceType][paramTypeKey] = broadcast.value;
+            }
+            // Build the RMNG cloud wire payload: { [deviceType]: { params: { [paramType]: value } } }.
+            const rmngGroupPayload: Record<string, Record<string, unknown>> = {};
+            for (const [deviceType, paramEntries] of Object.entries(paramsByDeviceType)) {
+                if (Object.keys(paramEntries).length === 0) continue;
+                rmngGroupPayload[deviceType] = {
+                    [GROUP_CONTROL_PAYLOAD_PARAMS_ENVELOPE_KEY]: paramEntries,
+                };
+            }
+            if (Object.keys(rmngGroupPayload).length === 0) {
+                return Promise.resolve();
+            }
+            return group.setParams(rmngGroupPayload);
         },
     };
 
@@ -342,8 +450,13 @@ export function transformToESPCDFGroup(
         parentId: isSubgroup(group) ? group.parentId : undefined,
         mutuallyExclusive: true, // Hardcoded as mutually exclusive by default (homes)
         type: isSubgroup(group) ? "room" : "home", // Hardcoded as home by default (homes)
-        isPrimaryUser: true, // Hardcoded as primary user by default (homes)
-        subGroups: isSubgroup(group) ? [] : group.subgroups?.map((subgroup: ESPRMNGGroup) => transformToESPCDFGroup(subgroup, user, identifier)) || [],
+        isPrimaryUser: accessType === GROUP_USER_ACCESS_PRIMARY,
+        accessType,
+        subGroups: isSubgroup(group)
+            ? []
+            : group.subgroups?.map((subgroup: ESPRMNGGroup) =>
+                  transformToESPCDFGroup(subgroup, user, identifier, accessType),
+              ) || [],
         operations: operations,
         _raw: group,
     });
@@ -385,7 +498,7 @@ async function gatherUniqueNodesFromGroupSubtree(
 
 /**
  * Builds {@link ESPCDFNode}s for this group: walks the group subtree (see gatherUniqueNodesFromGroupSubtree),
- * then maps each RMNG node with transformToESPCDFNode.
+ * then maps each RMNG node with transformToESPCDFNodes.
  */
 async function buildCdfNodesFromGroup(
     group: ESPRMNGGroup,
@@ -395,7 +508,7 @@ async function buildCdfNodesFromGroup(
     const seenNodeIds: Record<string, true> = {};
     const nodes: ESPRMNGNode[] = [];
     await gatherUniqueNodesFromGroupSubtree(group, seenNodeIds, nodes);
-    return nodes.map((node) => transformToESPCDFNode(node));
+    return transformToESPCDFNodes(nodes, "group.buildCdfNodesFromGroup");
 }
 
 async function resolveAutomationTriggerDetails(
@@ -409,7 +522,7 @@ async function resolveAutomationTriggerDetails(
     if (typeof getNodeFn !== "function") return [];
 
     const resolved: ResolvedAutomationEvents = [];
-    const nodeTriggersCache: Record<string, { id?: string; device?: string; param?: string; operator?: string; value?: unknown }[]> = {};
+    const nodeTriggersCache: Record<string, { id?: string; path?: string; operator?: string; value?: unknown }[]> = {};
 
     for (const triggerId of andIds) {
         if (typeof triggerId !== "string") continue;
@@ -425,14 +538,13 @@ async function resolveAutomationTriggerDetails(
                     continue;
                 }
                 const list = await getTriggersFn.call(node);
-                nodeTriggersCache[nid] = Array.isArray(list) ? (list as { id?: string; device?: string; param?: string; operator?: string; value?: unknown }[]) : [];
+                nodeTriggersCache[nid] = Array.isArray(list) ? (list as { id?: string; path?: string; operator?: string; value?: unknown }[]) : [];
             }
             const t = nodeTriggersCache[nid].find((tr) => tr.id === triggerId);
             if (t) {
                 resolved.push(triggerItemToCdfEvent({
                     id: t.id ?? "",
-                    device: t.device ?? "",
-                    param: t.param ?? "",
+                    path: t.path ?? "",
                     operator: apiOperatorToTriggerOperator(t.operator),
                     value: t.value,
                 }));

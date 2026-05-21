@@ -2,7 +2,7 @@ export default {
   expo: {
     name: process.env.APP_NAME || "ESP RainMaker Home",
     slug: process.env.APP_SLUG || "esp-rainmaker-home",
-    version: process.env.APP_VERSION || "4.2.0",
+    version: process.env.APP_VERSION || "4.3.0",
     orientation: "portrait",
     icon: "./src/assets/images/logo.png",
     userInterfaceStyle: "automatic",
@@ -114,6 +114,7 @@ export default {
         enableVoiceAssistants: process.env.ENABLE_VOICE_ASSISTANTS !== 'false',
         enableCdfAutoSync: process.env.ENABLE_CDF_AUTOSYNC !== 'false',
         enableControlGroups: process.env.ENABLE_CONTROL_GROUPS !== 'false',
+        enableOnNetworkProvisioning: process.env.ENABLE_ON_NETWORK_PROVISIONING !== 'false',
       }
 
     }

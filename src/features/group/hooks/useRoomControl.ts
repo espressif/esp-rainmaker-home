@@ -7,10 +7,7 @@
 import { useState, useCallback, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { useToast } from "@shared/hooks/useToast";
-import {
-  broadcastGroupParam,
-  type ParamBroadcastTarget,
-} from "@features/group/utils/controlGroupHelpers";
+import { broadcastGroupParam } from "@features/group/utils/controlGroupHelpers";
 import { ESPRM_POWER_PARAM_TYPE, ERROR_CODES } from "@shared/utils/constants";
 import { LOADER_VISIBLE_DURATION_MS, POWER_ACTION_ON, POWER_ACTION_OFF } from "@features/group/utils/constants";
 import type { RoomPowerEntry, RoomControlSwitchProps } from "@src/types/global";
@@ -85,12 +82,11 @@ export function useRoomControl(
       const action = value ? POWER_ACTION_ON : POWER_ACTION_OFF;
       setActiveAction(action);
 
-      const refPower = onlineEntries[0].powerParam;
-      const targets: ParamBroadcastTarget[] = onlineEntries.map((e) => ({
+      const broadcastTargets = onlineEntries.map((e) => ({
+        device: e.device,
         param: e.powerParam,
-        deviceName: e.device.name,
       }));
-      broadcastGroupParam(roomGroup, refPower, targets, value, {
+      broadcastGroupParam(roomGroup, broadcastTargets, value, {
         onSetParamsError: (err: unknown) => {
           const code = (err as { code?: string })?.code;
           const key =

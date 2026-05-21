@@ -37,6 +37,7 @@ import {
   ColorTemperatureSlider,
 } from "@shared/components/ParamControls";
 import { ParamControlWrap } from "@shared/components";
+import { DevicePanelNoParamsEmptyState } from "@features/control/components";
 
 // Types
 import { ControlPanelProps, Tab } from "@src/types/global";
@@ -226,6 +227,10 @@ const Light: React.FC<ControlPanelProps> = ({ node, device }) => {
       </Text>
     </TouchableOpacity>
   );
+  
+  if (device?.params?.length === 0) {
+    return <DevicePanelNoParamsEmptyState />;
+  }
 
   // Render
   return (
@@ -409,7 +414,7 @@ const styles = StyleSheet.create({
     display: "flex",
     flexDirection: "column",
     alignItems: "center",
-    gap: 10,
+    gap: 0,
     justifyContent: "center",
     height: "100%",
   },

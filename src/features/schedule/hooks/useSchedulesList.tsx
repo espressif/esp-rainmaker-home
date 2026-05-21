@@ -137,8 +137,8 @@ export const useSchedulesList = () => {
         }
         case "disable": {
           await schedule.disable();
-          toastRef.current?.showError(
-            tRef.current("schedule.schedules.someDevicesFailedUpdate"),
+          toastRef.current?.showSuccess(
+            tRef.current("schedule.schedules.scheduleDisabledSuccessfully"),
           );
           break;
         }

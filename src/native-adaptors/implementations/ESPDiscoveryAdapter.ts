@@ -11,15 +11,21 @@ import {
 } from "@shared/utils/constants";
 /**
  * ESP Discovery Adapter
- * 
- * This adapter is responsible for discovering ESP nodes (devices) that are available 
+ *
+ * This adapter is responsible for discovering ESP nodes (devices) that are available
  * for provisioning on the local network. It provides functionality to:
  * - Start device discovery on the local network
  * - Listen for discovery updates and device announcements
  * - Stop the discovery process when needed
- * 
- * The discovery process helps identify unprovisioned ESP devices that can be 
+ *
+ * The discovery process helps identify unprovisioned ESP devices that can be
  * configured and added to the user's network through the RainMaker platform.
+ *
+ * The native modules emit `DiscoveryUpdate` payloads of the shape:
+ *   { nodeId, baseUrl, host?, port?, txt?: { [key: string]: string } }
+ * `host`/`port`/`txt` are populated for resolved Bonjour/NSD services and let
+ * higher layers drive flows that need direct LAN HTTP communication
+ * (e.g. on-network challenge-response provisioning).
  */
 import {
   ESPLocalDiscoveryAdapterInterface,

@@ -499,13 +499,25 @@
       "qrDescription": "通过扫描二维码快速添加设备",
       "softAPOption": "SoftAP",
       "softAPDescription": "使用 SoftAP 连接添加设备",
+      "onNetworkOption": "网络中",
+      "onNetworkDescription": "添加已连接到您 Wi-Fi 网络的设备",
       "sharedHomeRestriction": "不允许添加设备",
       "sharedHomeMessage": "您没有权限向“{{homeName}}”添加设备，因为这是一个共享家庭。",
       "defaultHomeName": "此家庭"
     },
+    "onNetwork": {
+      "title": "发现设备",
+      "scanning": "正在扫描网络中的设备...",
+      "devicesFound": "发现 {{count}} 个设备",
+      "noDevicesFound": "未找到设备",
+      "noDevicesMessage": "未在网络中发现设备。请确保您的设备已开机，并连接到与手机相同的 Wi-Fi 网络。",
+      "popRequiredBadge": "需要 POP",
+      "noPopBadge": "无需 POP"
+    },
     "control": {
       "title": "设备控制",
-      "deviceNotFound": "设备未找到"
+      "deviceNotFound": "设备未找到",
+      "fallbackNoParams": "此设备未配置参数。"
     },
     "pop": {
       "title": "所有权证明",
@@ -547,6 +559,12 @@
         "confirmingNodeAssociationDescription": "正在确认与用户的节点关联",
         "confirmingWifiConnectionTitle": "正在确认 Wi-Fi 连接",
         "confirmingWifiConnectionDescription": "正在确认与设备的 Wi-Fi 连接",
+        "settingUpNodeTitle": "正在设置节点",
+        "settingUpNodeDescription": "正在根据用户的时区设置节点"
+      },
+      "onNetwork": {
+        "confirmingNodeAssociationTitle": "正在确认节点关联",
+        "confirmingNodeAssociationDescription": "正在通过本地网络验证设备与您账户的关联",
         "settingUpNodeTitle": "正在设置节点",
         "settingUpNodeDescription": "正在根据用户的时区设置节点"
       }
@@ -749,7 +767,9 @@
       "checkOTAUpdateError": "检查更新失败",
       "otaUpdateStartError": "启动更新失败",
       "failedToUpdateTimezone": "更新时区失败",
-      "noReadmeURLProvided": "未提供 README URL"
+      "noReadmeURLProvided": "未提供 README URL",
+      "deviceNotConnected": "设备未连接",
+      "failedToStartDiscovery": "无法启动网络发现"
     },
     "chart": {
       "title": "图表",
@@ -868,7 +888,9 @@
       "automationEnabled": "自动化已启用",
       "automationEnabledMessage": "自动化已成功启用",
       "automationDisabled": "自动化已禁用",
-      "automationDisabledMessage": "自动化已成功禁用"
+      "automationDisabledMessage": "自动化已成功禁用",
+      "notSupportedSubgroupAccessTitle": "Automations unavailable for room-only access",
+      "notSupportedSubgroupAccessDescription": "You currently have access only to selected rooms in this home. Automations require full home access because they can operate across devices and rooms. Ask the home owner to share the complete home to use automations."
     },
     "createAutomation": {
       "title": "创建自动化",
@@ -948,7 +970,8 @@
       "refreshFailed": "刷新自动化失败",
       "failedToFetchAutomation": "获取自动化失败",
       "failedToActionAutomation": "{{action}} 自动化失败",
-      "failedToCreateAutomation": "创建自动化失败"
+      "failedToCreateAutomation": "创建自动化失败",
+      "rmngEnableDisableNotSupported": "RMNG 暂不支持启用或禁用自动化。"
     }
   },
   "schedule": {

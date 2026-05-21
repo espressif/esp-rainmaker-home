@@ -9,22 +9,27 @@ import type { ESPCDFDeviceParam, ESPCDFGroup, ESPCDFNode } from "@store";
 import { fetchNodesIfEmpty } from "@store";
 import {
   broadcastGroupParam,
-  BroadcastGroupParamOptions,
   findDeviceOfType,
   findMatchingParam,
   isDeviceTypeSubgroup,
   resolveHomogeneousDeviceType,
   stripGroupControlSubgroupDisplayName,
-  type ParamBroadcastTarget,
 } from "@features/group/utils/controlGroupHelpers";
+import {
+  type GroupParamBroadcastTargetRow,
+  type GroupParamBroadcastOptions,
+} from "@shared/utils/groupParamBroadcastEnvelope";
 import { useCDF } from "@shared/hooks/useCDF";
 import { filterExcludedParamTypes } from "@shared/utils/paramUtils";
 
-export type { ParamBroadcastTarget };
-
-export interface ParamBroadcastRow {
-  refParam: ESPCDFDeviceParam;
-  targets: ParamBroadcastTarget[];
+/**
+ * One template param for the control UI, plus each member’s matching param instance for transport.
+ */
+export interface GroupControlParamBroadcastRow {
+  /** Param bound to {@link ParamWrap} / {@link ParameterControl} on the reference device. */
+  referenceParam: ESPCDFDeviceParam;
+  /** Per-node device + concrete param to set. */
+  broadcastTargets: GroupParamBroadcastTargetRow[];
 }
 
 export interface UseGroupControlOptions {
@@ -40,17 +45,15 @@ export interface UseGroupControlResult {
   homogeneousDeviceType: string | null;
   referenceNode: ESPCDFNode | null;
   isConnected: boolean;
-  paramRows: ParamBroadcastRow[];
+  paramBroadcastRows: GroupControlParamBroadcastRow[];
   handleEditGroup: () => void;
   /**
-   * Applies one param value to all targets via {@link ESPCDFGroup.setParams}; the active adaptor
-   * implements transport (e.g. group MQTT vs unicast per param).
+   * Applies one value to every row via {@link ESPCDFGroup.setParams}; the active adaptor handles wire format.
    */
   handleBroadcastParam: (
-    refParam: ESPCDFDeviceParam,
-    targets: ParamBroadcastTarget[],
+    broadcastTargets: GroupParamBroadcastTargetRow[],
     value: unknown,
-    options?: BroadcastGroupParamOptions
+    options?: GroupParamBroadcastOptions
   ) => void;
 }
 
@@ -101,22 +104,22 @@ export function useGroupControl(
     return findDeviceOfType(referenceNode, homogeneousDeviceType) ?? null;
   }, [referenceNode, homogeneousDeviceType]);
 
-  const paramRows: ParamBroadcastRow[] = useMemo(() => {
+  const paramBroadcastRows: GroupControlParamBroadcastRow[] = useMemo(() => {
     if (!deviceGroup?.nodeIds?.length || !homogeneousDeviceType || !referenceDevice) {
       return [];
     }
     const refParams = filterExcludedParamTypes(referenceDevice.params) ?? [];
-    return refParams.map((refParam) => {
-      const targets: ParamBroadcastTarget[] = [];
+    return refParams.map((referenceParam) => {
+      const broadcastTargets: GroupParamBroadcastTargetRow[] = [];
       for (const nid of deviceGroup.nodeIds ?? []) {
         const node = nodesById.get(nid);
         if (!node) continue;
         const dev = findDeviceOfType(node, homogeneousDeviceType);
         if (!dev) continue;
-        const p = findMatchingParam(dev, refParam);
-        if (p) targets.push({ param: p, deviceName: dev.name });
+        const p = findMatchingParam(dev, referenceParam);
+        if (p) broadcastTargets.push({ device: dev, param: p });
       }
-      return { refParam, targets };
+      return { referenceParam, broadcastTargets };
     });
   }, [deviceGroup, homogeneousDeviceType, referenceDevice, nodesById]);
 
@@ -137,12 +140,11 @@ export function useGroupControl(
 
   const handleBroadcastParam = useCallback(
     (
-      refParam: ESPCDFDeviceParam,
-      targets: ParamBroadcastTarget[],
+      broadcastTargets: GroupParamBroadcastTargetRow[],
       value: unknown,
-      options?: BroadcastGroupParamOptions
+      options?: GroupParamBroadcastOptions
     ) => {
-      broadcastGroupParam(deviceGroup, refParam, targets, value, options);
+      broadcastGroupParam(deviceGroup, broadcastTargets, value, options);
     },
     [deviceGroup]
   );
@@ -154,7 +156,7 @@ export function useGroupControl(
     homogeneousDeviceType,
     referenceNode,
     isConnected,
-    paramRows,
+    paramBroadcastRows,
     handleEditGroup,
     handleBroadcastParam,
   };

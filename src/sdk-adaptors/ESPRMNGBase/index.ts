@@ -97,12 +97,9 @@ export class ESPRMNGBaseSDKAdaptor implements ESPSDKAdaptor {
     async confirmSignUp(input: ESPSDKAdaptorAPIRequest): Promise<ESPSDKAdaptorAPIResponse> {
         const { username, verificationCode } = input.request as { username: string, verificationCode: string };
         const response = await this._authInstance.confirmSignUp(username, verificationCode);
-        if (!response.success) {
-            throw new Error("Signup confirmation failed");
-        }
         return {
             status: "success",
-            description: "Signup confirmation successful",
+            description: response.message || "Signup confirmation successful",
         };
     }
 
@@ -118,9 +115,6 @@ export class ESPRMNGBaseSDKAdaptor implements ESPSDKAdaptor {
     async setNewPassword(input: ESPSDKAdaptorAPIRequest<ESPCDFSetNewPasswordRequestPayload>): Promise<ESPSDKAdaptorAPIResponse> {
         const { username, newPassword, verificationCode } = input.request!;
         const response = await this._authInstance.setNewPassword(username, newPassword, verificationCode);
-        if (!response.success) {
-            throw new Error("Failed to set new password");
-        }
         return {
             status: "success",
             description: response.message || "New password set successfully",

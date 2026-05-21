@@ -61,11 +61,13 @@ const styles = StyleSheet.create({
     backgroundColor: tokens.colors.white,
     borderRadius: tokens.radius.md,
     margin: tokens.spacing._15,
+    width: '100%',
   },
   text: {
     fontSize: tokens.fontSize.md,
     color: tokens.colors.bg3,
     marginTop: tokens.spacing._15,
+    textAlign: 'center',
   },
 });
 

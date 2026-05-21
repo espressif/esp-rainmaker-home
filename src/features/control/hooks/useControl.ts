@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { useEffect, useRef } from "react";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { useTranslation } from "react-i18next";
 import { useCDF } from "@shared/hooks/useCDF";
@@ -36,6 +37,17 @@ export const useControl = (): UseControlReturn => {
   const device = node?.devices?.find((d) => d.name === _device) as
     | ESPCDFDevice
     | undefined;
+
+  const deviceWasFoundRef = useRef(false);
+  if (device) {
+    deviceWasFoundRef.current = true;
+  }
+
+  useEffect(() => {
+    if (_device && deviceWasFoundRef.current && !device) {
+      router.back();
+    }
+  }, [_device, device, router]);
 
   const handleMorePress = () => {
     router.push(`/(control)/Settings?id=${id}&device=${_device}`);

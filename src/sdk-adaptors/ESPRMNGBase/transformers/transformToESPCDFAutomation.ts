@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  *
  * Transforms RMNG automation to unified ESPCDFAutomation per RMNG_AUTOMATION_CDF_REFERENCE.md.
- * RMNG: conditions.and = trigger IDs; actions.targets = { node, device, param, value }.
+ * RMNG: conditions.and = trigger IDs; actions.targets = { node, path: "<deviceId>.<paramId>", value }.
  * CDF: events = event objects { deviceName, param, check, value } for UI; actions = { nodeId, deviceName, param, value }.
  *
  * Trigger ownership (update events):
@@ -24,7 +24,15 @@ import {
 } from "@store";
 import type { ESPCDFAutomationEvent } from "@store";
 import { ESPRMNGAutomation, ESPRMNGNode } from "@espressif/rmng-base-sdk";
-import { targetsToCdfActions, cdfActionsToTargets, cdfEventsToTriggerItems, parseTriggerId } from "../utils/automation";
+import { AUTOMATION_RMNG_ENABLE_DISABLE_UNSUPPORTED_I18N_KEY } from "@shared/utils/constants";
+import {
+    targetsToCdfActions,
+    cdfActionsToTargets,
+    cdfEventsToTriggerItems,
+    parseTriggerId,
+} from "../utils/automation";
+import { normalizeRmngSdkResponseToCdf } from "../utils/common";
+
 
 /** Resolved event objects for UI (deviceName, param, check, value). Used when trigger details are resolved in getAutomations. */
 export type ResolvedAutomationEvents = {
@@ -105,31 +113,36 @@ export function transformToESPCDFAutomation(
                 payload.conditions = { and: newTriggerIds };
             }
             const res = await automation.update(payload);
-            return { status: res.status, description: res.description ?? "" };
+            return normalizeRmngSdkResponseToCdf(res, "Automation updated successfully");
         },
         async delete(): Promise<ESPCDFAPIResponse> {
             const res = await automation.delete();
-            if (res.status === "success") {
-                const thisAutomationTriggerIds = automation.conditions?.and ?? [];
-                const nodeId = parseTriggerId(thisAutomationTriggerIds[0])?.nodeId ?? thisAutomationTriggerIds[0].split("~")[0];
-                if (!nodeId) {
-                    throw new Error("nodeId is required to delete automation");
-                }
+            const thisAutomationTriggerIds = automation.conditions?.and ?? [];
+            const nodeId =
+                parseTriggerId(thisAutomationTriggerIds[0])?.nodeId ??
+                thisAutomationTriggerIds[0]?.split("~")[0];
+            if (nodeId) {
                 const node = await options?.getNode?.(nodeId);
                 if (node) {
                     const existingTriggers = await node.getTriggers();
                     const existingItems = existingTriggers.map((t) => t.toTriggerItem());
-                    // Same node or new node: always remove this automation's previous triggers (by ID) and add the new ones.
-                    // So "same node, condition change" is handled: old triggers are excluded, new triggerItems replace them.
-                    const triggersFromOtherAutomations = existingItems.filter((t) => !thisAutomationTriggerIds.includes(t.id));
+                    const triggersFromOtherAutomations = existingItems.filter(
+                        (t) => !thisAutomationTriggerIds.includes(t.id),
+                    );
                     await node.setTriggers([...triggersFromOtherAutomations]);
                 }
             }
-            return { status: res.status, description: res.description ?? "" };
+            return normalizeRmngSdkResponseToCdf(res, "Automation deleted successfully");
         },
-        async enable(enabled: boolean): Promise<ESPCDFAPIResponse> {
-            const res = await automation.update({ enabled });
-            return { status: res.status, description: res.description ?? "" };
+        /**
+         * RMNG currently does not support the enable/disable functionality for automation.
+         * Throws an `Error` carrying `description` as an i18next key (`automation.errors.*`) for the UI layer to translate.
+         */
+        async enable(_enabled: boolean): Promise<ESPCDFAPIResponse> {
+            const description = AUTOMATION_RMNG_ENABLE_DISABLE_UNSUPPORTED_I18N_KEY;
+            const error = new Error(description) as Error & { description: string };
+            error.description = description;
+            throw error;
         },
     };
 

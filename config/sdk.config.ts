@@ -122,6 +122,7 @@ export function getRMNGSDKConfig(): ESPRMNGBaseConfig {
       override?.iotEndpoint ??
       rmngSdk.iotEndpoint,
     customStorageAdapter: asyncStorageAdapter,
+    localControlAdapter: ESPLocalControlAdapter as ESPRMNGBaseConfig["localControlAdapter"],
     // Native bridge uses async isConnected(); rmng-base-sdk MQTTTransport types are sync.
     mqttAdapter: ESPMQTTAdapter as unknown as ESPRMNGBaseConfig["mqttAdapter"],
     provisionAdapter: rmngCompatibleProvisionAdapter as ESPRMNGBaseConfig["provisionAdapter"],
@@ -174,14 +175,16 @@ export const SDK_FEATURE_MAP: Record<
     controlGroups: false,
     // API-only / env-controlled — always true at SDK level
     aiAgent: true, thirdPartyAuth: true, voiceAssistants: true,
+    onNetworkProvisioning: true,
   },
   [ESPRMNG_BASE_SDK_ID]: {
-    scenes: false, schedules: true, automations: true, localControl: false,
+    scenes: false, schedules: true, automations: true, localControl: true,
     notifications: true, groupSharing: true, subGroupSharing: true, transferGroupSharing: false, ota: false,
     controlGroups: true,
     aiAgent: false, thirdPartyAuth: false, voiceAssistants: false,
     authAllowedUsernameTypes: ["email", "phone"],
     groupSharingAllowedTypes: ["userCode"],
+    onNetworkProvisioning: false,
   },
   [ESPRMMatter_BASE_SDK_ID]: {
     scenes: true, schedules: true, automations: true, localControl: true,
@@ -189,5 +192,6 @@ export const SDK_FEATURE_MAP: Record<
     controlGroups: false,
     aiAgent: true, thirdPartyAuth: true, voiceAssistants: true,
     matterCommissioning: true,
+    onNetworkProvisioning: true,
   },
 };

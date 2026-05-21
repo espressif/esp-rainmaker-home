@@ -12,6 +12,21 @@ import {
   validateAutomationName,
 } from "@features/automation/utils/automationManagement";
 import { useCDF } from "@shared/hooks/useCDF";
+import { isAutomationsSupportedForGroupUserAccess } from "@shared/utils/groupAccess";
+
+/**
+ * Resolves automation error copy for toasts: `description` may be an i18next key (e.g. from RMNG adaptor) or plain API text.
+ * Missing keys fall back to the input string per i18next defaults.
+ * @param t - i18next translate function
+ * @param description - Error description from the store operation, if any
+ * @returns Message string for the toast body
+ */
+function translateAutomationErrorDescription(
+  t: TFunction,
+  description: string | undefined
+): string {
+  return description ? t(description) : t("automation.errors.fallback");
+}
 
 // --- Result types (structured outcomes for UI to interpret) ---
 
@@ -77,6 +92,8 @@ export interface UseAutomationsListResult {
   ) => Promise<ToggleAutomationResult>;
   /** Get automation by id from store */
   getAutomationById: (automationId: string) => ESPCDFAutomation | undefined;
+  /** True when current home is subgroup-only share (RMNG); Automations screen shows a notice instead of the list. */
+  isAutomationsAccessRestricted: boolean;
   /** Handlers and menu options (when options param is provided) */
   handleAutomationAction?: (
     automationId: string,
@@ -120,6 +137,11 @@ export function useAutomationsList(
   const { automationStore } = store;
   const currentHome = store.getCurrentHome();
 
+  const isAutomationsAccessRestricted = useMemo(
+    () => !isAutomationsSupportedForGroupUserAccess(currentHome?.accessType),
+    [currentHome?.accessType],
+  );
+
   const { automationsList } = automationStore;
   const nodeList = useMemo(
     () => currentHome?.nodeIds ?? [],
@@ -150,6 +172,9 @@ export function useAutomationsList(
     setIsRefreshing(true);
     try {
       const home = store.getCurrentHome();
+      if (!isAutomationsSupportedForGroupUserAccess(home?.accessType)) {
+        return { status: "success" };
+      }
       await home?.getAutomations();
       return { status: "success" };
     } catch (error: unknown) {
@@ -171,6 +196,9 @@ export function useAutomationsList(
     setIsLoading(true);
     try {
       const home = store.getCurrentHome();
+      if (!isAutomationsSupportedForGroupUserAccess(home?.accessType)) {
+        return { status: "success" };
+      }
       await home?.getAutomations();
       return { status: "success" };
     } catch (error: unknown) {
@@ -254,7 +282,10 @@ export function useAutomationsList(
               options.t("automation.errors.failedToActionAutomation", {
                 action,
               }),
-              result.description ?? options.t("automation.errors.fallback")
+              translateAutomationErrorDescription(
+                options.t,
+                result.description
+              )
             );
           }
         }
@@ -304,7 +335,10 @@ export function useAutomationsList(
             options.t("automation.errors.failedToActionAutomation", {
               action: enabled ? "enable" : "disable",
             }),
-            result.description ?? options.t("automation.errors.fallback")
+            translateAutomationErrorDescription(
+              options.t,
+              result.description
+            )
           );
         }
       } finally {
@@ -357,6 +391,7 @@ export function useAutomationsList(
   return {
     filteredAutomations,
     nodeList,
+    isAutomationsAccessRestricted,
     isLoading,
     isRefreshing,
     toggleLoadingStates,

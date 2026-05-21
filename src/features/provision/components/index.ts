@@ -5,6 +5,7 @@
  */
 
 export { ScannedDeviceCard } from "./ScannedDeviceCard";
+export { OnNetworkDeviceCard } from "./OnNetworkDeviceCard";
 export { DeviceTypeCard } from "./DeviceTypeCard";
 export { ScanningAnimation } from "./ScanningAnimation";
 export { NoDevicesFound } from "./NoDevicesFound";

@@ -29,7 +29,7 @@ export function getMatterDeviceNameFromMetadata(
 
 /**
  * Resolves the display name for a device given parent node metadata and fallbacks:
- * Matter metadata name → esp.param.name → displayName → device name → optional fallback.
+ * Matter metadata name → esp.param.name → displayName → device id → optional fallback.
  */
 export function resolveDeviceDisplayName(
   nodeMetadata: Record<string, unknown> | undefined,
@@ -49,7 +49,7 @@ export function resolveDeviceDisplayName(
   return (
     (nameParam?.value as string | undefined) ||
     device.displayName ||
-    device.name ||
+    device.id ||
     fallback
   );
 }

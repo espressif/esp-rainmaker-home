@@ -8,6 +8,7 @@ export { default as AutomationDeviceCard } from "./AutomationDeviceCard";
 export { default as AutomationCard } from "./AutomationCard";
 export { default as AutomationMenuBottomSheet } from "./AutomationMenuBottomSheet";
 export { AutomationsEmptyState } from "./AutomationsEmptyState";
+export { AutomationsSubgroupAccessNotice } from "./AutomationsSubgroupAccessNotice";
 export { AutomationsList } from "./AutomationsList";
 export { AutomationsFooterButton } from "./AutomationsFooterButton";
 export {

@@ -85,11 +85,11 @@ export function mapRmngClientOutputsToScannedPayload(
 
   const doc = value as Record<string, unknown>;
   const rmng = doc["rmng-base"] as Record<string, unknown>;
-  const userBaseRaw = doc["esp-user-base"];
+  const userBaseRaw = doc["espuser-base"];
 
   if (!isPlainObject(userBaseRaw)) {
     throw new Error(
-      "RMNG client outputs: missing or invalid esp-user-base (required for user API URLs)."
+      "RMNG client outputs: missing or invalid espuser-base (required for user API URLs)."
     );
   }
 
@@ -103,7 +103,7 @@ export function mapRmngClientOutputsToScannedPayload(
   const userApi = pickUserApiUrl(userBaseRaw);
   if (!userApi) {
     throw new Error(
-      "RMNG client outputs: esp-user-base must include EspUserApiUrl or CreateCommonBaseResourcesEspUserApiEndpointB000E4CB."
+      "RMNG client outputs: espuser-base must include EspUserApiUrl or CreateCommonBaseResourcesEspUserApiEndpointB000E4CB."
     );
   }
 

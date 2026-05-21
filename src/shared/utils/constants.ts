@@ -85,6 +85,8 @@ export const ESPRM_REFRESH_TOKEN_PARAM_TYPE = "esp.param.refresh-token";
 export const ESPRM_USER_TOKEN_PARAM_TYPE = "esp.param.user-token";
 export const ESPRM_BASE_URL_PARAM_TYPE = "esp.param.base-url";
 export const ESPRM_CHANNEL_PARAM_TYPE = "esp.param.channel";
+export const ESPRM_LOCAL_CONTROL_TYPE_PARAM_TYPE = "esp.param.local_control_type";
+export const ESPRM_LOCAL_CONTROL_POP_PARAM_TYPE = "esp.param.local_control_pop";
 
 /**
  * `extractDeviceType` values with no meaningful power param for card UI: DeviceCard uses node
@@ -122,15 +124,30 @@ export const USER_PERMISSION = "user";
 export const ESPRM_SYSTEM_SERVICE = "esp.service.system";
 export const ESPRM_SCENES_SERVICE = "esp.service.scenes";
 export const ESPRM_SCHEDULES_SERVICE = "esp.service.schedule";
+export const ESPRM_LOCAL_CONTROL_SERVICE = "esp.service.local_control";
 export const ESPRM_AGENT_AUTH_SERVICE = "esp.service.agent-auth";
 export const ESPRM_RMAKER_USER_AUTH_SERVICE = "esp.service.rmaker-user-auth";
 
 export const MDNS_SERVICE_TYPE_ESP_LOCAL_CTRL = "_esp_local_ctrl._tcp.";
+/** Service announced by unprovisioned RainMaker firmware running the on-network challenge-response flow. */
+export const MDNS_SERVICE_TYPE_ESP_RMAKER_CHAL_RESP = "_esp_rmaker_chal_resp._tcp.";
 export const MDNS_DOMAIN_LOCAL = "local.";
 
 // DISCOVERY EVENTS
 export const DISCOVERY_UPDATE_EVENT = "DiscoveryUpdate";
 export const DISCOVERY_LOST_EVENT = "DiscoveryLost";
+
+// MDNS TXT RECORD KEYS (emitted by native discovery modules for chal-resp services)
+export const MDNS_TXT_KEY_NODE_ID = "node_id";
+export const MDNS_TXT_KEY_SEC_VERSION = "sec_version";
+export const MDNS_TXT_KEY_POP_REQUIRED = "pop_required";
+export const MDNS_TXT_KEY_CH_RESP = "ch_resp";
+
+// ON-NETWORK DISCOVERY DEFAULTS
+export const ON_NETWORK_DEFAULT_CH_RESP_ENDPOINT = "ch_resp";
+export const ON_NETWORK_DEFAULT_SEC_VERSION = 0;
+export const ON_NETWORK_HTTP_TIMEOUT_MS = 15000;
+export const ON_NETWORK_DISCOVERY_DURATION_MS = 5000;
 
 // TOAST TYPES
 export const TOAST_TYPE_SUCCESS = "success";
@@ -147,6 +164,21 @@ export const GROUP_TYPE_HOME = "home";
 export const GROUP_TYPE_GROUP = "group";
 export const GROUP_TYPE_SUBGROUP = "subgroup";
 
+// GROUP CONTROL — cloud group/subgroup broadcast payload (device type → control envelope)
+export const GROUP_CONTROL_PAYLOAD_PARAMS_ENVELOPE_KEY = "params";
+
+// GROUP PARAM BROADCAST RELATED CONSTANTS
+export const GROUP_PARAM_BROADCAST_ENVELOPE_TOP_LEVEL_KEY = "__espcdfGroupControlBroadcast";
+export const GROUP_PARAM_BROADCAST_FIELD_VALUE = "value";
+export const GROUP_PARAM_BROADCAST_FIELD_TARGETS = "targets";
+export const GROUP_PARAM_BROADCAST_TARGET_ROW_DEVICE_KEY = "device";
+export const GROUP_PARAM_BROADCAST_TARGET_ROW_PARAM_KEY = "param";
+
+// GROUP USER ACCESS 
+export const GROUP_USER_ACCESS_PRIMARY = "primary";
+export const GROUP_USER_ACCESS_SECONDARY = "secondary";
+export const GROUP_USER_ACCESS_SUBGROUP = "subgroup";
+
 // DEVICE SELECTION LIST (layout variant; not i18n)
 export const DEVICE_SELECTION_LIST_VARIANT_SCENE = "scene";
 export const DEVICE_SELECTION_LIST_VARIANT_SCHEDULE = "schedule";
@@ -158,6 +190,10 @@ export const QA_DEVICE_SELECTION_VIEW_SELECTED_DEVICES = "view_selected_devices"
 export const QA_DEVICE_SELECTION_TEXT_SELECTED_DEVICES = "text_selected_devices";
 export const QA_DEVICE_SELECTION_VIEW_NON_SELECTED_DEVICES = "view_non_selected_devices";
 export const QA_DEVICE_SELECTION_TEXT_SELECT_DEVICES = "text_select_devices";
+
+// DEVICE CONTROL PANEL — QA / test ids
+export const QA_DEVICE_PANEL_NO_PARAMS_EMPTY_STATE =
+  "empty_state_device_fallback_no_params";
 
 // LIGHT CONTROL SCREEN
 export const COLOR_TAB = "Colour";
@@ -226,6 +262,10 @@ export const ERROR_CODES = {
   GEO_COORDINATES_MISSING: "error.geo.coordinates_missing",
   GEO_COORDINATES_INVALID: "error.geo.coordinates_invalid",
 } as const;
+
+/** i18next key under `automation.errors` in locales (RMNG adaptor; feature layer translates with `t()`). */
+export const AUTOMATION_RMNG_ENABLE_DISABLE_UNSUPPORTED_I18N_KEY =
+  "automation.errors.rmngEnableDisableNotSupported";
 
 // Chat Constants
 export const MAX_MESSAGES_IN_MEMORY = 500;

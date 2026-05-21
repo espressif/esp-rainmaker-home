@@ -25,6 +25,7 @@ import {
   AutomationsEmptyState,
   AutomationsList,
   AutomationsFooterButton,
+  AutomationsSubgroupAccessNotice,
 } from "@features/automation/components";
 import { testProps } from "@shared/utils/testProps";
 import type { AutomationMenuOption } from "@src/types/global";
@@ -44,6 +45,7 @@ export const AutomationsScreen = observer(() => {
   const {
     filteredAutomations,
     nodeList,
+    isAutomationsAccessRestricted,
     isLoading,
     isRefreshing,
     toggleLoadingStates,
@@ -68,7 +70,6 @@ export const AutomationsScreen = observer(() => {
     resetState,
   });
 
-  // Refs to avoid re-running useFocusEffect when toast/t change (would cause duplicate API calls)
   const toastRef = useRef(toast);
   const tRef = useRef(t);
   useEffect(() => {
@@ -160,13 +161,15 @@ export const AutomationsScreen = observer(() => {
     }
   }, [hasDevices, handleAddAutomation, router]);
 
+  const showFullAutomationsUi = !isAutomationsAccessRestricted;
+
   return (
     <>
       <Header
         label={t("automation.automations.title")}
         showBack={false}
         rightSlot={
-          hasDevices ? (
+          showFullAutomationsUi && hasDevices ? (
             <Plus
               {...testProps("button_add_automation_header")}
               size={24}
@@ -177,63 +180,80 @@ export const AutomationsScreen = observer(() => {
         }
       />
       <ScreenWrapper style={globalStyles.automationsScreenContainer}>
-        <ScrollView
-          {...testProps("scroll_automations")}
-          style={globalStyles.automationsScrollView}
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={globalStyles.automationsScrollContent}
-          refreshControl={
-            <RefreshControl
-              refreshing={isRefreshing}
-              onRefresh={handleRefresh}
-              colors={[tokens.colors.primary]}
-              tintColor={tokens.colors.primary}
-            />
-          }
-        >
-          {filteredAutomations.length === 0 ? (
-            <AutomationsEmptyState
-              isLoading={isLoading}
-              title={emptyTitle}
-              description={emptyDescription}
-            />
-          ) : (
-            <AutomationsList
-              automations={filteredAutomations}
-              onAutomationPress={handleAutomationPress}
-              onToggle={handleAutomationToggle!}
-              toggleLoadingStates={toggleLoadingStates}
-            />
-          )}
-        </ScrollView>
-
-        {!isLoading && (
-          <AutomationsFooterButton
-            label={footerButtonLabel}
-            onPress={handleFooterButtonPress}
+        {isAutomationsAccessRestricted ? (
+          <AutomationsSubgroupAccessNotice
+            title={t("automation.automations.notSupportedSubgroupAccessTitle")}
+            description={t(
+              "automation.automations.notSupportedSubgroupAccessDescription",
+            )}
           />
+        ) : (
+          <>
+            <ScrollView
+              {...testProps("scroll_automations")}
+              style={globalStyles.automationsScrollView}
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={globalStyles.automationsScrollContent}
+              refreshControl={
+                <RefreshControl
+                  refreshing={isRefreshing}
+                  onRefresh={handleRefresh}
+                  colors={[tokens.colors.primary]}
+                  tintColor={tokens.colors.primary}
+                />
+              }
+            >
+              {filteredAutomations.length === 0 ? (
+                <AutomationsEmptyState
+                  isLoading={isLoading}
+                  title={emptyTitle}
+                  description={emptyDescription}
+                />
+              ) : (
+                <AutomationsList
+                  automations={filteredAutomations}
+                  onAutomationPress={handleAutomationPress}
+                  onToggle={handleAutomationToggle!}
+                  toggleLoadingStates={toggleLoadingStates}
+                />
+              )}
+            </ScrollView>
+
+            {!isLoading && (
+              <AutomationsFooterButton
+                label={footerButtonLabel}
+                onPress={handleFooterButtonPress}
+              />
+            )}
+          </>
         )}
       </ScreenWrapper>
 
-      <AutomationMenuBottomSheet
-        visible={isBottomSheetVisible}
-        automation={selectedAutomation}
-        automationName={selectedAutomation?.name ?? "Automation"}
-        options={menuOptions}
-        onClose={handleCloseBottomSheet}
-      />
+      {showFullAutomationsUi && (
+        <>
+          <AutomationMenuBottomSheet
+            visible={isBottomSheetVisible}
+            automation={selectedAutomation}
+            automationName={selectedAutomation?.name ?? "Automation"}
+            options={menuOptions}
+            onClose={handleCloseBottomSheet}
+          />
 
-      <InputDialog
-        qaId="create_automation"
-        open={isAutomationNameDialogVisible}
-        title={t("automation.automations.createAutomation")}
-        inputPlaceholder={t("automation.automations.automationNamePlaceholder")}
-        confirmLabel={t("layout.shared.next")}
-        cancelLabel={t("layout.shared.cancel")}
-        onSubmit={(name) => handleAutomationNameConfirm?.(name)}
-        onCancel={() => setIsAutomationNameDialogVisible(false)}
-        initialValue={automationName}
-      />
+          <InputDialog
+            qaId="create_automation"
+            open={isAutomationNameDialogVisible}
+            title={t("automation.automations.createAutomation")}
+            inputPlaceholder={t(
+              "automation.automations.automationNamePlaceholder",
+            )}
+            confirmLabel={t("layout.shared.next")}
+            cancelLabel={t("layout.shared.cancel")}
+            onSubmit={(name) => handleAutomationNameConfirm?.(name)}
+            onCancel={() => setIsAutomationNameDialogVisible(false)}
+            initialValue={automationName}
+          />
+        </>
+      )}
     </>
   );
 });

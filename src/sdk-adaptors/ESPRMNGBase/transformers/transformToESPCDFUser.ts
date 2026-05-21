@@ -21,6 +21,7 @@ import {
     ESPCDFAPIResponse,
     ESPCDFAssumeRoleRequest,
     ESPCDFAssumeRoleResponse,
+    ESPCDFEventType,
 } from "@store";
 import {
     ESPDevice,
@@ -42,11 +43,10 @@ import {
     resolveRmngUserIdForCustomDataStorage,
 } from "../utils/userCustomDataStorage";
 import { filterEspProvisionDevicesByRmngCustomerId } from "../utils/filterRmngBleDevices";
+import { startRmngLocalDiscoverySubscription } from "../utils/rmngLocalDiscoverySubscription";
 
 /** Matches User API `POST /v1/app-platforms/{id}/clients` path segment. */
 const RMNG_APP_PLATFORM_ID = "virtual-app";
-/** Request body field when no push token exists; server still returns `user_code`. */
-const RMNG_REGISTER_CLIENT_TOKEN_PLACEHOLDER = "TOKEN";
 
 /**
  * Transforms ESPRMNGUser from the RainMaker SDK to ESPCDFUser format.
@@ -69,9 +69,7 @@ export function transformToESPCDFUser(
 
     // Start MQTT connection early; store the promise so operations that need
     // MQTT (e.g. syncHomeWithNodes → getNodes → SDK subscribeToNode) can await it.
-    const mqttConnectionPromise = esprmngUser.connectMQTT().then(() => {
-        console.log("[transformToESPCDFUser] MQTT connected");
-    }).catch((error) => {
+    const mqttConnectionPromise = esprmngUser.connectMQTT().catch((error) => {
         console.error("[transformToESPCDFUser] Failed to connect MQTT:", error);
     });
 
@@ -124,6 +122,8 @@ export function transformToESPCDFUser(
             console.error("[transformToESPCDFUser] Failed to persist lastSelectedHomeId:", error);
         }
     };
+
+    let discoveryCleanup: (() => void) | null = null;
 
     // Create operations object that wraps ESPRMNGUser methods
     const operations: ESPCDFUserOperation = {
@@ -261,18 +261,24 @@ export function transformToESPCDFUser(
         async getGroupById(_groupId: string, _options: Record<string, any>): Promise<any> {
             throw new Error("RMNGBase SDK does not support getGroupById");
         },
-        async subscribeToEvent(_event: string, _callback: (event: any) => void): Promise<void> {
-            throw new Error("RMNGBase SDK does not support subscribeToEvent");
+        async subscribeToEvent(event: string, callback: (event: any) => void): Promise<void> {
+            if (event === ESPCDFEventType.localDiscovery) {
+                discoveryCleanup = await startRmngLocalDiscoverySubscription(callback);
+                return;
+            }
+            throw new Error(`RMNGBase SDK does not support subscribeToEvent for event: ${event}`);
         },
-        async unsubscribeFromEvent(_event: string, _callback: (event: any) => void): Promise<void> {
-            throw new Error("RMNGBase SDK does not support unsubscribeFromEvent");
+        async unsubscribeFromEvent(event: string, _callback: (event: any) => void): Promise<void> {
+            if (event === ESPCDFEventType.localDiscovery) {
+                discoveryCleanup?.();
+                discoveryCleanup = null;
+            }
         },
         async setMultipleNodesParams(_payload: { nodeId: string; payload: any }[]): Promise<any> {
             throw new Error("RMNGBase SDK does not support setMultipleNodesParams");
         },
         async getGroups(): Promise<ESPCDFPaginatedAPIResponse<ESPCDFGroup[]>> {
             const groups = await esprmngUser.getGroups();
-            console.log("[RMNG][transformToESPCDFUser] getGroups", groups);
             const cdfGroups: ESPCDFGroup[] = groups.map((group: ESPRMNGGroup) =>
                 transformToESPCDFGroup(group, esprmngUser, ESPRMNGBaseAdaptorIdentifier)
             );
@@ -403,11 +409,10 @@ export function transformToESPCDFUser(
 
     const syncRmngUserCode = async (): Promise<void> => {
         try {
-            const userCode = await esprmngUser.registerClient(
-                RMNG_APP_PLATFORM_ID,
-                RMNG_REGISTER_CLIENT_TOKEN_PLACEHOLDER
-            );
-            cdfUser.userInfo.userCode = userCode;
+            const profile = await esprmngUser.getProfile();
+            if (profile.user_code) {
+                cdfUser.userInfo.userCode = profile.user_code;
+            }
         } catch (error) {
             console.warn("[transformToESPCDFUser] Failed to fetch RMNG user code:", error);
         }

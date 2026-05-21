@@ -6,7 +6,12 @@
 
 import type { ESPCDFDevice, ESPCDFDeviceParam, ESPCDFGroup, ESPCDFNode } from "@store";
 import { GROUP_TYPE_ROOM } from "@shared/utils/constants";
-import { getValidHomes } from "@store/utils/home";
+import {
+  buildGroupParamBroadcastSetParamsPayload,
+  type GroupParamBroadcastOptions,
+  type GroupParamBroadcastTargetRow,
+} from "@shared/utils/groupParamBroadcastEnvelope";
+import { getValidHomes } from "@store";
 
 /**
  * Group-control subgroups are identified by this prefix on the subgroup storage name
@@ -147,37 +152,28 @@ export function resolveHomogeneousDeviceType(
   return node ? getPrimaryHomogeneousDeviceType(node) : null;
 }
 
-/** One logical device row for group-level param broadcast (e.g. list card power, panel sliders). */
-export interface ParamBroadcastTarget {
-  param: ESPCDFDeviceParam;
-  /** Logical RainMaker device name for group-level payload keys. */
-  deviceName: string;
-}
-
-export interface BroadcastGroupParamOptions {
-  /** Invoked when {@link ESPCDFGroup.setParams} rejects (e.g. transport / API error). */
-  onSetParamsError?: (err: unknown) => void;
-}
-
 /**
- * Sends one logical param value to all targets: {@link ESPCDFGroup.setParams} when `deviceGroup` is
- * defined, otherwise per-target {@link ESPCDFDeviceParam.setValue}.
+ * Sends one logical param value for each target row: {@link ESPCDFGroup.setParams} when
+ * `deviceGroup` is defined (adaptors map each row’s device + param to SDK wire format), otherwise
+ * calls {@link ESPCDFDeviceParam.setValue} on each row’s `param`.
+ * @param deviceGroup Optional group; when absent, updates each row’s param only
+ * @param targets Member devices with the concrete param instance to set on each
+ * @param value Param value to publish (same value applied to every row)
+ * @param options Optional error callback for group `setParams` failures
  */
 export function broadcastGroupParam(
   deviceGroup: ESPCDFGroup | undefined,
-  refParam: ESPCDFDeviceParam,
-  targets: ParamBroadcastTarget[],
+  targets: GroupParamBroadcastTargetRow[],
   value: unknown,
-  options?: BroadcastGroupParamOptions
+  options?: GroupParamBroadcastOptions
 ): void {
   if (!deviceGroup) {
-    void Promise.allSettled(targets.map((t) => t.param.setValue(value)));
+    void Promise.allSettled(targets.map((row) => row.param.setValue(value)));
     return;
   }
-  const payload: Record<string, Record<string, unknown>> = {};
-  for (const { deviceName } of targets) {
-    if (!payload[deviceName]) payload[deviceName] = {};
-    payload[deviceName][refParam.name] = value;
+  const payload = buildGroupParamBroadcastSetParamsPayload(value, targets);
+  if (!payload) {
+    return;
   }
   void deviceGroup.setParams(payload).catch((err: unknown) => {
     console.error("[broadcastGroupParam] group setParams failed:", err);

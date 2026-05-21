@@ -53,3 +53,12 @@ export const ESPRMNG_PARAM_SIMPLE_TIME_SERIES_PROPERTY = "simple_ts";
 export const MATTER_METADATA_KEY = "Matter";
 export const MATTER_METADATA_DEVICE_NAME_KEY = "deviceName";
 
+// RMNG GET /v1/groups/{groupId}/users — `access_type` on each listed member
+export const ESPRMNG_GROUP_USER_ACCESS_PRIMARY = "primary";
+export const ESPRMNG_GROUP_USER_ACCESS_SECONDARY = "secondary";
+export const ESPRMNG_GROUP_USER_ACCESS_SUBGROUP = "subgroup";
+
+// Parent home group: secondary users are `access_type` secondary.
+export const ESPRMNG_GROUP_SHARING_SCOPE_PARENT = "parent_group";
+// Nested room group: secondary users are subgroup-scoped members from parent list.
+export const ESPRMNG_GROUP_SHARING_SCOPE_SUBGROUP_ROOM = "subgroup_room";

@@ -26,6 +26,10 @@ type ParameterControlProps = {
  * @param onValueChange - Value change handler (injected by ParamWrap)
  * @param disabled - Whether the control is disabled (injected by ParamWrap)
  * @param meta - Additional metadata (injected by ParamWrap)
+ * @param compact - When true, sliders use the one-row header (label + value); min/max
+ *   and below-thumb value are hidden. Defaults to false so scene/schedule/group/automation
+ *   show full bounds. Pass `compact` only from the generic device Fallback panel
+ *   (`device_panels/Fallback.tsx`).
  */
 export default function ParameterControl({
   param,
@@ -34,6 +38,7 @@ export default function ParameterControl({
   onValueChange,
   disabled,
   meta,
+  compact = false,
 }: ParameterControlProps) {
   const paramsUIMap = useMemo(() => getParamsUIMap(), []);
   const Control = useMemo(
@@ -43,7 +48,7 @@ export default function ParameterControl({
 
   if (!Control) return null;
 
-  // Forward props to the control component if they were provided by ParamWrap
+  // Forward props to the control component if they were provided by ParamWrap.
   return (
     <Control
       label={label}
@@ -51,6 +56,7 @@ export default function ParameterControl({
       onValueChange={onValueChange}
       disabled={disabled}
       meta={meta}
+      compact={compact}
     />
   );
 }

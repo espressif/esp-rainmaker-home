@@ -106,7 +106,11 @@ const DropdownSelector = observer(
     return (
       <>
         <TouchableOpacity
-          style={[styles.container, disabled && styles.disabled]}
+          style={[
+            styles.container,
+            styles.containerCompact,
+            disabled && styles.disabled,
+          ]}
           onPress={() => !disabled && setIsVisible(true)}
           disabled={disabled}
         >

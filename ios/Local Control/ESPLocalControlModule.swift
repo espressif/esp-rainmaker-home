@@ -65,16 +65,31 @@ class ESPLocalControlModule: NSObject {
   ///   - reject: A callback invoked with an error message if the connection fails.
   @objc(connect:baseUrl:securityType:pop:username:resolve:reject:)
   func connect(nodeId: String, baseUrl: String, securityType: NSNumber, pop: String?, username: String?, resolve: @escaping RCTPromiseResolveBlock, reject: @escaping RCTPromiseRejectBlock) {
-    // Determine the connection security type and configure the ESPDevice accordingly.
+    // Determine the connection security type and configure the ESPDevice
+    // accordingly.
+    //
+    // Per the ESP-IDF protocomm spec, POP is *optional* for security 1
+    // (Curve25519 ECDH key-exchange — works fine without POP if the device
+    // firmware doesn't require it; mDNS-discovered on-network devices that
+    // advertise `pop_required: false` are exactly this case). POP is *required*
+    // for security 2 (SRP6a authenticated handshake). This mirrors what the
+    // Android `ESPLocalControlModule` already does — it constructs
+    // `Security1(pop)` even when `pop` is null/empty.
     switch securityType {
     case 1:
-      // Secure connection with proof of possession.
-      if let pop = pop {
-        espLocalDevice = ESPDevice(name: nodeId, security: .secure, transport: .softap, proofOfPossession: pop)
-      } else {
-        reject("error", "Proof of possession is missing", nil)
-        return
-      }
+      // IMPORTANT: pass `""` (not `nil`) when POP isn't supplied. iOS
+      // `ESPDevice.initialiseSession` treats `proofOfPossession == nil` as
+      // "ask the delegate for POP" via `delegate?.getProofOfPossesion(...)`,
+      // and we don't set a delegate — so a `nil` POP would hang the session
+      // callback forever. An empty-string POP routes through
+      // `initSecureSession(pop: "")` → `ESPSecurity1(proofOfPossession: "")`,
+      // which matches Android's `Security1(null/empty)` path.
+      espLocalDevice = ESPDevice(
+        name: nodeId,
+        security: .secure,
+        transport: .softap,
+        proofOfPossession: pop ?? ""
+      )
     case 2:
       // Secure connection with proof of possession and username.
       if let pop = pop, let username = username {

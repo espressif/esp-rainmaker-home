@@ -499,13 +499,25 @@
       "qrDescription": "Quickly add device by scanning its QR code",
       "softAPOption": "SoftAP",
       "softAPDescription": "Add device using SoftAP connection",
+      "onNetworkOption": "On Network",
+      "onNetworkDescription": "Add a device that is already on your Wi-Fi network",
       "sharedHomeRestriction": "Device Addition Not Allowed",
       "sharedHomeMessage": "You don't have permission to add devices to '{{homeName}}' because it's a shared home.",
       "defaultHomeName": "this home"
     },
+    "onNetwork": {
+      "title": "Discover Devices",
+      "scanning": "Scanning network for devices...",
+      "devicesFound": "{{count}} Device Found",
+      "noDevicesFound": "No Devices Found",
+      "noDevicesMessage": "No on-network devices found. Make sure your device is powered on and connected to the same Wi-Fi network as your phone.",
+      "popRequiredBadge": "POP Required",
+      "noPopBadge": "No POP"
+    },
     "control": {
       "title": "Device Control",
-      "deviceNotFound": "Device not found"
+      "deviceNotFound": "Device not found",
+      "fallbackNoParams": "No parameters configured \n for this device."
     },
     "pop": {
       "title": "Proof of Possession",
@@ -547,6 +559,12 @@
         "confirmingNodeAssociationDescription": "Confirming Node association with user",
         "confirmingWifiConnectionTitle": "Confirming Wi-Fi Connection",
         "confirmingWifiConnectionDescription": "Confirming Wi-Fi Connection with the device",
+        "settingUpNodeTitle": "Setting up the Node",
+        "settingUpNodeDescription": "Setting up the Node with the user's timezone"
+      },
+      "onNetwork": {
+        "confirmingNodeAssociationTitle": "Confirming Node Association",
+        "confirmingNodeAssociationDescription": "Verifying device association with your account over the local network",
         "settingUpNodeTitle": "Setting up the Node",
         "settingUpNodeDescription": "Setting up the Node with the user's timezone"
       }
@@ -755,7 +773,8 @@
       "otaUpdateStartError": "Failed to start update",
       "failedToUpdateTimezone": "Failed to update timezone",
       "noReadmeURLProvided": "No README URL provided",
-      "deviceNotConnected": "Device is not connected"
+      "deviceNotConnected": "Device is not connected",
+      "failedToStartDiscovery": "Failed to start network discovery"
     },
     "chart": {
       "title": "Chart",
@@ -913,7 +932,9 @@
       "automationEnabled": "Automation Enabled",
       "automationEnabledMessage": "Automation has been enabled successfully",
       "automationDisabled": "Automation Disabled",
-      "automationDisabledMessage": "Automation has been disabled successfully"
+      "automationDisabledMessage": "Automation has been disabled successfully",
+      "notSupportedSubgroupAccessTitle": "Automations unavailable for room-only access",
+      "notSupportedSubgroupAccessDescription": "You currently have access only to selected rooms in this home. Automations require full home access because they can operate across devices and rooms. Ask the home owner to share the complete home to use automations."
     },
     "createAutomation": {
       "title": "Create Automation",
@@ -993,7 +1014,8 @@
       "refreshFailed": "Failed to refresh automations",
       "failedToFetchAutomation": "Failed to fetch automation",
       "failedToActionAutomation": "Failed to {{action}} automation",
-      "failedToCreateAutomation": "Failed to create automation"
+      "failedToCreateAutomation": "Failed to create automation",
+      "rmngEnableDisableNotSupported": "Enabling and disabling automations is not supported for RMNG."
     }
   },
   "schedule": {

@@ -33,6 +33,7 @@ export const usePOP = (): UsePOPReturn => {
 
   const device: ESPCDFProvisioningDevice = store?.nodeStore?.connectedDevice as ESPCDFProvisioningDevice;
   const softAPDeviceInfo = store.nodeStore.softAPDeviceInfo;
+  const onNetworkDeviceInfo = store.nodeStore.onNetworkDeviceInfo;
   const hasClaimCap = params.hasClaimCap === "true";
   const hasCameraClaim = params.hasCameraClaim === "true";
 
@@ -65,8 +66,22 @@ export const usePOP = (): UsePOPReturn => {
     setIsLoading(true);
 
     try {
-      // Check if this is a SoftAP device (coming from SoftAP flow)
-      if (softAPDeviceInfo) {
+      // Dispatch off the device model rather than route params — same
+      // pattern useProvision uses for chal-resp vs. MQTT.
+      const isOnNetwork =
+        (await device?.checkOnNetworkProvisioning()) ?? false;
+
+      // On-network flow: device is already on Wi-Fi; we just stash the POP
+      // for the next screen. Cloud verifies the signed challenge — no live
+      // device session here.
+      if (isOnNetwork) {
+        if (!onNetworkDeviceInfo) {
+          toast.showError(t("device.errors.deviceNotConnected"));
+          return;
+        }
+        store.nodeStore.onNetworkDevicePop = popCode;
+        router.push("/(provision)/Provision");
+      } else if (softAPDeviceInfo) {
         // iOS SoftAP flow - Create provisioning device for SoftAP with the provided POP code
         const user = store?.userStore.user;
         const cdfDevice = await user?.createProvisioningDevice(

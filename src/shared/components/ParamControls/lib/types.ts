@@ -28,6 +28,14 @@ export interface ParamControlChildProps {
   disabled?: boolean;
   meta?: any
   onOpenChart?: (() => void) | null;
+  /**
+   * When true, sliders render the compact one-row header (label left, current value right)
+   * with no min/max row or below-thumb value text. The drag bubble above the thumb is preserved.
+   * Prefer false everywhere except the generic device Fallback panel (`Fallback.tsx`),
+   * where list density matters. Scene, schedule, group, and automation flows use the
+   * expanded layout (min/max + below-thumb value) by default via ParameterControl.
+   */
+  compact?: boolean;
 }
 
 // Helper function to ensure value is within bounds

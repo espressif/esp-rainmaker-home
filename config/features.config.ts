@@ -35,26 +35,28 @@ export type FeatureKey =
   | 'aiAgent'
   | 'thirdPartyAuth'
   | 'voiceAssistants'
-  | 'controlGroups';
+  | 'controlGroups'
+  | 'onNetworkProvisioning';
 
 /**
  * Maps each FeatureKey to its corresponding key in the features block
  * of Constants.expoConfig.extra.features (set in app.config.ts).
  */
 const ENV_KEY_MAP: Record<FeatureKey, string> = {
-  scenes:               'enableScenes',
-  schedules:            'enableSchedules',
-  automations:          'enableAutomations',
-  localControl:         'enableLocalControl',
-  notifications:        'enableNotifications',
-  groupSharing:         'enableGroupSharing',
-  subGroupSharing:      'enableSubGroupSharing',
-  transferGroupSharing: 'enableTransferGroupSharing',
-  ota:                  'enableOta',
-  aiAgent:              'enableAiAgent',
-  thirdPartyAuth:       'enableThirdPartyAuth',
-  voiceAssistants:      'enableVoiceAssistants',
-  controlGroups:        'enableControlGroups',
+  scenes:                 'enableScenes',
+  schedules:              'enableSchedules',
+  automations:            'enableAutomations',
+  localControl:           'enableLocalControl',
+  notifications:          'enableNotifications',
+  groupSharing:           'enableGroupSharing',
+  subGroupSharing:        'enableSubGroupSharing',
+  transferGroupSharing:   'enableTransferGroupSharing',
+  ota:                    'enableOta',
+  aiAgent:                'enableAiAgent',
+  thirdPartyAuth:         'enableThirdPartyAuth',
+  voiceAssistants:        'enableVoiceAssistants',
+  controlGroups:          'enableControlGroups',
+  onNetworkProvisioning:  'enableOnNetworkProvisioning',
 };
 
 /**
@@ -82,19 +84,20 @@ export function getFeatures(): Record<FeatureKey, boolean> {
   };
 
   return {
-    scenes:               resolve('scenes'),
-    schedules:            resolve('schedules'),
-    automations:          resolve('automations'),
-    localControl:         resolve('localControl'),
-    notifications:        resolve('notifications'),
-    groupSharing:         resolve('groupSharing'),
-    subGroupSharing:      resolve('subGroupSharing'),
-    transferGroupSharing: resolve('transferGroupSharing'),
-    ota:                  resolve('ota'),
-    aiAgent:              resolve('aiAgent'),
-    thirdPartyAuth:       resolve('thirdPartyAuth'),
-    voiceAssistants:      resolve('voiceAssistants'),
-    controlGroups:        resolve('controlGroups'),
+    scenes:                 resolve('scenes'),
+    schedules:              resolve('schedules'),
+    automations:            resolve('automations'),
+    localControl:           resolve('localControl'),
+    notifications:          resolve('notifications'),
+    groupSharing:           resolve('groupSharing'),
+    subGroupSharing:        resolve('subGroupSharing'),
+    transferGroupSharing:   resolve('transferGroupSharing'),
+    ota:                    resolve('ota'),
+    aiAgent:                resolve('aiAgent'),
+    thirdPartyAuth:         resolve('thirdPartyAuth'),
+    voiceAssistants:        resolve('voiceAssistants'),
+    controlGroups:          resolve('controlGroups'),
+    onNetworkProvisioning:  resolve('onNetworkProvisioning'),
   };
 }
 
