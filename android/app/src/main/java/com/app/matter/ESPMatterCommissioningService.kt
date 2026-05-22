@@ -49,7 +49,8 @@ class ESPMatterCommissioningService : Service(), CommissioningService.Callback {
                 fabricInfo.rootCa!!,
                 fabricInfo.userNoc ?: "",
                 fabricInfo.ipk!!,
-                fabricInfo.groupCatIdOperate!!
+                fabricInfo.groupCatIdOperate!!,
+                fabricInfo.groupCatIdAdmin ?: ""
             )
             FabricSessionManager.setCurrentChipClient(chipClient)
         } else {

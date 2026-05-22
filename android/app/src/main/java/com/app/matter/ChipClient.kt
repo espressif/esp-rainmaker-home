@@ -32,6 +32,7 @@ import java.security.PrivateKey
 import java.security.Signature
 import java.security.cert.CertificateFactory
 import java.security.cert.X509Certificate
+import java.util.Optional
 import java.util.concurrent.TimeoutException
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
@@ -40,14 +41,15 @@ import kotlin.coroutines.suspendCoroutine
 /**
  * Handles Matter device communication and commissioning
  */
-class ChipClient constructor(
+class ChipClient @JvmOverloads constructor(
     private val context: Context,
     private val groupId: String,
     private val fabricId: String,
     private val rootCa: String,
     private var userNoc: String,
     private val ipk: String,
-    private val groupCatIdOperate: String
+    private val groupCatIdOperate: String,
+    private val groupCatIdAdmin: String = ""
 ) {
 
     companion object {
@@ -496,6 +498,7 @@ class ChipClient constructor(
                                             authMode,
                                             subjects,
                                             null,
+                                            Optional.empty(),
                                             fabricIndex
                                         )
 
@@ -693,12 +696,31 @@ class ChipClient constructor(
                     decode(cleanRootCert)
                 )
 
+                // CHIPDeviceController-JNI.cpp::onNOCChainGeneration now performs hard
+                // non-null checks on ControllerParams fields and rejects missing values
+                // with CHIP_ERROR_BAD_REQUEST (0x92). RainMaker uses a 2-tier PKI
+                // (Root -> NOC, no ICA), so pass an empty byte array for the intermediate
+                // certificate; downstream this is interpreted as "no intermediate cert".
+                val emptyIcac = ByteArray(0)
+
+                val adminSubject: Long = if (groupCatIdAdmin.isNotEmpty()) {
+                    Utils.getCatId(groupCatIdAdmin)
+                } else {
+                    Log.e(TAG, "groupCatIdAdmin is EMPTY; commissioning may fail")
+                    0L
+                }
+                Log.d(
+                    TAG,
+                    "Using admin CAT subject: 0x${java.lang.Long.toHexString(adminSubject)}"
+                )
+
                 val errorCode = chipDeviceController.onNOCChainGeneration(
                     ControllerParams.newBuilder()
                         .setRootCertificate(chain[1].encoded)
-                        .setIntermediateCertificate(chain[1].encoded)
+                        .setIntermediateCertificate(emptyIcac)
                         .setOperationalCertificate(chain[0].encoded)
                         .setIpk(ipkEpochKey)
+                        .setAdminSubject(adminSubject)
                         .build()
                 )
 
@@ -938,7 +960,7 @@ class ChipClient constructor(
             return OperationalKeyConfig(
                 EspKeypairDelegate(),
                 chain[1].encoded,
-                chain[1].encoded,
+                null,
                 chain[0].encoded,
                 ipkEpochKey
             )
