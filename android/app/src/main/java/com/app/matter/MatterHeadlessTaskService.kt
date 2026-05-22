@@ -25,16 +25,17 @@ class MatterHeadlessTaskService : HeadlessJsTaskService() {
 
     var taskName: String? = null
 
-    override fun getTaskConfig(intent: Intent): HeadlessJsTaskConfig? {
-        val extras: Bundle = intent.extras ?: return null
+    override fun getTaskConfig(intent: Intent?): HeadlessJsTaskConfig? {
+        val extras: Bundle = intent?.extras ?: return null
 
-        taskName = extras.getString(AppConstants.EXTRA_TASK_NAME)
-        if (taskName == null) {
+        val resolvedTaskName = extras.getString(AppConstants.EXTRA_TASK_NAME)
+        taskName = resolvedTaskName
+        if (resolvedTaskName == null) {
             Log.e(TAG, "Task name not provided in intent")
             return null
         }
 
-        Log.d(TAG, "Creating headless task config for: $taskName")
+        Log.d(TAG, "Creating headless task config for: $resolvedTaskName")
 
         // Convert Bundle extras to WritableMap for JS
         val taskData = Arguments.createMap()
@@ -72,7 +73,7 @@ class MatterHeadlessTaskService : HeadlessJsTaskService() {
         }
 
         return HeadlessJsTaskConfig(
-            taskName,
+            resolvedTaskName,
             taskData,
             60000, // Max timeout (task completes immediately on success/failure)
             true   // Allow in foreground

@@ -51,7 +51,7 @@ const TimePicker: React.FC<TimePickerProps> = ({
   const periods: TimePeriod[] = ["AM", "PM"];
 
   const debouncedScrollTo = useDebounce(
-    (index: number, scrollRef: React.RefObject<ScrollView>) => {
+    (index: number, scrollRef: React.RefObject<ScrollView | null>) => {
       const targetY = index * ITEM_HEIGHT;
       scrollRef.current?.scrollTo({
         y: targetY,
@@ -113,7 +113,7 @@ const TimePicker: React.FC<TimePickerProps> = ({
     item: any,
     items: any[],
     setter: (value: any) => void,
-    scrollRef: React.RefObject<ScrollView>,
+    scrollRef: React.RefObject<ScrollView | null>,
   ) => {
     const index = items.indexOf(item);
     if (index !== -1) {

@@ -3,6 +3,6 @@
 #import <Expo/Expo.h>
 #import <UserNotifications/UserNotifications.h>
 
-@interface AppDelegate : EXAppDelegateWrapper <UNUserNotificationCenterDelegate>
+@interface AppDelegate : RCTAppDelegate <UNUserNotificationCenterDelegate>
 
 @end

@@ -2,6 +2,8 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>APP_GROUP_ID</key>
+	<string>$(APP_GROUP_ID)</string>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
 	<key>CFBundleDevelopmentRegion</key>
@@ -49,6 +51,10 @@
 	<string>15.1</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>MATTER_ECOSYSTEM_NAME</key>
+	<string>$(MATTER_ECOSYSTEM_NAME)</string>
+	<key>MATTER_VENDOR_ID</key>
+	<string>$(MATTER_VENDOR_ID)</string>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsArbitraryLoads</key>
@@ -79,6 +85,8 @@
 	<array>
 		<string>$(PRODUCT_BUNDLE_IDENTIFIER).expo.index_route</string>
 	</array>
+	<key>RCTNewArchEnabled</key>
+	<true/>
 	<key>UILaunchStoryboardName</key>
 	<string>SplashScreen</string>
 	<key>UIRequiredDeviceCapabilities</key>
@@ -105,11 +113,5 @@
 	<string>Automatic</string>
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<false/>
-	<key>APP_GROUP_ID</key>
-	<string>$(APP_GROUP_ID)</string>
-	<key>MATTER_VENDOR_ID</key>
-	<string>$(MATTER_VENDOR_ID)</string>
-	<key>MATTER_ECOSYSTEM_NAME</key>
-	<string>$(MATTER_ECOSYSTEM_NAME)</string>
 </dict>
 </plist>

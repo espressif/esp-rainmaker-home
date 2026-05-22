@@ -39,13 +39,13 @@ export function useThrottle<T extends (...args: any[]) => any>(
   options?: UseThrottleOptions,
 ): T {
   const lastRun = useRef<number>(0);
-  const timeoutRef = useRef<ReturnType<typeof setTimeout>>();
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const latestArgsRef = useRef<Parameters<T> | null>(null);
   const isDrainingRef = useRef(false);
   const callbackRef = useRef(callback);
   callbackRef.current = callback;
-  const setLoadingRef = useRef<UseThrottleOptions["setLoadingWhilePending"]>();
-  setLoadingRef.current = options?.setLoadingWhilePending;
+  const setLoadingRef = useRef<UseThrottleOptions["setLoadingWhilePending"] | null>(null);
+  setLoadingRef.current = options?.setLoadingWhilePending ?? null;
 
   /** Starts or piggybacks the single async drain loop (caller must assign `latestArgsRef` immediately before invoking this). */
   const runAsyncDrain = useCallback(() => {
@@ -100,7 +100,7 @@ export function useThrottle<T extends (...args: any[]) => any>(
           timeoutRef.current = setTimeout(() => {
             lastRun.current = now;
             callbackRef.current(...args);
-            timeoutRef.current = undefined;
+            timeoutRef.current = null;
           }, delay - (now - lastRun.current));
         }
         return;

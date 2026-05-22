@@ -12,15 +12,14 @@
 // https://developer.apple.com/documentation/xcode/adding-a-build-configuration-file-to-your-project
 //
 
-// ============================================================================
-// CocoaPods Configuration
-// ============================================================================
-// PODS_ROOT and PODS_PODFILE_DIR_PATH are defined in project-level build settings
-
-// Include Pods configuration FIRST (order matters)
-// The build system will include the appropriate Pods xcconfig based on configuration
-#include? "Pods/Target Support Files/Pods-APP/Pods-APP.debug.xcconfig"
-#include? "Pods/Target Support Files/Pods-APP/Pods-APP.release.xcconfig"
+// Shared build settings (configuration-agnostic).
+// Per-configuration files APP.debug.xcconfig / APP.release.xcconfig include
+// this file alongside the matching Pods-APP.<config>.xcconfig, then are
+// referenced by the APP target's baseConfigurationReference per configuration.
+// The Pods xcconfig must not be included here — including both debug and
+// release Pods xcconfigs causes nested $(inherited) expansion in
+// OTHER_CFLAGS/CPLUSPLUSFLAGS to balloon to multi-MB values, breaking script
+// phases with "Argument list too long".
 
 // ============================================================================
 // CONFIGURATION-DRIVEN iOS BUILD SETTINGS

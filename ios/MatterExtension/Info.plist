@@ -4,10 +4,10 @@
 <dict>
 	<key>APP_GROUP_ID</key>
 	<string>$(APP_GROUP_ID)</string>
-	<key>MATTER_VENDOR_ID</key>
-	<string>$(MATTER_VENDOR_ID)</string>
 	<key>MATTER_ECOSYSTEM_NAME</key>
 	<string>$(MATTER_ECOSYSTEM_NAME)</string>
+	<key>MATTER_VENDOR_ID</key>
+	<string>$(MATTER_VENDOR_ID)</string>
 	<key>NSExtension</key>
 	<dict>
 		<key>NSExtensionPointIdentifier</key>
@@ -15,5 +15,7 @@
 		<key>NSExtensionPrincipalClass</key>
 		<string>$(PRODUCT_MODULE_NAME).RequestHandler</string>
 	</dict>
+	<key>RCTNewArchEnabled</key>
+	<true/>
 </dict>
 </plist>
