@@ -416,7 +416,7 @@ export interface TimePickerScrollProps {
   items: number[] | TimePeriod[];
   selected: number | TimePeriod;
   paddingZero?: boolean;
-  scrollRef: React.RefObject<ScrollView>;
+  scrollRef: React.RefObject<ScrollView | null>;
   setter: (value: any) => void;
 }
 
@@ -424,7 +424,7 @@ export interface TimePickerScrollHandlerProps {
   event: any;
   items: number[] | TimePeriod[];
   setter: (value: any) => void;
-  scrollRef: React.RefObject<ScrollView>;
+  scrollRef: React.RefObject<ScrollView | null>;
 }
 
 // ============================================================================

@@ -9,10 +9,16 @@
 #import <Network/Network.h>
 #import <React/RCTBridge.h>
 #import <ExpoModulesCore-Swift.h>
+#import <Expo/ExpoReactNativeFactory.h>
+#import <ReactAppDependencyProvider/RCTAppDependencyProvider.h>
 #import "APP-Swift.h"
 
+@interface RCTAppDelegate (Private)
+- (void)loadReactNativeWindow:(NSDictionary *)launchOptions;
+@end
 
-@implementation AppDelegate 
+
+@implementation AppDelegate
 
 
 - (BOOL)application:(UIApplication *)application didFinishLaunchingWithOptions:(NSDictionary *)launchOptions
@@ -23,13 +29,22 @@
   // They will be passed down to the ViewController used by React Native.
   self.initialProps = @{};
 
+  // SDK 55 requires EXReactNativeFactory so expo-splash-screen and other
+  // modules receive root-view hooks; the default RCTReactNativeFactory created
+  // by RCTAppDelegate leaves the splash screen up forever (blank screen).
+  self.dependencyProvider = [RCTAppDependencyProvider new];
+  self.reactNativeFactory = [[EXReactNativeFactory alloc] initWithDelegate:self];
+
+  if (self.automaticallyLoadReactNativeWindow) {
+    [self loadReactNativeWindow:launchOptions];
+  }
+
   [self registerForRemoteNotifications];
-  
+
   // Request BLE and Location permissions for ESP device functionality
-  
   [self requestAppPermissions];
 
-  return [super application:application didFinishLaunchingWithOptions:launchOptions];
+  return YES;
 }
 
 /**

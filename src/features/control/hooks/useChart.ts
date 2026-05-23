@@ -79,8 +79,8 @@ interface UseChartReturn {
   buttonRef: React.RefObject<any>;
   calendarButtonRef: React.RefObject<any>;
   chartContainerRef: React.RefObject<any>;
-  scrollViewRef: React.RefObject<ScrollView>;
-  calendarBottomSheetRef: React.RefObject<DateRangeCalendarBottomSheetRef>;
+  scrollViewRef: React.RefObject<ScrollView | null>;
+  calendarBottomSheetRef: React.RefObject<DateRangeCalendarBottomSheetRef | null>;
 
   // Handlers
   handleSelectAggregation: (agg: string) => void;

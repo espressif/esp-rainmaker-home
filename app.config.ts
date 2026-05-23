@@ -3,10 +3,10 @@ export default {
     name: process.env.APP_NAME || "ESP RainMaker Home",
     slug: process.env.APP_SLUG || "esp-rainmaker-home",
     version: process.env.APP_VERSION || "4.3.0",
+    scheme: process.env.AGENTS_DEEP_LINK_SCHEME || "rainmaker",
     orientation: "portrait",
     icon: "./src/assets/images/logo.png",
     userInterfaceStyle: "automatic",
-    newArchEnabled: true,
     ios: {
       supportsTablet: true,
       bundleIdentifier: process.env.IOS_APP_APPLICATION_ID || "com.espressif.novahome"
@@ -47,7 +47,8 @@ export default {
           "userInterfaceStyle": "automatic"
         }
       ],
-      "expo-font"
+      "expo-font",
+      "expo-web-browser"
     ],
     experiments: {
       typedRoutes: true
