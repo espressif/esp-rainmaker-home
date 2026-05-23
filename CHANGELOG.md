@@ -5,6 +5,18 @@ All notable changes to the ESP RainMaker Home app will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.0.0]
+
+### Enhanced
+
+#### Platform Upgrade (Expo SDK 55 / React Native 0.83)
+- Upgraded to Expo SDK 55 and React Native 0.83 for Android 16KB page size compliance
+- Migrated Android native build, Gradle wrapper, and project configuration to the required versions
+- Refreshed iOS native build configuration to match the upgraded stack
+- Fixed splash screen theme so it renders correctly after the upgrade
+- Updated affected app hooks to stay compatible with the new dependency versions
+- Bumped JS dependencies to versions compatible with Expo SDK 55
+
 ## [4.3.0]
 
 ### Added
