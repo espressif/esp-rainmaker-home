@@ -118,7 +118,7 @@ class ESPAppUtilityModule(private val reactCtx: ReactApplicationContext) :
      */
     @ReactMethod
     fun requestAllPermissions() {
-        val activity = currentActivity as? PermissionAwareActivity ?: return
+        val activity = reactApplicationContext.currentActivity as? PermissionAwareActivity ?: return
         
         val toRequest = mutableListOf<String>().apply {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {

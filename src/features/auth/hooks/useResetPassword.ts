@@ -35,7 +35,7 @@ export function useResetPassword() {
   const [isConfirmPasswordValid, setIsConfirmPasswordValid] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [countdown, setCountdown] = useState(0);
-  const timerRef = useRef<NodeJS.Timeout>();
+  const timerRef = useRef<NodeJS.Timeout | null>(null);
 
   const codeValidator = createCodeValidator(t("auth.validation.invalidCode"));
   const passwordValidator = createPasswordValidator(t);
@@ -69,10 +69,17 @@ export function useResetPassword() {
       timerRef.current = setInterval(() => {
         setCountdown((prev) => prev - 1);
       }, 1000);
-    } else {
+    } else if (timerRef.current) {
       clearInterval(timerRef.current);
+      timerRef.current = null;
     }
-    return () => clearInterval(timerRef.current);
+
+    return () => {
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+        timerRef.current = null;
+      }
+    };
   }, [countdown]);
 
   const handleResendCode = async () => {

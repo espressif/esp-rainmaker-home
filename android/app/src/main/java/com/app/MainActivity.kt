@@ -18,13 +18,12 @@ import android.os.Bundle
 import android.util.Log
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
-import androidx.core.view.WindowCompat
+
 import com.app.notification.ESPNotificationQueue
 import com.app.utils.ESPAppUtilityModule
 import com.app.utils.ESPPermissionUtils
 import com.facebook.react.ReactActivity
 import com.facebook.react.ReactActivityDelegate
-import com.facebook.react.ReactApplication
 import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.defaults.DefaultNewArchitectureEntryPoint.fabricEnabled
 import com.facebook.react.defaults.DefaultReactActivityDelegate
@@ -42,14 +41,10 @@ class MainActivity : ReactActivity() {
     private var appUtilityModule: ESPAppUtilityModule? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
-
-        WindowCompat.setDecorFitsSystemWindows(window, false)
-
         SplashScreenManager.registerOnActivity(this)
+        setTheme(R.style.AppTheme)
         super.onCreate(null)
         ESPNotificationHelper.createNotificationChannels(this)
-
-        initializeESPAppUtilityModule()
 
         FirebaseApp.initializeApp(this)
         FirebaseMessaging.getInstance().isAutoInitEnabled = false
@@ -63,51 +58,8 @@ class MainActivity : ReactActivity() {
 
     override fun onResume() {
         super.onResume()
-        if (appUtilityModule == null) {
-            initializeESPAppUtilityModule()
-        }
     }
 
-    /**
-     * Initialize ESPAppUtilityModule when React Native context becomes available
-     * This method can be called multiple times safely and works with both old and new React Native architectures
-     */
-    private fun initializeESPAppUtilityModule() {
-        if (appUtilityModule != null) {
-            return
-        }
-
-        try {
-            val reactApplication = application as? ReactApplication
-            if (reactApplication != null) {
-                val reactNativeHost = reactApplication.reactNativeHost
-
-                try {
-                    val reactInstanceManager = reactNativeHost.reactInstanceManager
-                    val reactContext = reactInstanceManager.currentReactContext
-                    if (reactContext != null) {
-                        val appContext = reactContext as ReactApplicationContext
-                        ESPNotificationQueue.setReactContext(appContext)
-                        appUtilityModule = ESPAppUtilityModule(appContext)
-
-                        runOnUiThread {
-                            checkPermissions()
-                            checkLocationServicesEnabled()
-                        }
-                        return
-                    }
-                } catch (e: Exception) {
-                    // React Native context not ready, will retry later
-                }
-            }
-        } catch (e: Exception) {
-            // Silent fail - app will use fallback permission checks
-        }
-    }
-
-    /**
-     * Helper method to check permissions using the actual ESPAppUtilityModule
-     */
     private fun checkPermissionsWithUtilityModule(onComplete: (bleGranted: Boolean, locationGranted: Boolean) -> Unit) {
         val bleGranted = if (appUtilityModule != null) {
             appUtilityModule!!.isBlePermissionGrantedSync()

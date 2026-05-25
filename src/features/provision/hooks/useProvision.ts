@@ -43,7 +43,7 @@ import {
 interface UseProvisionReturn {
   stages: ProvisionStage[];
   isComplete: boolean;
-  stepsScrollViewRef: React.RefObject<ScrollView>;
+  stepsScrollViewRef: React.RefObject<ScrollView | null>;
   handleContinue: () => void;
 }
 

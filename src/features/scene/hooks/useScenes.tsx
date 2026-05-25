@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useCallback, useState, useEffect, useMemo, useRef } from "react";
+import React, { useCallback, useState, useEffect, useMemo, useRef } from "react";
 import { useRouter } from "expo-router";
 import { useFocusEffect } from "@react-navigation/native";
 import { useTranslation } from "react-i18next";
@@ -48,7 +48,7 @@ export const useScenes = (): {
   getSceneMenuOptions: {
     id: string;
     label: string;
-    icon: JSX.Element;
+    icon: React.JSX.Element;
     onPress: () => void;
     loading: boolean;
     destructive?: boolean;

@@ -1,0 +1,8 @@
+//
+// SPDX-FileCopyrightText: 2026 Espressif Systems (Shanghai) CO LTD
+//
+// SPDX-License-Identifier: Apache-2.0
+//
+
+#include? "Pods/Target Support Files/Pods-APP/Pods-APP.release.xcconfig"
+#include "APP.xcconfig"

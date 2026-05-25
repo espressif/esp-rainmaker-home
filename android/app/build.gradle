@@ -43,8 +43,10 @@ if (keystorePropertiesFile.exists()) {
 react {
    entryFile = file(["node", "-e", "require('expo/scripts/resolveAppEntry')", projectRoot, "android", "absolute"].execute(null, rootDir).text.trim())
    reactNativeDir = new File(["node", "--print", "require.resolve('react-native/package.json')"].execute(null, rootDir).text.trim()).getParentFile().getAbsoluteFile()
-   hermesCommand = new File(["node", "--print", "require.resolve('react-native/package.json')"].execute(null, rootDir).text.trim()).getParentFile().getAbsolutePath() + "/sdks/hermesc/%OS-BIN%/hermesc"
+   hermesCommand = new File(["node", "--print", "require.resolve('hermes-compiler/package.json', { paths: [require.resolve('react-native/package.json')] })"].execute(null, rootDir).text.trim()).getParentFile().getAbsolutePath() + "/hermesc/%OS-BIN%/hermesc"
    codegenDir = new File(["node", "--print", "require.resolve('@react-native/codegen/package.json', { paths: [require.resolve('react-native/package.json')] })"].execute(null, rootDir).text.trim()).getParentFile().getAbsoluteFile()
+
+   enableBundleCompression = (findProperty('android.enableBundleCompression') ?: false).toBoolean()
 
 //    // Use Expo CLI to bundle the app, this ensures the Metro config
 //    // works correctly with Expo projects.
@@ -110,7 +112,7 @@ def enableProguardInReleaseBuilds = true
  * give correct results when using with locales other than en-US. Note that
  * this variant is about 6MiB larger per architecture than default.
  */
-def jscFlavor = 'org.webkit:android-jsc:+'
+def jscFlavor = 'io.github.react-native-community:jsc-android:2026004.+'
 
 android {
     ndkVersion rootProject.ext.ndkVersion
@@ -141,6 +143,7 @@ android {
         resValue "string", "notification_body", getProp("APP_NOTIFICATION_DEFAULT_BODY")
         
         // BuildConfig fields from gradle.properties
+        buildConfigField "String", "REACT_NATIVE_RELEASE_LEVEL", "\"${findProperty('reactNativeReleaseLevel') ?: 'stable'}\""
         buildConfigField "String", "THIRD_PARTY_AUTH_REDIRECT_URL", "\"${getProp("THIRD_PARTY_AUTH_REDIRECT_URL")}\""
         buildConfigField "String", "APP_NOTIFICATION_DEFAULT_TITLE", "\"${getProp("APP_NOTIFICATION_DEFAULT_TITLE")}\""
         buildConfigField "String", "APP_NOTIFICATION_DEFAULT_BODY", "\"${getProp("APP_NOTIFICATION_DEFAULT_BODY")}\""
@@ -280,15 +283,15 @@ dependencies {
 
     if (isGifEnabled) {
         // For animated gif support
-        implementation("com.facebook.fresco:animated-gif:${reactAndroidLibs.versions.fresco.get()}")
+        implementation("com.facebook.fresco:animated-gif:${expoLibs.versions.fresco.get()}")
     }
 
     if (isWebpEnabled) {
         // For webp support
-        implementation("com.facebook.fresco:webpsupport:${reactAndroidLibs.versions.fresco.get()}")
+        implementation("com.facebook.fresco:webpsupport:${expoLibs.versions.fresco.get()}")
         if (isWebpAnimatedEnabled) {
             // Animated webp support
-            implementation("com.facebook.fresco:animated-webp:${reactAndroidLibs.versions.fresco.get()}")
+            implementation("com.facebook.fresco:animated-webp:${expoLibs.versions.fresco.get()}")
         }
     }
 
@@ -298,7 +301,3 @@ dependencies {
         implementation jscFlavor
     }
 }
-
-project.ext.react = [
-  enableHermes: true
-]
