@@ -1,0 +1,416 @@
+require "json"
+require "fileutils"
+require "securerandom"
+
+default_platform(:ios)
+
+SIGNING_DIR   = File.expand_path("../../signing", __dir__).freeze
+ARTIFACTS_DIR = File.expand_path("../../artifacts/ios", __dir__).freeze
+IOS_DIR       = File.expand_path("..", __dir__).freeze
+WORKSPACE     = File.expand_path("../APP.xcworkspace", __dir__).freeze
+PROJECT       = File.expand_path("../APP.xcodeproj", __dir__).freeze
+
+APPLE_WWDR_CERT_URLS = [
+  "https://www.apple.com/certificateauthority/AppleWWDRCAG3.cer",
+  "https://www.apple.com/certificateauthority/AppleWWDRCAG4.cer",
+  "https://www.apple.com/certificateauthority/AppleWWDRCAG5.cer",
+  "https://www.apple.com/certificateauthority/AppleWWDRCAG6.cer"
+].freeze
+
+KEYCHAINS_DIR = File.expand_path("~/Library/Keychains").freeze
+
+def required_env(key, hint = nil)
+  value = ENV[key]
+  return value unless value.nil? || value.empty?
+
+  suffix = hint ? " — #{hint}" : ""
+  UI.user_error!("#{key} environment variable is required#{suffix}")
+end
+
+def env_csv_list(key, hint = nil)
+  required_env(key, hint).split(",").map(&:strip).reject(&:empty?)
+end
+
+def signing_targets
+  target_names = env_csv_list("IOS_XCODE_TARGETS", "Xcode target names, comma-separated")
+  bundle_ids   = env_csv_list("IOS_BUNDLE_IDS", "bundle IDs, same order as IOS_XCODE_TARGETS")
+  profiles     = env_csv_list("IOS_PROFILE_NAMES", "provisioning profile names, same order as IOS_XCODE_TARGETS")
+
+  unless target_names.length == bundle_ids.length && target_names.length == profiles.length
+    UI.user_error!(
+      "IOS_XCODE_TARGETS (#{target_names.length}), IOS_BUNDLE_IDS (#{bundle_ids.length}), " \
+      "and IOS_PROFILE_NAMES (#{profiles.length}) must list the same number of comma-separated values"
+    )
+  end
+
+  target_names.each_with_index.each_with_object({}) do |(name, index), memo|
+    memo[name] = { bundle_id: bundle_ids[index], profile: profiles[index] }
+  end
+end
+
+def secure_file_names
+  [required_env("IOS_CERTIFICATE_FILE", "distribution .p12 filename in GitLab Secure Files")] +
+    env_csv_list("IOS_PROFILE_FILES", "mobileprovision filenames in GitLab Secure Files")
+end
+
+def certificate_path
+  File.join(SIGNING_DIR, required_env("IOS_CERTIFICATE_FILE"))
+end
+
+def profile_paths
+  env_csv_list("IOS_PROFILE_FILES").map { |name| File.join(SIGNING_DIR, name) }
+end
+
+def ios_scheme
+  required_env("IOS_SCHEME", "Xcode scheme to build")
+end
+
+def output_ipa_name
+  required_env("IOS_OUTPUT_IPA_NAME", "output IPA filename")
+end
+
+def keychain_name
+  @keychain_name ||= begin
+    suffix = ENV["CI_JOB_ID"] || ENV["BUILD_NUMBER"] || SecureRandom.hex(4)
+    "esp-rainmaker-ios-ci-#{suffix}.keychain"
+  end
+end
+
+def gitlab_api_url
+  ENV["CI_API_V4_URL"] || required_env("IOS_GITLAB_API_URL", "GitLab API v4 base URL")
+end
+
+def gitlab_project_id
+  ENV["CI_PROJECT_ID"] || required_env("IOS_GITLAB_PROJECT_ID", "GitLab project ID or group/project path")
+end
+
+# CI_PROJECT_ID is numeric in GitLab CI; slash-encoding applies only when using IOS_GITLAB_PROJECT_ID path form.
+def encoded_gitlab_project_id
+  id = gitlab_project_id
+  id.include?("/") ? id.gsub("/", "%2F") : id
+end
+
+def gitlab_private_token
+  required_env("PRIVATE_TOKEN", "GitLab token with read_api (Secure Files)")
+end
+
+def ios_p12_password
+  required_env("IOS_P12_PASSWORD", "Apple Distribution .p12 password")
+end
+
+def xcode_team_id
+  required_env("XCODE_ORG_ID", "Apple Developer team ID")
+end
+
+# One password per Fastlane run. Random when IOS_KEYCHAIN_PASSWORD is unset; must not
+# call SecureRandom more than once or later unlock/partition-list steps fail.
+def ci_keychain_password
+  env_pw = ENV["IOS_KEYCHAIN_PASSWORD"]
+  return env_pw unless env_pw.nil? || env_pw.empty?
+
+  @ci_keychain_password ||= SecureRandom.hex(16).tap { |pw| ENV["IOS_KEYCHAIN_PASSWORD"] = pw }
+end
+
+def keychain_db_path
+  File.expand_path("~/Library/Keychains/#{keychain_name}-db")
+end
+
+def normalize_keychain_path(path)
+  cleaned = path.to_s.strip.delete('"')
+  return nil if cleaned.empty?
+
+  expanded = File.expand_path(cleaned)
+  return nil unless File.dirname(expanded) == KEYCHAINS_DIR
+
+  expanded.end_with?("-db") ? expanded : "#{expanded}-db"
+end
+
+def ensure_ci_keychain_in_search_list
+  kc_db = keychain_db_path
+  current = `security list-keychains -d user 2>/dev/null`
+             .lines
+             .filter_map { |line| normalize_keychain_path(line) }
+             .uniq
+  ordered = ([kc_db] + current.reject { |path| path == kc_db }).uniq
+  system("security", "list-keychains", "-s", *ordered)
+end
+
+def resolve_login_keychain_path
+  default_out = `security default-keychain 2>/dev/null`.strip
+  unless default_out.empty?
+    path = default_out.delete_prefix('"').delete_suffix('"')
+    return path if File.exist?(path)
+  end
+
+  %w[login.keychain-db login.keychain].each do |name|
+    path = File.join(KEYCHAINS_DIR, name)
+    return path if File.exist?(path)
+  end
+
+  login_glob = Dir[File.join(KEYCHAINS_DIR, "login*.keychain-db")].sort
+  return login_glob.first if login_glob.any?
+
+  nil
+end
+
+def remember_default_keychain
+  @previous_default_keychain ||= begin
+    out = `security default-keychain 2>/dev/null`.strip
+    out.empty? ? nil : out.delete_prefix('"').delete_suffix('"')
+  end
+end
+
+# security/cms and install_provisioning_profile require a user default keychain.
+# On shared runners this temporarily overrides the system default; restore_default_keychain_best_effort
+# puts back the keychain that was default when the lane started (not merely any login keychain).
+def ensure_login_keychain_default
+  remember_default_keychain
+
+  path = resolve_login_keychain_path
+  unless path
+    UI.user_error!(
+      "No user login keychain under ~/Library/Keychains. " \
+      "Open Keychain Access once on this Mac, then re-run the build."
+    )
+  end
+
+  ok = system("security", "default-keychain", "-s", path)
+  UI.user_error!("Failed to set default keychain (#{path})") unless ok
+
+  UI.success("Default keychain set (#{File.basename(path)})")
+  path
+end
+
+def restore_default_keychain_best_effort
+  path = @previous_default_keychain || resolve_login_keychain_path
+  system("security", "default-keychain", "-s", path) if path
+end
+
+def cleanup_signing_assets
+  return unless File.directory?(SIGNING_DIR)
+
+  Dir.children(SIGNING_DIR).each do |entry|
+    next if entry == "wwdr"
+
+    FileUtils.rm_rf(File.join(SIGNING_DIR, entry))
+  end
+end
+
+def delete_ephemeral_keychain
+  system("security", "delete-keychain", keychain_name, out: File::NULL, err: File::NULL)
+end
+
+def cleanup_ci_signing_state
+  cleanup_signing_assets
+  delete_ephemeral_keychain
+  restore_default_keychain_best_effort
+end
+
+def install_apple_wwdr_into_ci_keychain(_kc_password = nil)
+  kc_db = keychain_db_path
+  wwdr_dir = File.join(SIGNING_DIR, "wwdr")
+  FileUtils.mkdir_p(wwdr_dir)
+
+  imported_count = 0
+
+  APPLE_WWDR_CERT_URLS.each_with_index do |url, index|
+    cer_path = File.join(wwdr_dir, "AppleWWDRCA_#{index}.cer")
+
+    unless File.exist?(cer_path) && File.size?(cer_path)
+      downloaded = system("curl", "-sfL", "--retry", "3", "--retry-delay", "2", url, "-o", cer_path)
+      unless downloaded
+        UI.important("Skipping unavailable WWDR certificate: #{url}")
+        FileUtils.rm_f(cer_path)
+        next
+      end
+    end
+
+    imported = system(
+      "security", "import", cer_path,
+      "-k", kc_db,
+      "-T", "/usr/bin/codesign",
+      "-T", "/usr/bin/security",
+      out: File::NULL, err: File::NULL
+    )
+
+    if imported
+      imported_count += 1
+    else
+      UI.important("Failed to import WWDR certificate from #{cer_path}")
+    end
+  end
+
+  if imported_count.zero?
+    UI.user_error!(
+      "No Apple WWDR intermediate certificates could be imported into the CI keychain. " \
+      "Check network access to apple.com and dist.p12 / IOS_P12_PASSWORD."
+    )
+  end
+
+  UI.success("Installed #{imported_count} Apple WWDR intermediate certificate(s) in CI keychain")
+end
+
+def configure_codesign_keychain_access(kc_password)
+  kc_db = keychain_db_path
+  UI.user_error!("CI keychain not found at #{kc_db}") unless File.exist?(kc_db)
+
+  system("security", "unlock-keychain", "-p", kc_password, kc_db, out: File::NULL, err: File::NULL)
+  partition_ok = system(
+    "security", "set-key-partition-list",
+    "-S", "apple-tool:,apple:,codesign:",
+    "-s", "-k", kc_password,
+    kc_db,
+    out: File::NULL, err: File::NULL
+  )
+  unless partition_ok
+    UI.user_error!(
+      "set-key-partition-list failed for the CI signing keychain. " \
+      "The keychain password must stay the same for the entire adhoc lane."
+    )
+  end
+
+  ensure_ci_keychain_in_search_list
+
+  identities = `security find-identity -v -p codesigning #{kc_db} 2>/dev/null`
+  unless identities.include?("Apple Distribution")
+    all_identities = `security find-identity -p codesigning #{kc_db} 2>/dev/null`
+    UI.error("Valid codesigning identities in CI keychain:\n#{identities}")
+    UI.error("All codesigning identities in CI keychain (incl. invalid):\n#{all_identities}")
+    UI.user_error!(
+      "No Apple Distribution identity in the CI keychain. " \
+      "Check dist.p12, IOS_P12_PASSWORD, and WWDR intermediate certificates."
+    )
+  end
+
+  UI.success("CI keychain ready for codesign")
+  UI.message(identities.lines.first(5).join)
+end
+
+def curl_gitlab(url, out_path: nil)
+  token = gitlab_private_token
+  args = ["curl", "-sfL", "--header", "PRIVATE-TOKEN: #{token}", url]
+  args += ["-o", out_path] if out_path
+  system(*args)
+end
+
+platform :ios do
+
+  desc "Download .p12 and provisioning profiles from GitLab Secure Files"
+  private_lane :fetch_signing_assets do
+    project = encoded_gitlab_project_id
+    FileUtils.mkdir_p(SIGNING_DIR)
+
+    list_url = "#{gitlab_api_url}/projects/#{project}/secure_files?per_page=100"
+    list_json = `curl -sfL --header "PRIVATE-TOKEN: #{gitlab_private_token}" "#{list_url}"`
+    unless $?.success?
+      UI.user_error!("Failed to list Secure Files — check PRIVATE_TOKEN (read_api) and project access.")
+    end
+
+    files_by_name = JSON.parse(list_json).each_with_object({}) { |f, h| h[f["name"]] = f["id"] }
+
+    secure_file_names.each do |name|
+      id = files_by_name[name]
+      UI.user_error!("Secure file '#{name}' not found in GitLab Secure Files.") unless id
+
+      out = File.join(SIGNING_DIR, name)
+      url = "#{gitlab_api_url}/projects/#{project}/secure_files/#{id}/download"
+      UI.user_error!("Failed to download #{name}") unless curl_gitlab(url, out_path: out)
+      UI.user_error!("Secure file '#{name}' is empty after download") unless File.size?(out)
+      UI.success("Downloaded #{name}")
+    end
+  end
+
+  desc "Ephemeral keychain + distribution cert + provisioning profiles"
+  private_lane :setup_signing do
+    ensure_login_keychain_default
+
+    cleanup_signing_assets
+    delete_ephemeral_keychain
+
+    fetch_signing_assets
+
+    kc_pw = ci_keychain_password
+
+    create_keychain(
+      name: keychain_name,
+      password: kc_pw,
+      unlock: true,
+      timeout: 3600,
+      lock_when_sleeps: false,
+      add_to_search_list: false,
+      default_keychain: false
+    )
+
+    import_certificate(
+      certificate_path: certificate_path,
+      certificate_password: ios_p12_password,
+      keychain_name: keychain_name,
+      keychain_password: kc_pw
+    )
+
+    install_apple_wwdr_into_ci_keychain
+    configure_codesign_keychain_access(kc_pw)
+
+    ensure_login_keychain_default
+
+    profile_paths.each do |path|
+      install_provisioning_profile(path: path)
+    end
+  end
+
+  desc "Apply manual signing to Xcode targets from env"
+  private_lane :configure_signing do
+    team_id = xcode_team_id
+
+    signing_targets.each do |target_name, info|
+      update_code_signing_settings(
+        use_automatic_signing: false,
+        path: PROJECT,
+        team_id: team_id,
+        targets: [target_name],
+        profile_name: info[:profile],
+        code_sign_identity: "Apple Distribution"
+      )
+    end
+  end
+
+  desc "Build ad-hoc IPA from GitLab Secure Files signing material"
+  lane :adhoc do
+    ensure_login_keychain_default
+
+    cocoapods(podfile: File.join(IOS_DIR, "Podfile"), try_repo_update_on_error: true)
+
+    setup_signing
+    configure_signing
+
+    provisioning_profiles = signing_targets.values.to_h { |info| [info[:bundle_id], info[:profile]] }
+
+    kc = keychain_db_path
+
+    build_app(
+      workspace: WORKSPACE,
+      scheme: ios_scheme,
+      configuration: "Release",
+      export_method: "ad-hoc",
+      output_directory: ARTIFACTS_DIR,
+      output_name: output_ipa_name,
+      clean: true,
+      xcargs: "OTHER_CODE_SIGN_FLAGS='--keychain #{kc}'",
+      export_options: {
+        provisioningProfiles: provisioning_profiles,
+        signingStyle: "manual",
+        teamID: xcode_team_id
+      }
+    )
+  end
+
+  after_all do |_lane|
+    cleanup_ci_signing_state
+  end
+
+  error do |lane, exception|
+    UI.error("Lane #{lane} failed: #{exception.message}")
+    cleanup_ci_signing_state
+  end
+
+end

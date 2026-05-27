@@ -1,0 +1,5 @@
+source "https://rubygems.org"
+
+# iOS CI: Fastlane is used to run the `ios adhoc` lane.
+gem "fastlane"
+gem "cocoapods"

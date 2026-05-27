@@ -29,3 +29,4 @@ project.xcworkspace
 # CocoaPods
 /Pods/
 *.lock
+!fastlane/Gemfile.lock
