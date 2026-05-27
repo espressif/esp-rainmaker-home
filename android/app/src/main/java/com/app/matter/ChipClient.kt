@@ -6,6 +6,7 @@
 
 package com.app.matter
 
+import android.bluetooth.BluetoothGatt
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
@@ -56,7 +57,74 @@ class ChipClient @JvmOverloads constructor(
         const val TAG = "ChipClient"
         private const val DEFAULT_TIMEOUT = 15000L
         private const val INVOKE_COMMAND_TIMEOUT = 15000
+
+        // ----------------------------------------------------------------------------------
+        // Process-wide AndroidChipPlatform / AndroidBleManager.
+        //
+        // The native CHIP stack stores the BLE manager via a JniGlobalReference whose Init()
+        // *silently rejects* any subsequent registration (returns CHIP_ERROR_INCORRECT_STATE).
+        // That means only the FIRST AndroidBleManager ever passed to nativeSetBLEManager()
+        // is wired into the native BLE layer for the lifetime of the process.
+        //
+        // Multiple ChipClient instances (one per fabric + one per commissioning attempt)
+        // would otherwise spawn multiple AndroidBleManager instances of which only the first
+        // is actually live. When the ChipTool commissioning flow then registers a
+        // BluetoothGatt with a different (later) AndroidBleManager, the native code looks
+        // up the original BleManager, does not see the connection, and fails the write with
+        // "Unknown connId 1".
+        //
+        // Sharing a single platform/BleManager across all ChipClient instances avoids that
+        // mismatch. Each ChipClient still owns its own ChipDeviceController so that
+        // fabric-specific OperationalKeyConfig (root CA, IPK, NOC, ...) is honored.
+        // ----------------------------------------------------------------------------------
+        @Volatile
+        private var sAndroidPlatform: AndroidChipPlatform? = null
+
+        @Volatile
+        private var sBleManager: AndroidBleManager? = null
+
+        /**
+         * Ensures the process-wide [AndroidChipPlatform] / [AndroidBleManager] are initialised
+         * exactly once. Returns the cached instance on every subsequent call.
+         */
+        @JvmStatic
+        @Synchronized
+        fun ensureAndroidChipPlatform(context: Context): AndroidChipPlatform {
+            sAndroidPlatform?.let { return it }
+            ChipDeviceController.loadJni()
+            val ble = AndroidBleManager()
+            val platform = AndroidChipPlatform(
+                ble,
+                AndroidNfcCommissioningManager(),
+                PreferencesKeyValueStoreManager(context),
+                PreferencesConfigurationManager(context),
+                NsdManagerServiceResolver(context),
+                NsdManagerServiceBrowser(context),
+                ChipMdnsCallbackImpl(),
+                DiagnosticDataProviderImpl(context)
+            )
+            sBleManager = ble
+            sAndroidPlatform = platform
+            return platform
+        }
+
+        /**
+         * Returns the process-wide [AndroidBleManager], initialising the platform on demand.
+         */
+        @JvmStatic
+        @Synchronized
+        fun ensureBleManager(context: Context): AndroidBleManager {
+            ensureAndroidChipPlatform(context)
+            return sBleManager!!
+        }
     }
+
+    /**
+     * Returns the process-wide [AndroidBleManager]. ChipTool style commissioning uses this
+     * to register the live [android.bluetooth.BluetoothGatt] with the same BLE manager that
+     * the native CHIP stack queries.
+     */
+    fun getBleManager(): AndroidBleManager = ensureBleManager(context)
 
     // Android KeyStore for certificate management
     private val keyStore: KeyStore = KeyStore.getInstance("AndroidKeyStore").apply {
@@ -87,19 +155,10 @@ class ChipClient @JvmOverloads constructor(
     // Lazily instantiate ChipDeviceController
     private val chipDeviceController: ChipDeviceController by lazy {
         Log.d(TAG, "========== INITIALIZING ESP RAINMAKER CHIP DEVICE CONTROLLER ==========")
-        ChipDeviceController.loadJni()
-
-        // Initialize Android platform components
-        AndroidChipPlatform(
-            AndroidBleManager(),
-            AndroidNfcCommissioningManager(),
-            PreferencesKeyValueStoreManager(context),
-            PreferencesConfigurationManager(context),
-            NsdManagerServiceResolver(context),
-            NsdManagerServiceBrowser(context),
-            ChipMdnsCallbackImpl(),
-            DiagnosticDataProviderImpl(context)
-        )
+        // The native CHIP stack only honours the FIRST AndroidBleManager registered for
+        // the process. Always go through ensureAndroidChipPlatform() so every ChipClient
+        // shares the same one — required for the ChipTool BLE commissioning path.
+        ensureAndroidChipPlatform(context)
 
         try {
             val decodedHex: ByteArray = decodeHex(ipk)
@@ -216,7 +275,82 @@ class ChipClient @JvmOverloads constructor(
         commissioningContinuation = continuation
 
         try {
-            val callback = object : BaseCompletionListener() {
+            chipDeviceController.setCompletionListener(buildCommissioningCompletionListener(continuation))
+            chipDeviceController.commissionDevice(deviceId, networkCredentials)
+
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to commission device: ${e.message}", e)
+            continuation.resumeWithException(e)
+            commissioningContinuation = null
+        }
+    }
+
+    /**
+     * ChipTool style commissioning: drives the full PASE + commissioning + network
+     * provisioning flow over BLE in a single call. Reuses the exact same completion listener
+     * as [awaitCommissionDevice], so the post-commissioning steps (RM cluster reads, ACL
+     * setup, headless confirm-commission task) run identically regardless of which Matter
+     * back-end started the flow.
+     *
+     * The [bleGatt] / [connId] must come from [ChipToolBluetoothManager], which has already
+     * registered the connection with the process-wide [AndroidBleManager] owned by
+     * [ensureAndroidChipPlatform].
+     *
+     * @param deviceId Operational Matter node id this ChipClient will use locally during
+     *                 commissioning. The final node id assigned by RainMaker is independent
+     *                 and is fetched via the NOC chain issuer.
+     * @param bleGatt Live GATT connection to the commissionable device.
+     * @param connId Connection id returned by `AndroidBleManager.addConnection(...)`.
+     * @param setupPinCode Setup PIN parsed from the QR / manual pairing code.
+     * @param networkCredentials Wi-Fi credentials the device should join post-commission.
+     */
+    suspend fun awaitPairDeviceOverBle(
+        deviceId: Long,
+        bleGatt: BluetoothGatt,
+        connId: Int,
+        setupPinCode: Long,
+        networkCredentials: NetworkCredentials?
+    ) = suspendCancellableCoroutine<Unit> { continuation ->
+        Log.d(TAG, "Pairing device over BLE: deviceId=$deviceId connId=$connId")
+
+        // Match the state reset that GPS flow performs in triggerNOCTask(). We need a clean
+        // slate here because the NOCChainIssuer callback is invoked inside pairDevice(), so
+        // confirmTaskTriggered must be false when the new commissioning starts.
+        currentDeviceId = deviceId
+        tempDeviceId = deviceId
+        isCommissioning = true
+        nocChainReceived = false
+        nocChainInstalled = false
+        confirmTaskTriggered = false
+        commissioningContinuation = continuation
+
+        try {
+            chipDeviceController.setCompletionListener(buildCommissioningCompletionListener(continuation))
+            chipDeviceController.pairDevice(
+                bleGatt,
+                connId,
+                deviceId,
+                setupPinCode,
+                networkCredentials
+            )
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to pair device over BLE: ${e.message}", e)
+            continuation.resumeWithException(e)
+            commissioningContinuation = null
+        }
+    }
+
+    /**
+     * Builds the shared post-commissioning listener used by both the GPS-driven
+     * [awaitCommissionDevice] and the in-app ChipTool [awaitPairDeviceOverBle] flow.
+     * Completing the [continuation] is deferred to the headless confirm-commission task
+     * (see [onCommissioningFullyComplete] / [onCommissioningFailed]); the listener only
+     * resumes the continuation directly on synchronous error paths.
+     */
+    private fun buildCommissioningCompletionListener(
+        continuation: CancellableContinuation<Unit>
+    ): BaseCompletionListener {
+        return object : BaseCompletionListener() {
                 // Note that an error in processing is not necessarily communicated via onError().
                 // onCommissioningComplete with an "errorCode != 0" also denotes an error in processing.
                 override fun onCommissioningComplete(nodeId: Long, errorCode: Long) {
@@ -555,15 +689,6 @@ class ChipClient @JvmOverloads constructor(
                 ) {
                 }
             }
-
-            chipDeviceController.setCompletionListener(callback)
-            chipDeviceController.commissionDevice(deviceId, networkCredentials)
-
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to commission device: ${e.message}", e)
-            continuation.resumeWithException(e)
-            commissioningContinuation = null
-        }
     }
 
     /** Called when commissioning is fully complete (after confirm API succeeds). */

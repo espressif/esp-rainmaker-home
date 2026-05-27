@@ -87,6 +87,14 @@ object AppConstants {
     const val PRIVILEGE_OPERATE = 3
     const val ENDPOINT_0 = 0
 
+    // Matter CASE Authenticated Tag (CAT) NodeId prefix. Per Matter spec, ACL subjects
+    // and NOC subjects of type CAT live in the NodeId range
+    // 0xFFFFFFFD_00000000 - 0xFFFFFFFD_FFFFFFFF, where the lower 32 bits split into
+    // 16-bit identifier + 16-bit version. Raw RainMaker CAT id hex strings must be
+    // prefixed with this value before being passed to AddNOC / writeAcl, otherwise the
+    // device treats them as plain operational node ids and access control fails.
+    const val CAT_ID_PREFIX = "FFFFFFFD"
+
     const val ESP_PREFERENCES = "Esp_Preferences"
 
     // Cluster IDs from BuildConfig
@@ -168,6 +176,18 @@ object AppConstants {
 
     const val KEYSTORE_ANDROID = "AndroidKeyStore"
     const val EC_CURVE_SECP256R1 = "secp256r1"
+
+    // Matter commissioning back-end identifiers (must match values accepted by
+    // build.gradle's MATTER_COMMISSIONING_METHOD validation).
+    const val COMMISSIONING_METHOD_GOOGLE_PLAY_SERVICES = "GooglePlayServices"
+    const val COMMISSIONING_METHOD_CHIP_TOOL = "ChipTool"
+
+    // Source identifiers attached to MatterEvent payloads so React Native callers can
+    // tell which Android back-end performed the commissioning.
+    const val CHIP_TOOL_COMMISSIONING_SOURCE = "CHIP_TOOL"
+
+    // Intent extras consumed by ChipToolCommissioningActivity.
+    const val EXTRA_ONBOARDING_PAYLOAD = "on_board_payload"
 }
 
 data class MatterEvent(
