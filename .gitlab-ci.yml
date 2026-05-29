@@ -1,4 +1,4 @@
-# GitLab CI/CD Pipeline for ESP RainMaker Home App
+# GitLab CI/CD Pipeline for building ESP RainMaker Home App for Android and iOS and testing on Android devices.
 
 stages:
   - quality
@@ -90,6 +90,90 @@ android_apk:
   artifacts:
     paths:
       - artifacts/android/
+    expire_in: 1 day
+
+###############################################################
+# IOS — MR builds IPA
+###############################################################
+
+ios_ipa:
+  stage: build
+  tags: [mac-mini-runner]
+  before_script: []
+  needs:
+    - job: code_quality
+  rules:
+    - if: $CI_MERGE_REQUEST_ID
+  script:
+    - |
+      set -eo pipefail
+
+      RBENV_SHIMS="${HOME}/.rbenv/shims"
+      NVM_BIN=""
+      set +e
+      NVM_BIN="$(ls -d "${HOME}"/.nvm/versions/node/v22*/bin 2>/dev/null | sort -V | tail -1)"
+      set -e
+      export PATH="${RBENV_SHIMS}${NVM_BIN:+:${NVM_BIN}}:/opt/homebrew/opt/node@22/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
+      if [ -x "${RBENV_SHIMS}/ruby" ] && command -v rbenv >/dev/null 2>&1; then
+        eval "$(rbenv init - bash)"
+      fi
+      if ! command -v node >/dev/null 2>&1 && [ -s "${HOME}/.nvm/nvm.sh" ]; then
+        . "${HOME}/.nvm/nvm.sh"
+        nvm use 22 >/dev/null 2>&1 || true
+      fi
+      echo "CI PATH=${PATH}"
+      command -v node >/dev/null || { echo "ERROR: node not found; install: nvm install 22"; exit 1; }
+      command -v npm >/dev/null  || { echo "ERROR: npm not found"; exit 1; }
+      command -v ruby >/dev/null || { echo "ERROR: ruby not found; install: rbenv install 3.3.6 && rbenv global 3.3.6"; exit 1; }
+      node -v | grep -q '^v22' || { echo "ERROR: need Node 22, got $(node -v)"; exit 1; }
+      ruby -v | grep -q '^ruby 3' || { echo "ERROR: need Ruby 3.x, got $(ruby -v)"; exit 1; }
+      node -v && npm -v && xcodebuild -version && ruby -v
+
+      
+      IOS_RUNNER_ENV="${HOME}/.esp-rainmaker-ios-fastlane.env"
+      if [ -f "${IOS_RUNNER_ENV}" ]; then
+        set -a
+        # shellcheck disable=SC1090
+        source "${IOS_RUNNER_ENV}"
+        set +a
+        echo "Loaded mac-mini signing config from ${IOS_RUNNER_ENV}"
+      else
+        echo "ERROR: ${IOS_RUNNER_ENV} not found on mac-mini-runner (see ios/fastlane/README.md)"
+        exit 1
+      fi
+
+      # Secrets — GitLab CI/CD Variables only (Settings → CI/CD → Variables)
+      : "${PRIVATE_TOKEN:?must be set as a GitLab CI/CD variable (masked)}"
+      : "${IOS_P12_PASSWORD:?must be set as a GitLab CI/CD variable (masked)}"
+      : "${IOS_KEYCHAIN_PASSWORD:?must be set as a GitLab CI/CD variable (masked)}"
+      : "${XCODE_ORG_ID:?must be set as a GitLab CI/CD variable (masked)}"
+
+      # Non-secrets — mac-mini-runner file above (not GitLab CI/CD Variables)
+      : "${IOS_CERTIFICATE_FILE:?must be set in ${IOS_RUNNER_ENV}}"
+      : "${IOS_PROFILE_FILES:?must be set in ${IOS_RUNNER_ENV}}"
+      : "${IOS_XCODE_TARGETS:?must be set in ${IOS_RUNNER_ENV}}"
+      : "${IOS_BUNDLE_IDS:?must be set in ${IOS_RUNNER_ENV}}"
+      : "${IOS_PROFILE_NAMES:?must be set in ${IOS_RUNNER_ENV}}"
+      : "${IOS_SCHEME:?must be set in ${IOS_RUNNER_ENV}}"
+      : "${IOS_OUTPUT_IPA_NAME:?must be set in ${IOS_RUNNER_ENV}}"
+
+      echo "iOS signing: scheme=${IOS_SCHEME} cert=${IOS_CERTIFICATE_FILE} ipa=${IOS_OUTPUT_IPA_NAME}"
+
+      echo "export NODE_BINARY=$(command -v node)" > ios/.xcode.env.local
+
+      npm ci --prefer-offline --no-audit
+
+      if [ -f .env.example ]; then cp .env.example .env; echo "Created .env from .env.example"; else echo ".env.example not found, skipping"; fi
+
+      npm run prebuild:ios
+
+      cd ios/fastlane
+      bundle install --jobs 4 --retry 3
+      bundle exec fastlane ios adhoc
+
+  artifacts:
+    paths:
+      - artifacts/ios/
     expire_in: 1 day
 
 ###############################################################

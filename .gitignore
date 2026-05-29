@@ -90,3 +90,7 @@ android/app/google-services.json
 # Local base64 blobs for GitHub Actions signing secrets (never commit)
 secrets-base64/
 keystore.properties
+
+# CI signing assets and build outputs (never commit)
+/signing/
+/artifacts/
