@@ -13,14 +13,19 @@ import {
 } from "@config/runtime.config";
 import { provisionAdapter } from "@native-adaptors/implementations/ESPProvAdapter";
 import { EspLocalDiscoveryAdapter } from "@native-adaptors/implementations/ESPDiscoveryAdapter";
+import { matterLocalDiscoveryAdapter } from "@native-adaptors/implementations/MatterDiscoverAdapter";
 import ESPLocalControlAdapter from "@native-adaptors/implementations/ESPLocalControlAdapter";
 import { ESPNotificationAdapter } from "@native-adaptors/implementations/ESPNotificationAdapter";
 import { espOauthAdapter } from "@native-adaptors/implementations/ESPOauthAdapter";
 import ESPAppUtilityAdapter from "@native-adaptors/implementations/ESPAppUtilityAdapter";
-import { matterAdapter } from "@native-adaptors/implementations/ESPMatterAdapter";
+import { matterCommissioningAdaptor } from "@native-adaptors/implementations/ESPMatterAdapter";
+import { ESPMatterControlAdapter } from "@native-adaptors/implementations/ESPMatterControlAdapter";
+import { ESPMatterSubscriptionAdapter } from "@native-adaptors/implementations/ESPMatterSubscriptionAdapter";
 import { ESPMQTTAdapter } from "@native-adaptors/implementations/ESPMQTTAdapter";
 import { ESPRMBaseConfig } from "@espressif/rainmaker-base-sdk";
+import type { ESPRMMatterBaseConfig } from "@espressif/rainmaker-matter-sdk";
 import type { ESPRMNGBaseConfig } from "@espressif/rmng-base-sdk";
+import { matterClusterConfig } from "@sdk-adaptors/ESPRMMatterBase/cluster.config";
 import {
   DEFAULT_ACTIVE_SDK_ID,
   ESPRM_BASE_SDK_ID,
@@ -150,13 +155,18 @@ export const CDFConfig = {
 
 // ─── Matter SDK Config ────────────────────────────────────────────────────────
 
-export function getMatterSDKConfig() {
+export function getMatterSDKConfig(): ESPRMMatterBaseConfig {
   return {
     ...getRMSDKConfig(),
-    matterAdapter: matterAdapter,
+    matterCommissioningAdaptor,
+    matterControlAdapter: ESPMatterControlAdapter,
+    matterSubscriptionAdapter: ESPMatterSubscriptionAdapter,
+    matterLocalDiscoveryAdapter,
     matterVendorId: matterSdk.vendorId ?? "0x131B",
+    clusterConfig: matterClusterConfig,
   };
 }
+
 
 // ─── SDK Feature Map (Level 2) ────────────────────────────────────────────────
 //

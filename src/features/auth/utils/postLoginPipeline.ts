@@ -15,6 +15,8 @@ import { connectToolWithTokens } from "@features/agent/utils/oauth";
 import { DEFAULT_AGENT_ID, RAINMAKER_MCP_CONNECTOR_URL } from "@/config/agent.config";
 import { CDFConfig } from "@config/sdk.config";
 import { ESPCDF } from "@store";
+import { startNodeLocalDiscovery } from "@features/group/utils/localDiscovery";
+import { startMatterLocalDiscovery } from "@features/matter/utils/matterLocalDiscovery";
 
 export type PostLoginPipelineProgressState = {
   completed: number;
@@ -131,6 +133,25 @@ export async function executePostLoginPipeline(
     // This step is kept for any legacy code that might depend on it
     // but it won't be executed in the normal flow
   }
+
+  // Warm up local-network discovery (RainMaker local control + Matter operational).
+  postLoginSteps.push({
+    name: "startLocalDiscovery",
+    dependsOn: ["syncHomeWithNodes"],
+    optional: true,
+    background: true,
+    run: async () => {
+      try {
+        startNodeLocalDiscovery(store);
+        startMatterLocalDiscovery(store);
+      } catch (error) {
+        console.warn(
+          "[Post-Login] startLocalDiscovery failed (non-blocking):",
+          error,
+        );
+      }
+    },
+  });
 
   // Auto-connect MCP RainMaker connector for default agent
   postLoginSteps.push({

@@ -4,9 +4,18 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { ESPCDFDeviceParam } from "@store";
+import { ESPCDFDevice, ESPCDFDeviceParam } from "@store";
 import { PARAM_CONTROLS } from "@/config/params.config";
-import { ESPRM_UI_SLIDER_PARAM_TYPE } from "@shared/utils/constants";
+import {
+  ESPRM_POWER_PARAM_TYPE,
+  ESPRM_UI_HIDDEN_PARAM_TYPE,
+  ESPRM_UI_SLIDER_PARAM_TYPE,
+} from "@shared/utils/constants";
+/** SDK / Matter device may expose `primaryParam` (e.g. OnOff) on the device or `_raw`. */
+type DevicePrimaryParamRef = {
+  primaryParam?: { type?: string };
+  _raw?: { primaryParam?: { type?: string } };
+};
 
 /**
  * Type definition for a parameter control configuration
@@ -26,13 +35,53 @@ export interface ParamControlConfig {
 export type ParamsMap = Record<string, ParamControlConfig>;
 
 /**
+ * RainMaker power param or Matter OnOff (`server:0x6`) when no primary param is set.
+ * @param params - Device parameters
+ * @returns Matching power param, if any
+ */
+const findLegacyDeviceCardPowerParam = (
+  params: ESPCDFDeviceParam[] | undefined
+): ESPCDFDeviceParam | undefined =>
+  params?.find(
+    (param) =>
+      param.type === ESPRM_POWER_PARAM_TYPE || param.type === "server:0x6"
+  );
+
+/**
+ * Resolves the param that drives the device card power switch.
+ * Prefers SDK `primaryParam` (Matter), then RainMaker / Matter OnOff types.
+ * @param device - CDF device for the card
+ * @returns Power param to toggle, or undefined when none applies
+ */
+export const resolveDeviceCardPowerParam = (
+  device: ESPCDFDevice | undefined
+): ESPCDFDeviceParam | undefined => {
+  const params = device?.params;
+  if (!params?.length) {
+    return undefined;
+  }
+
+  const deviceRef = device as DevicePrimaryParamRef;
+  const primaryType =
+    deviceRef.primaryParam?.type ?? deviceRef._raw?.primaryParam?.type;
+  if (primaryType) {
+    const fromPrimary = params.find((param) => param.type === primaryType);
+    if (fromPrimary) {
+      return fromPrimary;
+    }
+  }
+
+  return findLegacyDeviceCardPowerParam(params);
+};
+
+/**
  * Builds a map of parameter types to their control configurations.
  * Single Responsibility: Only responsible for building the params map.
  * @returns A map where keys are parameter types and values are control configurations
  */
 export const buildParamsMap = (): ParamsMap => {
   return PARAM_CONTROLS.reduce((acc, control) => {
-    if (control.types.includes("esp.ui.hidden")) {
+    if (control.types.includes(ESPRM_UI_HIDDEN_PARAM_TYPE)) {
       return acc;
     }
     control.types.forEach((type) => {
@@ -53,11 +102,12 @@ export const resolveParamControl = (
   param: ESPCDFDeviceParam,
   paramsMap: ParamsMap
 ): ParamControlConfig | null => {
-  if (!param.uiType) {
+  const lookupKey = param.uiType ?? param.type;
+  if (!lookupKey) {
     return null;
   }
 
-  let control = paramsMap[param.uiType];
+  let control = paramsMap[lookupKey];
   if (!control) {
     return null;
   }
@@ -72,6 +122,27 @@ export const resolveParamControl = (
   }
 
   return control;
+};
+
+/**
+ * Resolves the label shown for a parameter control.
+ * Uses the device/cloud `name` when present; otherwise the `PARAM_CONTROLS` entry `name`.
+ * @param param - The device parameter
+ * @param paramsMap - Optional pre-built params map (reuse when rendering many params)
+ * @returns Display label, or empty string when neither source applies
+ */
+export const resolveParamDisplayLabel = (
+  param: ESPCDFDeviceParam,
+  paramsMap?: ParamsMap,
+): string => {
+  const fromParam = String(param.name ?? "").trim();
+  if (fromParam.length > 0) {
+    return fromParam;
+  }
+
+  const map = paramsMap ?? buildParamsMap();
+  const control = resolveParamControl(param, map);
+  return String(control?.name ?? "").trim();
 };
 
 /**

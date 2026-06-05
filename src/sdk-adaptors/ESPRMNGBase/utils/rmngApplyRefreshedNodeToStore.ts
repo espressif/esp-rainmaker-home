@@ -43,7 +43,13 @@ export function applyRefreshedCdfNodeToStore(cdfNode: ESPCDFNode): void {
     if (!nodeStore) return;
 
     // Merge local transport from existing store node
-    const merged = mergeLocalTransportFromNodeMap([cdfNode], nodeStore.nodesByIDMap)[0];
+    const registered =
+        root?.subscriptionStore?.getRegisteredTransportsSnapshot?.() ?? {};
+    const merged = mergeLocalTransportFromNodeMap(
+        [cdfNode],
+        nodeStore.nodesByIDMap,
+        registered,
+    )[0];
 
     const mergedTransports = merged.availableTransports as Record<string, unknown> | undefined;
     const mergedLocalBaseUrl = (mergedTransports?.local as { metadata?: { baseUrl?: string } })?.metadata?.baseUrl;

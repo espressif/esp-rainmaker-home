@@ -7,7 +7,7 @@
 import { NativeEventEmitter, Platform } from "react-native";
 import ESPMatterModule from "../interfaces/ESPMatterInterface";
 import {
-  ESPMatterAdapterInterface,
+  ESPMatterCommissioningAdaptorInterface,
   ESPRMConfirmRequestEventData,
   ESPRMCSRGenerationResult,
   ESPRMFabric,
@@ -32,7 +32,7 @@ import {
  * - Android: HeadlessJS tasks handle API calls in background
  * - iOS: SDK makes API calls directly via event handlers
  */
-export const matterAdapter: ESPMatterAdapterInterface = {
+export const matterCommissioningAdaptor: ESPMatterCommissioningAdaptorInterface = {
   /**
    * Generates CSR for fabric certificate using native secure storage.
    * @param fabricInfo - Fabric info containing groupId, fabricId, and name
@@ -195,4 +195,4 @@ export const matterAdapter: ESPMatterAdapterInterface = {
   },
 };
 
-export default matterAdapter;
+export default matterCommissioningAdaptor;

@@ -183,6 +183,7 @@ export function transformToESPCDFNode(
     };
 
     const cdfNode = new ESPCDFNode({
+        ...node,
         identifier: nodeId,
         id: nodeId,
         type: node.type,

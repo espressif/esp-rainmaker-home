@@ -182,9 +182,18 @@ export const useOnNetworkDiscovery = (): UseOnNetworkDiscoveryReturn => {
     setIsScanning(true);
     setDevices([]);
 
+    // Multi-browse: native may emit events for other concurrent browses
+    // (`_esp_local_ctrl._tcp.`, `_matter._tcp.`). Filter to chal-resp only.
+    const isChalResp = (payload: { serviceType?: unknown }) => {
+      const s = typeof payload?.serviceType === "string" ? payload.serviceType : "";
+      if (!s) return true; // older native build without discriminator → trust
+      return s.replace(/\.$/, "") === MDNS_SERVICE_TYPE_ESP_RMAKER_CHAL_RESP.replace(/\.$/, "");
+    };
+
     const updateSub = DeviceEventEmitter.addListener(
       DISCOVERY_UPDATE_EVENT,
       (payload: Record<string, unknown>) => {
+        if (!isChalResp(payload)) return;
         const next = buildOnNetworkDevice(payload);
         if (!next) return;
         setDevices((prev) => {
@@ -199,7 +208,8 @@ export const useOnNetworkDiscovery = (): UseOnNetworkDiscoveryReturn => {
 
     const lostSub = DeviceEventEmitter.addListener(
       DISCOVERY_LOST_EVENT,
-      (payload: { nodeId?: string }) => {
+      (payload: { nodeId?: string; serviceType?: string }) => {
+        if (!isChalResp(payload)) return;
         const lostId = payload?.nodeId;
         if (!lostId) return;
         setDevices((prev) => prev.filter((d) => d.nodeId !== lostId));

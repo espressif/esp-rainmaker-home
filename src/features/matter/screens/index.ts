@@ -4,4 +4,5 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-export { FabricSelectionScreen } from "./FabricSelection";
+export { CommissioningScreen } from "./Commissioning";
+export type { CommissioningScreenProps } from "./Commissioning";

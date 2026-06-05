@@ -29,7 +29,8 @@ data class DeviceMatterInfo(
     val endpoint: Int,
     val types: List<Long>,
     val serverClusters: List<Any>,
-    val clientClusters: List<Any>
+    val clientClusters: List<Any>,
+    val clusterAttributes: Map<String, List<Long>> = emptyMap()
 )
 
 class ClustersHelper constructor(private val chipClient: ChipClient) {
@@ -126,7 +127,20 @@ class ClustersHelper constructor(private val chipClient: ChipClient) {
         val clientClusters = arrayListOf<Any>()
         clientListAttribute.forEach { clientClusters.add(it) }
 
-        val deviceMatterInfo = DeviceMatterInfo(endpointInt, types, serverClusters, clientClusters)
+        val clusterAttributes = mutableMapOf<String, List<Long>>()
+        serverClusters.forEach { clusterId ->
+            val attributes = readClusterAttributeList(
+                connectedDevicePtr,
+                endpointInt,
+                clusterId.toString().toLong()
+            )
+            if (attributes.isNotEmpty()) {
+                clusterAttributes[clusterId.toString()] = attributes
+            }
+        }
+
+        val deviceMatterInfo =
+            DeviceMatterInfo(endpointInt, types, serverClusters, clientClusters, clusterAttributes)
         matterDeviceInfoList.add(deviceMatterInfo)
 
         partsListAttribute?.forEach { part ->
@@ -141,6 +155,41 @@ class ClustersHelper constructor(private val chipClient: ChipClient) {
             } catch (e: Exception) {
                 Log.e(TAG, "Error processing endpoint $part", e)
             }
+        }
+    }
+
+    /**
+     * Reads the universal `AttributeList` (id 0xFFFB) of a cluster, which enumerates
+     * all attribute ids supported by that cluster on the given endpoint.
+     */
+    private suspend fun readClusterAttributeList(
+        devicePtr: Long,
+        endpoint: Int,
+        clusterId: Long
+    ): List<Long> {
+        return try {
+            val attributePath = ChipAttributePath.newInstance(endpoint, clusterId, 0xFFFBL)
+            val attributeStates = chipClient.readAttributes(devicePtr, listOf(attributePath))
+            val attributeState = attributeStates[attributePath]
+
+            if (attributeState?.value is List<*>) {
+                val attributeList = attributeState.value as List<*>
+                attributeList.mapNotNull {
+                    when (it) {
+                        is Long -> it
+                        is Int -> it.toLong()
+                        else -> null
+                    }
+                }
+            } else {
+                emptyList()
+            }
+        } catch (e: Exception) {
+            Log.w(
+                TAG,
+                "Failed to read attribute list for cluster 0x${clusterId.toString(16)}: ${e.message}"
+            )
+            emptyList()
         }
     }
 

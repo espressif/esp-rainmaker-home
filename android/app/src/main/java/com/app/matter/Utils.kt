@@ -16,7 +16,7 @@ import java.math.BigInteger
 object Utils {
 
     private const val TAG = "Utils"
-    
+
     /**
      * Convert a raw RainMaker CAT id hex string (e.g. "02090001") into the full Matter
      * CASE Authenticated Tag NodeId by prefixing it with [AppConstants.CAT_ID_PREFIX]

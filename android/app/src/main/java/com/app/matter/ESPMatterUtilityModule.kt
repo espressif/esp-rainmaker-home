@@ -118,25 +118,26 @@ class ESPMatterUtilityModule (reactContext: ReactApplicationContext) :
 
             keyStore.setKeyEntry(fabricId, privateKey, null, certificates)
 
-            try {
-                val readBackChain = keyStore.getCertificateChain(fabricId)
-            } catch (rb: Exception) {
-                Log.w(TAG, "KeyStore read-back failed: ${rb.message}")
-            }
-
-            val fabricInfo = FabricInfo(
-                groupId = groupId,
-                fabricId = fabricId,
-                name = name,
-                rootCa = rootCa,
-                ipk = ipk,
-                userNoc = userNoc,
-                groupCatIdOperate = groupCatIdOperate,
-                groupCatIdAdmin = groupCatIdAdmin,
-                matterUserId = matterUserId,
-                userCatId = userCatId
+            val readBackChain = keyStore.getCertificateChain(fabricId)
+            Log.i(
+                TAG,
+                "[MatterDiscovery] storePrecommissionInfo: KeyStore chain size=${readBackChain?.size ?: 0} fabricId=$fabricId",
             )
-            FabricSessionManager.setCurrentFabric(fabricInfo)
+
+            applyFabricSession(
+                FabricInfo(
+                    groupId = groupId,
+                    fabricId = fabricId,
+                    name = name,
+                    rootCa = rootCa,
+                    ipk = ipk,
+                    userNoc = userNoc,
+                    groupCatIdOperate = groupCatIdOperate,
+                    groupCatIdAdmin = groupCatIdAdmin,
+                    matterUserId = matterUserId,
+                    userCatId = userCatId,
+                ),
+            )
 
             val storeResult = Arguments.createMap().apply {
                 putBoolean(AppConstants.KEY_SUCCESS, true)
@@ -167,6 +168,109 @@ class ESPMatterUtilityModule (reactContext: ReactApplicationContext) :
             Log.e(TAG, "Failed to store pre-commission info")
             promise.reject("STORE_PRECOMMISSION_ERROR", "Failed to store pre-commission info: ${error.message}", error)
         }
+    }
+
+    /**
+     * Hydrates {@link FabricSessionManager} from active-home fabric details for operational
+     * discovery. Requires an existing KeyStore private key + NOC chain for {@code fabricId}.
+     * Does not re-issue NOC — use {@link #storePrecommissionInfo} when KeyStore is empty.
+     */
+    @ReactMethod
+    fun syncFabricSession(params: ReadableMap, promise: Promise) {
+        Log.i(TAG, "[MatterDiscovery] syncFabricSession: begin")
+
+        val groupId = params.getStringOrNull(AppConstants.KEY_GROUP_ID_CAMEL)
+        val fabricId = params.getStringOrNull(AppConstants.KEY_FABRIC_ID_CAMEL)
+        val name = params.getStringOrNull(AppConstants.KEY_NAME)
+        val rootCa = params.getStringOrNull(AppConstants.KEY_ROOT_CA_CAMEL)
+        val ipk = params.getStringOrNull(AppConstants.KEY_IPK_CAMEL)
+        val matterUserId = params.getStringOrNull(AppConstants.KEY_MATTER_USER_ID)
+        val groupCatIdOperate = params.getStringOrNull(AppConstants.KEY_GROUP_CAT_ID_OPERATE)
+        val groupCatIdAdmin = params.getStringOrNull(AppConstants.KEY_GROUP_CAT_ID_ADMIN)
+        val userCatId = params.getStringOrNull(AppConstants.KEY_USER_CAT_ID)
+
+        try {
+            if (groupId.isNullOrEmpty() || fabricId.isNullOrEmpty() ||
+                rootCa.isNullOrEmpty() || matterUserId.isNullOrEmpty() || ipk.isNullOrEmpty()
+            ) {
+                promise.reject(
+                    "INVALID_PARAMS",
+                    "groupId, fabricId, rootCa, ipk, and matterUserId are required for syncFabricSession",
+                )
+                return
+            }
+
+            val keyStore = KeyStore.getInstance(AppConstants.KEYSTORE_ANDROID)
+            keyStore.load(null)
+
+            val privateKey = keyStore.getKey(fabricId, null)
+            if (privateKey == null) {
+                Log.e(TAG, "[MatterDiscovery] syncFabricSession: KEY_NOT_FOUND for fabricId=$fabricId")
+                promise.reject("KEY_NOT_FOUND", "Private key not found for fabric: $fabricId")
+                return
+            }
+
+            val chain = keyStore.getCertificateChain(fabricId)
+            val chainSize = chain?.size ?: 0
+            if (chainSize < 2) {
+                Log.e(
+                    TAG,
+                    "[MatterDiscovery] syncFabricSession: incomplete KeyStore chain size=$chainSize fabricId=$fabricId",
+                )
+                promise.reject(
+                    "NOC_NOT_AVAILABLE",
+                    "Operational certificate chain not found in KeyStore for fabric: $fabricId",
+                )
+                return
+            }
+
+            val userNocPem = MatterFabricUtils.encodeToPem(chain[0])
+            Log.i(
+                TAG,
+                "[MatterDiscovery] syncFabricSession: KeyStore ok chainSize=$chainSize " +
+                    "fabricId=$fabricId groupId=$groupId hasIpk=${!ipk.isNullOrEmpty()}",
+            )
+
+            applyFabricSession(
+                FabricInfo(
+                    groupId = groupId,
+                    fabricId = fabricId,
+                    name = name,
+                    rootCa = rootCa,
+                    ipk = ipk,
+                    userNoc = userNocPem,
+                    groupCatIdOperate = groupCatIdOperate,
+                    groupCatIdAdmin = groupCatIdAdmin,
+                    matterUserId = matterUserId,
+                    userCatId = userCatId,
+                ),
+            )
+
+            val storeResult = Arguments.createMap().apply {
+                putBoolean(AppConstants.KEY_SUCCESS, true)
+                putString(AppConstants.KEY_MESSAGE, "Fabric session synced for operational discovery")
+                putString(AppConstants.KEY_GROUP_ID, groupId)
+                putString(AppConstants.KEY_FABRIC_ID, fabricId)
+            }
+            promise.resolve(storeResult)
+        } catch (error: Exception) {
+            Log.e(TAG, "[MatterDiscovery] syncFabricSession failed: ${error.message}", error)
+            promise.reject("SYNC_FABRIC_SESSION_ERROR", error.message, error)
+        }
+    }
+
+    /**
+     * Applies fabric metadata to the in-memory session and clears a stale {@link ChipClient}.
+     */
+    private fun applyFabricSession(fabricInfo: FabricInfo) {
+        FabricSessionManager.clearCurrentChipClient()
+        FabricSessionManager.setCurrentFabric(fabricInfo)
+        Log.i(
+            TAG,
+            "[MatterDiscovery] applyFabricSession: fabricId=${fabricInfo.fabricId} " +
+                "groupId=${fabricInfo.groupId} hasUserNoc=${!fabricInfo.userNoc.isNullOrEmpty()} " +
+                "hasRootCa=${!fabricInfo.rootCa.isNullOrEmpty()} hasIpk=${!fabricInfo.ipk.isNullOrEmpty()}",
+        )
     }
 
 }

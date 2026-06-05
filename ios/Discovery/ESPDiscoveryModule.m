@@ -11,5 +11,6 @@
 
 RCT_EXTERN_METHOD(startDiscovery:(NSDictionary *)params)
 RCT_EXTERN_METHOD(stopDiscovery)
+RCT_EXTERN_METHOD(stopDiscoveryForType:(NSString *)serviceType)
 
 @end

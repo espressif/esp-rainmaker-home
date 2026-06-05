@@ -648,6 +648,29 @@
         "grantPermission": "Grant Permission"
       }
     },
+    "matter": {
+      "commissioning": {
+        "title": "Add Matter Device",
+        "preparing": "Preparing...",
+        "authRequired": "Please sign in to commission Matter devices.",
+        "noActiveHome": "No active home selected. Choose a home and try again.",
+        "fabricIdMismatch": "Fabric ID from the server does not match your home.",
+        "missingFabricCredentials": "Fabric credentials are incomplete. Try again.",
+        "failed": "Commissioning failed.",
+        "failedTitle": "Commissioning failed",
+        "invalidChallenge": "Device confirmation failed.",
+        "success": "{{deviceName}} added successfully",
+        "scanAgainHint": "Go back and scan the Matter QR code again.",
+        "convertTitle": "Enable Matter for this home",
+        "convertMessage": "\"{{homeName}}\" must be set up as a Matter fabric before you can add devices. Continue to convert this home?",
+        "convertConfirm": "Continue",
+        "convertBack": "Go back",
+        "statusPreparingFabric": "Preparing fabric...",
+        "statusStartingCommissioning": "Starting commissioning...",
+        "statusIssuingCertificate": "Issuing user certificate...",
+        "statusConvertingFabric": "Converting home to Matter fabric..."
+      }
+    },
     "wifi": {
       "title": "Connect to Wi-Fi",
       "selectNetwork": "Select Wi-Fi",

@@ -46,6 +46,7 @@
 		F1C602832E30C242003DA0C6 /* MTRCSRKeys.m in Sources */ = {isa = PBXBuildFile; fileRef = F1C6027C2E30C242003DA0C6 /* MTRCSRKeys.m */; };
 		F865357F2F8302A4004B8717 /* ESPMQTTModule.m in Sources */ = {isa = PBXBuildFile; fileRef = F865357D2F8302A4004B8717 /* ESPMQTTModule.m */; };
 		F86535802F8302A4004B8717 /* ESPMQTTModule.swift in Sources */ = {isa = PBXBuildFile; fileRef = F865357E2F8302A4004B8717 /* ESPMQTTModule.swift */; };
+		F8925F852FCFBD3800842C14 /* ESPMatterControl.swift in Sources */ = {isa = PBXBuildFile; fileRef = F8925F842FCFBD3800842C14 /* ESPMatterControl.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -124,6 +125,7 @@
 		F1C6027D2E30C242003DA0C6 /* MTRCSRKeys.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = MTRCSRKeys.h; sourceTree = "<group>"; };
 		F865357D2F8302A4004B8717 /* ESPMQTTModule.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = ESPMQTTModule.m; sourceTree = "<group>"; };
 		F865357E2F8302A4004B8717 /* ESPMQTTModule.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ESPMQTTModule.swift; sourceTree = "<group>"; };
+		F8925F842FCFBD3800842C14 /* ESPMatterControl.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ESPMatterControl.swift; sourceTree = "<group>"; };
 		FAC715A2D49A985799AEE119 /* ExpoModulesProvider.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ExpoModulesProvider.swift; path = "Pods/Target Support Files/Pods-APP/ExpoModulesProvider.swift"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -330,6 +332,7 @@
 		F1C6027B2E30C241003DA0C5 /* Matter */ = {
 			isa = PBXGroup;
 			children = (
+				F8925F842FCFBD3800842C14 /* ESPMatterControl.swift */,
 				F1A40E1E2EBC9E3A008A590D /* ESPLocalStorage.swift */,
 				F1A40E1F2EBC9E3A008A590D /* ESPMatterConstants.swift */,
 				F1A40E212EBC9E3A008A590D /* ESPMatterEcosystemInfo.swift */,
@@ -366,8 +369,8 @@
 				13B07F8E1A680F5B00A75B9A /* Resources */,
 				00DD1BFF1BD5951E006B06BC /* Bundle React Native code and images */,
 				8728E4712E98D74800DF9B82 /* Embed Foundation Extensions */,
-				DCC0B3DD43741A059E8C4458 /* [CP] Embed Pods Frameworks */,
 				09A71DDAD0B1A6289EEC7C6F /* [CP] Copy Pods Resources */,
+				6053E0C3D17B99277FE2C892 /* [CP] Embed Pods Frameworks */,
 			);
 			buildRules = (
 			);
@@ -514,6 +517,23 @@
 			shellPath = /bin/sh;
 			shellScript = "# This script configures Expo modules and generates the modules provider file.\nbash -l -c \"./Pods/Target\\ Support\\ Files/Pods-APP/expo-configure-project.sh\"\n";
 		};
+		6053E0C3D17B99277FE2C892 /* [CP] Embed Pods Frameworks */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+				"${PODS_ROOT}/Target Support Files/Pods-APP/Pods-APP-frameworks-${CONFIGURATION}-input-files.xcfilelist",
+			);
+			name = "[CP] Embed Pods Frameworks";
+			outputFileListPaths = (
+				"${PODS_ROOT}/Target Support Files/Pods-APP/Pods-APP-frameworks-${CONFIGURATION}-output-files.xcfilelist",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "\"${PODS_ROOT}/Target Support Files/Pods-APP/Pods-APP-frameworks.sh\"\n";
+			showEnvVarsInLog = 0;
+		};
 		A7F12FBBF9A4E41E417078CA /* [CP] Check Pods Manifest.lock */ = {
 			isa = PBXShellScriptBuildPhase;
 			buildActionMask = 2147483647;
@@ -534,40 +554,6 @@
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
 			shellScript = "diff \"${PODS_PODFILE_DIR_PATH}/Podfile.lock\" \"${PODS_ROOT}/Manifest.lock\" > /dev/null\nif [ $? != 0 ] ; then\n    # print error to STDERR\n    echo \"error: The sandbox is not in sync with the Podfile.lock. Run 'pod install' or update your CocoaPods installation.\" >&2\n    exit 1\nfi\n# This output is used by Xcode 'outputs' to avoid re-running this script phase.\necho \"SUCCESS\" > \"${SCRIPT_OUTPUT_FILE_0}\"\n";
-			showEnvVarsInLog = 0;
-		};
-		4DABF5A6CB001E609DF60A4D /* [CP] Copy Pods Resources */ = {
-			isa = PBXShellScriptBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			inputFileListPaths = (
-				"${PODS_ROOT}/Target Support Files/Pods-APP/Pods-APP-resources-${CONFIGURATION}-input-files.xcfilelist",
-			);
-			name = "[CP] Copy Pods Resources";
-			outputFileListPaths = (
-				"${PODS_ROOT}/Target Support Files/Pods-APP/Pods-APP-resources-${CONFIGURATION}-output-files.xcfilelist",
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-			shellPath = /bin/sh;
-			shellScript = "\"${PODS_ROOT}/Target Support Files/Pods-APP/Pods-APP-resources.sh\"\n";
-			showEnvVarsInLog = 0;
-		};
-		97835695BAB6A9770823450E /* [CP] Embed Pods Frameworks */ = {
-			isa = PBXShellScriptBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			inputFileListPaths = (
-				"${PODS_ROOT}/Target Support Files/Pods-APP/Pods-APP-frameworks-${CONFIGURATION}-input-files.xcfilelist",
-			);
-			name = "[CP] Embed Pods Frameworks";
-			outputFileListPaths = (
-				"${PODS_ROOT}/Target Support Files/Pods-APP/Pods-APP-frameworks-${CONFIGURATION}-output-files.xcfilelist",
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-			shellPath = /bin/sh;
-			shellScript = "\"${PODS_ROOT}/Target Support Files/Pods-APP/Pods-APP-frameworks.sh\"\n";
 			showEnvVarsInLog = 0;
 		};
 /* End PBXShellScriptBuildPhase section */
@@ -598,6 +584,7 @@
 				F1B6027F2E30C240003DA0C4 /* ESPNotificationModule.swift in Sources */,
 				F1B602802E30C240003DA0C4 /* ESPNotificationModule.m in Sources */,
 				F1C602812E30C241003DA0C5 /* ESPMatterModule.swift in Sources */,
+				F8925F852FCFBD3800842C14 /* ESPMatterControl.swift in Sources */,
 				F1C602822E30C241003DA0C5 /* ESPMatterModule.m in Sources */,
 				F1C602832E30C242003DA0C6 /* MTRCSRKeys.m in Sources */,
 				13B07FC11A68108700A75B9A /* main.m in Sources */,
@@ -767,6 +754,8 @@
 				LIBRARY_SEARCH_PATHS = "$(SDKROOT)/usr/lib/swift\"$(inherited)\"";
 				MTL_ENABLE_DEBUG_INFO = YES;
 				ONLY_ACTIVE_ARCH = YES;
+				OTHER_CFLAGS = "$(inherited)";
+				OTHER_CPLUSPLUSFLAGS = "$(inherited)";
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					" ",
@@ -826,6 +815,8 @@
 				);
 				LIBRARY_SEARCH_PATHS = "$(SDKROOT)/usr/lib/swift\"$(inherited)\"";
 				MTL_ENABLE_DEBUG_INFO = NO;
+				OTHER_CFLAGS = "$(inherited)";
+				OTHER_CPLUSPLUSFLAGS = "$(inherited)";
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					" ",

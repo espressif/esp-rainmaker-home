@@ -12,6 +12,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import { useCDF } from "@shared/hooks/useCDF";
 import { startNodeLocalDiscovery } from "@features/group/utils/localDiscovery";
+import { startMatterLocalDiscovery } from "@features/matter/utils/matterLocalDiscovery";
 import { useToast } from "@shared/hooks/useToast";
 import {
   ESPCDF,
@@ -50,12 +51,16 @@ interface UseProvisionReturn {
 /** Same as Home pull-to-refresh: fresh node list + connectivity from cloud, then local discovery. */
 async function syncHomeAfterProvision(
   store: ESPCDF | undefined,
-  syncHomeWithNodes: (shouldFetchFirstPage?: boolean) => Promise<void>
+  syncHomeWithNodes: (shouldFetchFirstPage?: boolean) => Promise<void>,
 ): Promise<void> {
   if (!store) return;
   try {
     await syncHomeWithNodes();
+    // CDF's mergeLocalTransportFromNodeMap preserves matter_local across the
+    // cloud refresh, so the just-commissioned device card stays "available on
+    // WLAN" the moment local discovery resolves it — no extra reapply needed.
     startNodeLocalDiscovery(store);
+    startMatterLocalDiscovery(store);
   } catch (e) {
     console.error(
       "[Provision] Post-provision syncHomeWithNodes failed (non-blocking):",

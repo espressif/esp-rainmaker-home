@@ -96,6 +96,7 @@ export const POWER_PARAM_UNSUPPORTED_DEVICE_TYPES = new Set<string>([
   "temperature-sensor",
   "ai assistant",
   "camera",
+  "matter:17",
 ]);
 
 // PARAM NAMES
@@ -106,6 +107,9 @@ export const PARAM_CONTROL_THROTTLE_MS = 100;
 
 // SUPPORTED PARAM UI TYPES
 export const ESPRM_UI_TEXT_PARAM_TYPE = "esp.ui.text";
+export const ESPRM_UI_STATUS_PARAM_TYPE = "esp.ui.status";
+export const ESPRM_UI_ACTION_BUTTON_PARAM_TYPE = "esp.ui.action-button";
+export const ESPRM_UI_CONTROL_BOARD_PARAM_TYPE = "esp.ui.control-board";
 export const ESPRM_UI_TOGGLE_PARAM_TYPE = "esp.ui.toggle";
 export const ESPRM_UI_SLIDER_PARAM_TYPE = "esp.ui.slider";
 export const ESPRM_UI_HUE_SLIDER_PARAM_TYPE = "esp.ui.hue-slider";
@@ -131,11 +135,20 @@ export const ESPRM_RMAKER_USER_AUTH_SERVICE = "esp.service.rmaker-user-auth";
 export const MDNS_SERVICE_TYPE_ESP_LOCAL_CTRL = "_esp_local_ctrl._tcp.";
 /** Service announced by unprovisioned RainMaker firmware running the on-network challenge-response flow. */
 export const MDNS_SERVICE_TYPE_ESP_RMAKER_CHAL_RESP = "_esp_rmaker_chal_resp._tcp.";
+/** Operational Matter service (Matter spec, "Operational Discovery"). Instance names are `<CompressedFabricId16Hex>-<MatterNodeId16Hex>`. */
+export const MDNS_SERVICE_TYPE_MATTER_OPERATIONAL = "_matter._tcp.";
 export const MDNS_DOMAIN_LOCAL = "local.";
 
 // DISCOVERY EVENTS
 export const DISCOVERY_UPDATE_EVENT = "DiscoveryUpdate";
 export const DISCOVERY_LOST_EVENT = "DiscoveryLost";
+export const MATTER_LOCAL_DISCOVERY_EVENT =
+  "com.espressif.event.matterLocalDiscovery";
+export const MATTER_LOCAL_DISCOVERY_LOST_EVENT =
+  "com.espressif.event.matterLocalDiscoveryLost";
+
+/** React Native config key for target Matter node ids passed to CHIP discovery. */
+export const MATTER_DISCOVERY_CONFIG_KEY_NODE_IDS = "matterNodeIds";
 
 // MDNS TXT RECORD KEYS (emitted by native discovery modules for chal-resp services)
 export const MDNS_TXT_KEY_NODE_ID = "node_id";
@@ -298,6 +311,25 @@ export const DEFAULT_MATTER_DEVICE_NAME = "Matter Device";
 export const MAX_MATTER_DEVICE_NAME_LENGTH = 32;
 export const MATTER_METADATA_KEY = "Matter";
 export const MATTER_METADATA_DEVICE_NAME_KEY = "deviceName";
+export const MATTER_METADATA_DEVICE_TYPE_KEY = "deviceType";
+export const MATTER_METADATA_ENDPOINTS_KEY = "endpoints";
+
+/**
+ * Custom transport slot used by `ESPMatterLocalTransport` registrations on
+ * SDK nodes (`customTransportManagers[<key>]`) and surfaced on
+ * `node.availableTransports[<key>]` once installed.
+ *
+ * The Matter SDK exposes this same value as
+ * `ESPRMMatterBase.MATTER_LOCAL_TRANSPORT_KEY`; we mirror it here so layers
+ * that cannot import `@espressif/*` directly (shared, features) can still
+ * reference the wire constant.
+ */
+export const MATTER_LOCAL_TRANSPORT_KEY = "matter_local";
+
+/** Generic invoke token for one-shot command param controls. */
+export const PARAM_CONTROL_INVOKE_VALUE = "invoke";
+/** Placeholder when a param value is not yet resolved. */
+export const PARAM_VALUE_UNKNOWN = "unknown";
 
 // Matter QR Code constants
 export const MATTER_QR_CODE_PREFIX = "MT:";
@@ -318,6 +350,20 @@ export const MATTER_EVENT_COMMISSIONING_CONFIRMATION_RESPONSE =
   "COMMISSIONING_CONFIRMATION_RESPONSE";
 export const MATTER_EVENT_COMMISSIONING_ERROR = "COMMISSIONING_ERROR";
 
+/** Android GPS commissioning service intermediate complete (not terminal). */
+export const MATTER_COMMISSIONING_SOURCE_GPS = "GPS_SERVICE";
+
+/** Android HeadlessJS confirm task terminal complete. */
+export const MATTER_COMMISSIONING_SOURCE_HEADLESS_JS = "HEADLESS_JS";
+
+/**
+ * AppRegistry names in `registerHeadless.ts` — must match
+ * `AppConstants.TASK_ISSUE_NOC` / `TASK_CONFIRM_COMMISSION` in Android.
+ */
+export const HEADLESS_JS_TASK_MATTER_ISSUE_NOC = "MatterIssueNocTask";
+export const HEADLESS_JS_TASK_MATTER_CONFIRM_COMMISSION =
+  "MatterConfirmCommissionTask";
+
 // HeadlessJS handled event types (bypasses postMessage to native)
 export const HEADLESS_HANDLED_TYPES = [
   "COMMISSIONING_CONFIRMATION_RESPONSE",
@@ -335,7 +381,11 @@ export const STATUS_SUCCESS = "success";
 export const METADATA_KEY_CHALLENGE = "challenge";
 export const METADATA_KEY_CHALLENGE_RESPONSE = "challengeResponse";
 export const METADATA_KEY_CHALLENGE_RESPONSE_SNAKE = "challenge_response";
-export const METADATA_KEY_IS_RAINMAKER_NODE = "is_rainmaker_node";
+/**
+ * Canonical RainMaker flag key inside `metadata.Matter`, aligned with reference
+ * Android/iOS apps and the Matter SDK (`ESPRMMatterMetadataInterface.isRainmaker`).
+ */
+export const METADATA_KEY_IS_RAINMAKER = "isRainmaker";
 export const METADATA_KEY_RAINMAKER_NODE_ID = "rainmaker_node_id";
 export const METADATA_KEY_MATTER_NODE_ID = "matterNodeId";
 
@@ -349,6 +399,7 @@ export const HEADLESS_COMMISSIONING_DESCRIPTION = "Matter node commissioning in 
 // Matter Commissioning Status constants
 export const MATTER_STATUS_PREPARING = "Preparing...";
 export const MATTER_STATUS_PREPARING_FABRIC = "Preparing fabric...";
+export const MATTER_STATUS_CONVERTING_FABRIC = "Converting home to Matter fabric...";
 export const MATTER_STATUS_STARTING_COMMISSIONING = "Starting commissioning...";
 export const MATTER_STATUS_CONFIRMING_DEVICE = "Confirming device...";
 export const MATTER_STATUS_ISSUING_CERTIFICATE = "Issuing user certificate...";
@@ -448,3 +499,15 @@ export const WEBRTC_DEFAULT_MESSAGES = {
 // WebRTC Media constants
 export const WEBRTC_MEDIA_KIND_VIDEO = "video";
 export const WEBRTC_TRANSCEIVER_DIRECTION_RECVONLY = "recvonly";
+
+// MATTER DATA VALUE TYPES (Apple MTRDataValueDictionary / CHIP TLV wire shape)
+export const MATTER_DATA_VALUE_TYPE_NULL = "Null";
+export const MATTER_DATA_VALUE_TYPE_BOOLEAN = "Boolean";
+export const MATTER_DATA_VALUE_TYPE_UNSIGNED_INTEGER = "UnsignedInteger";
+export const MATTER_DATA_VALUE_TYPE_SIGNED_INTEGER = "SignedInteger";
+export const MATTER_DATA_VALUE_TYPE_FLOAT = "Float";
+export const MATTER_DATA_VALUE_TYPE_DOUBLE = "Double";
+export const MATTER_DATA_VALUE_TYPE_UTF8_STRING = "UTF8String";
+export const MATTER_DATA_VALUE_TYPE_OCTET_STRING = "OctetString";
+export const MATTER_DATA_VALUE_TYPE_STRUCTURE = "Structure";
+export const MATTER_DATA_VALUE_TYPE_ARRAY = "Array";

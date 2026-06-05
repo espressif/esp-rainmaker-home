@@ -18,6 +18,7 @@ import type { ReactNode } from "react";
 import { AgentConfig } from "@features/agent/utils";
 import { ESPCDFDevice, ESPCDFGroup, ESPCDFNode, ESPCDFDeviceParam, ESPCDFNodeConfig, ESPCDFAutomation, ESPCDFGroupSharingRequest } from "@store";
 import type { UseHomeViewModelResult } from "@features/group/hooks";
+import type { MatterCommissioningPhase } from "@features/matter/constants";
 
 // ============================================================================
 // Common Types
@@ -996,6 +997,88 @@ export interface PollResult<T> {
   error?: string;
 }
 
+
+// ============================================================================
+// Matter commissioning types
+// ============================================================================
+
+/** Localized error strings supplied by the commissioning hook (i18n). */
+export interface MatterCommissioningErrorMessages {
+  fabricIdMismatch: string;
+  missingFabricCredentials: string;
+}
+
+/** Optional hooks for long-running fabric preparation steps (UI status only). */
+export interface MatterCommissioningProgressCallbacks {
+  /** Invoked immediately before `issueUserNoC` when credentials are not yet stored. */
+  onIssuingCertificate?: () => void;
+}
+
+/** Outcome when deciding how to start commissioning for the active home. */
+export type FabricCommissioningBootstrap =
+  | { kind: "needs_conversion" }
+  | { kind: "ready"; fabric: ESPCDFGroup };
+
+/**
+ * Input for {@link useCommissioning}, usually from `/(matter)/Commissioning` route params.
+ *
+ * Commissioning always targets the **current home** in the CDF store—there is no fabric or
+ * home picker in this flow.
+ * @example
+ * ```tsx
+ * router.push({
+ *   pathname: "/(matter)/Commissioning",
+ *   params: {
+ *     qrData: matterQrPayload,
+ *     fabricConversionConsentRequired: "false",
+ *   },
+ * });
+ * ```
+ */
+export interface UseCommissioningParams {
+  /** Matter onboarding payload from the scanned QR code (typically starts with `MT:`). */
+  qrData: string;
+  /**
+   * When `true`, pause at `needs_conversion` and show fabric conversion consent UI.
+   * When `false`, call `convertToMatterFabric` automatically and continue commissioning.
+   */
+  fabricConversionConsentRequired?: boolean;
+}
+
+/**
+ * State and callbacks exposed to the Matter commissioning screen.
+ *
+ * Map `phase` to UI blocks (spinner, consent, error). On `error`, show `errorMessage` plus
+ * the scan-again hint; the user goes back via the header to scan a new QR code.
+ * @example
+ * ```tsx
+ * const { phase, statusMessage, errorMessage, onConfirmConvert, onDeclineConvert } =
+ *   useCommissioning({ qrData, fabricConversionConsentRequired: true });
+ *
+ * if (phase === MATTER_COMMISSIONING_PHASE_ERROR) {
+ *   return (
+ *     <>
+ *       <Text>{errorMessage}</Text>
+ *       <Text>{t("device.matter.commissioning.scanAgainHint")}</Text>
+ *     </>
+ *   );
+ * }
+ * ```
+ */
+export interface UseCommissioningResult {
+  /** Current commissioning step; drives which UI block is shown. */
+  phase: MatterCommissioningPhase;
+  /** Localized or native progress text shown under the spinner. */
+  statusMessage: string;
+  /** User-visible error when `phase` is `error`; otherwise `null`. */
+  errorMessage: string | null;
+  /** Display name of the active home (updated after fabric conversion). */
+  activeHomeName: string;
+  /** User accepted converting the active home to a Matter fabric. */
+  onConfirmConvert: () => void;
+  /** User declined conversion; navigates back. */
+  onDeclineConvert: () => void;
+}
 
 // ============================================================================
 // Device Challenge Response Types

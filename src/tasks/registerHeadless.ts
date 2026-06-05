@@ -6,13 +6,25 @@
 
 import { AppRegistry } from "react-native";
 import {
+  HEADLESS_JS_TASK_MATTER_CONFIRM_COMMISSION,
+  HEADLESS_JS_TASK_MATTER_ISSUE_NOC,
+} from "@shared/utils/constants";
+import {
   MatterIssueNocTask,
   MatterConfirmCommissionTask,
 } from "@src/tasks/matterCommissioningTask";
 
+/**
+ * Registers Android Headless JS tasks for Matter commissioning.
+ *
+ * Native `MatterHeadlessTaskService` starts these by name (`AppConstants.TASK_*` in Kotlin).
+ * Success paths:
+ * - Issue NOC: SDK `issueNodeNoC` → `matterCommissioningAdaptor.postMessage(ISSUE_NODE_NOC_RESPONSE)` → ChipClient
+ * - Confirm: `handleHeadlessTaskResult(CONFIRM_COMMISSION)` → `MatterCommissioningEvent` → UI hook
+ */
 export function registerHeadlessTasks() {
   AppRegistry.registerHeadlessTask(
-    "MatterIssueNocTask",
+    HEADLESS_JS_TASK_MATTER_ISSUE_NOC,
     () => async (taskData: any) => {
       try {
         await MatterIssueNocTask(taskData);
@@ -24,7 +36,7 @@ export function registerHeadlessTasks() {
   );
 
   AppRegistry.registerHeadlessTask(
-    "MatterConfirmCommissionTask",
+    HEADLESS_JS_TASK_MATTER_CONFIRM_COMMISSION,
     () => async (taskData: any) => {
       try {
         await MatterConfirmCommissionTask(taskData);

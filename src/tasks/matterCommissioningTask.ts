@@ -18,6 +18,7 @@ import {
   ESPRMMatterBase,
   type ESPRMMatterBaseConfig,
 } from "@espressif/rainmaker-matter-sdk";
+import { resolveMatterFabricByGroupId } from "@sdk-adaptors/ESPRMMatterBase/resolveMatterFabricByGroupId";
 import { getMatterSDKConfig } from "@config/sdk.config";
 import { runtimeConfigManager } from "@config/runtime.config";
 import {
@@ -30,7 +31,7 @@ import {
   METADATA_KEY_CHALLENGE,
   METADATA_KEY_CHALLENGE_RESPONSE,
   METADATA_KEY_CHALLENGE_RESPONSE_SNAKE,
-  METADATA_KEY_IS_RAINMAKER_NODE,
+  METADATA_KEY_IS_RAINMAKER,
   METADATA_KEY_RAINMAKER_NODE_ID,
   METADATA_KEY_MATTER_NODE_ID,
   HEADLESS_ERROR_MISSING_TASK_DATA,
@@ -109,11 +110,7 @@ export const MatterIssueNocTask = async (taskData: IssueNocTaskData) => {
       throw new Error(HEADLESS_ERROR_USER_NOT_AUTHENTICATED);
     }
 
-    const fabric = await user.getFabricById({ id: groupId });
-
-    if (!fabric) {
-      throw new Error(`Fabric not found with groupId: ${groupId}`);
-    }
+    const fabric = await resolveMatterFabricByGroupId(user, groupId);
 
     const commissioningRequest = await fabric.issueNodeNoC({
       csr,
@@ -175,15 +172,22 @@ export const MatterConfirmCommissionTask = async (
       metadata[METADATA_KEY_CHALLENGE_RESPONSE_SNAKE] ||
       "";
 
-    // Expected structure: { metadata: { Matter: { is_rainmaker_node, ... } }, rainmaker_node_id, ... }
+    // The native side ships the entire confirm body (request_id, status, metadata:{Matter:{...}}, rainmaker_node_id, challenge, ...) as `taskData.metadata`.
+    // Extract just the canonical `metadata.Matter` sub-object — that is what the SDK and the
+    // PUT /user/node_group?group_id=... cloud endpoint actually expect under `metadata`.
     const matterData =
       metadata.metadata?.[MATTER_METADATA_KEY] ||
       metadata[MATTER_METADATA_KEY] ||
       {};
+    const cloudMatterMetadata =
+      Object.keys(matterData).length > 0
+        ? { [MATTER_METADATA_KEY]: matterData }
+        : undefined;
 
+    const isRainmakerFlag = matterData[METADATA_KEY_IS_RAINMAKER];
     const isRainmakerNode =
-      matterData[METADATA_KEY_IS_RAINMAKER_NODE] === true ||
-      matterData[METADATA_KEY_IS_RAINMAKER_NODE] === "true" ||
+      isRainmakerFlag === true ||
+      isRainmakerFlag === "true" ||
       Boolean(metadata[METADATA_KEY_RAINMAKER_NODE_ID]);
 
     const rainmakerNodeId =
@@ -213,7 +217,7 @@ export const MatterConfirmCommissionTask = async (
         matterNodeId: matterNodeId,
         challengeResponse: challengeResponse,
         challenge: challenge,
-        metadata: metadata,
+        metadata: cloudMatterMetadata,
       });
 
     const resultData = {

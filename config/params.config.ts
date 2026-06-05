@@ -4,27 +4,28 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { BrightnessSlider } from "@shared/components";
-import { ColorTemperatureSlider } from "@shared/components";
-import { HueSlider } from "@shared/components";
-import { SaturationSlider } from "@shared/components";
-import { ToggleSwitch } from "@shared/components";
-import { Slider } from "@shared/components";
-import { HueCircle } from "@shared/components";
-import { PushButton } from "@shared/components";
-import { DropdownSelector } from "@shared/components";
-import { TriggerButton } from "@shared/components";
-import { TextInput, Temperature } from "@shared/components";
+import BrightnessSlider from "@shared/components/ParamControls/BrightnessSlider";
+import ColorTemperatureSlider from "@shared/components/ParamControls/ColorTemperatureSlider";
+import HueSlider from "@shared/components/ParamControls/HueSlider";
+import SaturationSlider from "@shared/components/ParamControls/SaturationSlider";
+import ToggleSwitch from "@shared/components/ParamControls/ToggleSwitch";
+import Slider from "@shared/components/ParamControls/Slider";
+import HueCircle from "@shared/components/ParamControls/HueCircle";
+import PushButton from "@shared/components/ParamControls/PushButton";
+import DropdownSelector from "@shared/components/ParamControls/DropdownSelector";
+import TriggerButton from "@shared/components/ParamControls/TriggerButton";
+import TextInput from "@shared/components/ParamControls/TextInput";
+import Temperature from "@shared/components/ParamControls/Temperature";
+import StatusReadout from "@shared/components/ParamControls/StatusReadout";
+import ControlBoard from "@shared/components/ParamControls/ControlBoard";
+import ActionButton from "@shared/components/ParamControls/ActionButton";
 
 import {
-  // DATA TYPES
   DATA_TYPE_ALL,
   DATA_TYPE_BOOL,
   DATA_TYPE_INT,
   DATA_TYPE_FLOAT,
   DATA_TYPE_STRING,
-
-  // SUPPORTED PARAM TYPES
   ESPRM_BRIGHTNESS_PARAM_TYPE,
   ESPRM_CCT_PARAM_TYPE,
   ESPRM_HUE_PARAM_TYPE,
@@ -32,9 +33,10 @@ import {
   ESPRM_SATURATION_PARAM_TYPE,
   ESPRM_TEMPERATURE_PARAM_TYPE,
   ESPRM_LIGHT_MODE_PARAM_TYPE,
-
-  // SUPPORTED PARAM UI TYPES
   ESPRM_UI_DROPDOWN_PARAM_TYPE,
+  ESPRM_UI_STATUS_PARAM_TYPE,
+  ESPRM_UI_CONTROL_BOARD_PARAM_TYPE,
+  ESPRM_UI_ACTION_BUTTON_PARAM_TYPE,
   ESPRM_UI_HIDDEN_PARAM_TYPE,
   ESPRM_UI_HUE_CIRCLE_PARAM_TYPE,
   ESPRM_UI_HUE_SLIDER_PARAM_TYPE,
@@ -59,8 +61,8 @@ export const PARAM_CONTROLS = [
     dataTypes: DATA_TYPE_ALL,
   },
   {
-    name: "Toggle",
-    types: [ESPRM_UI_TOGGLE_PARAM_TYPE, ESPRM_POWER_PARAM_TYPE],
+    name: "Power",
+    types: [ESPRM_UI_TOGGLE_PARAM_TYPE, ESPRM_POWER_PARAM_TYPE, "server:0x6"],
     control: ToggleSwitch,
     dataTypes: DATA_TYPE_BOOL,
     hide: true,
@@ -74,14 +76,14 @@ export const PARAM_CONTROLS = [
   },
   {
     name: "Brightness",
-    types: [ESPRM_BRIGHTNESS_PARAM_TYPE],
+    types: [ESPRM_BRIGHTNESS_PARAM_TYPE, "server:0x8"],
     control: BrightnessSlider,
     dataTypes: DATA_TYPE_INT,
     paramType: ESPRM_BRIGHTNESS_PARAM_TYPE,
   },
   {
     name: "CCT",
-    types: [ESPRM_CCT_PARAM_TYPE],
+    types: [ESPRM_CCT_PARAM_TYPE, "server:0x300"],
     control: ColorTemperatureSlider,
     dataTypes: DATA_TYPE_INT,
     paramType: ESPRM_CCT_PARAM_TYPE,
@@ -92,15 +94,11 @@ export const PARAM_CONTROLS = [
     control: SaturationSlider,
     dataTypes: DATA_TYPE_INT,
     paramType: ESPRM_SATURATION_PARAM_TYPE,
-    derivedMeta: [
-      {
-        hue: ESPRM_HUE_PARAM_TYPE,
-      },
-    ],
+    derivedMeta: [{ hue: ESPRM_HUE_PARAM_TYPE }],
   },
   {
     name: "Hue Slider",
-    types: [ESPRM_UI_HUE_SLIDER_PARAM_TYPE, ESPRM_HUE_PARAM_TYPE],
+    types: [ESPRM_UI_HUE_SLIDER_PARAM_TYPE, ESPRM_HUE_PARAM_TYPE, "server:0x300"],
     control: HueSlider,
     dataTypes: DATA_TYPE_INT,
     paramType: ESPRM_HUE_PARAM_TYPE,
@@ -123,11 +121,31 @@ export const PARAM_CONTROLS = [
     types: [
       ESPRM_UI_DROPDOWN_PARAM_TYPE,
       ESPRM_LIGHT_MODE_PARAM_TYPE,
+      "server:0x54",
+      "server:0x55",
     ],
     control: DropdownSelector,
     dataTypes: [DATA_TYPE_INT, DATA_TYPE_STRING],
     requirements:
       "bounds (min/max) for Int, valid strings for String; string + bounds = discrete string values",
+  },
+  {
+    name: "Status",
+    types: [ESPRM_UI_STATUS_PARAM_TYPE, "server:0x2f"],
+    control: StatusReadout,
+    dataTypes: [DATA_TYPE_INT, DATA_TYPE_STRING],
+  },
+  {
+    name: "Transport Control",
+    types: [ESPRM_UI_CONTROL_BOARD_PARAM_TYPE],
+    control: ControlBoard,
+    dataTypes: DATA_TYPE_STRING,
+  },
+  {
+    name: "Action Button",
+    types: [ESPRM_UI_ACTION_BUTTON_PARAM_TYPE],
+    control: ActionButton,
+    dataTypes: DATA_TYPE_STRING,
   },
   {
     name: "Trigger",

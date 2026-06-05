@@ -21,13 +21,11 @@ import com.facebook.react.uimanager.ViewManager
 import com.app.discovery.mDNSManager.DiscoveredService
 
 /**
- * `ESPDiscoveryModule` provides functionality for discovering ESP devices over mDNS.
- * It allows React Native applications to:
- * - Start and stop device discovery.
- * - Emit discovered device information to the React Native layer.
+ * `ESPDiscoveryModule` provides mDNS discovery for RainMaker local control and
+ * on-network provisioning services.
  *
- * This module interacts with the mDNSManager for handling mDNS-based device discovery.
- * It discovers devices based on the service type sent from the react native layer - SDK.
+ * Matter operational discovery is handled separately by [com.app.matter.MatterDiscoveryModule]
+ * via the CHIP stack.
  */
 class ESPDiscoveryModule(reactContext: ReactApplicationContext) :
     ReactContextBaseJavaModule(reactContext), ReactPackage {
@@ -39,31 +37,19 @@ class ESPDiscoveryModule(reactContext: ReactApplicationContext) :
         private const val DEFAULT_MDNS_DOMAIN_LOCAL = "local."
     }
 
-    private var mdnsManager: mDNSManager? = null
-    private val nodeBaseUrlMap: HashMap<String, String> = HashMap()
-    private var serviceType: String = ""
-
-    /**
-     * Initialize the mDNSManager and set up a listener for discovered devices.
-     */
-    init {
-        mdnsManager = mDNSManager.getInstance(
+    private val mdnsManager: mDNSManager =
+        mDNSManager.getInstance(
             reactContext.applicationContext,
-            serviceType, // Service type set in startDiscovery method
             object : mDNSManager.mDNSEvenListener {
                 override fun deviceFound(service: DiscoveredService) {
-                    nodeBaseUrlMap[service.nodeId] = service.baseUrl
                     sendDeviceEvent(service)
                 }
 
-                override fun deviceLost(nodeId: String) {
-                    nodeBaseUrlMap.remove(nodeId)
-                    sendDiscoveryLostEvent(nodeId)
+                override fun deviceLost(serviceType: String, nodeId: String, serviceName: String) {
+                    sendDiscoveryLostEvent(serviceType, nodeId, serviceName)
                 }
-            }
+            },
         )
-        mdnsManager?.initializeNsd()
-    }
 
     /**
      * Returns the name of the module to be used in React Native.
@@ -81,44 +67,46 @@ class ESPDiscoveryModule(reactContext: ReactApplicationContext) :
     ): MutableList<NativeModule> = listOf(this).toMutableList()
 
     /**
-     * Starts mDNS service discovery for a specified service type and domain.
-     *
-     * @param config ReadableMap containing the serviceType and domain.
+     * Starts an mDNS browse session for the given service type. Idempotent — calling it
+     * again with the same `serviceType` while a session is running is a no-op, so RM and
+     * Matter consumers can each call it independently.
      */
     @ReactMethod
     fun startDiscovery(config: ReadableMap) {
-        var serviceType = config.getString("serviceType")?.trim()
-        var domain = config.getString("domain")?.trim()
+        val rawServiceType = if (config.hasKey("serviceType")) config.getString("serviceType")?.trim() else null
+        val rawDomain = if (config.hasKey("domain")) config.getString("domain")?.trim() else null
 
-        if (serviceType.isNullOrEmpty()) {
-            serviceType = DEFAULT_MDNS_SERVICE_TYPE
-        }
-        if (domain.isNullOrEmpty()) {
-            domain = DEFAULT_MDNS_DOMAIN_LOCAL
-        } else if (domain == "local") {
-            domain = DEFAULT_MDNS_DOMAIN_LOCAL
+        val serviceType = if (rawServiceType.isNullOrEmpty()) DEFAULT_MDNS_SERVICE_TYPE else rawServiceType
+        val domain = when {
+            rawDomain.isNullOrEmpty() -> DEFAULT_MDNS_DOMAIN_LOCAL
+            rawDomain == "local" -> DEFAULT_MDNS_DOMAIN_LOCAL
+            else -> rawDomain
         }
 
-        Log.d(TAG, "startDiscovery called: serviceType=$serviceType, domain=$domain, mdnsManager=${mdnsManager != null}")
-        mdnsManager?.discoverServices(serviceType, domain)
+        Log.d(TAG, "startDiscovery: serviceType=$serviceType, domain=$domain")
+        mdnsManager.discoverServices(serviceType, domain)
     }
 
     /**
-     * Stops the mDNS service discovery.
+     * Stops all active mDNS browse sessions. Existing JS callers (notably the
+     * `useOnNetworkDiscovery` stop/restart dance) rely on this stopping every browse,
+     * so the semantics are preserved.
      */
     @ReactMethod
     fun stopDiscovery() {
-        Log.d(TAG, "stopDiscovery called, mdnsManager=${mdnsManager != null}")
-        mdnsManager?.stopDiscovery()
+        Log.d(TAG, "stopDiscovery: stopping all sessions")
+        mdnsManager.stopAllDiscovery()
+    }
+
+    /** Stops a single browse session (use this from JS to stop e.g. just the Matter browse). */
+    @ReactMethod
+    fun stopDiscoveryForType(serviceType: String) {
+        Log.d(TAG, "stopDiscoveryForType: $serviceType")
+        mdnsManager.stopDiscovery(serviceType)
     }
 
     /**
-     * Sends a `DiscoveryUpdate` event to React Native with the resolved service.
-     *
-     * Backwards-compatible payload: existing consumers continue to read
-     * `nodeId`/`baseUrl`. Additional fields (`host`, `port`, `txt`) let JS-side
-     * features drive direct LAN HTTP flows (e.g. on-network challenge-response
-     * provisioning) without further native round-trips.
+     * Emits a `DiscoveryUpdate` event with RainMaker local-control / provisioning fields.
      */
     private fun sendDeviceEvent(service: DiscoveredService) {
         val txtMap = WritableNativeMap().apply {
@@ -127,6 +115,7 @@ class ESPDiscoveryModule(reactContext: ReactApplicationContext) :
             }
         }
         val eventData = WritableNativeMap().apply {
+            putString("serviceType", service.serviceType)
             putString("nodeId", service.nodeId)
             putString("serviceName", service.serviceName)
             putString("baseUrl", service.baseUrl)
@@ -143,9 +132,11 @@ class ESPDiscoveryModule(reactContext: ReactApplicationContext) :
         }
     }
 
-    private fun sendDiscoveryLostEvent(nodeId: String) {
+    private fun sendDiscoveryLostEvent(serviceType: String, nodeId: String, serviceName: String) {
         val eventData = WritableNativeMap().apply {
+            putString("serviceType", serviceType)
             putString("nodeId", nodeId)
+            putString("serviceName", serviceName)
         }
         try {
             reactApplicationContext

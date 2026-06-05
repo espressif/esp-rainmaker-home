@@ -648,6 +648,29 @@
         "grantPermission": "授予权限"
       }
     },
+    "matter": {
+      "commissioning": {
+        "title": "添加 Matter 设备",
+        "preparing": "准备中...",
+        "authRequired": "请先登录后再进行 Matter 设备调试。",
+        "noActiveHome": "未选择当前家庭。请先选择家庭后重试。",
+        "fabricIdMismatch": "服务器返回的 Fabric ID 与当前家庭不匹配。",
+        "missingFabricCredentials": "Fabric 凭证不完整，请重试。",
+        "failed": "调试失败。",
+        "failedTitle": "调试失败",
+        "invalidChallenge": "设备确认失败。",
+        "success": "已成功添加 {{deviceName}}",
+        "scanAgainHint": "请返回并重新扫描 Matter 二维码。",
+        "convertTitle": "为此家庭启用 Matter",
+        "convertMessage": "需要先为“{{homeName}}”配置 Matter Fabric 才能添加设备。是否继续转换此家庭？",
+        "convertConfirm": "继续",
+        "convertBack": "返回",
+        "statusPreparingFabric": "正在准备 Fabric...",
+        "statusStartingCommissioning": "正在启动调试...",
+        "statusIssuingCertificate": "正在签发用户证书...",
+        "statusConvertingFabric": "正在将家庭转换为 Matter Fabric..."
+      }
+    },
     "wifi": {
       "title": "连接到 Wi-Fi",
       "selectNetwork": "选择 Wi-Fi",

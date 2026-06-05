@@ -52,9 +52,19 @@ const DropdownSelector = observer(
         "validStrings" in meta && Array.isArray(meta.validStrings)
       );
 
+    const labelMap: Record<string, string> | undefined =
+      meta && typeof meta.labels === "object" && meta.labels !== null
+        ? (meta.labels as Record<string, string>)
+        : undefined;
+    const labelFor = (slug: string | number): string =>
+      labelMap?.[String(slug)] ?? String(slug);
+
     const options: DropdownOption[] =
       "validStrings" in meta && Array.isArray(meta.validStrings)
-        ? meta.validStrings.map((str: string) => ({ label: str, value: str }))
+        ? meta.validStrings.map((str: string) => ({
+            label: labelFor(str),
+            value: str,
+          }))
         : hasNumericBounds
           ? Array.from({ length: meta.max - meta.min + 1 }, (_, i) => {
               const n = i + meta.min;

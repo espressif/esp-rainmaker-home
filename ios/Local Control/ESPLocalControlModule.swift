@@ -13,6 +13,7 @@ class ESPLocalControlModule: NSObject {
   
   var espLocalDevice = ESPDevice(name: "espDevice", security: .unsecure, transport: .softap)
   private let sessionPath = "esp_local_ctrl/session"
+  private let versionPath = "esp_local_ctrl/version"
 
   /// Normalizes `baseUrl` for ESPProvision `ESPSoftAPTransport`, which prepends `http://` when building URLs.
 
@@ -105,18 +106,44 @@ class ESPLocalControlModule: NSObject {
     
     // Configure the transport layer for the ESPDevice.
     espLocalDevice.espSoftApTransport = ESPSoftAPTransport(baseUrl: baseUrlForSoftApTransport(baseUrl))
-    
-    // Initialize the session with the ESP device.
+
+    // Security2 IV scheme depends on firmware sec_patch_ver; probe it first.
+    if securityType == 2 {
+      fetchSecPatchVersion { patchVersion in
+        var prov: [String: Any] = ["sec_ver": ESPSecurity.secure2.rawValue]
+        if let patchVersion = patchVersion {
+          prov["sec_patch_ver"] = patchVersion
+        }
+        self.espLocalDevice.versionInfo = ["prov": prov] as NSDictionary
+        self.establishSession(resolve: resolve, reject: reject)
+      }
+    } else {
+      establishSession(resolve: resolve, reject: reject)
+    }
+  }
+
+  private func fetchSecPatchVersion(completion: @escaping (Int?) -> Void) {
+    espLocalDevice.espSoftApTransport.SendConfigData(path: versionPath, data: Data("---".utf8)) { response, _ in
+      guard
+        let response = response,
+        let json = try? JSONSerialization.jsonObject(with: response) as? [String: Any],
+        let localCtrl = json["local_ctrl"] as? [String: Any]
+      else {
+        completion(nil)
+        return
+      }
+      completion(localCtrl["sec_patch_ver"] as? Int)
+    }
+  }
+
+  private func establishSession(resolve: @escaping RCTPromiseResolveBlock, reject: @escaping RCTPromiseRejectBlock) {
     espLocalDevice.initialiseSession(sessionPath: sessionPath) { status in
       switch status {
       case .connected:
-        // Connection successful, resolve the promise with success status.
         resolve(["status": "success"])
       case .failedToConnect(let eSPSessionError):
-        // Connection failed, reject the promise with the error description.
         reject("error", eSPSessionError.description, nil)
       case .disconnected:
-        // Session disconnected, reject the promise with an error message.
         reject("error", "Failed to establish session", nil)
       }
     }

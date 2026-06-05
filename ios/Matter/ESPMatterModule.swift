@@ -29,10 +29,18 @@ struct RainMakerCluster {
 @available(iOS 16.4, *)
 @objc(ESPMatterModule)
 class ESPMatterModule: RCTEventEmitter {
-  
+
+  /// Match `ESPDiscoveryModule` / `ESPNotificationModule`: JS listens via
+  /// `DeviceEventEmitter` (`ESPMatterControlAdapter.subscribe`) without calling
+  /// native `addListener`. Without `disabledObservation`, `sendEvent` for
+  /// `ESPMatter:attributeReport` is dropped and RN logs "no listeners registered".
+  override init() {
+    super.init(disabledObservation: ())
+  }
+
   // MARK: - Properties
   private let csrQueue = DispatchQueue(label: ESPMatterConstants.csrQueueLabel, qos: .userInitiated)
-  private let matterQueue = DispatchQueue(label: ESPMatterConstants.matterQueueLabel, qos: .userInitiated)
+  let matterQueue = DispatchQueue(label: ESPMatterConstants.matterQueueLabel, qos: .userInitiated)
   
   // Matter Event Identifier
   private let matterEventIdentifier: String = ESPMatterConstants.matterEventIdentifier
@@ -43,7 +51,7 @@ class ESPMatterModule: RCTEventEmitter {
   private var currentCommissioningReject: RCTPromiseRejectBlock?
   
   // Matter controller and commissioning state
-  private var currentMatterController: MTRDeviceController?
+  var currentMatterController: MTRDeviceController?
   private var currentDeviceId: UInt64?
   private var currentMatterNodeId: UInt64?
   private var currentRequestId: String?
@@ -52,11 +60,16 @@ class ESPMatterModule: RCTEventEmitter {
   // RainMaker device properties
   private var rainmakerNodeId: String?
   private var isRainMakerDevice: Bool = false
+
+  /// Most recently parsed Matter device info from the post-commissioning attribute scan.
+  /// Used to populate `deviceType` and the nested `endpoints` map in the cloud Matter metadata.
+  private var lastParsedDeviceInfo: MatterDeviceInfo?
   
   // MARK: - RCTEventEmitter Override
   override func supportedEvents() -> [String]! {
     return [
-      matterEventIdentifier
+      matterEventIdentifier,
+      ESPMatterControl.attributeReportEventName
     ]
   }
   
@@ -425,6 +438,59 @@ class ESPMatterModule: RCTEventEmitter {
     
   }
   
+  // MARK: - Post-login fabric bootstrap (cold start)
+
+  /// Restores the Matter controller after login using fabric metadata + the Keychain-stored user NOC.
+  ///
+  /// iOS analogue of Android's `syncFabricSession`: hydrates `currentMatterController`
+  /// before any `matterControlRead/Write/Invoke/Subscribe` calls can succeed.
+  @objc(syncFabricSession:resolver:rejecter:)
+  func syncFabricSession(_ params: [String: Any],
+                         resolver resolve: @escaping RCTPromiseResolveBlock,
+                         rejecter reject: @escaping RCTPromiseRejectBlock) {
+    do {
+      if #available(iOS 16.4, *) {
+        // ok
+      } else {
+        reject("UNSUPPORTED_IOS_VERSION", ESPMatterConstants.matterRequiresIOS164, nil)
+        return
+      }
+
+      guard let groupId = params[ESPMatterConstants.groupId] as? String,
+            !groupId.isEmpty,
+            let fabricId = params[ESPMatterConstants.fabricId] as? String,
+            !fabricId.isEmpty else {
+        reject(ESPMatterConstants.invalidParams,
+               "groupId and fabricId are required for syncFabricSession",
+               nil)
+        return
+      }
+
+      var fabric: [String: Any] = [
+        ESPMatterConstants.id: groupId,
+        ESPMatterConstants.fabricId: fabricId,
+      ]
+
+      if let name = params[ESPMatterConstants.name] as? String {
+        fabric[ESPMatterConstants.name] = name
+      }
+
+      if let ipk = params[ESPMatterConstants.ipk] as? String, !ipk.isEmpty {
+        fabric[ESPMatterConstants.fabricDetails] = [
+          ESPMatterConstants.ipk: ipk,
+        ]
+      }
+
+      try initializeMatterControllerWithFabric(fabric)
+      resolve([ESPMatterConstants.success: true,
+               ESPMatterConstants.message: "Matter controller restored for fabricId=\(fabricId) groupId=\(groupId)"])
+    } catch let error as NSError {
+      reject("SYNC_FABRIC_SESSION_ERROR", error.localizedDescription, error)
+    } catch {
+      reject("SYNC_FABRIC_SESSION_ERROR", "Failed to restore Matter controller", error)
+    }
+  }
+
   /// Check if user NOC exists in iOS Keychain for the given fabric
   /// - Parameter fabricId: Fabric ID used as the storage key (matches ESPMatterUtilityModule storage)
   private func checkUserNOCExists(fabricId: String) -> Bool {
@@ -493,9 +559,21 @@ class ESPMatterModule: RCTEventEmitter {
       ])
     }
     
+    // Prefer the cloud-synced IPK so all controllers on this fabric agree on it.
+    // Fall back to the locally generated IPK only if the cloud value is missing
+    // or fails to decode (matches the production esp-rainmaker-ios behavior).
+    var finalIPK = csrKeys.ipk
+    if let fabricDetails = fabric[ESPMatterConstants.fabricDetails] as? [String: Any],
+       let ipkHex = fabricDetails[ESPMatterConstants.ipk] as? String {
+      let trimmedIpk = ipkHex.replacingOccurrences(of: " ", with: "")
+      if !trimmedIpk.isEmpty, let cloudIPK = trimmedIpk.matterHexData {
+        finalIPK = cloudIPK
+      }
+    }
+    
     // Create Matter controller startup parameters
     let params = MTRDeviceControllerStartupParams(
-      ipk: csrKeys.ipk,
+      ipk: finalIPK,
       operationalKeypair: csrKeys,
       operationalCertificate: nocDerBytes,
       intermediateCertificate: nil,
@@ -802,7 +880,8 @@ class ESPMatterModule: RCTEventEmitter {
       }
       
       let deviceInfo = ESPMatterModule.parseDeviceInfo(from: values)
-      
+      self.lastParsedDeviceInfo = deviceInfo
+
       // Check for RainMaker cluster in server lists
       var isRainMakerClusterFound = false
       var totalServerClusters: [UInt32] = []
@@ -954,31 +1033,78 @@ class ESPMatterModule: RCTEventEmitter {
   
   /// Handle pure Matter device
   private func handlePureMatterDevice(deviceId: UInt64, groupId: String) {
-    
+
     // Retrieve device name from Apple commissioning shared storage
     let deviceNameFromAppleCommissioning = ESPMatterEcosystemInfo.shared.getDeviceName()
     let deviceName = deviceNameFromAppleCommissioning ?? ESPMatterConstants.defaultDeviceName
-    
-    let matterNodeIdHex = String(format: ESPMatterConstants.matterNodeIdFormat, deviceId)
-    let matterMetadata: [String: Any] = [
-      ESPMatterConstants.isRainmakerNode: false,
-      ESPMatterConstants.matterNodeIdKey: matterNodeIdHex,
-      ESPMatterConstants.deviceType: ESPMatterConstants.pureMatterDeviceType,
-      ESPMatterConstants.deviceName: deviceName
-    ]
-    
+
+    let matterMetadata = buildCloudMatterMetadata(
+      deviceName: deviceName,
+      isRainmaker: false,
+      groupId: groupId
+    )
+
     let metadata: [String: Any] = [
       ESPMatterConstants.matter: matterMetadata
     ]
-    
+
+    // Pure Matter confirm needs `matterNodeId` for the Matter SDK's
+    // startCommissioning event handler validation; rainmakerNodeId / challenge
+    // are intentionally omitted (cloud `confirmPureMatterNode` does not require them).
+    let matterNodeIdHex = String(format: ESPMatterConstants.matterNodeIdFormat, deviceId)
+    let requestId = currentRequestId ?? String(deviceId)
+
     let requestData: [String: Any] = [
-      ESPMatterConstants.requestId: currentRequestId ?? String(deviceId),
+      ESPMatterConstants.requestId: requestId,
       ESPMatterConstants.status: ESPMatterConstants.success,
       ESPMatterConstants.deviceName: deviceName,
+      ESPMatterConstants.matterNodeId: matterNodeIdHex,
+      ESPMatterConstants.deviceId: requestId,
       ESPMatterConstants.metadata: metadata
     ]
-    
+
     emitMatterEvent(eventType: ESPMatterConstants.commissioningConfirmationRequest, data: requestData)
+  }
+
+  /// Builds the canonical cloud Matter metadata payload (the `Matter` sub-object
+  /// inside `metadata`), aligned with reference iOS / reference Android apps and
+  /// the matter SDK's `ESPRMMatterMetadataInterface`.
+  ///
+  /// Shape:
+  /// ```
+  /// {
+  ///   "deviceName": "...",
+  ///   "deviceType": <int>,         // primary Matter device type id (omitted if unknown)
+  ///   "isRainmaker": <bool>,
+  ///   "group_id": "...",
+  ///   "endpoints": {                // omitted if no parsed device info available
+  ///     "0x<EP>": { "clusters": { "servers": {...}, "clients": {...} } }
+  ///   }
+  /// }
+  /// ```
+  /// `matterNodeId` is intentionally NOT included here — it is sent in the outer body.
+  private func buildCloudMatterMetadata(
+    deviceName: String,
+    isRainmaker: Bool,
+    groupId: String
+  ) -> [String: Any] {
+    var matterMetadata: [String: Any] = [
+      ESPMatterConstants.deviceName: deviceName,
+      ESPMatterConstants.isRainmaker: isRainmaker,
+      ESPMatterConstants.groupIdKeyDict: groupId
+    ]
+
+    if let deviceInfo = self.lastParsedDeviceInfo {
+      if let primaryDeviceType = deviceInfo.primaryDeviceType {
+        matterMetadata[ESPMatterConstants.deviceType] = Int(primaryDeviceType)
+      }
+      let endpointsDict = ESPMatterModule.buildEndpointsDict(from: deviceInfo)
+      if !endpointsDict.isEmpty {
+        matterMetadata[ESPMatterConstants.endpoints] = endpointsDict
+      }
+    }
+
+    return matterMetadata
   }
   
   /// Store parsed device info
@@ -1021,11 +1147,24 @@ class ESPMatterModule: RCTEventEmitter {
 
 struct MatterDeviceInfo {
   let endpoints: [Endpoint]
-  
+
+  /// Returns the first Matter device type id from the first non-zero endpoint
+  /// that exposes a DeviceTypeList. Endpoint 0 is the Root Node and is excluded.
+  /// Used to populate the canonical `deviceType` field in cloud Matter metadata.
+  var primaryDeviceType: UInt32? {
+    for endpoint in endpoints where endpoint.id != 0 {
+      if let firstType = endpoint.deviceTypes.first {
+        return firstType
+      }
+    }
+    return nil
+  }
+
   struct Endpoint {
     let id: UInt16
     let servers: [Cluster]
     let clients: [Cluster]
+    let deviceTypes: [UInt32]
   }
   
   struct Cluster {
@@ -1054,8 +1193,8 @@ extension ESPMatterModule {
   /// - Parameter result: result
   /// - Returns: MatterDeviceInfo object
   static func parseDeviceInfo(from result: [[String: Any]]) -> MatterDeviceInfo {
-    var endpointMap: [UInt16: (servers: [MatterDeviceInfo.Cluster], clients: [MatterDeviceInfo.Cluster])] = [:]
-    
+    var endpointMap: [UInt16: (servers: [MatterDeviceInfo.Cluster], clients: [MatterDeviceInfo.Cluster], deviceTypes: [UInt32])] = [:]
+
     for item in result {
       guard let attributePath = item["attributePath"] as? MTRAttributePath,
             let data = item["data"] as? [String: Any] else {
@@ -1068,12 +1207,32 @@ extension ESPMatterModule {
       
       // Initialize endpoint if not exists
       if endpointMap[endpoint] == nil {
-        endpointMap[endpoint] = (servers: [], clients: [])
+        endpointMap[endpoint] = (servers: [], clients: [], deviceTypes: [])
       }
       
       // Handle Descriptor cluster data (0x1d)
       if clusterId == 0x1d {
         switch attributeId {
+        case 0x0: // DeviceTypeList — array of structs { deviceType, revision }
+          if let typeData = data["value"] as? [[String: Any]] {
+            let types = typeData.compactMap { entryDict -> UInt32? in
+              guard let entryStruct = entryDict["data"] as? [String: Any],
+                    let fields = entryStruct["value"] as? [[String: Any]] else {
+                return nil
+              }
+              for field in fields {
+                if let context = field["contextTag"] as? NSNumber,
+                   context.uint32Value == 0,
+                   let inner = field["data"] as? [String: Any],
+                   let value = inner["value"] as? NSNumber {
+                  return UInt32(value.uint32Value)
+                }
+              }
+              return nil
+            }
+            endpointMap[endpoint]?.deviceTypes = types
+          }
+
         case 0x1: // ServerList
           if let serverData = data["value"] as? [[String: Any]] {
             let servers = serverData.compactMap { serverDict -> UInt32? in
@@ -1144,23 +1303,23 @@ extension ESPMatterModule {
     let endpoints = endpointMap.map { (endpointId, clusterInfo) in
       MatterDeviceInfo.Endpoint(id: endpointId,
                                 servers: clusterInfo.servers,
-                                clients: clusterInfo.clients)
+                                clients: clusterInfo.clients,
+                                deviceTypes: clusterInfo.deviceTypes)
     }.sorted { $0.id < $1.id }
     
     return MatterDeviceInfo(endpoints: endpoints)
   }
   
-  /// Convert MatterDeviceInfo to JSON format with endpoints organized by clusters
-  /// - Parameter deviceInfo: MatterDeviceInfo object
-  /// - Returns: Dictionary representation in the specified format
-  static func convertToJSONFormat(from deviceInfo: MatterDeviceInfo) -> [String: Any] {
+  /// Build the inner `endpoints` map for cloud Matter metadata, organized by clusters.
+  /// Shape: `{ "0x<EP>": { "clusters": { "servers": { "0x<CID>": { "attributes": [...] } }, "clients": {...} } } }`
+  /// matches reference iOS / reference Android.
+  static func buildEndpointsDict(from deviceInfo: MatterDeviceInfo) -> [String: Any] {
     var endpointsDict: [String: Any] = [:]
-    
+
     for endpoint in deviceInfo.endpoints {
       let endpointKey = String(format: "0x%x", endpoint.id)
       var clustersDict: [String: Any] = [:]
-      
-      // Process servers
+
       if !endpoint.servers.isEmpty {
         var serversDict: [String: Any] = [:]
         for server in endpoint.servers {
@@ -1170,8 +1329,7 @@ extension ESPMatterModule {
         }
         clustersDict[ESPMatterConstants.servers] = serversDict
       }
-      
-      // Process clients
+
       if !endpoint.clients.isEmpty {
         var clientsDict: [String: Any] = [:]
         for client in endpoint.clients {
@@ -1181,11 +1339,16 @@ extension ESPMatterModule {
         }
         clustersDict[ESPMatterConstants.clients] = clientsDict
       }
-      
+
       endpointsDict[endpointKey] = [ESPMatterConstants.clusters: clustersDict]
     }
-    
-    return [ESPMatterConstants.endpoints: endpointsDict]
+
+    return endpointsDict
+  }
+
+  /// Wrapper kept for local UserDefaults storage (`{ "endpoints": {...} }`).
+  static func convertToJSONFormat(from deviceInfo: MatterDeviceInfo) -> [String: Any] {
+    return [ESPMatterConstants.endpoints: buildEndpointsDict(from: deviceInfo)]
   }
 }
 
@@ -1318,20 +1481,19 @@ extension ESPMatterModule {
   
   /// Confirm RainMaker commissioning with challenge
   private func confirmRainMakerCommissioning(deviceId: UInt64, groupId: String, rainmakerNodeId: String, challenge: String) {
-    
+
     let deviceNameFromAppleCommissioning = ESPMatterEcosystemInfo.shared.getDeviceName()
     let deviceName = deviceNameFromAppleCommissioning ?? ESPMatterConstants.defaultDeviceName
-    
+
     let matterNodeIdHex = String(format: ESPMatterConstants.matterNodeIdFormat, deviceId)
     let requestId = currentRequestId ?? String(deviceId)
-    
-    // Include device name in metadata for RainMaker devices
-    let matterMetadata: [String: Any] = [
-      ESPMatterConstants.isRainmakerNode: true,
-      ESPMatterConstants.matterNodeIdKey: matterNodeIdHex,
-      ESPMatterConstants.deviceName: deviceName
-    ]
-    
+
+    let matterMetadata = buildCloudMatterMetadata(
+      deviceName: deviceName,
+      isRainmaker: true,
+      groupId: groupId
+    )
+
     let metadata: [String: Any] = [
       ESPMatterConstants.matter: matterMetadata
     ]
@@ -1593,5 +1755,27 @@ class ESPMatterStorage: NSObject, MTRStorage {
   func removeValue(forKey key: String) -> Bool {
     userDefaults.removeObject(forKey: storagePrefix + key)
     return true
+  }
+}
+
+// MARK: - Hex Decoding
+
+fileprivate extension String {
+  /// Decodes a hexadecimal string (e.g. an IPK delivered from the cloud) into raw bytes.
+  /// Returns `nil` for empty input or strings that don't contain valid hex pairs.
+  /// Mirrors the helper used by the production esp-rainmaker-ios app.
+  var matterHexData: Data? {
+    var data = Data(capacity: self.count / 2)
+    guard let regex = try? NSRegularExpression(pattern: "[0-9a-f]{1,2}", options: .caseInsensitive) else {
+      return nil
+    }
+    regex.enumerateMatches(in: self, range: NSRange(startIndex..., in: self)) { match, _, _ in
+      guard let match = match else { return }
+      let byteString = (self as NSString).substring(with: match.range)
+      if let num = UInt8(byteString, radix: 16) {
+        data.append(num)
+      }
+    }
+    return data.isEmpty ? nil : data
   }
 }

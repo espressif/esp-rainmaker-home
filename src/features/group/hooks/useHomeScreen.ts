@@ -15,6 +15,7 @@ import { useToast } from "@shared/hooks/useToast";
 import { getDefaultHomeTabs, compareDeviceType } from "@features/group/utils/homeScreenHelpers";
 import { ALL_DEVICES_TAB_ID, FILTER_ALL } from "@features/group/utils/constants";
 import { startNodeLocalDiscovery } from "@features/group/utils/localDiscovery";
+import { startMatterLocalDiscovery } from "@features/matter/utils/matterLocalDiscovery";
 import type { RoomTab } from "@src/types/global";
 import { getFeatures } from "@/config/features.config";
 
@@ -53,7 +54,6 @@ export function useHomeScreen(): UseHomeScreenResult {
   const unifiedUser = unifiedUserStore?.user;
   const router = useRouter();
   const toast = useToast();
-
   const defaultTabs = useMemo(() => getDefaultHomeTabs(t), [t]);
   const hasInitialized = useRef(false);
   const initializeHomeRef = useRef<(() => Promise<void>) | null>(null);
@@ -113,8 +113,16 @@ export function useHomeScreen(): UseHomeScreenResult {
         return;
       }
       hasInitialized.current = true;
-      await unifiedUser?.syncHomeWithNodes?.();
+      // Kick off mDNS browses in parallel with the cloud sync. Discovery is
+      // continuous and the CDF index is rebuilt per event, so even if the
+      // first announcements arrive before the store is populated they are
+      // simply dropped and re-matched against the next periodic announcement
+      // (mDNS responders re-announce every 1-2s). Doing this in parallel
+      // shaves the cloud-sync round-trip off the time-to-"available on WLAN".
+      const syncPromise = unifiedUser?.syncHomeWithNodes?.();
       startNodeLocalDiscovery(store);
+      startMatterLocalDiscovery(store);
+      await syncPromise;
     } catch (error) {
       console.error("Failed to initialize home:", error);
       hasInitialized.current = false;
@@ -139,8 +147,10 @@ export function useHomeScreen(): UseHomeScreenResult {
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     try {
-      await unifiedUser?.syncHomeWithNodes?.();
+      const syncPromise = unifiedUser?.syncHomeWithNodes?.();
       startNodeLocalDiscovery(store);
+      startMatterLocalDiscovery(store);
+      await syncPromise;
     } catch (error) {
       console.error("Error refreshing home:", error);
     } finally {
@@ -153,10 +163,12 @@ export function useHomeScreen(): UseHomeScreenResult {
       if (home?.id) {
         await unifiedUser?.setCurrentHome?.(home);
         await unifiedUser?.syncHomeWithNodes?.();
+        startNodeLocalDiscovery(store);
+        startMatterLocalDiscovery(store);
         setTooltipVisible(false);
       }
     },
-    [unifiedUser]
+    [unifiedUser, store]
   );
 
   const handleDropdownPress = useCallback(

@@ -27,6 +27,20 @@ interface ESPMatterUtilityInterface {
     groupCatIdAdmin?: string;
     userCatId?: string;
   }): Promise<void>;
+  /**
+   * Hydrates native fabric session from active-home details when KeyStore already holds NOC.
+   */
+  syncFabricSession(params: {
+    groupId: string;
+    fabricId: string;
+    name?: string;
+    matterUserId: string;
+    rootCa: string;
+    ipk?: string;
+    groupCatIdOperate?: string;
+    groupCatIdAdmin?: string;
+    userCatId?: string;
+  }): Promise<void>;
 }
 
 const { ESPMatterUtilityModule } = NativeModules;
