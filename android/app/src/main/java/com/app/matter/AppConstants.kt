@@ -44,7 +44,6 @@ object AppConstants {
     const val KEY_GROUP_CAT_ID_ADMIN = "groupCatIdAdmin"
     const val KEY_USER_CAT_ID = "userCatId"
     const val KEY_STATUS = "status"
-    const val KEY_DEVICE_NAME = "device_name"
     const val KEY_FABRIC_NAME = "fabric_name"
     const val KEY_MESSAGE = "message"
     const val KEY_MESSAGE_CAMEL = "message"
@@ -117,13 +116,18 @@ object AppConstants {
     const val KEY_CHALLENGE_RESPONSE_CAMEL = "challengeResponse"
     const val KEY_REQ_ID = "req_id"
     const val KEY_METADATA = "metadata"
-    const val KEY_IS_RAINMAKER_NODE = "is_rainmaker_node"
+    /** Native to React Native event payload key for the RainMaker flag. */
     const val KEY_IS_RAINMAKER_NODE_CAMEL = "isRainmakerNode"
+    /** Cloud Matter metadata flag key, aligned with reference Android/iOS apps. */
+    const val KEY_IS_RAINMAKER = "isRainmaker"
     const val KEY_MATTER = "Matter"
     const val KEY_DEVICE_TYPE = "deviceType"
-    const val KEY_ENDPOINTS_DATA = "endpointsData"
-    const val KEY_SERVERS_DATA = "serversData"
-    const val KEY_CLIENTS_DATA = "clientsData"
+    /** Cloud Matter metadata: nested endpoints.{0xEP}.clusters.{servers|clients}.{0xCID}.attributes */
+    const val KEY_ENDPOINTS = "endpoints"
+    const val KEY_CLUSTERS = "clusters"
+    const val KEY_SERVERS = "servers"
+    const val KEY_CLIENTS = "clients"
+    const val KEY_ATTRIBUTES = "attributes"
 
     const val DEFAULT_MATTER_DEVICE_NAME = "Matter Device"
     const val MATTER_CONTROLLER_DEVICE_NAME = "Matter Controller"
@@ -177,6 +181,19 @@ object AppConstants {
     const val KEYSTORE_ANDROID = "AndroidKeyStore"
     const val EC_CURVE_SECP256R1 = "secp256r1"
 
+    /** Operational Matter mDNS / discovery service type (CHIP operational browse). */
+    const val MATTER_OPERATIONAL_SERVICE_TYPE = "_matter._tcp."
+    /** React Native discovery config key for target Matter node ids (hex strings). */
+    const val KEY_MATTER_NODE_IDS = "matterNodeIds"
+    /** Interval between CHIP operational reachability probes while discovery is active. */
+    const val MATTER_DISCOVERY_POLL_INTERVAL_MS = 8_000L
+    /** IM read timeout when verifying an already-connected node is still on the LAN. */
+    const val MATTER_DISCOVERY_LIVENESS_TIMEOUT_MS = 3_000L
+    /**
+     * `getConnectedDevicePointer` below this elapsed time reuses a cached CASE session
+     * without network I/O — follow with a liveness read before reporting reachable.
+     */
+    const val MATTER_DISCOVERY_CACHED_SESSION_ELAPSED_MS = 200L
     // Matter commissioning back-end identifiers (must match values accepted by
     // build.gradle's MATTER_COMMISSIONING_METHOD validation).
     const val COMMISSIONING_METHOD_GOOGLE_PLAY_SERVICES = "GooglePlayServices"

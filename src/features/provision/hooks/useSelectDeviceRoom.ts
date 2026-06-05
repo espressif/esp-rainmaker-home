@@ -59,7 +59,7 @@ export const useSelectDeviceRoom = (): UseSelectDeviceRoomReturn => {
 
   const rooms = useMemo(
     () => getSelectableRoomsForHome(home),
-    [home?.subGroups]
+    [home],
   );
 
   useEffect(() => {
@@ -150,6 +150,7 @@ export const useSelectDeviceRoom = (): UseSelectDeviceRoomReturn => {
     provisionedNode,
     selectedRoom,
     router,
+    syncHomeWithNodes,
     t,
     toast,
   ]);

@@ -57,6 +57,8 @@ class ChipClient @JvmOverloads constructor(
         const val TAG = "ChipClient"
         private const val DEFAULT_TIMEOUT = 15000L
         private const val INVOKE_COMMAND_TIMEOUT = 15000
+        private const val BASIC_INFORMATION_CLUSTER_ID = 0x00000028L
+        private const val DATA_MODEL_REVISION_ATTRIBUTE_ID = 0x00000000L
 
         // ----------------------------------------------------------------------------------
         // Process-wide AndroidChipPlatform / AndroidBleManager.
@@ -152,8 +154,10 @@ class ChipClient @JvmOverloads constructor(
     private val confirmContinuations = mutableMapOf<String, CancellableContinuation<String>>()
     private var commissioningContinuation: CancellableContinuation<Unit>? = null
 
-    // Lazily instantiate ChipDeviceController
-    private val chipDeviceController: ChipDeviceController by lazy {
+    // Lazily instantiate ChipDeviceController. Package-internal so
+    // [ESPMatterControl] can reach the low-level CHIP IM primitives
+    // (subscribe/shutdownSubscriptions) that aren't yet wrapped here.
+    internal val chipDeviceController: ChipDeviceController by lazy {
         Log.d(TAG, "========== INITIALIZING ESP RAINMAKER CHIP DEVICE CONTROLLER ==========")
         // The native CHIP stack only honours the FIRST AndroidBleManager registered for
         // the process. Always go through ensureAndroidChipPlatform() so every ChipClient
@@ -396,9 +400,28 @@ class ChipClient @JvmOverloads constructor(
                                 var deviceName = ""
                                 val metadataJson = JsonObject()
                                 val body = JsonObject()
-                                var endpointsArray = JsonArray()
-                                var serversDataJson = JsonObject()
-                                var clientsDataJson = JsonObject()
+                                val endpointsJson = JsonObject()
+                                /**
+                                 * Build cloud Matter metadata in the canonical nested shape used by
+                                 * reference apps and the Matter SDK:
+                                 *
+                                 * {
+                                 *   "Matter": {
+                                 *     "deviceName": "...",
+                                 *     "deviceType": <int>,
+                                 *     "isRainmaker": <bool>,
+                                 *     "group_id": "...",
+                                 *     "endpoints": {
+                                 *       "0x<EP>": {
+                                 *         "clusters": {
+                                 *           "servers": { "0x<CID>": { "attributes": ["0x<AID>"...] | null } },
+                                 *           "clients": { "0x<CID>": { "attributes": null } }
+                                 *         }
+                                 *       }
+                                 *     }
+                                 *   }
+                                 * }
+                                 */
 
                                 if (deviceMatterInfo.isNotEmpty()) {
                                     try {
@@ -406,52 +429,70 @@ class ChipClient @JvmOverloads constructor(
 
                                             if (info.types.isNotEmpty()) {
                                                 val primaryDeviceType = info.types[0].toInt()
-                                                metadataJson.addProperty(
-                                                    AppConstants.KEY_DEVICE_TYPE,
-                                                    primaryDeviceType
-                                                )
+                                                if (info.endpoint != 0) {
+                                                    metadataJson.addProperty(
+                                                        AppConstants.KEY_DEVICE_TYPE,
+                                                        primaryDeviceType
+                                                    )
 
-                                                if (deviceName.isEmpty()) {
-                                                    deviceName = NodeUtils.getDefaultNameForMatterDevice(primaryDeviceType)
-                                                }
-
-                                                for (deviceType in info.types) {
-                                                    val defaultName = NodeUtils.getDefaultNameForMatterDevice(deviceType.toInt())
-                                                    val category = NodeUtils.getDeviceCategory(deviceType.toInt())
-                                                }
-                                            } else {
-                                                if (deviceName.isEmpty()) {
-                                                    deviceName = AppConstants.DEFAULT_MATTER_DEVICE_NAME
+                                                    if (deviceName.isEmpty()) {
+                                                        deviceName = NodeUtils.getDefaultNameForMatterDevice(primaryDeviceType)
+                                                    }
                                                 }
                                             }
 
-                                            endpointsArray.add(info.endpoint)
+                                            val endpointJson = JsonObject()
+                                            val clustersJson = JsonObject()
 
-                                            if (info.serverClusters.isNotEmpty()) {
-                                                val serverClustersArr = JsonArray()
-                                                for (serverCluster in info.serverClusters) {
-                                                    serverClustersArr.add(
-                                                        serverCluster.toString().toInt()
+                                            val serversJson = JsonObject()
+                                            for (serverCluster in info.serverClusters) {
+                                                val clusterIdLong = serverCluster.toString().toLong()
+                                                val clusterIdHex = "0x${clusterIdLong.toString(16)}"
+                                                val clusterJson = JsonObject()
+
+                                                val attributeIds =
+                                                    info.clusterAttributes[serverCluster.toString()]
+                                                if (attributeIds != null && attributeIds.isNotEmpty()) {
+                                                    val attributesArr = JsonArray()
+                                                    for (attributeId in attributeIds) {
+                                                        attributesArr.add(
+                                                            "0x${attributeId.toString(16)}"
+                                                        )
+                                                    }
+                                                    clusterJson.add(
+                                                        AppConstants.KEY_ATTRIBUTES,
+                                                        attributesArr
+                                                    )
+                                                } else {
+                                                    clusterJson.add(
+                                                        AppConstants.KEY_ATTRIBUTES,
+                                                        null
                                                     )
                                                 }
-                                                serversDataJson.add(
-                                                    info.endpoint.toString(),
-                                                    serverClustersArr
-                                                )
+                                                serversJson.add(clusterIdHex, clusterJson)
                                             }
 
-                                            if (info.clientClusters.isNotEmpty()) {
-                                                val clientClustersArr = JsonArray()
-                                                for (clientCluster in info.clientClusters) {
-                                                    clientClustersArr.add(
-                                                        clientCluster.toString().toInt()
-                                                    )
-                                                }
-                                                clientsDataJson.add(
-                                                    info.endpoint.toString(),
-                                                    clientClustersArr
-                                                )
+                                            val clientsJson = JsonObject()
+                                            for (clientCluster in info.clientClusters) {
+                                                val clusterIdLong = clientCluster.toString().toLong()
+                                                val clusterIdHex = "0x${clusterIdLong.toString(16)}"
+                                                val clusterJson = JsonObject()
+                                                clusterJson.add(AppConstants.KEY_ATTRIBUTES, null)
+                                                clientsJson.add(clusterIdHex, clusterJson)
                                             }
+
+                                            if (serversJson.size() > 0) {
+                                                clustersJson.add(AppConstants.KEY_SERVERS, serversJson)
+                                            }
+                                            if (clientsJson.size() > 0) {
+                                                clustersJson.add(AppConstants.KEY_CLIENTS, clientsJson)
+                                            }
+
+                                            endpointJson.add(AppConstants.KEY_CLUSTERS, clustersJson)
+                                            endpointsJson.add(
+                                                "0x${info.endpoint.toString(16)}",
+                                                endpointJson
+                                            )
 
                                             if (info.endpoint == 0) {
                                                 for (serverCluster in info.serverClusters) {
@@ -469,34 +510,22 @@ class ChipClient @JvmOverloads constructor(
                                             }
                                         }
 
+                                        if (deviceName.isEmpty()) {
+                                            deviceName = AppConstants.DEFAULT_MATTER_DEVICE_NAME
+                                        }
+
                                         metadataJson.addProperty(
-                                            AppConstants.KEY_IS_RAINMAKER_NODE,
+                                            AppConstants.KEY_IS_RAINMAKER,
                                             isRmClusterAvailable
                                         )
                                         metadataJson.addProperty(
-                                            AppConstants.KEY_DEVICE_NAME,
+                                            AppConstants.KEY_DEVICE_NAME_CAMEL,
                                             deviceName
                                         )
                                         metadataJson.addProperty(AppConstants.KEY_GROUP_ID, groupId)
+                                        metadataJson.add(AppConstants.KEY_ENDPOINTS, endpointsJson)
 
                                         this@ChipClient.lastCommissionedDeviceName = deviceName
-                                        metadataJson.add(
-                                            AppConstants.KEY_ENDPOINTS_DATA,
-                                            endpointsArray
-                                        )
-
-                                        if (serversDataJson.size() > 0) {
-                                            metadataJson.add(
-                                                AppConstants.KEY_SERVERS_DATA,
-                                                serversDataJson
-                                            )
-                                        }
-                                        if (clientsDataJson.size() > 0) {
-                                            metadataJson.add(
-                                                AppConstants.KEY_CLIENTS_DATA,
-                                                clientsDataJson
-                                            )
-                                        }
 
                                     } catch (e: Exception) {
                                         Log.e(TAG, "Error building metadata: ${e.message}", e)
@@ -583,6 +612,7 @@ class ChipClient @JvmOverloads constructor(
                                     TAG,
                                     "Metadata fetched successfully, triggering confirm commission headless task"
                                 )
+                                Log.d(TAG, "Confirm commission body: ${body}")
 
                                 if (isControllerClusterAvailable && isRmClusterAvailable) {
                                     val sharedPreferences = context.getSharedPreferences(
@@ -828,6 +858,7 @@ class ChipClient @JvmOverloads constructor(
                 // certificate; downstream this is interpreted as "no intermediate cert".
                 val emptyIcac = ByteArray(0)
 
+                // admin subject is the CAT id for the admin group
                 val adminSubject: Long = if (groupCatIdAdmin.isNotEmpty()) {
                     Utils.getCatId(groupCatIdAdmin)
                 } else {
@@ -839,6 +870,16 @@ class ChipClient @JvmOverloads constructor(
                     "Using admin CAT subject: 0x${java.lang.Long.toHexString(adminSubject)}"
                 )
 
+                // Intentionally do NOT call setAdminSubject(...) here. Matching the
+                // Espressif RainMaker reference app, we let the SDK derive the
+                // AddNOC.caseAdminSubject from the controller's own operational node
+                // ID (the userNoc operational identity). Passing groupCatIdAdmin as
+                // a CAT here installs an ACL admin entry on the device that is keyed
+                // to the CAT, and the device then rejects CommissioningComplete with
+                // status 0x7E (UnsupportedAccess) whenever the userNoc subject DN
+                // doesn't carry that exact CAT (id+version) — which is the scenario
+                // we hit on pure-Matter fabrics. Operate-level CATs are still applied
+                // post-commissioning via AccessControlClusterHelper.writeAclAttribute.
                 val errorCode = chipDeviceController.onNOCChainGeneration(
                     ControllerParams.newBuilder()
                         .setRootCertificate(chain[1].encoded)
@@ -861,6 +902,36 @@ class ChipClient @JvmOverloads constructor(
 
         } catch (e: Exception) {
             Log.e(TAG, "Failed to receive NOC chain: ${e.message}", e)
+        }
+    }
+
+    /**
+     * Returns the operational IP address CHIP resolved for a connected node, if available.
+     *
+     * @param nodeId Matter operational node id (64-bit).
+     * @returns Host/IP string or `null` when the node is not connected.
+     */
+    fun getIpAddressForNode(nodeId: Long): String? {
+        return try {
+            chipDeviceController.getIpAddress(nodeId)
+        } catch (e: Exception) {
+            Log.w(TAG, "getIpAddressForNode failed for $nodeId: ${e.message}")
+            null
+        }
+    }
+
+    /**
+     * Returns host/port CHIP resolved for a connected node, if available.
+     *
+     * @param nodeId Matter operational node id (64-bit).
+     * @returns [NetworkLocation] or `null` when the node is not connected.
+     */
+    fun getNetworkLocationForNode(nodeId: Long): NetworkLocation? {
+        return try {
+            chipDeviceController.getNetworkLocation(nodeId)
+        } catch (e: Exception) {
+            Log.w(TAG, "getNetworkLocationForNode failed for $nodeId: ${e.message}")
+            null
         }
     }
 
@@ -892,6 +963,80 @@ class ChipClient @JvmOverloads constructor(
                 continuation.resumeWithException(e)
             }
         }
+
+    /**
+     * Confirms a node is still reachable by reading Basic Information `DataModelRevision`.
+     * Cached CASE sessions can make [awaitGetConnectedDevicePointer] succeed without LAN I/O.
+     *
+     * @param devicePointer Connected device pointer from CHIP.
+     * @param timeoutMs Interaction-model timeout for the read.
+     * @returns True when the device responds; false on error or timeout.
+     */
+    suspend fun awaitVerifyOperationalReachability(
+        devicePointer: Long,
+        timeoutMs: Int = AppConstants.MATTER_DISCOVERY_LIVENESS_TIMEOUT_MS.toInt(),
+    ): Boolean {
+        val attributePath = ChipAttributePath.newInstance(
+            0,
+            BASIC_INFORMATION_CLUSTER_ID,
+            DATA_MODEL_REVISION_ATTRIBUTE_ID,
+        )
+
+        return suspendCoroutine { continuation ->
+            var finished = false
+            fun finish(reachable: Boolean) {
+                if (finished) {
+                    return
+                }
+                finished = true
+                continuation.resume(reachable)
+            }
+
+            try {
+                chipDeviceController.readAttributePath(
+                    object : ReportCallback {
+                        override fun onReport(nodeState: NodeState?) {
+                            if (nodeState == null) {
+                                Log.d(TAG, "verifyOperationalReachability: empty NodeState")
+                                finish(false)
+                                return
+                            }
+                            val attributeState =
+                                nodeState
+                                    .getEndpointState(0)
+                                    ?.getClusterState(BASIC_INFORMATION_CLUSTER_ID)
+                                    ?.getAttributeState(DATA_MODEL_REVISION_ATTRIBUTE_ID)
+                            if (attributeState != null) {
+                                Log.d(TAG, "verifyOperationalReachability: ok")
+                                finish(true)
+                            } else {
+                                Log.d(TAG, "verifyOperationalReachability: attribute missing")
+                                finish(false)
+                            }
+                        }
+
+                        override fun onError(
+                            attributePath: ChipAttributePath?,
+                            eventPath: ChipEventPath?,
+                            ex: Exception,
+                        ) {
+                            Log.d(
+                                TAG,
+                                "verifyOperationalReachability onError: ${ex.message}",
+                            )
+                            finish(false)
+                        }
+                    },
+                    devicePointer,
+                    listOf(attributePath),
+                    timeoutMs,
+                )
+            } catch (e: Exception) {
+                Log.w(TAG, "verifyOperationalReachability failed: ${e.message}")
+                finish(false)
+            }
+        }
+    }
 
     private suspend fun readAttribute(
         devicePtr: Long,

@@ -17,6 +17,7 @@ import { Power } from "lucide-react-native";
 import { ParamControlChildProps } from "./lib/types";
 import { observer } from "mobx-react-lite";
 import { testProps } from "@shared/utils/testProps";
+import { coerceParamValueToBoolean } from "@shared/utils/paramUtils";
 
 /**
  * PowerButton
@@ -29,7 +30,7 @@ import { testProps } from "@shared/utils/testProps";
  */
 const PowerButton = observer(
   ({ value, onValueChange, disabled }: ParamControlChildProps) => {
-    const isOn = Boolean(value);
+    const isOn = coerceParamValueToBoolean(value);
     const size = 120;
     // Handlers
     const handlePress = async () => {

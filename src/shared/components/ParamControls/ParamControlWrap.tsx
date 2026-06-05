@@ -7,14 +7,26 @@
 import React, { ReactElement, useEffect, useMemo, useRef } from "react";
 import { View, GestureResponderEvent } from "react-native";
 
-// Components
 import { observer, useLocalObservable } from "mobx-react-lite";
 
-// Hooks
 import { useThrottle } from "@shared/hooks/useThrottle";
 import { useToast } from "@shared/hooks/useToast";
+import {
+  ESPRM_PARAM_TIME_SERIES_PROPERTY,
+  ESPRM_PARAM_SIMPLE_TIME_SERIES_PROPERTY,
+  ESPRM_PARAM_WRITE_PROPERTY,
+  PARAM_CONTROL_THROTTLE_MS,
+} from "@shared/utils/constants";
+import {
+  coerceParamValueToBoolean,
+  getParamControlBounds,
+  isBooleanControlParam,
+  PARAM_BOUNDS_CONTROL_BOARD_ACTIONS,
+  PARAM_BOUNDS_VALUE_SUFFIX,
+  shouldPersistWriteWithoutLocalUpdate,
+} from "@shared/utils/paramUtils";
+import { resolveParamDisplayLabel } from "@shared/utils/deviceParams";
 
-// Types & Styles
 import {
   ParamControlProps,
   getParamBounds,
@@ -22,11 +34,6 @@ import {
   comparableRoundedParamNumber,
   normalizeNumericParamValue,
 } from "./lib/types";
-import {
-  ESPRM_PARAM_TIME_SERIES_PROPERTY,
-  ESPRM_PARAM_SIMPLE_TIME_SERIES_PROPERTY,
-  PARAM_CONTROL_THROTTLE_MS,
-} from "@shared/utils/constants";
 
 /**
  * ParamControlWrap
@@ -56,9 +63,17 @@ const ParamControlWrap = observer(
       typeof max === "number" &&
       Number.isFinite(max);
     const toast = useToast();
+    const paramBounds = getParamControlBounds(param);
+
+    const normalizeParamValue = (value: unknown): unknown => {
+      if (isBooleanControlParam(param)) {
+        return coerceParamValueToBoolean(value);
+      }
+      return normalizeNumericParamValue(value);
+    };
 
     const state = useLocalObservable(() => ({
-      value: normalizeNumericParamValue(param.value),
+      value: normalizeParamValue(param.value),
       setValue: (next: unknown) => {
         state.value = next;
       },
@@ -73,31 +88,53 @@ const ParamControlWrap = observer(
       [param.properties],
     );
 
+    const isWritable = useMemo(
+      () => param.properties?.includes(ESPRM_PARAM_WRITE_PROPERTY) ?? false,
+      [param.properties],
+    );
+
+    const displayLabel = useMemo(
+      () => resolveParamDisplayLabel(param),
+      [param],
+    );
+
+    // Slider-style params (writable + finite numeric bounds) need a debounce
+    // so an in-flight subscription frame doesn't clobber the user's drag mid
+    // gesture. Action-style params (control board, dropdown chips, status
+    // pills, action buttons, read-only telemetry) have no local drag to
+    // protect — `shouldPersistWriteWithoutLocalUpdate` already keeps the UI
+    // off the optimistic-update path for them — so deferring device-state
+    // updates by 3 s only adds a perceived "tap → glyph appears" lag (e.g.
+    // Start → Pause glyph on the RVC Control tile).
+    const isSliderStyleParam = isWritable && hasFiniteBounds;
+
     useEffect(() => {
-      // Debounce the update of the state.value to avoid rapid changes
+      if (!isSliderStyleParam) {
+        state.value = normalizeParamValue(param.value);
+        return;
+      }
+
       const debounceUpdateDelay = 3000;
 
       if (paramUpdateDelayTimeoutRef.current === null) {
-        state.value = normalizeNumericParamValue(param.value);
+        state.value = normalizeParamValue(param.value);
       }
 
       if (paramUpdateDelayTimeoutRef.current !== null) {
         clearTimeout(paramUpdateDelayTimeoutRef.current);
       }
       paramUpdateDelayTimeoutRef.current = setTimeout(() => {
-        state.value = normalizeNumericParamValue(param.value);
+        state.value = normalizeParamValue(param.value);
         paramUpdateDelayTimeoutRef.current = null;
       }, debounceUpdateDelay);
 
       return () => {
-        // cancel the timeout if the value changes again
         if (paramUpdateDelayTimeoutRef.current !== null) {
           clearTimeout(paramUpdateDelayTimeoutRef.current);
         }
-      };  
-    }, [param.value, state.value])
+      };
+    }, [param.value, state, state.value, isSliderStyleParam]);
 
-    /** Latest `param` for throttled persistence (avoid stale closures). */
     const paramRef = useRef(param);
     paramRef.current = param;
 
@@ -121,7 +158,13 @@ const ParamControlWrap = observer(
       newValue: unknown,
       validate: boolean = true,
     ) => {
-      if (disabled) return;
+      if (disabled || !isWritable) return;
+
+      if (shouldPersistWriteWithoutLocalUpdate(param, newValue)) {
+        enqueueUpdate(newValue);
+        return;
+      }
+
       if (typeof newValue === "number" && validate) {
         const roundedValue = Math.round(newValue);
         const cur = comparableRoundedParamNumber(state.value);
@@ -149,13 +192,20 @@ const ParamControlWrap = observer(
           return React.cloneElement(
             child as ReactElement<ParamControlChildProps>,
             {
-              label: param.name,
+              label: displayLabel,
               value: state.value,
               onValueChange: handleValueChange,
-              disabled: !isTimeSeriesParam && disabled,
+              disabled: isTimeSeriesParam
+                ? disabled
+                : isWritable
+                  ? disabled
+                  : false,
               meta: {
                 ...getParamBounds(param),
                 dataType: param.dataType,
+                labels: paramBounds.labels,
+                valueSuffix: paramBounds[PARAM_BOUNDS_VALUE_SUFFIX] ?? "",
+                controlBoardActions: paramBounds[PARAM_BOUNDS_CONTROL_BOARD_ACTIONS],
               },
               onOpenChart: onOpenChart ? () => onOpenChart(param) : null,
             },

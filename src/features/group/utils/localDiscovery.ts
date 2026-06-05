@@ -10,7 +10,10 @@ import {
   ESPCDFEventType,
   ESPCDFNodeTransport,
 } from "@store";
-import { DISCOVERY_LOST_EVENT } from "@shared/utils/constants";
+import {
+  DISCOVERY_LOST_EVENT,
+  MDNS_SERVICE_TYPE_ESP_LOCAL_CTRL,
+} from "@shared/utils/constants";
 import { handleNodeTransportUpdate } from "@store";
 
 let discoveryLostSubscription: ReturnType<
@@ -31,7 +34,16 @@ const startNodeLocalDiscovery = (store: ESPCDF) => {
   if (!discoveryLostSubscription) {
     discoveryLostSubscription = DeviceEventEmitter.addListener(
       DISCOVERY_LOST_EVENT,
-      (payload: { nodeId?: string }) => {
+      (payload: { nodeId?: string; serviceType?: string }) => {
+        // Multi-browse: only react to RainMaker local-control losses; Matter
+        // losses are handled by `startMatterLocalDiscovery`.
+        if (
+          payload?.serviceType &&
+          payload.serviceType.replace(/\.$/, "") !==
+            MDNS_SERVICE_TYPE_ESP_LOCAL_CTRL.replace(/\.$/, "")
+        ) {
+          return;
+        }
         const nodeId = payload?.nodeId;
         if (!nodeId || !discoveryStoreRef) return;
         handleNodeTransportUpdate(

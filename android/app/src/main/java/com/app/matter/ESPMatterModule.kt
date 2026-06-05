@@ -16,6 +16,7 @@ import com.facebook.react.bridge.NativeModule
 import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.bridge.ReactContextBaseJavaModule
 import com.facebook.react.bridge.ReactMethod
+import com.facebook.react.bridge.ReadableArray
 import com.facebook.react.bridge.ReadableMap
 import com.facebook.react.bridge.WritableMap
 import com.facebook.react.bridge.WritableNativeMap
@@ -42,6 +43,9 @@ class ESPMatterModule(reactContext: ReactApplicationContext) :
     companion object {
         private const val TAG = "ESPMatterModule"
     }
+
+    /** Lazy native Matter control adapter — IM ops only (read/write/invoke/subscribe). */
+    private val controlAdapter: ESPMatterControl by lazy { ESPMatterControl(reactContext) }
 
     init {
         EventBus.getDefault().register(this)
@@ -615,4 +619,74 @@ class ESPMatterModule(reactContext: ReactApplicationContext) :
         }
     }
 
+    // -----------------------------------------------------------------------
+    // Matter control adapter primitives — wired by ESPMatterControlAdapter.ts.
+    // Surface is the four canonical Matter Interaction Model operations
+    // (Read / Write / Invoke / Subscribe) plus their lifecycle siblings
+    // (Init / Shutdown / Unsubscribe). Cluster-specific semantic routing
+    // (semantic units, OnOff bool, mode pickers) lives above this surface
+    // — either in TypeScript hooks/panels or in the Matter SDK transformer.
+    // All numeric ids cross the bridge as Double to avoid Int32 truncation.
+    // -----------------------------------------------------------------------
+
+    @ReactMethod
+    fun matterControlInit(config: ReadableMap?, promise: Promise) {
+        controlAdapter.init(config, promise)
+    }
+
+    @ReactMethod
+    fun matterControlShutdown(promise: Promise) {
+        controlAdapter.shutdown(promise)
+    }
+
+    @ReactMethod
+    fun matterControlRead(
+        matterNodeId: String,
+        endpoint: Int,
+        clusterId: Double,
+        attributeId: Double,
+        promise: Promise
+    ) {
+        controlAdapter.read(matterNodeId, endpoint, clusterId, attributeId, promise)
+    }
+
+    @ReactMethod
+    fun matterControlWrite(
+        matterNodeId: String,
+        endpoint: Int,
+        clusterId: Double,
+        attributeId: Double,
+        value: ReadableMap?,
+        promise: Promise
+    ) {
+        controlAdapter.write(matterNodeId, endpoint, clusterId, attributeId, value, promise)
+    }
+
+    @ReactMethod
+    fun matterControlInvoke(
+        matterNodeId: String,
+        endpoint: Int,
+        clusterId: Double,
+        commandId: Double,
+        commandFields: ReadableMap?,
+        promise: Promise
+    ) {
+        controlAdapter.invoke(matterNodeId, endpoint, clusterId, commandId, commandFields, promise)
+    }
+
+    @ReactMethod
+    fun matterControlSubscribe(
+        matterNodeId: String,
+        attributePaths: ReadableArray?,
+        minIntervalSec: Int,
+        maxIntervalSec: Int,
+        promise: Promise
+    ) {
+        controlAdapter.subscribe(matterNodeId, attributePaths, minIntervalSec, maxIntervalSec, promise)
+    }
+
+    @ReactMethod
+    fun matterControlUnsubscribe(handle: String, promise: Promise) {
+        controlAdapter.unsubscribe(handle, promise)
+    }
 }

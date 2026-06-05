@@ -6,6 +6,7 @@
 
 package com.app.matter
 
+import android.util.Base64
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import java.io.ByteArrayInputStream
@@ -51,6 +52,24 @@ class MatterFabricUtils {
                 
             } catch (e: Exception) {
                 throw RuntimeException("Failed to decode certificate", e)
+            }
+        }
+
+        /**
+         * Encodes an X.509 certificate to PEM for session metadata when only KeyStore holds the NOC.
+         *
+ * @param certificate - Certificate from Android KeyStore chain.
+ * @return PEM string with BEGIN/END markers.
+ */
+        fun encodeToPem(certificate: Certificate): String {
+            val base64 = Base64.encodeToString(certificate.encoded, Base64.NO_WRAP)
+            return buildString {
+                append(AppConstants.CERTIFICATE_BEGIN)
+                append('\n')
+                append(base64)
+                append('\n')
+                append(AppConstants.CERTIFICATE_END)
+                append('\n')
             }
         }
     }

@@ -88,13 +88,18 @@ class ESPLocalControlModule(reactContext: ReactApplicationContext) :
     }
 
     /**
-     * Class representing a local ESP device.
-     *
-     * @property nodeId Unique identifier of the device.
-     * @property ipAddr IP address of the device.
-     * @property port Port number of the device.
+     * Per-node connection state captured at connect() time. Re-used by sendData()
+     * to re-handshake with the original credentials if the session is torn down.
      */
-    inner class EspLocalDevice(val nodeId: String, val ipAddr: String, val port: Int)
+    inner class EspLocalDevice(
+        val nodeId: String,
+        val ipAddr: String,
+        val port: Int,
+        val baseUrl: String,
+        val securityType: Int,
+        val pop: String?,
+        val username: String?
+    )
 
     /**
      * Class managing session logic for secure communication with devices.
@@ -162,8 +167,15 @@ class ESPLocalControlModule(reactContext: ReactApplicationContext) :
             if (isSessionEstablished) {
                 transport.sendConfigData(path, encryptedData, object : ResponseListener {
                     override fun onSuccess(returnData: ByteArray?) {
-                        val decryptedData = security.decrypt(returnData)
-                        listener.onSuccess(decryptedData)
+                        try {
+                            val decryptedData = security.decrypt(returnData)
+                            listener.onSuccess(decryptedData)
+                        } catch (e: Exception) {
+                            // Decrypt failure means this session is unusable; force a
+                            // fresh handshake on the next sendData call.
+                            isSessionEstablished = false
+                            listener.onFailure(e)
+                        }
                     }
 
                     override fun onFailure(e: Exception) {
@@ -321,9 +333,12 @@ class ESPLocalControlModule(reactContext: ReactApplicationContext) :
             return
         }
 
-        val device = EspLocalDevice(nodeId, address, port)
+        val device = EspLocalDevice(nodeId, address, port, baseUrl, securityType, pop, username)
 
-        // Initialize session
+        // Drop any prior session so initSession() isn't short-circuited by a stale state.
+        session = null
+        sessionState = SessionState.NOT_CREATED
+
         initSession(device, baseUrl, securityType, pop, username, object : ResponseListener {
             override fun onSuccess(returnData: ByteArray?) {
                 localDeviceMap[nodeId] = device
@@ -340,28 +355,10 @@ class ESPLocalControlModule(reactContext: ReactApplicationContext) :
     }
 
     /**
-     * Initializes a secure session with the specified ESP local device.
-     * This method creates and establishes a session using the provided security configuration,
-     * ensuring encrypted communication between the app and the device.
-     *
-     * @param device The ESP local device to connect to.
-     * @param baseUrl The base URL of the device, including the IP address and port.
-     * @param securityType The security type to use for the session (0: None, 1: Security1, 2: Security2).
-     * @param pop Proof of possession for establishing secure connections (used in Security1 and Security2).
-     * @param username The username for authentication (required for Security2).
-     * @param listener Callback to notify success or failure of the session initialization.
-     *
-     * Flow:
-     * 1. Depending on the security type, initializes the corresponding `Security` implementation.
-     * 2. Creates a transport instance for communicating with the device.
-     * 3. Starts the session establishment process via the `EspLocalSession` class.
-     * 4. Notifies the result of session establishment using the provided listener.
-     *
-     * Notes:
-     * - If a session is already being created, the method exits without reinitializing.
-     * - This is a critical step for enabling further communication with the device.
+     * Initializes a secure session with the device. For Security2, first probes
+     * the device's version endpoint so the right `sec_patch_ver` is fed into the
+     * Security2 constructor (required against ESP-IDF v5.4+ firmware).
      */
-
     private fun initSession(
         device: EspLocalDevice,
         baseUrl: String,
@@ -370,40 +367,91 @@ class ESPLocalControlModule(reactContext: ReactApplicationContext) :
         username: String?,
         listener: ResponseListener
     ) {
-        if (sessionState != SessionState.CREATING) {
-            sessionState = SessionState.CREATING
+        if (sessionState == SessionState.CREATING) return
+        sessionState = SessionState.CREATING
 
-            val security: Security = when (securityType) {
-                2 -> Security2(username, pop).also {
-                    Log.d(TAG, "Created security 2 with pop: $pop")
+        if (securityType == 2) {
+            fetchSecPatchVersion(baseUrl) { secPatchVersion ->
+                establishSession(baseUrl, securityType, pop, username, secPatchVersion, listener)
+            }
+        } else {
+            establishSession(baseUrl, securityType, pop, username, 0, listener)
+        }
+    }
+
+    private fun fetchSecPatchVersion(baseUrl: String, onResult: (Int) -> Unit) {
+        val versionTransport = EspLocalTransport(baseUrl)
+        versionTransport.sendConfigData(
+            "esp_local_ctrl/version",
+            "---".toByteArray(),
+            object : ResponseListener {
+                override fun onSuccess(returnData: ByteArray?) {
+                    val version = parseSecPatchVersion(returnData)
+                    Log.d(TAG, "Device advertises sec_patch_ver=$version")
+                    onResult(version)
                 }
 
-                1 -> Security1(pop).also {
-                    Log.d(TAG, "Created security 1 with pop: $pop")
-                }
-
-                0 -> Security0()
-                else -> {
-                    Log.e(TAG, "Invalid security type: $securityType. Defaulting to Security0.")
-                    Security0()
+                override fun onFailure(e: Exception) {
+                    Log.w(TAG, "Version endpoint unavailable, using sec_patch_ver=0: ${e.message}")
+                    onResult(0)
                 }
             }
+        )
+    }
 
-            val transport = EspLocalTransport(baseUrl)
-            session = EspLocalSession(transport, security)
-
-            session?.init(null, object : SessionListener {
-                override fun onSessionEstablished() {
-                    sessionState = SessionState.CREATED
-                    listener.onSuccess(null)
-                }
-
-                override fun onSessionEstablishFailed(e: Exception) {
-                    sessionState = SessionState.FAILED
-                    listener.onFailure(e)
-                }
-            })
+    private fun parseSecPatchVersion(returnData: ByteArray?): Int {
+        if (returnData == null) return 0
+        return try {
+            val root = org.json.JSONObject(String(returnData))
+            val localCtrl = root.optJSONObject("local_ctrl")
+            localCtrl?.optInt("sec_patch_ver", 0) ?: 0
+        } catch (e: Exception) {
+            Log.w(TAG, "Could not parse version JSON, using sec_patch_ver=0: ${e.message}")
+            0
         }
+    }
+
+    private fun establishSession(
+        baseUrl: String,
+        securityType: Int,
+        pop: String?,
+        username: String?,
+        secPatchVersion: Int,
+        listener: ResponseListener
+    ) {
+        val security: Security = when (securityType) {
+            2 -> Security2(username, pop, secPatchVersion).also {
+                Log.d(
+                    TAG,
+                    "Created security 2 with username: $username, pop: $pop, patchVersion: $secPatchVersion"
+                )
+            }
+
+            1 -> Security1(pop).also {
+                Log.d(TAG, "Created security 1 with pop: $pop")
+            }
+
+            0 -> Security0()
+            else -> {
+                Log.e(TAG, "Invalid security type: $securityType. Defaulting to Security0.")
+                Security0()
+            }
+        }
+
+        val transport = EspLocalTransport(baseUrl)
+        session = EspLocalSession(transport, security)
+
+        session?.init(null, object : SessionListener {
+            override fun onSessionEstablished() {
+                sessionState = SessionState.CREATED
+                listener.onSuccess(null)
+            }
+
+            override fun onSessionEstablishFailed(e: Exception) {
+                sessionState = SessionState.FAILED
+                listener.onFailure(e)
+            }
+        })
     }
 
     /**
@@ -438,16 +486,27 @@ class ESPLocalControlModule(reactContext: ReactApplicationContext) :
         }
 
         if (session == null || !session!!.isEstablished()) {
-            val capturedSecurityType = this.securityType
-            initSession(device, baseUrl, capturedSecurityType, "", "wifiprov", object : ResponseListener {
-                override fun onSuccess(returnData: ByteArray?) {
-                    sendDataToDevice(finalUrl, decodedData, promise)
-                }
+            // Re-handshake with the per-node credentials captured at connect().
+            sessionState = SessionState.NOT_CREATED
+            initSession(
+                device,
+                device.baseUrl,
+                device.securityType,
+                device.pop,
+                device.username,
+                object : ResponseListener {
+                    override fun onSuccess(returnData: ByteArray?) {
+                        sendDataToDevice(finalUrl, decodedData, promise)
+                    }
 
-                override fun onFailure(e: Exception) {
-                    promise.reject("SESSION_NOT_INITIALIZED", "Failed to initialize session. Error: ${e.message}")
+                    override fun onFailure(e: Exception) {
+                        promise.reject(
+                            "SESSION_NOT_INITIALIZED",
+                            "Failed to initialize session. Error: ${e.message}"
+                        )
+                    }
                 }
-            })
+            )
         } else {
             sendDataToDevice(finalUrl, decodedData, promise)
         }
