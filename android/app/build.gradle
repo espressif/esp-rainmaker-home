@@ -159,6 +159,20 @@ android {
             ? Integer.parseInt(matterVendorIdStr.substring(2), 16) 
             : Integer.parseInt(matterVendorIdStr)
         buildConfigField "int", "MATTER_VENDOR_ID", "${matterVendorIdInt}"
+
+        // Matter commissioning back-end ("ChipTool" or "GooglePlayServices"). Defaults to
+        // Google Play services. Routed at runtime by ESPMatterModule.startEcosystemCommissioning.
+        // "ChipTool" so the build can produce a working Matter flow on devices without Google Play services.
+        def commissioningMethod = project.findProperty("MATTER_COMMISSIONING_METHOD") ?: "GooglePlayServices"
+        if (commissioningMethod.isEmpty()) {
+            commissioningMethod = "GooglePlayServices"
+        }
+        if (!commissioningMethod.equalsIgnoreCase("ChipTool")
+                && !commissioningMethod.equalsIgnoreCase("GooglePlayServices")) {
+            throw new GradleException("Invalid 'MATTER_COMMISSIONING_METHOD' value '" + commissioningMethod
+                    + "'. Allowed values: 'ChipTool' or 'GooglePlayServices'.")
+        }
+        buildConfigField "String", "MATTER_COMMISSIONING_METHOD", "\"${commissioningMethod}\""
         
         // Manifest placeholders from gradle.properties
         manifestPlaceholders = [

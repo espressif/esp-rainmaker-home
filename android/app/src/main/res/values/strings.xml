@@ -2,4 +2,26 @@
   <string name="expo_system_ui_user_interface_style" translatable="false">automatic</string>
   <string name="expo_splash_screen_resize_mode" translatable="false">contain</string>
   <string name="expo_splash_screen_status_bar_translucent" translatable="false">false</string>
+
+  <!-- ChipTool in-app Matter commissioning UI strings. Used by
+       ChipToolCommissioningActivity when MATTER_COMMISSIONING_METHOD=ChipTool. -->
+  <string name="chiptool_commissioning_progress">Preparing commissioning…</string>
+  <string name="chiptool_status_scanning_ble">Scanning for Matter device over BLE…</string>
+  <string name="chiptool_status_connecting_ble">Connecting to Matter device…</string>
+  <string name="chiptool_status_pairing">Commissioning device into RainMaker fabric…</string>
+  <string name="chiptool_status_success">Device commissioned successfully</string>
+  <string name="chiptool_status_failed">Commissioning failed: %1$s</string>
+  <string name="chiptool_status_ble_not_found">Could not find the Matter device over BLE. Please make sure the device is in pairing mode and try again.</string>
+  <string name="chiptool_status_invalid_payload">The Matter setup code is invalid. Please scan a valid QR code or enter a valid manual pairing code.</string>
+  <string name="chiptool_status_missing_payload">No Matter setup code was provided.</string>
+  <string name="chiptool_status_missing_fabric">Missing RainMaker fabric details. Please retry from fabric selection.</string>
+  <string name="chiptool_status_permission_denied">Bluetooth permissions are required for ChipTool commissioning.</string>
+  <string name="chiptool_status_cancelled">Matter commissioning was cancelled.</string>
+  <string name="chiptool_wifi_dialog_title">Wi-Fi credentials</string>
+  <string name="chiptool_wifi_dialog_subtitle">Enter the Wi-Fi network the new Matter device should join.</string>
+  <string name="chiptool_wifi_ssid_hint">Wi-Fi network name (SSID)</string>
+  <string name="chiptool_wifi_password_hint">Wi-Fi password</string>
+  <string name="chiptool_wifi_dialog_positive">Commission</string>
+  <string name="chiptool_wifi_dialog_negative">Cancel</string>
+  <string name="chiptool_wifi_dialog_validation">Wi-Fi SSID and password are required.</string>
 </resources>

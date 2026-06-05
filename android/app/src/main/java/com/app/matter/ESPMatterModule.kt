@@ -10,6 +10,7 @@ import android.content.Intent
 import android.os.Bundle
 import android.util.Log
 import android.view.View
+import com.app.BuildConfig
 import com.facebook.react.ReactPackage
 import com.facebook.react.bridge.NativeModule
 import com.facebook.react.bridge.ReactApplicationContext
@@ -181,13 +182,27 @@ class ESPMatterModule(reactContext: ReactApplicationContext) :
         fabricDetails: ReadableMap,
         promise: Promise
     ) {
-        Log.d(TAG, "Onboarding Payload: $onboardingPayload")
+        Log.d(
+            TAG,
+            "Onboarding Payload: $onboardingPayload " +
+                "(commissioningMethod=${BuildConfig.MATTER_COMMISSIONING_METHOD})"
+        )
 
         try {
             storeFabricDetails(fabricDetails)
 
-            // Start Google Play Services Matter commissioning
-            startGooglePlayServicesCommissioning(onboardingPayload, promise)
+            // Route to the configured commissioning back-end. See BuildConfig field
+            // populated by android/app/build.gradle from MATTER_COMMISSIONING_METHOD
+            // (synced from .env). Default is ChipTool.
+            if (AppConstants.COMMISSIONING_METHOD_CHIP_TOOL.equals(
+                    BuildConfig.MATTER_COMMISSIONING_METHOD,
+                    ignoreCase = true
+                )
+            ) {
+                startChipToolCommissioning(onboardingPayload, promise)
+            } else {
+                startGooglePlayServicesCommissioning(onboardingPayload, promise)
+            }
 
         } catch (error: Exception) {
             Log.e(TAG, "Matter commissioning failed: ${error.message}", error)
@@ -279,6 +294,31 @@ class ESPMatterModule(reactContext: ReactApplicationContext) :
             promise.reject(
                 "ACTIVITY_START_ERROR",
                 "Failed to start ecosystem commissioning activity: ${error.message}",
+                error
+            )
+        }
+    }
+
+    /**
+     * Launches the in-app ChipTool commissioning activity. Fabric details have already been
+     * persisted via [storeFabricDetails], so [ChipToolCommissioningActivity] only needs the
+     * Matter onboarding payload (QR code text) here.
+     */
+    private fun startChipToolCommissioning(onboardingPayload: String, promise: Promise) {
+        try {
+            val intent =
+                Intent(reactApplicationContext, ChipToolCommissioningActivity::class.java).apply {
+                    putExtra(AppConstants.EXTRA_ONBOARDING_PAYLOAD, onboardingPayload)
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+            reactApplicationContext.startActivity(intent)
+
+            promise.resolve("ChipTool commissioning activity started")
+
+        } catch (error: Exception) {
+            promise.reject(
+                "ACTIVITY_START_ERROR",
+                "Failed to start ChipTool commissioning activity: ${error.message}",
                 error
             )
         }
