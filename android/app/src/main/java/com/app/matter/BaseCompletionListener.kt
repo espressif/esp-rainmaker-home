@@ -67,4 +67,14 @@ abstract class BaseCompletionListener : ChipDeviceController.CompletionListener 
     override fun onCommissioningStatusUpdate(nodeId: Long, stage: String?, errorCode: Long) {
         // Default implementation - override in subclass if needed
     }
+
+    /**
+     * The updated ChipDeviceController.CompletionListener interface (CHIPController 1.5.x)
+     * adds onCommissioningStageStart, invoked before every commissioning stage. The default
+     * IDE stub throws NotImplementedError which crashes the very first PASE/CASE step, so a
+     * safe no-op default that just logs is provided here.
+     */
+    override fun onCommissioningStageStart(nodeId: Long, stage: String?) {
+        Log.d(TAG, "onCommissioningStageStart nodeId [${nodeId}]  stage [${stage}]")
+    }
 }
