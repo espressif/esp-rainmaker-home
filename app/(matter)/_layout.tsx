@@ -10,8 +10,7 @@ import { Stack } from "expo-router";
  * Matter Layout Component
  * 
  * This layout component defines the navigation structure for Matter-related screens.
- * It provides a stack navigator for the Matter commissioning flow including
- * fabric selection and commissioning progress screens.
+ * It provides a stack navigator for the Matter commissioning flow.
  */
 export default function MatterLayout() {
   return (
@@ -22,9 +21,9 @@ export default function MatterLayout() {
       }}
     >
       <Stack.Screen
-        name="FabricSelection"
+        name="Commissioning"
         options={{
-          title: "Select Fabric",
+          title: "Commissioning",
           headerShown: false,
         }}
       />

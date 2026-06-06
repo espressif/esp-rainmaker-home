@@ -59,6 +59,10 @@ import {
   RM_QR_CODE_PREFIX,
   RM_QR_TRANSPORT_MAP,
 } from "@shared/utils/constants";
+import {
+  MATTER_ROUTE_PARAM_FABRIC_CONVERSION_CONSENT_REQUIRED,
+  MATTER_ROUTE_PARAM_VALUE_FALSE,
+} from "@features/matter/constants";
 
 const { width, height } = Dimensions.get("window");
 const SCANNER_WIDTH = width * 0.8;
@@ -618,10 +622,13 @@ const ScanQR = () => {
 
       // Close camera with preview before navigation
       await closeCamera();
-      // Navigate to Fabric Selection with QR data
       router.push({
-        pathname: "/(matter)/FabricSelection",
-        params: { qrData },
+        pathname: "/(matter)/Commissioning",
+        params: {
+          qrData,
+          [MATTER_ROUTE_PARAM_FABRIC_CONVERSION_CONSENT_REQUIRED]:
+            MATTER_ROUTE_PARAM_VALUE_FALSE,
+        },
       });
     } catch (error: unknown) {
       const errorMessage =

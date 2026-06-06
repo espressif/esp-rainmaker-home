@@ -119,6 +119,15 @@
             android:noHistory="true"
             android:theme="@style/AppTheme.Transparent" />
 
+        <!-- In-app ChipTool commissioning activity (no Google Play services dependency).
+             Selected at build time via MATTER_COMMISSIONING_METHOD; launched from
+             ESPMatterModule.startEcosystemCommissioning. -->
+        <activity
+            android:name=".matter.ChipToolCommissioningActivity"
+            android:exported="false"
+            android:launchMode="singleTop"
+            android:screenOrientation="portrait" />
+
         <service
             android:name=".notification.FCMService"
             android:exported="false">

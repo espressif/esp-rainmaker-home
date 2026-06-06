@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   View,
   Text,
@@ -26,22 +26,25 @@ import { router } from "expo-router";
 import { observer } from "mobx-react-lite";
 import { useTranslation } from "react-i18next";
 import { useToast } from "@shared/hooks/useToast";
-
+import { useCDF } from "@shared/hooks/useCDF";
 // Utils
-import { getDeviceImage, extractDeviceType } from "@shared/utils/device";
+import {
+  extractDeviceType,
+  getDeviceImage,
+  isDeviceConnected,
+  isDeviceLocallyAvailable,
+} from "@shared/utils/device";
+import { resolveDeviceCardPowerParam } from "@shared/utils/deviceParams";
+import { coerceParamValueToBoolean } from "@shared/utils/paramUtils";
 
 // Constants
 import {
   POWER_PARAM_UNSUPPORTED_DEVICE_TYPES,
   ESPRM_NAME_PARAM_TYPE,
-  ESPRM_POWER_PARAM_TYPE,
   ERROR_CODES,
   ESPRM_TEMPERATURE_PARAM_TYPE,
   MATTER_METADATA_KEY,
-  MATTER_METADATA_DEVICE_NAME_KEY,
-  ESPRM_LOCAL_CONTROL_SERVICE,
-  ESPRM_LOCAL_CONTROL_TYPE_PARAM_TYPE,
-  ESPRM_LOCAL_CONTROL_POP_PARAM_TYPE,
+  MATTER_METADATA_DEVICE_NAME_KEY
 } from "@shared/utils/constants";
 
 // Styles
@@ -56,8 +59,6 @@ import {
   ESPCDFDevice,
   ESPCDFDeviceParam,
   ESPCDFNode,
-  ESPCDFNodeTransport,
-  ESPCDFTransportConfig,
 } from "@store";
 // Types
 interface DeviceCardProps {
@@ -95,46 +96,47 @@ const DeviceCard: React.FC<DeviceCardProps> = ({
   const toast = useToast();
   const { t } = useTranslation();
   const [paramTypeMap, setParamTypeMap] = useState<ParamTypeMap>({});
-  const [isPowerParamExisit, setIsPowerParamExisit] = useState<boolean>(false);
+  const { store } = useCDF();
+  const { width } = useWindowDimensions();
 
-  const isConnected = node.connectivityStatus?.isConnected || false;
+  const cardPowerParam = useMemo(
+    () => resolveDeviceCardPowerParam(device),
+    [device],
+  );
+  const isPowerParamExisit = Boolean(cardPowerParam);
+  const isPowerOn = coerceParamValueToBoolean(cardPowerParam?.value);
 
-  // Read during render so observer() re-renders when node.availableTransports (or its "local" entry) changes
-  const availableTransports = node.availableTransports as
-    | Record<string, ESPCDFTransportConfig>
-    | undefined;
-  const localTransport = availableTransports?.[ESPCDFNodeTransport.LOCAL];
-  const localControlService = node.services?.find(
-    (service) => service.type === ESPRM_LOCAL_CONTROL_SERVICE
+  // Prop `node` may come from a WeakRef snapshot; cloud status and metadata use
+  // nodeStore when present. LAN reachability reads subscriptionStore.registeredTransports
+  // directly so observer() re-renders on discovery add/remove.
+  const storeNode = store.nodeStore.nodesByIDMap[node.id] ?? node;
+  const registeredTransports =
+    store.subscriptionStore.registeredTransports[node.id];
+  const deviceConnected = useMemo(
+    () => isDeviceConnected(storeNode, registeredTransports),
+    [storeNode, registeredTransports],
   );
-  const hasLocalControlParams = Boolean(
-    localControlService?.params?.some(
-      (param) =>
-        param.type === ESPRM_LOCAL_CONTROL_TYPE_PARAM_TYPE ||
-        param.type === ESPRM_LOCAL_CONTROL_POP_PARAM_TYPE
-    )
+  const availableLocally = useMemo(
+    () => isDeviceLocallyAvailable(storeNode, registeredTransports),
+    [storeNode, registeredTransports],
   );
-  const isAvailableLocally = Boolean(
-    hasLocalControlParams &&
-    localTransport?.metadata?.baseUrl != null &&
-    String(localTransport.metadata.baseUrl).trim().length > 0,
-  );
+
+  let cardWidth = 180;
+  if (width <= 500) {
+    cardWidth = (width - tokens.spacing._15 * 2) / 2 - 6;
+  }
 
   /**
-   * useEffect to set the paramTypeMap and isPowerParamExisit
+   * Builds paramTypeMap for non-power card fields (name, temperature).
    */
   useEffect(() => {
     if (device) {
-      const paramTypeMap = device.params?.reduce((acc, param) => {
+      const nextParamTypeMap = device.params?.reduce((acc, param) => {
         acc[param.type || ""] = param;
         return acc;
       }, {} as ParamTypeMap);
 
-      setParamTypeMap(paramTypeMap || {});
-      setIsPowerParamExisit(
-        device.params?.some((param) => param.type === ESPRM_POWER_PARAM_TYPE) ||
-          false,
-      );
+      setParamTypeMap(nextParamTypeMap || {});
     }
   }, [device]);
 
@@ -152,31 +154,22 @@ const DeviceCard: React.FC<DeviceCardProps> = ({
     } as any);
   };
 
-  // STYLE : card width
-  const { width } = useWindowDimensions();
-  let cardWidth = 180;
-  if (width <= 500) {
-    cardWidth = (width - tokens.spacing._15 * 2) / 2 - 6;
-  }
-
   /**
    * Handle device power control
    * Sets the power state of the device
    * @param device - The device to control
    * @param value - The power state to set
    */
-  const handleDevicePowerControl = (device: ESPCDFDevice, value: boolean) => {
-    const powerParam: ESPCDFDeviceParam | undefined = device?.params?.find(
-      (param) => param.type === ESPRM_POWER_PARAM_TYPE,
-    );
-    if (powerParam) {
-      powerParam
-        .setValue(value)
-        .then(() => {})
-        .catch((err) => {
-          toast.showError(t(ERROR_CODES[err.code as keyof typeof ERROR_CODES]));
-        });
+  const handleDevicePowerControl = (value: boolean) => {
+    if (!cardPowerParam) {
+      return;
     }
+    cardPowerParam
+      .setValue(value)
+      .then(() => {})
+      .catch((err) => {
+        toast.showError(t(ERROR_CODES[err.code as keyof typeof ERROR_CODES]));
+      });
   };
 
   // Render compact card
@@ -189,7 +182,7 @@ const DeviceCard: React.FC<DeviceCardProps> = ({
       >
         <Image
           {...testProps("icon_device_card")}
-          source={getDeviceImage(device.type, isConnected)}
+          source={getDeviceImage(device.type, deviceConnected)}
           style={[styles.image, { marginBottom: 5 }]}
         />
 
@@ -209,18 +202,18 @@ const DeviceCard: React.FC<DeviceCardProps> = ({
             size="$2.5"
             borderColor={tokens.colors.bg1}
             borderWidth={0}
-            checked={paramTypeMap[ESPRM_POWER_PARAM_TYPE]?.value || false}
-            disabled={!isConnected}
+            checked={isPowerOn}
+            disabled={!deviceConnected}
             style={[
               globalStyles.switch,
-              !isConnected && globalStyles.deviceCardDisabled,
+              !deviceConnected && globalStyles.deviceCardDisabled,
             ]}
-            onCheckedChange={(value) => handleDevicePowerControl(device, value)}
+            onCheckedChange={handleDevicePowerControl}
           >
             <Switch.Thumb
               animation="quicker"
               style={
-                paramTypeMap[ESPRM_POWER_PARAM_TYPE]?.value
+                isPowerOn
                   ? globalStyles.switchThumbActive
                   : globalStyles.switchThumb
               }
@@ -234,9 +227,9 @@ const DeviceCard: React.FC<DeviceCardProps> = ({
   const getOnValue = () => {
     const extractedDeviceType = extractDeviceType(device.type);
     if (POWER_PARAM_UNSUPPORTED_DEVICE_TYPES.has(extractedDeviceType)) {
-      return isConnected;
+      return deviceConnected;
     }
-    return paramTypeMap[ESPRM_POWER_PARAM_TYPE]?.value;
+    return isPowerOn;
   };
 
   /**
@@ -250,9 +243,9 @@ const DeviceCard: React.FC<DeviceCardProps> = ({
       : null;
   };
 
-  const getDeviceName = (node: ESPCDFNode) => {
+  const getDeviceName = (cdfNode: ESPCDFNode) => {
     // Check if node metadata contains Matter key
-    const metadata = node.metadata;
+    const metadata = cdfNode.metadata;
     if (metadata && metadata[MATTER_METADATA_KEY]) {
       const deviceName =
         metadata[MATTER_METADATA_KEY][MATTER_METADATA_DEVICE_NAME_KEY];
@@ -274,8 +267,8 @@ const DeviceCard: React.FC<DeviceCardProps> = ({
         {
           padding: 10,
           width: cardWidth,
-          opacity: !isConnected ? 0.7 : 1,
-          backgroundColor: !isConnected
+          opacity: !deviceConnected ? 0.7 : 1,
+          backgroundColor: !deviceConnected
             ? tokens.colors.bg2
             : tokens.colors.white,
         },
@@ -294,18 +287,18 @@ const DeviceCard: React.FC<DeviceCardProps> = ({
             size="$2.5"
             borderColor={tokens.colors.bg1}
             borderWidth={0}
-            checked={paramTypeMap[ESPRM_POWER_PARAM_TYPE]?.value || false}
-            disabled={!isConnected}
+            checked={isPowerOn}
+            disabled={!deviceConnected}
             style={[
               globalStyles.switch,
-              !isConnected && globalStyles.deviceCardDisabled,
+              !deviceConnected && globalStyles.deviceCardDisabled,
             ]}
-            onCheckedChange={(value) => handleDevicePowerControl(device, value)}
+            onCheckedChange={handleDevicePowerControl}
           >
             <Switch.Thumb
               animation="quicker"
               style={
-                paramTypeMap[ESPRM_POWER_PARAM_TYPE]?.value
+                isPowerOn
                   ? globalStyles.switchThumbActive
                   : globalStyles.switchThumb
               }
@@ -326,14 +319,14 @@ const DeviceCard: React.FC<DeviceCardProps> = ({
             style={styles.name}
             numberOfLines={1}
           >
-            {getDeviceName(node) ||
+            {getDeviceName(storeNode) ||
               paramTypeMap[ESPRM_NAME_PARAM_TYPE]?.value ||
               device.displayName}
           </Text>
         </View>
         <View style={styles.statusContainer}>
-          {isConnected ? (
-            isAvailableLocally ? (
+          {deviceConnected ? (
+            availableLocally ? (
               <View style={styles.wlanIndicator}>
                 <Lock size={12} color={tokens.colors.primary} />
                 <Text

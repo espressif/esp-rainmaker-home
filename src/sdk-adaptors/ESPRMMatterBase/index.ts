@@ -14,15 +14,97 @@ import {
 } from "@store";
 import {
     ESPRMMatterBase,
+    ESPRMMatterDeviceParam,
     type ESPRMMatterBaseConfig,
     ESPRMAuth,
     ESPRMBaseConfig,
     ESPTransportMode,
+    ESPRMBase,
+    MatterSubscriptionChannelIds,
+    SubscriptionChannelIds,
 } from "@espressif/rainmaker-matter-sdk";
 import { transformToESPCDFUser } from "./transformers";
 import { ESPRMMatterBaseAdaptorIdentifier } from "./constants";
+import { getActiveMatterFabricId } from "@native-adaptors/implementations/ESPMatterUtilityAdapter";
+import { isCrossClusterInvokeMarker } from "./utils/common";
 
 export { ESPRMMatterBaseAdaptorIdentifier };
+export type {
+    ClusterConfigMap,
+    ClusterRegistryEntry,
+} from "@espressif/rainmaker-matter-sdk";
+
+/**
+ * Installs a one-shot prototype patch on `ESPRMMatterDeviceParam.setValue`
+ * that honors the `__matterCrossClusterInvoke` marker emitted by a
+ * resolver's `encodeValue`. When the marker is present, the patched
+ * setValue calls `ESPMatterControlAdapter.invoke()` with the override
+ * `(clusterId, commandId, payload)` instead of the param's host cluster.
+ *
+ * Why prototype-patch: the SDK's `SetValue.js` always reads `clusterId`
+ * and `endpointId` from the param instance — there is no per-write
+ * cluster override hook. Touching the SDK source would force every app
+ * to rebuild and republish the matter SDK; the patch lets the cluster
+ * config own cross-cluster decisions (e.g. RVC `Start` → `0x54` cmd
+ * `0x00` instead of `0x61` cmd `0x02`) without forking the SDK.
+ *
+ * Idempotent — guarded by a module-local flag so re-initialization (hot
+ * reload, multi-config) doesn't stack patches.
+ */
+let crossClusterPatchInstalled = false;
+function installCrossClusterInvokePatch(): void {
+    if (crossClusterPatchInstalled) return;
+    const proto = (ESPRMMatterDeviceParam as unknown as {
+        prototype: {
+            setValue: (value: unknown) => Promise<unknown>;
+            resolver?: { encodeValue?: (value: unknown, rawModes?: Record<string, number>) => unknown };
+        };
+    }).prototype;
+    const originalSetValue = proto.setValue;
+    proto.setValue = async function (value: unknown): Promise<unknown> {
+        const self = this as unknown as {
+            resolver?: { encodeValue?: (value: unknown, rawModes?: Record<string, number>) => unknown };
+            rawModes?: Record<string, number>;
+            nodeRef: { deref: () => { matterNodeId?: string } | undefined };
+            endpointId?: number;
+            value: unknown;
+        };
+        const encoded = self.resolver?.encodeValue?.(value, self.rawModes);
+        if (isCrossClusterInvokeMarker(encoded)) {
+            const node = self.nodeRef.deref();
+            const matterNodeId = node?.matterNodeId;
+            if (!matterNodeId) {
+                throw new Error(
+                    "Cross-cluster invoke skipped: matterNodeId unavailable on node ref.",
+                );
+            }
+            const adapter = ESPRMMatterBase.ESPMatterControlAdapter;
+            const result = await adapter.invoke(
+                matterNodeId,
+                self.endpointId ?? 0,
+                encoded.clusterId,
+                encoded.commandId,
+                encoded.payload,
+            );
+            if (!result.success) {
+                throw new Error(
+                    result.error ?? "Matter cross-cluster invoke failed",
+                );
+            }
+            // Optimistic write so the host param's MobX consumers see the
+            // action token; the next subscription frame on the host
+            // cluster's read attribute will overwrite with the decoded
+            // device state.
+            self.value = value;
+            return {
+                status: "success",
+                description: `Matter cross-cluster invoke (cluster=0x${encoded.clusterId.toString(16)} cmd=0x${encoded.commandId.toString(16)})`,
+            };
+        }
+        return originalSetValue.call(this, value);
+    };
+    crossClusterPatchInstalled = true;
+}
 
 export class ESPRMMatterBaseSDKAdaptor {
     config: ESPRMMatterBaseConfig;
@@ -41,6 +123,102 @@ export class ESPRMMatterBaseSDKAdaptor {
         ]);
         ESPRMMatterBase.configure(config);
         this._authInstance = ESPRMMatterBase.getAuthInstance();
+
+        // Install the cross-cluster invoke prototype patch *after*
+        // `configure` so the SDK's own `SetValue` setup (prototype assign
+        // in `methods/ESPRMMatterDeviceParam/SetValue.js`) is in place
+        // — we wrap it, not the other way around.
+        installCrossClusterInvokePatch();
+
+        // Register the Matter subscription channel with `ESPRMBase.subscriptionManager`
+        // and put it ahead of the notification channel in the global order.
+        //
+        // Two steps are required for `subscribeToAllNodes()` to find the channel:
+        //   1. `initializeMatterSubscription()` registers the channel built by
+        //      `configure(config)` on the base SDK's subscription manager.
+        //   2. `setGlobalChannelOrder([...])` puts it in the priority list —
+        //      `getAvailableChannelsForNode(node)` ignores any channel not in
+        //      the global order, even if registered.
+        //
+        // The base SDK's `configure()` already sets the order to
+        // `[NOTIFICATION]` when a `notificationAdapter` is configured, which
+        // overwrites whatever we set here if it runs later. To survive that,
+        // we re-set the order *after* the registration completes; if the
+        // notification setter happens to land afterwards we lose Matter
+        // until `setGlobalChannelOrder` runs again — acceptable since this
+        // path is only relevant on cold start where order is fluid anyway.
+        // Best-effort: a registration failure should not block SDK init —
+        // we still want commissioning / control paths to work, just without
+        // matter-channel subscriptions until the next login.
+        if (config.matterSubscriptionAdapter) {
+            try {
+                await ESPRMMatterBase.initializeMatterSubscription();
+
+                // Wire the matter subscription channel's `fabricIdResolver`.
+                // The matter SDK's `MatterSubscriptionChannel.subscribe()`
+                // calls `await fabricIdResolver(rmNodeId)` and throws
+                // "Fabric ID resolver not configured" if none is set.
+                // Our native control adapter does its own per-node
+                // (rmNodeId → matterNodeId) lookup and ignores the
+                // fabricId, so returning the active fabric id from the
+                // module-level cache populated by `syncFabricSession` is
+                // sufficient. Returning empty string before the first
+                // sync is harmless — the matter channel forwards it to
+                // the adapter which ignores it.
+                const matterChannel = (
+                    ESPRMMatterBase as unknown as {
+                        getMatterSubscriptionChannel?: () => {
+                            setFabricIdResolver?: (
+                                resolver: (nodeId: string) => Promise<string>,
+                            ) => void;
+                        } | undefined;
+                    }
+                ).getMatterSubscriptionChannel?.();
+                if (matterChannel?.setFabricIdResolver) {
+                    matterChannel.setFabricIdResolver(async (_nodeId: string) => {
+                        return getActiveMatterFabricId() ?? "";
+                    });
+                    console.log(
+                        "[ESPRMMatterBaseSDKAdaptor] matter channel fabricIdResolver wired",
+                    );
+                } else {
+                    console.warn(
+                        "[ESPRMMatterBaseSDKAdaptor] could not wire fabricIdResolver — channel.setFabricIdResolver not available",
+                    );
+                }
+
+                const subscriptionManager = (
+                    ESPRMBase as unknown as {
+                        subscriptionManager: {
+                            getGlobalChannelOrder?: () => string[];
+                            setGlobalChannelOrder: (ids: string[]) => void;
+                        };
+                    }
+                ).subscriptionManager;
+                if (subscriptionManager) {
+                    const currentOrder =
+                        subscriptionManager.getGlobalChannelOrder?.() ?? [];
+                    const desiredOrder = Array.from(
+                        new Set([
+                            MatterSubscriptionChannelIds.MATTER,
+                            ...currentOrder,
+                            SubscriptionChannelIds.NOTIFICATION,
+                        ]),
+                    );
+                    subscriptionManager.setGlobalChannelOrder(desiredOrder);
+                    console.log(
+                        "[ESPRMMatterBaseSDKAdaptor] matter subscription channel registered; channel order:",
+                        desiredOrder,
+                    );
+                }
+            } catch (error) {
+                console.warn(
+                    "[ESPRMMatterBaseSDKAdaptor] initializeMatterSubscription failed:",
+                    error,
+                );
+            }
+        }
+
         return {
             status: "success",
             description: "SDK initialized successfully with Matter support",

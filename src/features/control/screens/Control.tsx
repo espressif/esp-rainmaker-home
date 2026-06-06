@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { useEffect } from "react";
 import { View, Text, StyleSheet, Pressable } from "react-native";
 
 // Styles
@@ -14,6 +15,7 @@ import { globalStyles } from "@shared/theme/globalStyleSheet";
 import { useTranslation } from "react-i18next";
 import { observer } from "mobx-react-lite";
 import { useControl } from "@features/control/hooks";
+import { useCDF } from "@shared/hooks/useCDF";
 
 // Icons
 import { Settings } from "lucide-react-native";
@@ -28,6 +30,7 @@ import CameraControl from "./device_panels/Camera";
 
 // Utils
 import { testProps } from "@shared/utils/testProps";
+import { readAttributesForNodeId } from "@shared/utils/matterAttributeRead";
 
 const CONTROL_PANELS: Record<string, React.FC<any>> = {
   light: LightControl,
@@ -44,6 +47,24 @@ const Control = () => {
   const { t } = useTranslation();
   const { node, device, displayName, deviceConfig, handleMorePress } =
     useControl();
+  const { store } = useCDF();
+
+  // iOS parity: when entering the control screen for a Matter node, fire a
+  // one-shot read of every matter param on the node so the panel paints
+  // with live values regardless of whether the subscription has delivered
+  // an initial frame yet. Mirrors the `getCurrentLevelValues()` /
+  // `getCurrentSaturationValue()` calls in the native iOS RainMaker app's
+  // `DeviceViewController+UIWorker.swift`. On Android the subscription
+  // already delivers an initial ReportData on establishment, so this is
+  // typically redundant — but it's idempotent (same dispatch path as a
+  // subscription frame) and the FW wouldn't queue a second push for a
+  // value that just matched the cached frame, so the cost is minimal.
+  useEffect(() => {
+    if (!node?.isMatter || !node.id) return;
+    const user = store?.userStore?.user;
+    if (!user) return;
+    void readAttributesForNodeId(user, node.id);
+  }, [node?.id, node?.isMatter, store?.userStore?.user]);
 
   // Early return for missing device
   if (!device) {

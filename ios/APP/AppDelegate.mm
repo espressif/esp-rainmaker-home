@@ -11,6 +11,7 @@
 #import <ExpoModulesCore-Swift.h>
 #import <Expo/ExpoReactNativeFactory.h>
 #import <ReactAppDependencyProvider/RCTAppDependencyProvider.h>
+#import <TargetConditionals.h>
 #import "APP-Swift.h"
 
 @interface RCTAppDelegate (Private)

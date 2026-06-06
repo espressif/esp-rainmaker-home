@@ -49,7 +49,8 @@ class ESPMatterCommissioningService : Service(), CommissioningService.Callback {
                 fabricInfo.rootCa!!,
                 fabricInfo.userNoc ?: "",
                 fabricInfo.ipk!!,
-                fabricInfo.groupCatIdOperate!!
+                fabricInfo.groupCatIdOperate!!,
+                fabricInfo.groupCatIdAdmin ?: ""
             )
             FabricSessionManager.setCurrentChipClient(chipClient)
         } else {
@@ -165,7 +166,7 @@ class ESPMatterCommissioningService : Service(), CommissioningService.Callback {
             val eventData = android.os.Bundle().apply {
                 putString(AppConstants.KEY_STATUS, "success")
                 putString(AppConstants.KEY_DEVICE_ID, deviceId)
-                putString(AppConstants.KEY_DEVICE_NAME, deviceName)
+                putString(AppConstants.KEY_DEVICE_NAME_CAMEL, deviceName)
                 putString(AppConstants.KEY_FABRIC_NAME, fabricName)
                 putString(AppConstants.KEY_MESSAGE, AppConstants.GPS_COMMISSIONING_SUCCESS)
                 putString(AppConstants.KEY_SOURCE, AppConstants.GPS_COMMISSIONING_SOURCE)

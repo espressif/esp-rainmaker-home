@@ -4,14 +4,25 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { ESPRM_NAME_PARAM_TYPE } from "./constants";
+import { ESPRM_NAME_PARAM_TYPE, MATTER_LOCAL_TRANSPORT_KEY } from "./constants";
 import {
   getProvisionBleIconName,
   isAIAgentFromAdvertisement,
   parseBleManufacturerAdvertisement,
 } from "./bleAdvertisement";
 import { DEVICE_TYPE_LIST } from "@/config/devices.config";
-import { ESPCDFDevice, ESPCDFDeviceParam, ESPCDFNode } from "@store";
+import {
+  ESPCDFDevice,
+  ESPCDFDeviceParam,
+  ESPCDFNode,
+  ESPCDFNodeTransport,
+  ESPCDFTransportConfig,
+} from "@store";
+
+/** Client-registered discovery transports for one node (subscription store shape). */
+type NodeRegisteredTransports = Partial<
+  Record<string, ESPCDFTransportConfig>
+>;
 
 export type { BleAdvertisedDeviceKind, ParsedBleManufacturerAdvertisement } from "./bleAdvertisement";
 
@@ -35,6 +46,8 @@ const deviceImages: Record<string, any> = {
   "ai-assistant-online": require("@assets/images/devices/ai-assistant-online.png"),
   camera: require("@assets/images/devices/camera.png"),
   "camera-online": require("@assets/images/devices/camera.png"),
+  "rvc-online": require("@assets/images/devices/rvc-online.png"),
+  "rvc": require("@assets/images/devices/rvc.png"),
   // Add more mappings as needed
 };
 
@@ -404,6 +417,57 @@ const getQRScanErrorType = (
   return "generic";
 };
 
+/**
+ * Resolves transport map for reachability checks.
+ * @param cdfNode - CDF node (prefer live `nodeStore` entry when available).
+ * @param registeredTransports - Optional subscription-store transports for MobX tracking.
+ * @returns Transports used to detect LAN availability.
+ */
+function resolveNodeTransportsForReachability(
+  cdfNode: ESPCDFNode,
+  registeredTransports?: NodeRegisteredTransports | null,
+): NodeRegisteredTransports | undefined {
+  return registeredTransports ?? cdfNode.availableTransports;
+}
+
+/**
+ * Whether the node has an active LAN transport (RainMaker local or Matter operational).
+ * Prefer `registeredTransports` from `subscriptionStore` so MobX tracks discovery add/remove.
+ * @param cdfNode - Node used for fallback `availableTransports`.
+ * @param registeredTransports - Optional subscription-store transports for this node id.
+ * @returns True when local or Matter operational transport is registered.
+ */
+const isDeviceLocallyAvailable = (
+  cdfNode: ESPCDFNode,
+  registeredTransports?: NodeRegisteredTransports | null,
+): boolean => {
+  const transportSource = resolveNodeTransportsForReachability(
+    cdfNode,
+    registeredTransports,
+  );
+  const RMLocalTransport = ESPCDFNodeTransport.LOCAL;
+  const MatterLocalTransport = MATTER_LOCAL_TRANSPORT_KEY;
+  return Boolean(
+    transportSource?.[RMLocalTransport] ||
+      transportSource?.[MatterLocalTransport],
+  );
+};
+
+/**
+ * Whether the device is reachable for control UI: cloud online or locally discovered.
+ * Prefer `registeredTransports` from `subscriptionStore` so MobX tracks discovery add/remove.
+ * @param cdfNode - Node used for cloud `connectivityStatus` (live nodeStore entry when available).
+ * @param registeredTransports - Optional subscription-store transports for this node id.
+ * @returns True when cloud-connected or LAN transport is active.
+ */
+const isDeviceConnected = (
+  cdfNode: ESPCDFNode,
+  registeredTransports?: NodeRegisteredTransports | null,
+): boolean => {
+  const isCloudConnected = cdfNode.connectivityStatus?.isConnected || false;
+  return isCloudConnected || isDeviceLocallyAvailable(cdfNode, registeredTransports);
+};
+
 // Export constants and utility functions
 export { DEVICE_TYPE_LIST, deviceImages };
 
@@ -425,4 +489,6 @@ export {
   isAIAgentFromAdvertisement,
   getProvisionBleIconName,
   parseBleManufacturerAdvertisement,
+  isDeviceConnected,
+  isDeviceLocallyAvailable,
 };

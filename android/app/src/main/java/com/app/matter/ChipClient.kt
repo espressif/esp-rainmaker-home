@@ -6,6 +6,7 @@
 
 package com.app.matter
 
+import android.bluetooth.BluetoothGatt
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
@@ -32,6 +33,7 @@ import java.security.PrivateKey
 import java.security.Signature
 import java.security.cert.CertificateFactory
 import java.security.cert.X509Certificate
+import java.util.Optional
 import java.util.concurrent.TimeoutException
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
@@ -40,21 +42,91 @@ import kotlin.coroutines.suspendCoroutine
 /**
  * Handles Matter device communication and commissioning
  */
-class ChipClient constructor(
+class ChipClient @JvmOverloads constructor(
     private val context: Context,
     private val groupId: String,
     private val fabricId: String,
     private val rootCa: String,
     private var userNoc: String,
     private val ipk: String,
-    private val groupCatIdOperate: String
+    private val groupCatIdOperate: String,
+    private val groupCatIdAdmin: String = ""
 ) {
 
     companion object {
         const val TAG = "ChipClient"
         private const val DEFAULT_TIMEOUT = 15000L
         private const val INVOKE_COMMAND_TIMEOUT = 15000
+        private const val BASIC_INFORMATION_CLUSTER_ID = 0x00000028L
+        private const val DATA_MODEL_REVISION_ATTRIBUTE_ID = 0x00000000L
+
+        // ----------------------------------------------------------------------------------
+        // Process-wide AndroidChipPlatform / AndroidBleManager.
+        //
+        // The native CHIP stack stores the BLE manager via a JniGlobalReference whose Init()
+        // *silently rejects* any subsequent registration (returns CHIP_ERROR_INCORRECT_STATE).
+        // That means only the FIRST AndroidBleManager ever passed to nativeSetBLEManager()
+        // is wired into the native BLE layer for the lifetime of the process.
+        //
+        // Multiple ChipClient instances (one per fabric + one per commissioning attempt)
+        // would otherwise spawn multiple AndroidBleManager instances of which only the first
+        // is actually live. When the ChipTool commissioning flow then registers a
+        // BluetoothGatt with a different (later) AndroidBleManager, the native code looks
+        // up the original BleManager, does not see the connection, and fails the write with
+        // "Unknown connId 1".
+        //
+        // Sharing a single platform/BleManager across all ChipClient instances avoids that
+        // mismatch. Each ChipClient still owns its own ChipDeviceController so that
+        // fabric-specific OperationalKeyConfig (root CA, IPK, NOC, ...) is honored.
+        // ----------------------------------------------------------------------------------
+        @Volatile
+        private var sAndroidPlatform: AndroidChipPlatform? = null
+
+        @Volatile
+        private var sBleManager: AndroidBleManager? = null
+
+        /**
+         * Ensures the process-wide [AndroidChipPlatform] / [AndroidBleManager] are initialised
+         * exactly once. Returns the cached instance on every subsequent call.
+         */
+        @JvmStatic
+        @Synchronized
+        fun ensureAndroidChipPlatform(context: Context): AndroidChipPlatform {
+            sAndroidPlatform?.let { return it }
+            ChipDeviceController.loadJni()
+            val ble = AndroidBleManager()
+            val platform = AndroidChipPlatform(
+                ble,
+                AndroidNfcCommissioningManager(),
+                PreferencesKeyValueStoreManager(context),
+                PreferencesConfigurationManager(context),
+                NsdManagerServiceResolver(context),
+                NsdManagerServiceBrowser(context),
+                ChipMdnsCallbackImpl(),
+                DiagnosticDataProviderImpl(context)
+            )
+            sBleManager = ble
+            sAndroidPlatform = platform
+            return platform
+        }
+
+        /**
+         * Returns the process-wide [AndroidBleManager], initialising the platform on demand.
+         */
+        @JvmStatic
+        @Synchronized
+        fun ensureBleManager(context: Context): AndroidBleManager {
+            ensureAndroidChipPlatform(context)
+            return sBleManager!!
+        }
     }
+
+    /**
+     * Returns the process-wide [AndroidBleManager]. ChipTool style commissioning uses this
+     * to register the live [android.bluetooth.BluetoothGatt] with the same BLE manager that
+     * the native CHIP stack queries.
+     */
+    fun getBleManager(): AndroidBleManager = ensureBleManager(context)
 
     // Android KeyStore for certificate management
     private val keyStore: KeyStore = KeyStore.getInstance("AndroidKeyStore").apply {
@@ -82,22 +154,15 @@ class ChipClient constructor(
     private val confirmContinuations = mutableMapOf<String, CancellableContinuation<String>>()
     private var commissioningContinuation: CancellableContinuation<Unit>? = null
 
-    // Lazily instantiate ChipDeviceController
-    private val chipDeviceController: ChipDeviceController by lazy {
+    // Lazily instantiate ChipDeviceController. Package-internal so
+    // [ESPMatterControl] can reach the low-level CHIP IM primitives
+    // (subscribe/shutdownSubscriptions) that aren't yet wrapped here.
+    internal val chipDeviceController: ChipDeviceController by lazy {
         Log.d(TAG, "========== INITIALIZING ESP RAINMAKER CHIP DEVICE CONTROLLER ==========")
-        ChipDeviceController.loadJni()
-
-        // Initialize Android platform components
-        AndroidChipPlatform(
-            AndroidBleManager(),
-            AndroidNfcCommissioningManager(),
-            PreferencesKeyValueStoreManager(context),
-            PreferencesConfigurationManager(context),
-            NsdManagerServiceResolver(context),
-            NsdManagerServiceBrowser(context),
-            ChipMdnsCallbackImpl(),
-            DiagnosticDataProviderImpl(context)
-        )
+        // The native CHIP stack only honours the FIRST AndroidBleManager registered for
+        // the process. Always go through ensureAndroidChipPlatform() so every ChipClient
+        // shares the same one — required for the ChipTool BLE commissioning path.
+        ensureAndroidChipPlatform(context)
 
         try {
             val decodedHex: ByteArray = decodeHex(ipk)
@@ -214,7 +279,82 @@ class ChipClient constructor(
         commissioningContinuation = continuation
 
         try {
-            val callback = object : BaseCompletionListener() {
+            chipDeviceController.setCompletionListener(buildCommissioningCompletionListener(continuation))
+            chipDeviceController.commissionDevice(deviceId, networkCredentials)
+
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to commission device: ${e.message}", e)
+            continuation.resumeWithException(e)
+            commissioningContinuation = null
+        }
+    }
+
+    /**
+     * ChipTool style commissioning: drives the full PASE + commissioning + network
+     * provisioning flow over BLE in a single call. Reuses the exact same completion listener
+     * as [awaitCommissionDevice], so the post-commissioning steps (RM cluster reads, ACL
+     * setup, headless confirm-commission task) run identically regardless of which Matter
+     * back-end started the flow.
+     *
+     * The [bleGatt] / [connId] must come from [ChipToolBluetoothManager], which has already
+     * registered the connection with the process-wide [AndroidBleManager] owned by
+     * [ensureAndroidChipPlatform].
+     *
+     * @param deviceId Operational Matter node id this ChipClient will use locally during
+     *                 commissioning. The final node id assigned by RainMaker is independent
+     *                 and is fetched via the NOC chain issuer.
+     * @param bleGatt Live GATT connection to the commissionable device.
+     * @param connId Connection id returned by `AndroidBleManager.addConnection(...)`.
+     * @param setupPinCode Setup PIN parsed from the QR / manual pairing code.
+     * @param networkCredentials Wi-Fi credentials the device should join post-commission.
+     */
+    suspend fun awaitPairDeviceOverBle(
+        deviceId: Long,
+        bleGatt: BluetoothGatt,
+        connId: Int,
+        setupPinCode: Long,
+        networkCredentials: NetworkCredentials?
+    ) = suspendCancellableCoroutine<Unit> { continuation ->
+        Log.d(TAG, "Pairing device over BLE: deviceId=$deviceId connId=$connId")
+
+        // Match the state reset that GPS flow performs in triggerNOCTask(). We need a clean
+        // slate here because the NOCChainIssuer callback is invoked inside pairDevice(), so
+        // confirmTaskTriggered must be false when the new commissioning starts.
+        currentDeviceId = deviceId
+        tempDeviceId = deviceId
+        isCommissioning = true
+        nocChainReceived = false
+        nocChainInstalled = false
+        confirmTaskTriggered = false
+        commissioningContinuation = continuation
+
+        try {
+            chipDeviceController.setCompletionListener(buildCommissioningCompletionListener(continuation))
+            chipDeviceController.pairDevice(
+                bleGatt,
+                connId,
+                deviceId,
+                setupPinCode,
+                networkCredentials
+            )
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to pair device over BLE: ${e.message}", e)
+            continuation.resumeWithException(e)
+            commissioningContinuation = null
+        }
+    }
+
+    /**
+     * Builds the shared post-commissioning listener used by both the GPS-driven
+     * [awaitCommissionDevice] and the in-app ChipTool [awaitPairDeviceOverBle] flow.
+     * Completing the [continuation] is deferred to the headless confirm-commission task
+     * (see [onCommissioningFullyComplete] / [onCommissioningFailed]); the listener only
+     * resumes the continuation directly on synchronous error paths.
+     */
+    private fun buildCommissioningCompletionListener(
+        continuation: CancellableContinuation<Unit>
+    ): BaseCompletionListener {
+        return object : BaseCompletionListener() {
                 // Note that an error in processing is not necessarily communicated via onError().
                 // onCommissioningComplete with an "errorCode != 0" also denotes an error in processing.
                 override fun onCommissioningComplete(nodeId: Long, errorCode: Long) {
@@ -260,9 +400,28 @@ class ChipClient constructor(
                                 var deviceName = ""
                                 val metadataJson = JsonObject()
                                 val body = JsonObject()
-                                var endpointsArray = JsonArray()
-                                var serversDataJson = JsonObject()
-                                var clientsDataJson = JsonObject()
+                                val endpointsJson = JsonObject()
+                                /**
+                                 * Build cloud Matter metadata in the canonical nested shape used by
+                                 * reference apps and the Matter SDK:
+                                 *
+                                 * {
+                                 *   "Matter": {
+                                 *     "deviceName": "...",
+                                 *     "deviceType": <int>,
+                                 *     "isRainmaker": <bool>,
+                                 *     "group_id": "...",
+                                 *     "endpoints": {
+                                 *       "0x<EP>": {
+                                 *         "clusters": {
+                                 *           "servers": { "0x<CID>": { "attributes": ["0x<AID>"...] | null } },
+                                 *           "clients": { "0x<CID>": { "attributes": null } }
+                                 *         }
+                                 *       }
+                                 *     }
+                                 *   }
+                                 * }
+                                 */
 
                                 if (deviceMatterInfo.isNotEmpty()) {
                                     try {
@@ -270,52 +429,70 @@ class ChipClient constructor(
 
                                             if (info.types.isNotEmpty()) {
                                                 val primaryDeviceType = info.types[0].toInt()
-                                                metadataJson.addProperty(
-                                                    AppConstants.KEY_DEVICE_TYPE,
-                                                    primaryDeviceType
-                                                )
+                                                if (info.endpoint != 0) {
+                                                    metadataJson.addProperty(
+                                                        AppConstants.KEY_DEVICE_TYPE,
+                                                        primaryDeviceType
+                                                    )
 
-                                                if (deviceName.isEmpty()) {
-                                                    deviceName = NodeUtils.getDefaultNameForMatterDevice(primaryDeviceType)
-                                                }
-
-                                                for (deviceType in info.types) {
-                                                    val defaultName = NodeUtils.getDefaultNameForMatterDevice(deviceType.toInt())
-                                                    val category = NodeUtils.getDeviceCategory(deviceType.toInt())
-                                                }
-                                            } else {
-                                                if (deviceName.isEmpty()) {
-                                                    deviceName = AppConstants.DEFAULT_MATTER_DEVICE_NAME
+                                                    if (deviceName.isEmpty()) {
+                                                        deviceName = NodeUtils.getDefaultNameForMatterDevice(primaryDeviceType)
+                                                    }
                                                 }
                                             }
 
-                                            endpointsArray.add(info.endpoint)
+                                            val endpointJson = JsonObject()
+                                            val clustersJson = JsonObject()
 
-                                            if (info.serverClusters.isNotEmpty()) {
-                                                val serverClustersArr = JsonArray()
-                                                for (serverCluster in info.serverClusters) {
-                                                    serverClustersArr.add(
-                                                        serverCluster.toString().toInt()
+                                            val serversJson = JsonObject()
+                                            for (serverCluster in info.serverClusters) {
+                                                val clusterIdLong = serverCluster.toString().toLong()
+                                                val clusterIdHex = "0x${clusterIdLong.toString(16)}"
+                                                val clusterJson = JsonObject()
+
+                                                val attributeIds =
+                                                    info.clusterAttributes[serverCluster.toString()]
+                                                if (attributeIds != null && attributeIds.isNotEmpty()) {
+                                                    val attributesArr = JsonArray()
+                                                    for (attributeId in attributeIds) {
+                                                        attributesArr.add(
+                                                            "0x${attributeId.toString(16)}"
+                                                        )
+                                                    }
+                                                    clusterJson.add(
+                                                        AppConstants.KEY_ATTRIBUTES,
+                                                        attributesArr
+                                                    )
+                                                } else {
+                                                    clusterJson.add(
+                                                        AppConstants.KEY_ATTRIBUTES,
+                                                        null
                                                     )
                                                 }
-                                                serversDataJson.add(
-                                                    info.endpoint.toString(),
-                                                    serverClustersArr
-                                                )
+                                                serversJson.add(clusterIdHex, clusterJson)
                                             }
 
-                                            if (info.clientClusters.isNotEmpty()) {
-                                                val clientClustersArr = JsonArray()
-                                                for (clientCluster in info.clientClusters) {
-                                                    clientClustersArr.add(
-                                                        clientCluster.toString().toInt()
-                                                    )
-                                                }
-                                                clientsDataJson.add(
-                                                    info.endpoint.toString(),
-                                                    clientClustersArr
-                                                )
+                                            val clientsJson = JsonObject()
+                                            for (clientCluster in info.clientClusters) {
+                                                val clusterIdLong = clientCluster.toString().toLong()
+                                                val clusterIdHex = "0x${clusterIdLong.toString(16)}"
+                                                val clusterJson = JsonObject()
+                                                clusterJson.add(AppConstants.KEY_ATTRIBUTES, null)
+                                                clientsJson.add(clusterIdHex, clusterJson)
                                             }
+
+                                            if (serversJson.size() > 0) {
+                                                clustersJson.add(AppConstants.KEY_SERVERS, serversJson)
+                                            }
+                                            if (clientsJson.size() > 0) {
+                                                clustersJson.add(AppConstants.KEY_CLIENTS, clientsJson)
+                                            }
+
+                                            endpointJson.add(AppConstants.KEY_CLUSTERS, clustersJson)
+                                            endpointsJson.add(
+                                                "0x${info.endpoint.toString(16)}",
+                                                endpointJson
+                                            )
 
                                             if (info.endpoint == 0) {
                                                 for (serverCluster in info.serverClusters) {
@@ -333,34 +510,22 @@ class ChipClient constructor(
                                             }
                                         }
 
+                                        if (deviceName.isEmpty()) {
+                                            deviceName = AppConstants.DEFAULT_MATTER_DEVICE_NAME
+                                        }
+
                                         metadataJson.addProperty(
-                                            AppConstants.KEY_IS_RAINMAKER_NODE,
+                                            AppConstants.KEY_IS_RAINMAKER,
                                             isRmClusterAvailable
                                         )
                                         metadataJson.addProperty(
-                                            AppConstants.KEY_DEVICE_NAME,
+                                            AppConstants.KEY_DEVICE_NAME_CAMEL,
                                             deviceName
                                         )
                                         metadataJson.addProperty(AppConstants.KEY_GROUP_ID, groupId)
+                                        metadataJson.add(AppConstants.KEY_ENDPOINTS, endpointsJson)
 
                                         this@ChipClient.lastCommissionedDeviceName = deviceName
-                                        metadataJson.add(
-                                            AppConstants.KEY_ENDPOINTS_DATA,
-                                            endpointsArray
-                                        )
-
-                                        if (serversDataJson.size() > 0) {
-                                            metadataJson.add(
-                                                AppConstants.KEY_SERVERS_DATA,
-                                                serversDataJson
-                                            )
-                                        }
-                                        if (clientsDataJson.size() > 0) {
-                                            metadataJson.add(
-                                                AppConstants.KEY_CLIENTS_DATA,
-                                                clientsDataJson
-                                            )
-                                        }
 
                                     } catch (e: Exception) {
                                         Log.e(TAG, "Error building metadata: ${e.message}", e)
@@ -447,6 +612,7 @@ class ChipClient constructor(
                                     TAG,
                                     "Metadata fetched successfully, triggering confirm commission headless task"
                                 )
+                                Log.d(TAG, "Confirm commission body: ${body}")
 
                                 if (isControllerClusterAvailable && isRmClusterAvailable) {
                                     val sharedPreferences = context.getSharedPreferences(
@@ -496,6 +662,7 @@ class ChipClient constructor(
                                             authMode,
                                             subjects,
                                             null,
+                                            Optional.empty(),
                                             fabricIndex
                                         )
 
@@ -552,15 +719,6 @@ class ChipClient constructor(
                 ) {
                 }
             }
-
-            chipDeviceController.setCompletionListener(callback)
-            chipDeviceController.commissionDevice(deviceId, networkCredentials)
-
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to commission device: ${e.message}", e)
-            continuation.resumeWithException(e)
-            commissioningContinuation = null
-        }
     }
 
     /** Called when commissioning is fully complete (after confirm API succeeds). */
@@ -693,12 +851,42 @@ class ChipClient constructor(
                     decode(cleanRootCert)
                 )
 
+                // CHIPDeviceController-JNI.cpp::onNOCChainGeneration now performs hard
+                // non-null checks on ControllerParams fields and rejects missing values
+                // with CHIP_ERROR_BAD_REQUEST (0x92). RainMaker uses a 2-tier PKI
+                // (Root -> NOC, no ICA), so pass an empty byte array for the intermediate
+                // certificate; downstream this is interpreted as "no intermediate cert".
+                val emptyIcac = ByteArray(0)
+
+                // admin subject is the CAT id for the admin group
+                val adminSubject: Long = if (groupCatIdAdmin.isNotEmpty()) {
+                    Utils.getCatId(groupCatIdAdmin)
+                } else {
+                    Log.e(TAG, "groupCatIdAdmin is EMPTY; commissioning may fail")
+                    0L
+                }
+                Log.d(
+                    TAG,
+                    "Using admin CAT subject: 0x${java.lang.Long.toHexString(adminSubject)}"
+                )
+
+                // Intentionally do NOT call setAdminSubject(...) here. Matching the
+                // Espressif RainMaker reference app, we let the SDK derive the
+                // AddNOC.caseAdminSubject from the controller's own operational node
+                // ID (the userNoc operational identity). Passing groupCatIdAdmin as
+                // a CAT here installs an ACL admin entry on the device that is keyed
+                // to the CAT, and the device then rejects CommissioningComplete with
+                // status 0x7E (UnsupportedAccess) whenever the userNoc subject DN
+                // doesn't carry that exact CAT (id+version) — which is the scenario
+                // we hit on pure-Matter fabrics. Operate-level CATs are still applied
+                // post-commissioning via AccessControlClusterHelper.writeAclAttribute.
                 val errorCode = chipDeviceController.onNOCChainGeneration(
                     ControllerParams.newBuilder()
                         .setRootCertificate(chain[1].encoded)
-                        .setIntermediateCertificate(chain[1].encoded)
+                        .setIntermediateCertificate(emptyIcac)
                         .setOperationalCertificate(chain[0].encoded)
                         .setIpk(ipkEpochKey)
+                        .setAdminSubject(adminSubject)
                         .build()
                 )
 
@@ -714,6 +902,36 @@ class ChipClient constructor(
 
         } catch (e: Exception) {
             Log.e(TAG, "Failed to receive NOC chain: ${e.message}", e)
+        }
+    }
+
+    /**
+     * Returns the operational IP address CHIP resolved for a connected node, if available.
+     *
+     * @param nodeId Matter operational node id (64-bit).
+     * @returns Host/IP string or `null` when the node is not connected.
+     */
+    fun getIpAddressForNode(nodeId: Long): String? {
+        return try {
+            chipDeviceController.getIpAddress(nodeId)
+        } catch (e: Exception) {
+            Log.w(TAG, "getIpAddressForNode failed for $nodeId: ${e.message}")
+            null
+        }
+    }
+
+    /**
+     * Returns host/port CHIP resolved for a connected node, if available.
+     *
+     * @param nodeId Matter operational node id (64-bit).
+     * @returns [NetworkLocation] or `null` when the node is not connected.
+     */
+    fun getNetworkLocationForNode(nodeId: Long): NetworkLocation? {
+        return try {
+            chipDeviceController.getNetworkLocation(nodeId)
+        } catch (e: Exception) {
+            Log.w(TAG, "getNetworkLocationForNode failed for $nodeId: ${e.message}")
+            null
         }
     }
 
@@ -745,6 +963,80 @@ class ChipClient constructor(
                 continuation.resumeWithException(e)
             }
         }
+
+    /**
+     * Confirms a node is still reachable by reading Basic Information `DataModelRevision`.
+     * Cached CASE sessions can make [awaitGetConnectedDevicePointer] succeed without LAN I/O.
+     *
+     * @param devicePointer Connected device pointer from CHIP.
+     * @param timeoutMs Interaction-model timeout for the read.
+     * @returns True when the device responds; false on error or timeout.
+     */
+    suspend fun awaitVerifyOperationalReachability(
+        devicePointer: Long,
+        timeoutMs: Int = AppConstants.MATTER_DISCOVERY_LIVENESS_TIMEOUT_MS.toInt(),
+    ): Boolean {
+        val attributePath = ChipAttributePath.newInstance(
+            0,
+            BASIC_INFORMATION_CLUSTER_ID,
+            DATA_MODEL_REVISION_ATTRIBUTE_ID,
+        )
+
+        return suspendCoroutine { continuation ->
+            var finished = false
+            fun finish(reachable: Boolean) {
+                if (finished) {
+                    return
+                }
+                finished = true
+                continuation.resume(reachable)
+            }
+
+            try {
+                chipDeviceController.readAttributePath(
+                    object : ReportCallback {
+                        override fun onReport(nodeState: NodeState?) {
+                            if (nodeState == null) {
+                                Log.d(TAG, "verifyOperationalReachability: empty NodeState")
+                                finish(false)
+                                return
+                            }
+                            val attributeState =
+                                nodeState
+                                    .getEndpointState(0)
+                                    ?.getClusterState(BASIC_INFORMATION_CLUSTER_ID)
+                                    ?.getAttributeState(DATA_MODEL_REVISION_ATTRIBUTE_ID)
+                            if (attributeState != null) {
+                                Log.d(TAG, "verifyOperationalReachability: ok")
+                                finish(true)
+                            } else {
+                                Log.d(TAG, "verifyOperationalReachability: attribute missing")
+                                finish(false)
+                            }
+                        }
+
+                        override fun onError(
+                            attributePath: ChipAttributePath?,
+                            eventPath: ChipEventPath?,
+                            ex: Exception,
+                        ) {
+                            Log.d(
+                                TAG,
+                                "verifyOperationalReachability onError: ${ex.message}",
+                            )
+                            finish(false)
+                        }
+                    },
+                    devicePointer,
+                    listOf(attributePath),
+                    timeoutMs,
+                )
+            } catch (e: Exception) {
+                Log.w(TAG, "verifyOperationalReachability failed: ${e.message}")
+                finish(false)
+            }
+        }
+    }
 
     private suspend fun readAttribute(
         devicePtr: Long,
@@ -938,7 +1230,7 @@ class ChipClient constructor(
             return OperationalKeyConfig(
                 EspKeypairDelegate(),
                 chain[1].encoded,
-                chain[1].encoded,
+                null,
                 chain[0].encoded,
                 ipkEpochKey
             )

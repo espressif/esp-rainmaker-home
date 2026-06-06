@@ -279,6 +279,31 @@ export const paramControlStyles = StyleSheet.create({
     elevation: 10,
   },
 
+  controlBoardWrapper: {
+    alignItems: "center",
+    justifyContent: "center",
+    marginVertical: tokens.spacing._20,
+  },
+
+  controlBoardButton: {
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: tokens.colors.text_secondary,
+  },
+
+  controlBoardButtonInner: {
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: tokens.colors.text_secondary,
+  },
+
+  controlBoardLabel: {
+    ...globalStyles.fontMd,
+    color: tokens.colors.text_primary,
+    marginTop: tokens.spacing._10,
+    textAlign: "center",
+  },
+
   // Push Button Styles
   pushButton: {
     paddingVertical: tokens.spacing._10,

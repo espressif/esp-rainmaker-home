@@ -13,6 +13,7 @@ import com.app.discovery.ESPDiscoveryModule
 import com.app.local_control.ESPLocalControlModule
 import com.app.matter.ESPMatterModule
 import com.app.matter.ESPMatterUtilityModule
+import com.app.matter.MatterDiscoveryModule
 import com.app.matter.FabricSessionManager
 import com.app.notification.ESPNotificationModule
 import com.app.oauth.ESPOauthModule
@@ -69,6 +70,12 @@ class MainApplication : Application(), ReactApplication {
                 add(object : ReactPackage {
                     override fun createNativeModules(reactContext: ReactApplicationContext): List<NativeModule> =
                         listOf(ESPAppUtilityModule(reactContext))
+                    override fun createViewManagers(reactContext: ReactApplicationContext): List<ViewManager<*, *>> =
+                        emptyList()
+                })
+                add(object : ReactPackage {
+                    override fun createNativeModules(reactContext: ReactApplicationContext): List<NativeModule> =
+                        listOf(MatterDiscoveryModule(reactContext))
                     override fun createViewManagers(reactContext: ReactApplicationContext): List<ViewManager<*, *>> =
                         emptyList()
                 })

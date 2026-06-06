@@ -10,11 +10,13 @@ import android.content.Intent
 import android.os.Bundle
 import android.util.Log
 import android.view.View
+import com.app.BuildConfig
 import com.facebook.react.ReactPackage
 import com.facebook.react.bridge.NativeModule
 import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.bridge.ReactContextBaseJavaModule
 import com.facebook.react.bridge.ReactMethod
+import com.facebook.react.bridge.ReadableArray
 import com.facebook.react.bridge.ReadableMap
 import com.facebook.react.bridge.WritableMap
 import com.facebook.react.bridge.WritableNativeMap
@@ -41,6 +43,9 @@ class ESPMatterModule(reactContext: ReactApplicationContext) :
     companion object {
         private const val TAG = "ESPMatterModule"
     }
+
+    /** Lazy native Matter control adapter — IM ops only (read/write/invoke/subscribe). */
+    private val controlAdapter: ESPMatterControl by lazy { ESPMatterControl(reactContext) }
 
     init {
         EventBus.getDefault().register(this)
@@ -181,13 +186,27 @@ class ESPMatterModule(reactContext: ReactApplicationContext) :
         fabricDetails: ReadableMap,
         promise: Promise
     ) {
-        Log.d(TAG, "Onboarding Payload: $onboardingPayload")
+        Log.d(
+            TAG,
+            "Onboarding Payload: $onboardingPayload " +
+                "(commissioningMethod=${BuildConfig.MATTER_COMMISSIONING_METHOD})"
+        )
 
         try {
             storeFabricDetails(fabricDetails)
 
-            // Start Google Play Services Matter commissioning
-            startGooglePlayServicesCommissioning(onboardingPayload, promise)
+            // Route to the configured commissioning back-end. See BuildConfig field
+            // populated by android/app/build.gradle from MATTER_COMMISSIONING_METHOD
+            // (synced from .env). Default is ChipTool.
+            if (AppConstants.COMMISSIONING_METHOD_CHIP_TOOL.equals(
+                    BuildConfig.MATTER_COMMISSIONING_METHOD,
+                    ignoreCase = true
+                )
+            ) {
+                startChipToolCommissioning(onboardingPayload, promise)
+            } else {
+                startGooglePlayServicesCommissioning(onboardingPayload, promise)
+            }
 
         } catch (error: Exception) {
             Log.e(TAG, "Matter commissioning failed: ${error.message}", error)
@@ -279,6 +298,31 @@ class ESPMatterModule(reactContext: ReactApplicationContext) :
             promise.reject(
                 "ACTIVITY_START_ERROR",
                 "Failed to start ecosystem commissioning activity: ${error.message}",
+                error
+            )
+        }
+    }
+
+    /**
+     * Launches the in-app ChipTool commissioning activity. Fabric details have already been
+     * persisted via [storeFabricDetails], so [ChipToolCommissioningActivity] only needs the
+     * Matter onboarding payload (QR code text) here.
+     */
+    private fun startChipToolCommissioning(onboardingPayload: String, promise: Promise) {
+        try {
+            val intent =
+                Intent(reactApplicationContext, ChipToolCommissioningActivity::class.java).apply {
+                    putExtra(AppConstants.EXTRA_ONBOARDING_PAYLOAD, onboardingPayload)
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+            reactApplicationContext.startActivity(intent)
+
+            promise.resolve("ChipTool commissioning activity started")
+
+        } catch (error: Exception) {
+            promise.reject(
+                "ACTIVITY_START_ERROR",
+                "Failed to start ChipTool commissioning activity: ${error.message}",
                 error
             )
         }
@@ -575,4 +619,74 @@ class ESPMatterModule(reactContext: ReactApplicationContext) :
         }
     }
 
+    // -----------------------------------------------------------------------
+    // Matter control adapter primitives — wired by ESPMatterControlAdapter.ts.
+    // Surface is the four canonical Matter Interaction Model operations
+    // (Read / Write / Invoke / Subscribe) plus their lifecycle siblings
+    // (Init / Shutdown / Unsubscribe). Cluster-specific semantic routing
+    // (semantic units, OnOff bool, mode pickers) lives above this surface
+    // — either in TypeScript hooks/panels or in the Matter SDK transformer.
+    // All numeric ids cross the bridge as Double to avoid Int32 truncation.
+    // -----------------------------------------------------------------------
+
+    @ReactMethod
+    fun matterControlInit(config: ReadableMap?, promise: Promise) {
+        controlAdapter.init(config, promise)
+    }
+
+    @ReactMethod
+    fun matterControlShutdown(promise: Promise) {
+        controlAdapter.shutdown(promise)
+    }
+
+    @ReactMethod
+    fun matterControlRead(
+        matterNodeId: String,
+        endpoint: Int,
+        clusterId: Double,
+        attributeId: Double,
+        promise: Promise
+    ) {
+        controlAdapter.read(matterNodeId, endpoint, clusterId, attributeId, promise)
+    }
+
+    @ReactMethod
+    fun matterControlWrite(
+        matterNodeId: String,
+        endpoint: Int,
+        clusterId: Double,
+        attributeId: Double,
+        value: ReadableMap?,
+        promise: Promise
+    ) {
+        controlAdapter.write(matterNodeId, endpoint, clusterId, attributeId, value, promise)
+    }
+
+    @ReactMethod
+    fun matterControlInvoke(
+        matterNodeId: String,
+        endpoint: Int,
+        clusterId: Double,
+        commandId: Double,
+        commandFields: ReadableMap?,
+        promise: Promise
+    ) {
+        controlAdapter.invoke(matterNodeId, endpoint, clusterId, commandId, commandFields, promise)
+    }
+
+    @ReactMethod
+    fun matterControlSubscribe(
+        matterNodeId: String,
+        attributePaths: ReadableArray?,
+        minIntervalSec: Int,
+        maxIntervalSec: Int,
+        promise: Promise
+    ) {
+        controlAdapter.subscribe(matterNodeId, attributePaths, minIntervalSec, maxIntervalSec, promise)
+    }
+
+    @ReactMethod
+    fun matterControlUnsubscribe(handle: String, promise: Promise) {
+        controlAdapter.unsubscribe(handle, promise)
+    }
 }

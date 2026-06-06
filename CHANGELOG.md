@@ -5,6 +5,30 @@ All notable changes to the ESP RainMaker Home app will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.1.0]
+
+### Added
+
+#### Matter Device Control
+- Enabled read, write, and command invocation for commissioned Matter devices
+- Streamed live attribute updates via Matter subscriptions, with delivery routed per fabric and group
+- Supported group-level control by resolving the active Matter fabric for each RainMaker group
+- Added local discovery and reachability tracking for commissioned Matter nodes
+- Supported concurrent mDNS discovery for Matter services without interfering with existing browse sessions
+- Replaced the standalone fabric selection screen with a guided commissioning and fabric-conversion consent flow
+- Initialized Matter fabric state after sign-in so device control is available without a separate setup step
+- Added RVC device profile, parameter mappings, and locale strings
+
+#### Matter ChipTool Commissioning
+- ChipTool commissioning path for hardware without Google Play services; build-time back-end switch (Google Play default)
+- Shared RainMaker NOC-chain issuer and fabric details across both back-ends; fixed CAT id admin subject for access control
+
+### Fixed
+
+- [Matter] CHIPController 1.5.1.0 upgrade; fixed PASE/CASE crash on commissioning stage start
+- [Matter] NOC chain generation and 2-tier PKI alignment for group admin subject
+- [Matter] Access-control entry construction aligned with updated cluster signature
+
 ## [5.0.0]
 
 ### Enhanced

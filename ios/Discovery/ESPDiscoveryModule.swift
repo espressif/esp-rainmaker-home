@@ -10,42 +10,42 @@ import React
 
 private let kDefaultMdnsServiceType = "_esp_local_ctrl._tcp."
 private let kDefaultMdnsDomain = "local."
+private let kMatterOperationalServiceType = "_matter._tcp."
 
 @objc(ESPDiscoveryModule)
 class ESPDiscoveryModule: RCTEventEmitter {
-  
-  private var serviceBrowser = NetServiceBrowser()
-  private var servicesBeingResolved: [NetService] = []
-  /// Matches Android `resolvedNsdServices` bookkeeping: stable node id for `DiscoveryLost` when TXT `node_id` ≠ instance name.
-  private var resolvedNodeIdByServiceKey: [String: String] = [:]
-  
+
+  /// Active browse sessions keyed by service type. Each session owns its own
+  /// `NetServiceBrowser` + resolution bookkeeping so concurrent browses (e.g.
+  /// `_esp_local_ctrl._tcp.` and `_matter._tcp.`) don't share state.
+  private var sessionsByType: [String: BrowseSession] = [:]
+  private let sessionsQueue = DispatchQueue(label: "ESPDiscoveryModule.sessions")
+
   override init() {
     super.init(disabledObservation: ())
-    // Ensure service browser is properly initialized
-    serviceBrowser = NetServiceBrowser()
-    serviceBrowser.delegate = self
   }
-  
+
   override public static func moduleName() -> String {
     return "ESPDiscoveryModule"
   }
-  
-  // Required for RCTEventEmitter
+
   public override static func requiresMainQueueSetup() -> Bool {
     return true
   }
-  
+
   override func supportedEvents() -> [String]! {
     return ["DiscoveryUpdate", "DiscoveryLost"]
   }
-  /// Starts the discovery process for network services.
+
+  /// Starts an mDNS browse session for the given service type. Idempotent — calling it
+  /// again with the same `serviceType` while a session is running is a no-op.
   ///
-  /// - Parameter params: A dictionary containing the following keys:
-  ///   - `serviceType`: RainMaker local control default `_esp_local_ctrl._tcp.` (from base SDK).
-  ///   - `domain`: SDK sends `local`; Bonjour expects `local.` — normalized below.
-  ///
+  /// - Parameter params: A dictionary containing:
+  ///   - `serviceType`: e.g. `_esp_local_ctrl._tcp.` or `_matter._tcp.`
+  ///   - `domain`: SDK sends `local`; Bonjour expects `local.` — normalised below.
   @objc(startDiscovery:)
   func startDiscovery(params: NSDictionary) {
+    NSLog("[ESPDiscoveryModule] startDiscovery called params=%@", params)
     var serviceType = (params["serviceType"] as? String)?
       .trimmingCharacters(in: .whitespacesAndNewlines)
     var domain = (params["domain"] as? String)?
@@ -60,39 +60,50 @@ class ESPDiscoveryModule: RCTEventEmitter {
       domain = kDefaultMdnsDomain
     }
 
-    guard let st = serviceType, let dom = domain else { return }
+    guard let st = serviceType, let dom = domain else {
+      NSLog("[ESPDiscoveryModule] startDiscovery: nil serviceType/domain after defaulting; aborting")
+      return
+    }
 
-    resolvedNodeIdByServiceKey.removeAll()
-    servicesBeingResolved.removeAll()
-    serviceBrowser.stop()
-    serviceBrowser.searchForServices(ofType: st, inDomain: dom)
+    sessionsQueue.sync {
+      if sessionsByType[st] != nil {
+        NSLog("[ESPDiscoveryModule] session already running for %@", st)
+        return
+      }
+      NSLog("[ESPDiscoveryModule] starting new BrowseSession type=%@ domain=%@", st, dom)
+      let session = BrowseSession(serviceType: st, domain: dom, owner: self)
+      sessionsByType[st] = session
+      session.start()
+    }
   }
-  
-  /// Stops the ongoing discovery process.
+
+  /// Stops every active browse session (preserves the legacy semantics that JS callers
+  /// like `useOnNetworkDiscovery` rely on).
   @objc(stopDiscovery)
   func stopDiscovery() {
-    // Stop the service browser to terminate the discovery process.
-    serviceBrowser.stop()
-    servicesBeingResolved.removeAll()
-    resolvedNodeIdByServiceKey.removeAll()
+    sessionsQueue.sync {
+      for (_, session) in sessionsByType {
+        session.stop()
+      }
+      sessionsByType.removeAll()
+    }
   }
-  
-  /// Emits a `DiscoveryUpdate` event with full discovery payload.
-  ///
-  /// Backwards-compatible: existing consumers continue to read `nodeId`/`baseUrl`.
-  /// Additional fields are populated from the resolved Bonjour service so JS can
-  /// drive flows that need direct LAN HTTP communication (e.g. on-network
-  /// challenge-response provisioning) without further native round-trips.
-  ///
-  /// - Parameters:
-  ///   - nodeId: Stable id (TXT `node_id` if present, else service name).
-  ///   - serviceName: Raw mDNS service instance name (always preserved
-  ///                  separately from `nodeId` so the UI can show both).
-  ///   - baseUrl: `http://<host>:<port>` for legacy local control flows.
-  ///   - host: Numeric IP of the resolved service (preferred for HTTP).
-  ///   - port: TCP port advertised by the service.
-  ///   - txt: Raw TXT key/value dictionary (UTF-8 strings) from the service.
-  private func sendDeviceEvent(
+
+  /// Stops a single browse session.
+  @objc(stopDiscoveryForType:)
+  func stopDiscoveryForType(_ serviceType: String) {
+    let key = serviceType.trimmingCharacters(in: .whitespacesAndNewlines)
+    sessionsQueue.sync {
+      if let session = sessionsByType.removeValue(forKey: key) {
+        session.stop()
+      }
+    }
+  }
+
+  // MARK: - Internal: event emission
+
+  fileprivate func emitDeviceFound(
+    serviceType: String,
     nodeId: String,
     serviceName: String,
     baseUrl: String,
@@ -101,10 +112,14 @@ class ESPDiscoveryModule: RCTEventEmitter {
     txt: [String: String]
   ) {
     guard !nodeId.isEmpty, !baseUrl.isEmpty else {
+      NSLog(
+        "[ESPDiscoveryModule] emitDeviceFound dropped: empty nodeId or baseUrl (type=%@ name=%@)",
+        serviceType, serviceName
+      )
       return
     }
-
-    let eventData: [String: Any] = [
+    var eventData: [String: Any] = [
+      "serviceType": serviceType,
       "nodeId": nodeId,
       "serviceName": serviceName,
       "baseUrl": baseUrl,
@@ -112,32 +127,156 @@ class ESPDiscoveryModule: RCTEventEmitter {
       "port": port,
       "txt": txt,
     ]
+    attachMatterFields(into: &eventData, serviceType: serviceType, serviceName: serviceName)
+    NSLog(
+      "[ESPDiscoveryModule] emit DiscoveryUpdate type=%@ name=%@ host=%@ port=%d matterNodeId=%@ compressedFabricId=%@",
+      serviceType,
+      serviceName,
+      host,
+      port,
+      (eventData["matterNodeId"] as? String) ?? "<nil>",
+      (eventData["compressedFabricId"] as? String) ?? "<nil>"
+    )
     sendEvent(withName: "DiscoveryUpdate", body: eventData)
   }
 
+  fileprivate func emitDeviceLost(serviceType: String, nodeId: String, serviceName: String) {
+    var eventData: [String: Any] = [
+      "serviceType": serviceType,
+      "nodeId": nodeId,
+      "serviceName": serviceName,
+    ]
+    attachMatterFields(into: &eventData, serviceType: serviceType, serviceName: serviceName)
+    sendEvent(withName: "DiscoveryLost", body: eventData)
+  }
+
+  /// For `_matter._tcp.` events, derive `matterNodeId` + `compressedFabricId` from the
+  /// service instance name. RainMaker types are unaffected.
+  ///
+  /// Matter spec ("Operational Discovery") defines the instance name as
+  /// `<CompressedFabricId16Hex>-<MatterNodeId16Hex>`. Both halves are exactly 16 hex characters.
+  private func attachMatterFields(
+    into payload: inout [String: Any],
+    serviceType: String,
+    serviceName: String
+  ) {
+    let stripped = serviceType.trimmingCharacters(in: CharacterSet(charactersIn: "."))
+    let target = kMatterOperationalServiceType.trimmingCharacters(in: CharacterSet(charactersIn: "."))
+    guard stripped == target else { return }
+    let parts = serviceName.split(separator: "-")
+    guard parts.count == 2,
+          parts[0].count == 16, parts[1].count == 16,
+          parts[0].allSatisfy({ $0.isHexDigit }),
+          parts[1].allSatisfy({ $0.isHexDigit })
+    else {
+      NSLog(
+        "[ESPDiscoveryModule] attachMatterFields: instance name does not match Matter operational format (name=%@)",
+        serviceName
+      )
+      return
+    }
+    payload["matterNodeId"] = String(parts[1]).lowercased()
+    payload["compressedFabricId"] = String(parts[0]).lowercased()
+    NSLog(
+      "[ESPDiscoveryModule] attachMatterFields: parsed matterNodeId=%@ compressedFabricId=%@ from name=%@",
+      String(parts[1]).lowercased(),
+      String(parts[0]).lowercased(),
+      serviceName
+    )
+  }
 }
 
-extension ESPDiscoveryModule: NetServiceBrowserDelegate {
+// MARK: - BrowseSession
+
+/// Owns the per-service-type Bonjour state. Slow Matter resolves never block RainMaker
+/// resolves because each session has its own browser/delegate/queue.
+private final class BrowseSession: NSObject, NetServiceBrowserDelegate, NetServiceDelegate {
+  let serviceType: String
+  let domain: String
+  weak var owner: ESPDiscoveryModule?
+
+  private let browser = NetServiceBrowser()
+  private var servicesBeingResolved: [NetService] = []
+  /// Stable node id for `DiscoveryLost` when TXT `node_id` differs from instance name.
+  private var resolvedNodeIdByServiceKey: [String: String] = [:]
+
+  init(serviceType: String, domain: String, owner: ESPDiscoveryModule) {
+    self.serviceType = serviceType
+    self.domain = domain
+    self.owner = owner
+    super.init()
+    browser.delegate = self
+  }
+
+  /// `NetServiceBrowser` delivers delegate callbacks on the run loop of the thread
+  /// that called `searchForServices`. React Native dispatches module methods on a
+  /// background `methodQueue`, whose thread has no run loop being driven — so
+  /// `willSearch` fires (it's posted synchronously) but `didFind` / `didResolveAddress`
+  /// never do, and discovery silently produces zero results. Pin browse + resolve to
+  /// the main run loop so the callbacks always fire.
+  func start() {
+    DispatchQueue.main.async { [weak self] in
+      guard let self = self else { return }
+      NSLog("ESPDiscoveryModule: BrowseSession.start type=%@ domain=%@", self.serviceType, self.domain)
+      self.browser.schedule(in: RunLoop.main, forMode: .common)
+      self.browser.searchForServices(ofType: self.serviceType, inDomain: self.domain)
+    }
+  }
+
+  func stop() {
+    DispatchQueue.main.async { [weak self] in
+      guard let self = self else { return }
+      NSLog("ESPDiscoveryModule: BrowseSession.stop type=%@", self.serviceType)
+      self.browser.stop()
+      for service in self.servicesBeingResolved {
+        service.stop()
+      }
+      self.servicesBeingResolved.removeAll()
+      self.resolvedNodeIdByServiceKey.removeAll()
+    }
+  }
+
+  // MARK: NetServiceBrowserDelegate
+
   func netServiceBrowser(_: NetServiceBrowser, didFind service: NetService, moreComing _: Bool) {
+    NSLog(
+      "ESPDiscoveryModule: didFind type=%@ name=%@ domain=%@",
+      service.type, service.name, service.domain
+    )
     service.delegate = self
+    service.schedule(in: RunLoop.main, forMode: .common)
     servicesBeingResolved.append(service)
     service.resolve(withTimeout: 5.0)
   }
 
+  func netServiceBrowser(_: NetServiceBrowser, didNotSearch errorDict: [String: NSNumber]) {
+    NSLog(
+      "ESPDiscoveryModule: didNotSearch type=%@ error=%@",
+      serviceType, String(describing: errorDict)
+    )
+  }
+
+  func netServiceBrowserWillSearch(_: NetServiceBrowser) {
+    NSLog("ESPDiscoveryModule: willSearch type=%@", serviceType)
+  }
+
   func netServiceBrowser(_: NetServiceBrowser, didRemove service: NetService, moreComing _: Bool) {
-    NSLog("ESPDiscoveryModule: Service lost: name=%@ type=%@ domain=%@", service.name, service.type, service.domain)
+    NSLog(
+      "ESPDiscoveryModule: Service lost type=%@ name=%@",
+      service.type, service.name
+    )
     servicesBeingResolved.removeAll {
       $0.name == service.name && $0.type == service.type && $0.domain == service.domain
     }
     let key = Self.serviceKey(service)
     let nodeId = resolvedNodeIdByServiceKey.removeValue(forKey: key) ?? service.name
     if !nodeId.isEmpty {
-      sendEvent(withName: "DiscoveryLost", body: ["nodeId": nodeId])
+      owner?.emitDeviceLost(serviceType: serviceType, nodeId: nodeId, serviceName: service.name)
     }
   }
-}
 
-extension ESPDiscoveryModule: NetServiceDelegate {
+  // MARK: NetServiceDelegate
+
   func netServiceDidResolveAddress(_ sender: NetService) {
     let txt = txtRecordDictionary(sender)
     var nodeId = nodeIdFromTxtRecord(txt)
@@ -145,20 +284,25 @@ extension ESPDiscoveryModule: NetServiceDelegate {
       nodeId = sender.name
     }
     guard !nodeId.isEmpty else {
-      NSLog("ESPDiscoveryModule: Could not determine node id for service")
+      NSLog("ESPDiscoveryModule: Could not determine node id (type=%@)", serviceType)
       return
     }
 
     let hostForUrl = numericHostString(from: sender)
       ?? sender.hostName.map { $0.hasSuffix(".") ? String($0.dropLast()) : $0 }
     guard let host = hostForUrl, !host.isEmpty else {
-      NSLog("ESPDiscoveryModule: Invalid host after resolve")
+      NSLog("ESPDiscoveryModule: Invalid host after resolve (type=%@)", serviceType)
       return
     }
 
     let baseUrl = "http://\(host):\(sender.port)"
+    NSLog(
+      "ESPDiscoveryModule: didResolve type=%@ name=%@ host=%@ port=%d",
+      serviceType, sender.name, host, sender.port
+    )
     resolvedNodeIdByServiceKey[Self.serviceKey(sender)] = nodeId
-    sendDeviceEvent(
+    owner?.emitDeviceFound(
+      serviceType: serviceType,
       nodeId: nodeId,
       serviceName: sender.name,
       baseUrl: baseUrl,
@@ -167,29 +311,30 @@ extension ESPDiscoveryModule: NetServiceDelegate {
       txt: txt
     )
   }
-  
+
   func netService(_ sender: NetService, didNotResolve errorDict: [String: NSNumber]) {
-    print("ESPDiscoveryModule: Failed to resolve service: \(errorDict)")
+    NSLog(
+      "ESPDiscoveryModule: Failed to resolve type=%@ name=%@ error=%@",
+      serviceType, sender.name, String(describing: errorDict)
+    )
   }
+
+  // MARK: Helpers
 
   private static func serviceKey(_ service: NetService) -> String {
     "\(service.name)|\(service.type)|\(service.domain)"
   }
 
-  /// Bonjour TXT `node_id` (case-insensitive), same as RainMaker Android `mDNSManager`.
+  /// Bonjour TXT `node_id` (case-insensitive), same as Android `mDNSManager`.
   private func nodeIdFromTxtRecord(_ txt: [String: String]) -> String {
     for (key, value) in txt where key.lowercased() == "node_id" {
-      let trimmed = value.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines)
+      let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
       if !trimmed.isEmpty { return trimmed }
     }
     return ""
   }
 
   /// Decode TXT record into a `[String: String]` of UTF-8 values.
-  ///
-  /// Used both for `node_id` lookup and to surface TXT data (e.g. `pop_required`,
-  /// `sec_version`, `ch_resp`) to the JS layer for on-network provisioning.
-  /// Uses `txtRecordData` + `dictionary(fromTXTRecord:)` for broad availability.
   private func txtRecordDictionary(_ service: NetService) -> [String: String] {
     guard let txtData = service.txtRecordData() else { return [:] }
     let raw = NetService.dictionary(fromTXTRecord: txtData)

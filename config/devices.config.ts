@@ -191,4 +191,16 @@ export const DEVICE_TYPE_LIST = [
     disabled: false,
     controlPanel: "camera",
   },
+  {
+    label: "RVC",
+    groupLabel: "RVC",
+    type: ["matter:17"],
+    name: "RVC",
+    param: "RVC",
+    icon: {
+      rvc: { icon: "rvc" },
+    },
+    defaultIcon: "rvc",
+    disabled: false,
+  },
 ];

@@ -108,5 +108,6 @@ export function getFeatures(): Record<FeatureKey, boolean> {
 export function getEnabledOAuthProviders(): string[] {
   const f = getFeatures();
   if (!f.thirdPartyAuth) return [];
-  return (Constants.expoConfig?.extra?.features?.thirdPartyAuthProviders || []) as string[];
+  const providers = Constants.expoConfig?.extra?.features?.thirdPartyAuthProviders || [];
+  return providers
 }
