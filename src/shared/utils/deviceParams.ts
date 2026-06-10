@@ -47,9 +47,13 @@ const findLegacyDeviceCardPowerParam = (
       param.type === ESPRM_POWER_PARAM_TYPE || param.type === "server:0x6"
   );
 
+/** Types that are valid power/toggle params for the device card switch. */
+const POWER_COMPATIBLE_TYPES = new Set([ESPRM_POWER_PARAM_TYPE, "server:0x6"]);
+
 /**
  * Resolves the param that drives the device card power switch.
- * Prefers SDK `primaryParam` (Matter), then RainMaker / Matter OnOff types.
+ * Prefers SDK `primaryParam` only when its type is a known power/onoff type,
+ * otherwise it falls back to the type-based legacy lookup.
  * @param device - CDF device for the card
  * @returns Power param to toggle, or undefined when none applies
  */
@@ -64,7 +68,7 @@ export const resolveDeviceCardPowerParam = (
   const deviceRef = device as DevicePrimaryParamRef;
   const primaryType =
     deviceRef.primaryParam?.type ?? deviceRef._raw?.primaryParam?.type;
-  if (primaryType) {
+  if (primaryType && POWER_COMPATIBLE_TYPES.has(primaryType)) {
     const fromPrimary = params.find((param) => param.type === primaryType);
     if (fromPrimary) {
       return fromPrimary;
