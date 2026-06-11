@@ -1,0 +1,51 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!--
+      CN-flavor-only components. WeChat login ships only in the CN build (the
+      WeChat SDK and its native modules live in the `cn` source set).
+    -->
+
+    <!-- WeChat must be able to see its host app for IPC. -->
+    <queries>
+        <package android:name="com.tencent.mm" />
+    </queries>
+
+    <application>
+
+        <!--
+          WeChat OAuth callback activity. The WeChat SDK delivers the auth result
+          to the component named <applicationId>.wxapi.WXEntryActivity. The real
+          class lives in the stable com.app.wechat package; the alias below
+          exposes it under the WeChat-required, applicationId-derived name so this
+          keeps working regardless of ANDROID_APP_APPLICATION_ID.
+        -->
+        <activity
+            android:name="com.app.wechat.WXEntryActivity"
+            android:exported="true"
+            android:launchMode="singleTask"
+            android:taskAffinity="" />
+
+        <activity-alias
+            android:name="${applicationId}.wxapi.WXEntryActivity"
+            android:targetActivity="com.app.wechat.WXEntryActivity"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="${WECHAT_APP_ID}" />
+            </intent-filter>
+        </activity-alias>
+
+        <!-- Keeps WeChat registration alive via ACTION_REFRESH_WXAPP. -->
+        <receiver
+            android:name="com.app.wechat.AppRegister"
+            android:exported="true"
+            android:permission="com.tencent.mm.plugin.permission.SEND">
+            <intent-filter>
+                <action android:name="com.tencent.mm.plugin.openapi.Intent.ACTION_REFRESH_WXAPP" />
+            </intent-filter>
+        </receiver>
+
+    </application>
+</manifest>

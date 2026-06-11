@@ -1,0 +1,31 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!--
+      Global-flavor-only components. These depend on Firebase / Google Play
+      services and are intentionally absent from the CN flavor.
+    -->
+    <application>
+
+        <!-- Matter Commissioning Activity for Google Play Services -->
+        <activity
+            android:name=".matter.MatterCommissioningActivity"
+            android:exported="false"
+            android:launchMode="singleTop"
+            android:noHistory="true"
+            android:theme="@style/AppTheme.Transparent" />
+
+        <!-- Firebase Cloud Messaging service -->
+        <service
+            android:name=".notification.FCMService"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.google.firebase.MESSAGING_EVENT" />
+            </intent-filter>
+        </service>
+
+        <!-- ESP Matter Commissioning Service for Google Play Services -->
+        <service
+            android:name=".matter.ESPMatterCommissioningService"
+            android:exported="true" />
+    </application>
+</manifest>

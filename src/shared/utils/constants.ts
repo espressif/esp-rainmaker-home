@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import Constants from "expo-constants";
+import { getRegionConfig } from "@config/region.config";
 
 // CONSTANTS
 export const TOAST_ANIMATION_DURATION = "200ms";
@@ -16,28 +16,28 @@ export const PLATFORM_IOS = "ios";
 export const DEFAULT_HOME_GROUP_NAME = "Home";
 export const HOME_NAME_MAX_LENGTH = 32;
 
-// LINKS — defaults; override via WEBSITE_LINK / TERMS_OF_USE_LINK / PRIVACY_POLICY_LINK (.env → app.config extra.websiteLinks)
+// LINKS — region-scoped values come from the committed region env files
+// (.env.global.example / .env.cn.example → extra.regionConfigs.<region>.websiteLinks); the
+// hard-coded defaults below are the last-resort fallback for blank values.
 const DEFAULT_WEBSITE_LINK = "https://rainmaker.espressif.com";
 
-// Legal pages are served per UI language. Link values — env overrides and
-// the defaults below — may carry a {lang} placeholder substituted with the
-// active UI language at resolve time; a plain URL (no placeholder) applies
-// to all languages.
+// Legal pages exist per language × region
+// (rainmaker.espressif.com/<en|zh>/<page>?region=<global|china>), so the
+// region env files carry the URLs as templates with a {lang} placeholder
+// filled with the active UI language at resolve time. A plain URL (no
+// placeholder) is used verbatim for every language.
 const LEGAL_LINK_LANG_PLACEHOLDER = "{lang}";
 const DEFAULT_TERMS_OF_USE_LINK_TEMPLATE =
   "https://rainmaker.espressif.com/{lang}/terms-of-use?region=global";
 const DEFAULT_PRIVACY_POLICY_LINK_TEMPLATE =
   "https://rainmaker.espressif.com/{lang}/privacy-policy?region=global";
 
-const websiteLinksFromEnv = (Constants.expoConfig?.extra?.websiteLinks ||
-  {}) as {
-    website?: string;
-    termsOfUse?: string;
-    privacyPolicy?: string;
-  };
+// Resolved once at module load; the active region is session-stable
+// (region.config.ts caches it), so this agrees with every call-time reader.
+const websiteLinks = getRegionConfig().websiteLinks;
 
 export const WEBSITE_LINK =
-  websiteLinksFromEnv.website?.trim() || DEFAULT_WEBSITE_LINK;
+  websiteLinks.website?.trim() || DEFAULT_WEBSITE_LINK;
 
 /**
  * Fills a legal-link template's `{lang}` placeholder with the supported UI
@@ -55,27 +55,37 @@ const resolveLegalLink = (template: string, language?: string): string => {
 
 /**
  * Terms of use URL for the given UI language (callers pass `i18n.language`).
- * Uses the `TERMS_OF_USE_LINK` env override when set, else the default
- * template.
+ * Takes the active region's configured link and substitutes its `{lang}`
+ * placeholder with the UI language; a plain URL (no placeholder) applies to
+ * all languages.
+ * @param language Optional UI language tag (e.g. `en`, `zh-CN`).
+ * @returns The resolved terms of use URL.
  */
 export const getTermsOfUseLink = (language?: string): string =>
   resolveLegalLink(
-    websiteLinksFromEnv.termsOfUse?.trim() ||
-      DEFAULT_TERMS_OF_USE_LINK_TEMPLATE,
+    websiteLinks.termsOfUse?.trim() || DEFAULT_TERMS_OF_USE_LINK_TEMPLATE,
     language
   );
 
 /**
  * Privacy policy URL for the given UI language (callers pass `i18n.language`).
- * Uses the `PRIVACY_POLICY_LINK` env override when set, else the default
- * template.
+ * Takes the active region's configured link template and substitutes its
+ * `{lang}` placeholder with the UI language; a plain URL (no placeholder)
+ * applies to all languages.
+ * @param language Optional UI language tag (e.g. `en`, `zh-CN`).
+ * @returns The resolved privacy policy URL.
  */
 export const getPrivacyPolicyLink = (language?: string): string =>
   resolveLegalLink(
-    websiteLinksFromEnv.privacyPolicy?.trim() ||
-      DEFAULT_PRIVACY_POLICY_LINK_TEMPLATE,
+    websiteLinks.privacyPolicy?.trim() || DEFAULT_PRIVACY_POLICY_LINK_TEMPLATE,
     language
   );
+
+// STORAGE KEYS
+// Persisted flag recording that the user accepted the CN-region privacy
+// consent shown at first launch. Stored via the AsyncStorage adapter.
+export const CN_CONSENT_ACCEPTED_KEY = "@esp_cn_consent_accepted";
+export const CONSENT_ACCEPTED_VALUE = "true";
 
 // TOAST TYPES
 export const SUCESS = "success";

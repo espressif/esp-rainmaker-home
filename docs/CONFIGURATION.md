@@ -29,17 +29,31 @@ This document provides detailed information on how to configure and customize th
 
 ## Environment Variables (.env)
 
-The `.env` file is the **single place** to configure the app for a different backend, brand, or feature set. All values are injected into the Expo build via `app.config.ts` and synced to native Android / iOS build configs by the prebuild scripts.
+Each region has **one self-contained env file** holding *everything* for that region — native/build identity **and** the JS/runtime region config — in a single layer. There are two files per region:
 
-### Setup
+| File | Committed? | Role |
+| --- | --- | --- |
+| `.env.global.example` / `.env.cn.example` | yes | Template / reference (safe to commit). Also the fallback when no local file exists (CI, fresh checkout). |
+| `.env.global` / `.env.cn` | **no** (gitignored) | Your real values. Copy the matching `.example`, then edit. |
+
+A build copies the relevant file to `.env`, **preferring the local file and falling back to the committed `.example`**:
 
 ```bash
-cp .env.example .env
-# Edit .env with your values
-npm run prebuild   # syncs values to android/ and ios/ native configs
+npm run android            # global Android → .env.global (else .env.global.example)
+npm run android:cn         # CN Android     → .env.cn     (else .env.cn.example)
+npm run ios                # iOS binary     → .env.global.example (see APP_REGION note below)
 ```
 
-Re-run `npm run prebuild` (or just `npm run android` / `npm run ios`) any time you change `.env`.
+Two consumers read the copied `.env`:
+
+- **`scripts/sync-env-to-*.js`** pull the native/build-identity keys into the Android (gradle) / iOS (xcconfig) projects.
+- **`app.config.ts`** reads native keys via `process.env` **and** parses **both** region files directly (local if present, else `.example`), embedding them as `extra.regionConfigs.{global,cn}`. The app selects one at runtime via `config/region.config.ts` (`getRegionConfig()`).
+
+Because both region blocks are always embedded, **one binary can serve both regions**: the iOS App Store app builds from `.env.global.example` (`APP_REGION=auto`) and resolves its region from the device's Region setting at startup. Android instead ships two flavors, each pinned at build time by the `APP_REGION` in its file: the local `.env.global` sets `APP_REGION=global` (the global APK omits the CN-only WeChat native module, so it must not runtime-flip to CN), and `.env.cn` sets `APP_REGION=cn`.
+
+> **`APP_REGION` note:** `npm run ios` copies the committed `.env.global.example` (which keeps `APP_REGION=auto` for the single iOS binary), **not** the local `.env.global` (which is pinned to `global` for the Android global flavor). Keep valid iOS values in `.env.global.example` for this reason.
+
+The region keys must keep an identical key set across the two regions (same keys, region-specific values). The sync scripts also accept `ENVFILE=<path>` to read a different env file without copying.
 
 ---
 
@@ -51,7 +65,7 @@ Re-run `npm run prebuild` (or just `npm run android` / `npm run ios`) any time y
 | `APP_SLUG`                   | Expo slug (used for OTA and deep links)             | `esp-rainmaker-home`           |
 | `APP_SCHEMA`                 | URL scheme for deep links (`<schema>://`)           | `rainmaker`                    |
 | `IOS_APP_APPLICATION_ID`     | iOS bundle identifier                               | `com.espressif.nova`           |
-| `ANDROID_APP_APPLICATION_ID` | Android application ID                              | `com.espressif.novahome`       |
+| `ANDROID_APP_APPLICATION_ID` | Android application ID for this build. Value differs per region file (`com.espressif.novahome` global, `com.espressif.nova` cn); the global flavor inherits it via `defaultConfig`, the cn flavor via `findProperty`. Builds are one-flavor-at-a-time. | `com.espressif.novahome` |
 | `IOS_APP_GROUP_ID`           | iOS App Group ID (used for notification extensions) | `group.com.espressif.novahome` |
 
 ---
@@ -65,26 +79,30 @@ Re-run `npm run prebuild` (or just `npm run android` / `npm run ios`) any time y
 
 ---
 
-### SDK Configuration
+### SDK Configuration (region config — `.env.global.example` / `.env.cn.example`)
 
-The active SDK and its API endpoints are fully controlled from `.env`.
+The active SDK and its API endpoints are **region config**: they live in the committed `.env.global.example` / `.env.cn.example` files (same keys in both) and are selected at runtime for the active region.
 
-| Variable      | Description                                         | Default                               |
-| ------------- | --------------------------------------------------- | ------------------------------------- |
-| `ACTIVE_SDK`  | SDK to use: `rainmaker-base-sdk` or `rmng-base-sdk` | `rainmaker-base-sdk`                  |
-| `BASE_URL`    | ESP RainMaker API base URL                          | `https://api.rainmaker.espressif.com` |
-| `API_VERSION` | API version path segment                            | `v1`                                  |
+| Variable      | Description                                         | Global value                          | CN value                                    |
+| ------------- | --------------------------------------------------- | ------------------------------------- | ------------------------------------------- |
+| `ACTIVE_SDK`  | SDK to use: `rainmaker-base-sdk` or `rmng-base-sdk` | `rainmaker-matter-sdk`                | `rainmaker-matter-sdk`                      |
+| `BASE_URL`    | ESP RainMaker API base URL                          | `https://api.rainmaker.espressif.com` | `https://api2.rainmaker.espressif.com.cn`   |
+| `API_VERSION` | API version path segment                            | `v1`                                  | `v1`                                        |
+| `CLAIM_URL`      | Claiming service URL                             | `https://esp-claiming.rainmaker.espressif.com` | `https://claiming.rainmaker.espressif.com.cn` |
 
-These values are read by `app.config.ts` and passed to the SDK adaptor via `config/sdk.config.ts` at startup — no source file edits required.
+The `RMNG_*` endpoint set follows the same pattern. These are embedded as `extra.regionConfigs.{global,cn}` and resolved by `config/sdk.config.ts` via `getRegionConfig()` at startup — there is **no fallback** to legacy top-level keys; a missing region block fails fast.
 
 ---
 
 ### Feature Flags
 
-Feature flags use a **two-level gating** system:
+Feature flags use a **three-level, disable-only gating** system (`config/features.config.ts`):
 
-- **Level 2 — SDK capability** (hard gate): if the active SDK does not support a feature, it is disabled regardless of `.env`.
-- **Level 1 — `.env` switch** (soft gate): can only _disable_ a feature that the SDK supports. Set the variable to `false` to turn it off.
+- **Level 3 — SDK capability** (hard gate): if the active SDK does not support a feature, it is disabled regardless of config.
+- **Level 2 — region availability** (`.env.global.example` / `.env.cn.example`, committed): what the region offers, resolved at runtime. Example: `ENABLE_VOICE_ASSISTANTS=false` in `.env.cn.example` hides Alexa/Google Assistant in the CN region — including on the single iOS binary.
+- **Level 1 — binary `.env` override**: disables what a specific binary cannot support. Example: `ENABLE_NOTIFICATIONS=false` in `.env.cn.example`, because the Android CN binary ships without FCM. This is a per-binary push-transport limit, not a CN-region policy — so `config/features.config.ts` keeps notifications available on **iOS** (APNs, every region) regardless of the flag; only Android honors it.
+
+No level can enable what a lower level disabled. Set a variable to `false` to turn a feature off; unset variables default to enabled.
 
 | Variable                  | Feature                            | Default |
 | ------------------------- | ---------------------------------- | ------- |
@@ -106,14 +124,24 @@ Feature flags use a **two-level gating** system:
 
 ### Third-Party Auth (OAuth)
 
-| Variable                             | Description                               | Default                                      |
-| ------------------------------------ | ----------------------------------------- | -------------------------------------------- |
-| `THIRD_PARTY_AUTH_CLIENT_ID`         | Cognito / OAuth client ID                 | `1h7ujqjs8140n17v0ahb4n51m2`                 |
-| `THIRD_PARTY_AUTH_AUTH_URL`          | OAuth authorization endpoint              | `https://3pauth.rainmaker.espressif.com`     |
-| `THIRD_PARTY_AUTH_REDIRECT_SCHEME`   | URL scheme for OAuth redirect             | `rainmaker`                                  |
-| `THIRD_PARTY_AUTH_REDIRECT_HOST`     | Host component of OAuth redirect URL      | `com.espressif.novahome`                     |
-| `THIRD_PARTY_AUTH_REDIRECT_URL`      | Full OAuth redirect URL                   | `rainmaker://com.espressif.novahome/success` |
-| `THIRD_PARTY_AUTH_ENABLED_PROVIDERS` | Comma-separated list of enabled providers | `Google,SignInWithApple`                     |
+**Region config** (`.env.global.example` / `.env.cn.example`) — the OAuth client and the offered providers are per-region:
+
+| Variable                             | Description                               | Global value                                 | CN value                                  |
+| ------------------------------------ | ----------------------------------------- | -------------------------------------------- | ----------------------------------------- |
+| `THIRD_PARTY_AUTH_CLIENT_ID`         | Cognito / OAuth client ID                 | `1h7ujqjs8140n17v0ahb4n51m2`                 | `6m3FgmvJSt4g6pDrHgfpYj`                  |
+| `THIRD_PARTY_AUTH_AUTH_URL`          | OAuth authorization endpoint              | `https://3pauth.rainmaker.espressif.com`     | `https://api2.rainmaker.espressif.com.cn` |
+| `THIRD_PARTY_AUTH_REDIRECT_URL`      | Redirect URL sent to the OAuth server     | `rainmaker://com.espressif.novahome/success` | `rainmaker://com.espressif.nova/success`  |
+| `THIRD_PARTY_AUTH_ENABLED_PROVIDERS` | Providers offered, in display order       | `Google,SignInWithApple`                     | `WeChat,SignInWithApple`                  |
+
+The provider lists **are** the region gate — Google is simply absent from the CN list and WeChat from the global list; no code-level provider filtering exists.
+
+**Binary keys** (in the region file copied to `.env`) — the native redirect capture must match the binary's application id:
+
+| Variable                           | Description                          |
+| ---------------------------------- | ------------------------------------ |
+| `THIRD_PARTY_AUTH_REDIRECT_SCHEME` | URL scheme for OAuth redirect        |
+| `THIRD_PARTY_AUTH_REDIRECT_HOST`   | Host component of OAuth redirect URL |
+| `THIRD_PARTY_AUTH_REDIRECT_URL`    | Full redirect URL (native BuildConfig) |
 
 ---
 
@@ -164,17 +192,17 @@ Feature flags use a **two-level gating** system:
 
 ---
 
-### Legal & Website Links
+### Legal & Website Links (region config — `.env.global.example` / `.env.cn.example`)
 
-These URLs appear in the app's settings / about screen and the signup / agent consent sheets.
+These URLs appear in the app's settings / about screen and the CN consent screen. They are region config, resolved at runtime for the active region.
 
-| Variable              | Description                 | Default                                                                |
-| --------------------- | --------------------------- | ---------------------------------------------------------------------- |
-| `WEBSITE_LINK`        | Product website URL         | `https://rainmaker.espressif.com`                                       |
-| `TERMS_OF_USE_LINK`   | Terms of use URL template   | `https://rainmaker.espressif.com/{lang}/terms-of-use?region=global`     |
-| `PRIVACY_POLICY_LINK` | Privacy policy URL template | `https://rainmaker.espressif.com/{lang}/privacy-policy?region=global`   |
+| Variable              | Description                  | Global value                                                        | CN value                                                            |
+| --------------------- | ---------------------------- | ------------------------------------------------------------------- | ------------------------------------------------------------------- |
+| `WEBSITE_LINK`        | Product website URL          | `https://rainmaker.espressif.com`                                    | `https://rainmaker.espressif.com`                                    |
+| `TERMS_OF_USE_LINK`   | Terms of use URL template   | `https://rainmaker.espressif.com/{lang}/terms-of-use?region=global`   | `https://rainmaker.espressif.com/{lang}/terms-of-use?region=china`   |
+| `PRIVACY_POLICY_LINK` | Privacy policy URL template | `https://rainmaker.espressif.com/{lang}/privacy-policy?region=global` | `https://rainmaker.espressif.com/{lang}/privacy-policy?region=china` |
 
-The legal links support a `{lang}` placeholder, replaced at runtime with the active UI language (`en` / `zh`), so both language versions of a page are served from one configured URL — e.g. with `TERMS_OF_USE_LINK=https://rainmaker.espressif.com/{lang}/terms-of-use?region=china` in `.env`, an English UI resolves to `https://rainmaker.espressif.com/en/terms-of-use?region=china`. A plain URL without the placeholder applies to all languages.
+The legal links support a `{lang}` placeholder, replaced at runtime with the active UI language (`en` / `zh`) so each region serves its pages in both languages (e.g. CN region + English UI → `https://rainmaker.espressif.com/en/privacy-policy?region=china`). A plain URL without the placeholder applies to all languages.
 
 ---
 
@@ -200,6 +228,22 @@ The repository ships a placeholder at `android/app/google-services.json.template
 4. Copy it to `android/app/google-services.json`, replacing the placeholder.
 
 > ⚠️ **Without a valid `google-services.json`, Android push notifications will not work.** The app will build and run, but no notifications will be delivered.
+
+### Android App Signing (per-flavor keystores)
+
+Release signing is **per flavor**: each region's `.env` carries its own keystore credentials, so building a flavor signs it with that flavor's keystore. Four keys, defined in the **local** (gitignored) `.env.global` / `.env.cn`:
+
+| Variable | Description |
+| --- | --- |
+| `ANDROID_KEYSTORE_FILE` | Keystore path, relative to `android/app/` (e.g. `sign/global-release.jks`) |
+| `ANDROID_KEYSTORE_PASSWORD` | Keystore (store) password |
+| `ANDROID_KEY_ALIAS` | Key alias |
+| `ANDROID_KEY_PASSWORD` | Key password |
+
+Flow: `npm run prebuild:android` (via `scripts/sync-env-to-android.js`) reads these from the active `.env` and writes the **gitignored** `android/keystore.properties`; `build.gradle`'s single `release` signingConfig reads that file and signs whichever flavor is being assembled. So `keystore.properties` always holds just these four keys — a new variant needs no extra keys in it, only the four values in that variant's `.env`.
+
+- Put the keystores under `android/app/sign/` (gitignored) and the real credentials only in the **local** `.env.global` / `.env.cn` — keep the committed `.env.*.example` lines blank. Signing secrets are written **only** to `keystore.properties`, never to the committed `gradle.properties`.
+- Without `ANDROID_KEYSTORE_FILE` set, the release APK is unsigned and debug builds use the default debug key.
 
 ## Device & Parameter Configuration
 
@@ -543,13 +587,13 @@ The files below sit **outside** `.env` and require source edits for structural c
 
 ### `config/sdk.config.ts`
 
-This is the **SDK wiring layer** — it reads `.env` values from `app.config.ts` extras, merges any runtime config (QR scan), and assembles the config objects passed to each SDK adaptor.
+This is the **SDK wiring layer** — it reads the active region's block from `extra.regionConfigs` (built from the committed `.env.global.example` / `.env.cn.example`), merges any runtime config (QR scan), and assembles the config objects passed to each SDK adaptor.
 
 **Important caveats:**
 
-- **`ActiveSDK`** is resolved from `ACTIVE_SDK` in `.env`. Changing the active SDK requires a rebuild — it is baked in at build time.
-- **`getRMSDKConfig()`** merges values in priority order: _runtime config (QR scan) → `.env` → hardcoded fallback_. If a QR-scanned config is present it always wins over `.env` for `baseUrl`, `version`, `authUrl`, `clientId`, and `redirectUrl`.
-- **`SDK_FEATURE_MAP`** is the Level 2 hard gate for feature flags. If you integrate a new SDK adaptor, you **must** add its entry here listing which features it supports. Features absent from the map default to disabled.
+- **`ActiveSDK`** is resolved from `ACTIVE_SDK` in the committed region files (`.env.global.example` / `.env.cn.example`) for the active region. Changing it requires a rebuild — it is baked in at build time.
+- **`getRMSDKConfig()`** merges values in priority order: _runtime config (QR scan) → active region config → hardcoded fallback_. If a QR-scanned config is present it always wins over `.env` for `baseUrl`, `version`, `authUrl`, `clientId`, and `redirectUrl`.
+- **`SDK_FEATURE_MAP`** is the Level 3 hard gate for feature flags. If you integrate a new SDK adaptor, you **must** add its entry here and explicitly set unsupported features to `false` — only an explicit `false` disables a feature; keys absent from the map pass this gate (i.e. default to enabled).
 - **`CDFConfig.autoSync`** is driven by `ENABLE_CDF_AUTOSYNC` in `.env`. Setting it to `false` disables automatic CDF data synchronisation — device state will only refresh on explicit user action.
 - **`getMatterSDKConfig()`** extends the RM SDK config with the Matter vendor ID (`matterVendorId`) and the React Native **Matter** adaptor (`matterAdapter`). It is passed into **`ESPRMMatterBaseSDKAdaptor`** whenever adaptors are created — not a separate post-CDF step.
 
@@ -562,8 +606,8 @@ This file resolves the final feature flag state used throughout the app.
 **Important caveats:**
 
 - **Always call `getFeatures()` as a function** — it is intentionally not a `const` export. It reads `ActiveSDK` at call time, making it safe if the SDK is switched at runtime. Caching its return value across a SDK switch will produce stale flags.
-- **`getEnabledOAuthProviders()`** returns an empty array when `thirdPartyAuth` is disabled at either gate level. The Login screen calls this to decide which OAuth buttons to render.
-- You cannot enable a feature via `.env` that the SDK does not support — Level 2 (`SDK_FEATURE_MAP`) is always the hard ceiling.
+- **`getEnabledOAuthProviders()`** returns the active region's provider list (`THIRD_PARTY_AUTH_ENABLED_PROVIDERS` in `.env.global.example` / `.env.cn.example`) and an empty array when `thirdPartyAuth` is disabled at any gate level. The Login screen calls this to decide which OAuth buttons to render.
+- You cannot enable a feature via region or binary config that the SDK does not support — Level 3 (`SDK_FEATURE_MAP`) is always the hard ceiling.
 
 ---
 

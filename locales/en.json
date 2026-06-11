@@ -1,4 +1,11 @@
 {
+  "consent": {
+    "title": "Privacy Policy",
+    "acceptAndContinue": "Accept & Continue",
+    "disagree": "Disagree",
+    "declinedTitle": "Consent required",
+    "declinedMessage": "You need to accept the privacy policy to use the app."
+  },
   "alexa": {
     "guide": "Alexa Guide",
     "step1": "1. Tap \"Skills & Games\" in the menu, then search \"ESP RainMaker Home\".",
@@ -105,6 +112,9 @@
     },
     "shared": {
       "version": "Version",
+      "region": "Region",
+      "regionGlobal": "Global",
+      "regionCn": "China",
       "termsOfUse": "Terms of Use",
       "privacyPolicy": "Privacy Policy",
       "errorHeader": "Error",
@@ -139,6 +149,9 @@
       "signInButton": "Sign in",
       "forgotPassword": "Forgot password",
       "thirdPartyLogin": "Third-party account login",
+      "signInToContinue": "Sign in to continue",
+      "continueWith": "Continue with {{provider}}",
+      "chooseSignInMethod": "Choose how you'd like to sign in",
       "navigateToSignUp": "Don't have an account? Sign up",
       "settingUpAccount": "Setting up your account",
       "settingUpHomes": "Setting up homes",

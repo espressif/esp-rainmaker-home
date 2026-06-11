@@ -1,16 +1,30 @@
 apply plugin: "com.android.application"
 apply plugin: "org.jetbrains.kotlin.android"
 apply plugin: "com.facebook.react"
-apply plugin: "com.google.gms.google-services"
 
-def googleServicesFile = file("google-services.json")
-if (!googleServicesFile.exists()) {
-    def templateFile = file("google-services.json.template")
-    if (templateFile.exists()) {
-        logger.warn("google-services.json not found — copying from template (placeholder values)")
-        templateFile.withInputStream { is -> googleServicesFile.withOutputStream { os -> os << is } }
-    } else {
-        logger.warn("google-services.json not found and no template available — Firebase features will fail")
+// Region build selector (synced from `.env` APP_REGION by
+// scripts/sync-env-to-android.js). The CN flavor excludes Firebase / Google
+// Play services entirely, so the google-services plugin and its
+// google-services.json are only applied for non-CN builds.
+def appRegion = (project.findProperty("APP_REGION") ?: "global").toString().toLowerCase()
+// Primary selector is APP_REGION (synced from .env). As a safety net, also treat
+// any requested CN flavor task as a CN build so Firebase / google-services
+// can never be pulled into the CN APK even if APP_REGION was not set.
+def buildingCnTask = gradle.startParameter.taskNames.any { it.toLowerCase().contains("cn") }
+def isCnRegion = appRegion == "cn" || buildingCnTask
+
+if (!isCnRegion) {
+    apply plugin: "com.google.gms.google-services"
+
+    def googleServicesFile = file("google-services.json")
+    if (!googleServicesFile.exists()) {
+        def templateFile = file("google-services.json.template")
+        if (templateFile.exists()) {
+            logger.warn("google-services.json not found — copying from template (placeholder values)")
+            templateFile.withInputStream { is -> googleServicesFile.withOutputStream { os -> os << is } }
+        } else {
+            logger.warn("google-services.json not found and no template available — Firebase features will fail")
+        }
     }
 }
 
@@ -129,6 +143,11 @@ android {
         }
     }
     defaultConfig {
+        // Default / global application id. The `cn` product flavor overrides this
+        // at build time. For non-CN builds this literal is kept in sync with
+        // ANDROID_APP_APPLICATION_ID by scripts/sync-env-to-android.js and MUST stay a
+        // plain quoted string so the Expo CLI can parse it
+        // (`expo run:android` reads /applicationId ['"](.*)['"]/).
         applicationId "com.espressif.novahome"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
@@ -160,20 +179,10 @@ android {
             : Integer.parseInt(matterVendorIdStr)
         buildConfigField "int", "MATTER_VENDOR_ID", "${matterVendorIdInt}"
 
-        // Matter commissioning back-end ("ChipTool" or "GooglePlayServices"). Defaults to
-        // Google Play services. Routed at runtime by ESPMatterModule.startEcosystemCommissioning.
-        // "ChipTool" so the build can produce a working Matter flow on devices without Google Play services.
-        def commissioningMethod = project.findProperty("MATTER_COMMISSIONING_METHOD") ?: "GooglePlayServices"
-        if (commissioningMethod.isEmpty()) {
-            commissioningMethod = "GooglePlayServices"
-        }
-        if (!commissioningMethod.equalsIgnoreCase("ChipTool")
-                && !commissioningMethod.equalsIgnoreCase("GooglePlayServices")) {
-            throw new GradleException("Invalid 'MATTER_COMMISSIONING_METHOD' value '" + commissioningMethod
-                    + "'. Allowed values: 'ChipTool' or 'GooglePlayServices'.")
-        }
-        buildConfigField "String", "MATTER_COMMISSIONING_METHOD", "\"${commissioningMethod}\""
-        
+        // Matter commissioning back-end (BuildConfig.MATTER_COMMISSIONING_METHOD) is
+        // set per region product flavor below: global -> GooglePlayServices (env
+        // overridable), cn -> ChipTool (hard-coded, no Google Play services).
+
         // Manifest placeholders from gradle.properties
         manifestPlaceholders = [
             AGENTS_DEEP_LINK_SCHEME: getProp("AGENTS_DEEP_LINK_SCHEME"),
@@ -183,6 +192,22 @@ android {
             THIRD_PARTY_AUTH_REDIRECT_HOST: getProp("THIRD_PARTY_AUTH_REDIRECT_HOST")
         ]
     }
+
+    // Region product flavors. Application id, Matter commissioning back-end, and
+    // (via dependencies + source sets) Firebase / Google Play services inclusion
+    // are all selected here. Build with e.g. `assembleGlobalRelease` /
+    // `assembleCnRelease`. Keep APP_REGION in `.env` in sync with the flavor
+    // you build (it gates the google-services plugin + JS cloud/legal config).
+    // ─── Signing ─────────────────────────────────────────────────────────────
+    // ONE release keystore signs every flavor (global, cn, and any future
+    // variant) — so adding a variant needs zero new signing keys. ALL credentials
+    // live in the gitignored android/keystore.properties (never commit real
+    // keystores/creds), just four keys:
+    //     storeFile / storePassword / keyAlias / keyPassword
+    // storeFile is relative to android/app/ (e.g. sign/release.jks). The config
+    // only populates when the keys are present, so a checkout without
+    // keystore.properties still builds debug (default debug key) and produces an
+    // unsigned release. Applied to the release buildType below (all flavors).
     signingConfigs {
         debug {
             storeFile file('debug.keystore')
@@ -190,11 +215,11 @@ android {
             keyAlias 'androiddebugkey'
             keyPassword 'android'
         }
-
+        // Release signing — shared by all product flavors.
         release {
-            def storeFilePath = keystoreProperties['storeFile']
-            if (storeFilePath) {
-                storeFile file(storeFilePath)
+            def sf = keystoreProperties['storeFile']
+            if (sf) {
+                storeFile file(sf)
                 storePassword keystoreProperties['storePassword']
                 keyAlias keystoreProperties['keyAlias']
                 keyPassword keystoreProperties['keyPassword']
@@ -202,16 +227,58 @@ android {
         }
     }
 
+    flavorDimensions "region"
+    productFlavors {
+        // Global: api.rainmaker.espressif.com, Google Play services Matter
+        // commissioning, Firebase/FCM push. App id inherits defaultConfig
+        // (com.espressif.novahome), kept in sync from ANDROID_APP_APPLICATION_ID
+        // by scripts/sync-env-to-android.js (non-CN builds only).
+        global {
+            dimension "region"
+
+            def commissioningMethod = (project.findProperty("MATTER_COMMISSIONING_METHOD") ?: "GooglePlayServices").toString()
+            if (commissioningMethod.isEmpty()) {
+                commissioningMethod = "GooglePlayServices"
+            }
+            if (!commissioningMethod.equalsIgnoreCase("ChipTool")
+                    && !commissioningMethod.equalsIgnoreCase("GooglePlayServices")) {
+                throw new GradleException("Invalid 'MATTER_COMMISSIONING_METHOD' value '" + commissioningMethod
+                        + "'. Allowed values: 'ChipTool' or 'GooglePlayServices'.")
+            }
+            buildConfigField "String", "MATTER_COMMISSIONING_METHOD", "\"${commissioningMethod}\""
+        }
+        // CN: api2.rainmaker.espressif.com.cn, in-app ChipTool Matter
+        // commissioning, NO Firebase / Google Play services. App id com.espressif.nova
+        // (from ANDROID_APP_APPLICATION_ID in the CN .env; sync leaves defaultConfig
+        // untouched for CN builds, so the CN id comes from this findProperty).
+        cn {
+            dimension "region"
+            applicationId (project.findProperty("ANDROID_APP_APPLICATION_ID") ?: "com.espressif.nova").toString()
+            // CN hard-codes ChipTool — Google Play services are unavailable.
+            buildConfigField "String", "MATTER_COMMISSIONING_METHOD", "\"ChipTool\""
+
+            // WeChat login (CN only). The App ID feeds both the native module
+            // (BuildConfig) and the WXEntryActivity URL scheme (manifest
+            // placeholder). Synced from WECHAT_APP_ID in .env.
+            def weChatAppId = (project.findProperty("WECHAT_APP_ID") ?: "").toString()
+            buildConfigField "String", "WECHAT_APP_ID", "\"${weChatAppId}\""
+            manifestPlaceholders = [WECHAT_APP_ID: weChatAppId]
+        }
+    }
     buildTypes {
         debug {
-            signingConfig signingConfigs.debug
+            // Debug variants use the default debug keystore (signingConfigs.debug).
             minifyEnabled false
             shrinkResources false
             proguardFiles getDefaultProguardFile("proguard-android.txt"), "proguard-rules.pro"
             crunchPngs true
         }
         release {
-            signingConfig signingConfigs.release
+            // All flavors' release variants sign with the one shared release
+            // keystore (from keystore.properties). Without it, the APK is unsigned.
+            if (keystoreProperties['storeFile']) {
+                signingConfig signingConfigs.release
+            }
             shrinkResources (findProperty('android.enableShrinkResourcesInReleaseBuilds')?.toBoolean() ?: false)
             minifyEnabled enableProguardInReleaseBuilds
             proguardFiles getDefaultProguardFile("proguard-android.txt"), "proguard-rules.pro"
@@ -261,13 +328,18 @@ dependencies {
     implementation("com.facebook.react:react-android")
     implementation("com.github.espressif:esp-idf-provisioning-android:lib-2.4.4")
     implementation ("org.greenrobot:eventbus:3.3.1")
-    implementation 'com.google.android.gms:play-services-cast:22.1.0'
-    implementation 'com.google.firebase:firebase-analytics-ktx:22.1.2'
-    implementation platform('com.google.firebase:firebase-bom:33.5.1')
-    implementation 'com.google.firebase:firebase-messaging'
-    implementation 'com.google.firebase:firebase-common-ktx:21.0.0'
 
-    // Google Play Services Matter APIs
+    // Firebase / Google Play services — GLOBAL flavor only. The CN flavor
+    // ships without these so the CN APK contains no Google dependencies.
+    globalImplementation 'com.google.android.gms:play-services-cast:22.1.0'
+    globalImplementation 'com.google.firebase:firebase-analytics-ktx:22.1.2'
+    globalImplementation platform('com.google.firebase:firebase-bom:33.5.1')
+    globalImplementation 'com.google.firebase:firebase-messaging'
+    globalImplementation 'com.google.firebase:firebase-common-ktx:21.0.0'
+
+    // WeChat SDK — CN flavor only (WeChat login is offered solely in the CN build).
+    cnImplementation 'com.tencent.mm.opensdk:wechat-sdk-android-without-mta:6.8.0'
+
     implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3'
 
     implementation 'commons-codec:commons-codec:1.19.0'
@@ -279,9 +351,10 @@ dependencies {
     // Protobuf dependency for Matter TLV and certificate handling
     implementation 'com.google.protobuf:protobuf-javalite:4.32.1'
 
-    // Google Play Services Matter APIs for commissioning UI
-    implementation 'com.google.android.gms:play-services-base:18.8.0'
-    implementation 'com.google.android.gms:play-services-home:16.0.0'
+    // Google Play services Matter APIs for commissioning UI — GLOBAL flavor only
+    // (CN uses in-app ChipTool commissioning instead).
+    globalImplementation 'com.google.android.gms:play-services-base:18.8.0'
+    globalImplementation 'com.google.android.gms:play-services-home:16.0.0'
 
     implementation 'com.google.code.gson:gson:2.13.2'
     

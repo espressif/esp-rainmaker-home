@@ -16,7 +16,7 @@ sign/
 
 # Release signing (never commit real credentials or upload keystore)
 keystore.properties
-**/release.keystore
+**/release.*.keystore
 
 # Firebase / Google Services (use template for compilation)
 app/google-services.json

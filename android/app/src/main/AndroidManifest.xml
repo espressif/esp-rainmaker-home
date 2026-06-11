@@ -121,14 +121,6 @@
             </intent-filter>
         </activity>
 
-        <!-- Matter Commissioning Activity for Google Play Services -->
-        <activity
-            android:name=".matter.MatterCommissioningActivity"
-            android:exported="false"
-            android:launchMode="singleTop"
-            android:noHistory="true"
-            android:theme="@style/AppTheme.Transparent" />
-
         <!-- In-app ChipTool commissioning activity (no Google Play services dependency).
              Selected at build time via MATTER_COMMISSIONING_METHOD; launched from
              ESPMatterModule.startEcosystemCommissioning. -->
@@ -138,22 +130,14 @@
             android:launchMode="singleTop"
             android:screenOrientation="portrait" />
 
-        <service
-            android:name=".notification.FCMService"
-            android:exported="false">
-            <intent-filter>
-                <action android:name="com.google.firebase.MESSAGING_EVENT" />
-            </intent-filter>
-        </service>
-
         <!-- Headless JS Task Service for Matter Commissioning -->
         <service
             android:name=".matter.MatterHeadlessTaskService"
             android:exported="false" />
 
-        <!-- ESP Matter Commissioning Service for Google Play Services -->
-        <service
-            android:name=".matter.ESPMatterCommissioningService"
-            android:exported="true" />
+        <!-- Google-dependent components (FCM service, Google Play services Matter
+             commissioning activity + service) are declared in the `global` flavor
+             manifest (src/global/AndroidManifest.xml) so they are excluded from
+             the CN build, which ships without Firebase / Google Play services. -->
     </application>
 </manifest>

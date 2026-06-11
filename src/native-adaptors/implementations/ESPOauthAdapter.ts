@@ -16,6 +16,20 @@ import ESPOauthModule from "../interfaces/ESPOauthInterface";
  * - No dependency on React Native's Linking API
  */
 export class ESPOauthAdapter {
+  /** True once the current attempt's authorization code has been received. */
+  private authCodeReceived = false;
+
+  /**
+   * Whether the in-flight OAuth attempt has already received its authorization
+   * code from the browser redirect — i.e. the browser leg is complete and only
+   * the token exchange remains. Used by the login flow's browser-abandon
+   * watchdog to avoid cancelling an attempt that is past the browser phase.
+   * Reset at the start of each `getOauthCode` call.
+   */
+  hasReceivedAuthCode(): boolean {
+    return this.authCodeReceived;
+  }
+
   /**
    * Initiates the OAuth authorization flow.
    *
@@ -27,6 +41,7 @@ export class ESPOauthAdapter {
    * @throws Error if the OAuth flow fails or times out
    */
   async getOauthCode(requestURL: string): Promise<string> {
+    this.authCodeReceived = false;
     try {
       // Call the native module which handles everything:
       // 1. Opens the URL in browser
@@ -34,6 +49,7 @@ export class ESPOauthAdapter {
       // 3. Extracts auth code from redirect
       // 4. Returns the auth code or throws error
       const authCode = await ESPOauthModule.getOauthCode(requestURL);
+      this.authCodeReceived = true;
       return authCode;
     } catch (error) {
       console.error("OAuth flow failed:", error);

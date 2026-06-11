@@ -68,6 +68,20 @@ export const ESPAppUtilityAdapter = {
     } catch (error) {
       console.error("ESPAppUtilityAdapter: Error requesting permissions:", error);
     }
+  },
+
+  /**
+   * Records CN-region privacy consent natively and triggers the startup
+   * permission prompts deferred until consent. Safe to call on any build.
+   * @returns Resolves true once consent is recorded (false on error).
+   */
+  async acceptCnConsent(): Promise<boolean> {
+    try {
+      return await ESPAppUtilityModule.acceptCnConsent();
+    } catch (error) {
+      console.error("ESPAppUtilityAdapter: Error accepting consent:", error);
+      return false;
+    }
   }
 };
 
