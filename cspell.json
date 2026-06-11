@@ -18,7 +18,9 @@
     "*.lock",
     "*.log",
     "package-lock.json",
-    "src/shared/utils/timezone.ts"
+    "src/shared/utils/timezone.ts",
+    "config/agent.config.ts",
+    "src/features/agent/utils/constants.ts"
   ],
   "words": [
     "Espressif",
@@ -48,6 +50,8 @@
     "MQTT",
     "WEBRTC",
     "WebRTC",
+    "conv",
+    "CONV",
     "proto",
     "protobuf",
     "Protobuf",

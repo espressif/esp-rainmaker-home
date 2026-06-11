@@ -11,12 +11,14 @@ import { tokens } from "@shared/theme/tokens";
 import { globalStyles } from "@shared/theme/globalStyleSheet";
 
 interface ChatQuestionSuggestionsProps {
-  questions?: string[];
+  questions: string[];
   onQuestionPress: (question: string) => void;
 }
 
 /**
- * Question suggestions component for default agent
+ * Renders tappable starter questions shown on new conversations.
+ * @param props - Suggestion strings and selection callback.
+ * @returns Suggestion chip list for the chat welcome state.
  */
 export const ChatQuestionSuggestions: React.FC<
   ChatQuestionSuggestionsProps

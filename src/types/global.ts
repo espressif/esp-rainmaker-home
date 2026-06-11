@@ -987,6 +987,16 @@ export type ConfigScanPhase =
 // Chat Types
 // ============================================================================
 
+export interface ChatMediaAttachment {
+  type: string;
+  mediaId: string;
+  s3Key: string;
+  contentType: string;
+  filename: string;
+  sizeBytes: number;
+  localUri?: string;
+}
+
 export interface ChatMessage {
   id: string;
   text: string;
@@ -995,8 +1005,9 @@ export interface ChatMessage {
   messageType?: string;
   isCollapsed?: boolean;
   toolName?: string; // For tool_call_info and tool_result_info
-  jsonData?: any; // For JSON messages
+  jsonData?: unknown; // For JSON messages
   isJsonExpanded?: boolean; // For JSON expandable state
+  media?: ChatMediaAttachment[];
 }
 
 // ============================================================================

@@ -10,3 +10,7 @@ export { useTimeSeriesChart } from "./useTimeSeriesChart";
 export { useGuide } from "./useGuide";
 export { useGuideSteps } from "./useGuideSteps";
 export { useCameraCommand } from "./useCameraCommand";
+export {
+  useDeviceAuthRefresh,
+  nodeHasAuthService,
+} from "./useDeviceAuthRefresh";

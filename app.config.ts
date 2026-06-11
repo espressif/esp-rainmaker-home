@@ -224,13 +224,30 @@ export default {
     userInterfaceStyle: "automatic",
     ios: {
       supportsTablet: true,
-      bundleIdentifier: process.env.IOS_APP_APPLICATION_ID || "com.espressif.novahome"
+      bundleIdentifier: process.env.IOS_APP_APPLICATION_ID || "com.espressif.novahome",
+      associatedDomains: [
+        `applinks:${process.env.AGENTS_DEEP_LINK_HOST || "agents.espressif.com"}`,
+      ],
     },
     android: {
       adaptiveIcon: {
         foregroundImage: "./src/assets/images/logo.png",
         backgroundColor: "#ffffff"
-      }
+      },
+      intentFilters: [
+        {
+          action: "VIEW",
+          autoVerify: true,
+          data: [
+            {
+              scheme: "https",
+              host: process.env.AGENTS_DEEP_LINK_HOST || "agents.espressif.com",
+              pathPrefix: process.env.AGENTS_DEEP_LINK_PATH_PREFIX || "/try/agents",
+            },
+          ],
+          category: ["BROWSABLE", "DEFAULT"],
+        },
+      ],
     },
     web: {
       bundler: "metro",
@@ -264,7 +281,14 @@ export default {
       ],
       "expo-font",
       "expo-web-browser",
-      "expo-localization"
+      "expo-localization",
+      [
+        "expo-image-picker",
+        {
+          photosPermission:
+            "Allow $(PRODUCT_NAME) to access your photos to attach images in chat",
+        },
+      ],
     ],
     experiments: {
       typedRoutes: true

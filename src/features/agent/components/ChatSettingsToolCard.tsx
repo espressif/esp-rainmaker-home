@@ -5,7 +5,7 @@
  */
 
 
-import { Text, ActivityIndicator, Pressable, TouchableWithoutFeedback } from "react-native";
+import { Text, ActivityIndicator, Pressable } from "react-native";
 import { useTranslation } from "react-i18next";
 import { tokens } from "@shared/theme/tokens";
 import { globalStyles } from "@shared/theme/globalStyleSheet";
@@ -23,6 +23,7 @@ interface ChatSettingsToolCardProps {
   isDisconnecting: boolean;
   onConnect: (tool: AgentConfigTool) => void;
   onDisconnect: (tool: AgentConfigTool) => void;
+  onPress: (tool: AgentConfigTool) => void;
 }
 
 /**
@@ -38,20 +39,21 @@ export function ChatSettingsToolCard({
   isDisconnecting,
   onConnect,
   onDisconnect,
+  onPress,
 }: ChatSettingsToolCardProps) {
   const { t } = useTranslation();
 
   return (
-    <TouchableWithoutFeedback>
-      <Pressable
-        style={({ pressed }) => [
-          globalStyles.chatSettingsToolCard,
-          {
-            width: cardWidth,
-            opacity: pressed ? 0.7 : 1,
-          },
-        ]}
-      >
+    <Pressable
+      style={({ pressed }) => [
+        globalStyles.chatSettingsToolCard,
+        {
+          width: cardWidth,
+          opacity: pressed ? 0.7 : 1,
+        },
+      ]}
+      onPress={() => onPress(tool)}
+    >
         <Text style={globalStyles.chatSettingsToolName} numberOfLines={2}>
           {tool.name || `Tool ${index + 1}`}
         </Text>
@@ -93,7 +95,6 @@ export function ChatSettingsToolCard({
             </Pressable>
           )
         ) : null}
-      </Pressable>
-    </TouchableWithoutFeedback>
+    </Pressable>
   );
 }

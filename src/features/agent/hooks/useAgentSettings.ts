@@ -25,6 +25,7 @@ import {
   getAgentsAndSelectedId,
   deleteConversationId,
   AGENT_SOURCE,
+  AGENT_ROUTE_PATH,
 } from "@features/agent/utils";
 import { getAgentTermsAccepted } from "@features/agent/utils/storage";
 import type { AgentConfig } from "@src/types/global";
@@ -145,12 +146,16 @@ export function useAgentSettings() {
     setIsAddDialogVisible(true);
   }, []);
 
+  const handleScanAgent = useCallback(() => {
+    router.push(AGENT_ROUTE_PATH.AGENT_SCAN as never);
+  }, [router]);
+
   const handleAddAgentConfirm = useCallback(
     async (name: string, agentIdValue: string) => {
       if (!validateAgentInput(name, agentIdValue)) {
         toast.showError(
           t("aiSettings.errors.invalidInput"),
-          t("aiSettings.errors.fillAllFields")
+          t("aiSettings.errors.fillAllFields"),
         );
         return;
       }
@@ -166,7 +171,7 @@ export function useAgentSettings() {
           toast.showError(
             t("aiSettings.errors.agentInvalid") || "Agent Invalid",
             t("aiSettings.errors.agentNotFound") ||
-            "Agent not found. Please check the agent ID."
+              "Agent not found. Please check the agent ID.",
           );
           setActionLoading(null);
           return;
@@ -179,7 +184,7 @@ export function useAgentSettings() {
         if (!result.isUpdate) {
           const updatedAgents = await getAllAgents(user);
           const newAgent = updatedAgents.find(
-            (agent) => agent.agentId === trimmedAgentId
+            (agent) => agent.agentId === trimmedAgentId,
           );
 
           if (newAgent) {
@@ -201,12 +206,12 @@ export function useAgentSettings() {
         if (result.isUpdate) {
           toast.showSuccess(
             t("aiSettings.title"),
-            t("aiSettings.agentUpdated") || "Agent updated successfully"
+            t("aiSettings.agentUpdated") || "Agent updated successfully",
           );
         } else {
           toast.showSuccess(
             t("aiSettings.title"),
-            t("aiSettings.agentAdded") || "Agent added successfully"
+            t("aiSettings.agentAdded") || "Agent added successfully",
           );
         }
       } catch {
@@ -215,8 +220,12 @@ export function useAgentSettings() {
         setActionLoading(null);
       }
     },
-    [addAgent, fetchAgents, selectAgent, toast, t, user]
+    [addAgent, fetchAgents, selectAgent, toast, t, user],
   );
+
+  const closeAddDialog = useCallback(() => {
+    setIsAddDialogVisible(false);
+  }, []);
 
   const handleSelectAgent = useCallback(
     async (agent: AgentConfig) => {
@@ -308,10 +317,14 @@ export function useAgentSettings() {
 
   const groupAgentsBySource = useCallback(() => {
     const templateAgents = agents.filter(
-      (a) => a.source === AGENT_SOURCE.TEMPLATE
+      (a) => a.source === AGENT_SOURCE.TEMPLATE,
     );
     const userAgents = agents.filter((a) => a.source === AGENT_SOURCE.USER);
-    const customAgents = agents.filter((a) => a.source === AGENT_SOURCE.CUSTOM);
+    const customAgents = agents.filter(
+      (a) =>
+        a.source === AGENT_SOURCE.CUSTOM ||
+        (!a.source && !a.isDefault),
+    );
 
     const defaultAgent = customAgents.find((a) => a.isDefault);
     const customAgentsWithoutDefault = customAgents.filter((a) => !a.isDefault);
@@ -326,10 +339,6 @@ export function useAgentSettings() {
 
   const toggleEditing = useCallback(() => {
     setIsEditing((prev) => !prev);
-  }, []);
-
-  const closeAddDialog = useCallback(() => {
-    setIsAddDialogVisible(false);
   }, []);
 
   const closeTermsBottomSheet = useCallback(() => {
@@ -356,14 +365,15 @@ export function useAgentSettings() {
     agentName,
     fetchAgents,
     handleAddAgent,
+    handleScanAgent,
     handleAddAgentConfirm,
+    closeAddDialog,
     handleSelectAgent,
     handleDeleteAgent,
     confirmDeleteAgent,
     handleCloseDeleteDialog,
     groupAgentsBySource,
     toggleEditing,
-    closeAddDialog,
     closeTermsBottomSheet,
     completeTermsBottomSheet,
   };

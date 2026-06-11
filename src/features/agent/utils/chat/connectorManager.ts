@@ -7,9 +7,15 @@
 import { ESPCDF } from "@store";
 import { ConnectedConnector } from "../apiHelper";
 import {
-  connectToolWithTokens
+  connectToolWithTokens,
+  getToolConnectionStatus,
+  isRainmakerMcpRemoteTool,
+  toTokenConnectOAuthMetadata,
 } from "@features/agent/utils";
-import { RAINMAKER_MCP_CONNECTOR_URL } from "@/config/agent.config";
+import {
+  AGENT_TOOL_AUTH_TYPE_OAUTH,
+  AGENT_TOOL_TYPE_REMOTE,
+} from "@features/agent/utils/constants";
 
 export interface ConnectorCheckResult {
   allConnected: boolean;
@@ -37,31 +43,23 @@ export const checkRequiredConnectors = (
   const missingConnectors: string[] = [];
 
   for (const tool of tools) {
-    if (tool.url) {
-      // Special handling for MCP connector - match by connectorId
-      let connector: ConnectedConnector | undefined;
-      if (tool.url === RAINMAKER_MCP_CONNECTOR_URL) {
-        // For MCP connector, match by connectorId pattern: url::clientId
-        const expectedConnectorId = tool.oauthMetadata?.clientId
-          ? `${RAINMAKER_MCP_CONNECTOR_URL}::${tool.oauthMetadata.clientId}`
-          : null;
+    if (
+      tool.type !== AGENT_TOOL_TYPE_REMOTE ||
+      tool.authType !== AGENT_TOOL_AUTH_TYPE_OAUTH ||
+      !tool.url ||
+      !tool.oauthMetadata?.clientId
+    ) {
+      continue;
+    }
 
-        if (expectedConnectorId) {
-          connector = connectedConnectors.find(
-            (c) => c.connectorId === expectedConnectorId
-          );
-        }
-      } else {
-        // For other connectors, match by connectorUrl
-        connector = connectedConnectors.find(
-          (c) => c.connectorUrl === tool.url
-        );
-      }
+    const { isConnected } = getToolConnectionStatus(
+      tool.url,
+      connectedConnectors,
+      tool.oauthMetadata.clientId
+    );
 
-      // If connector exists in array, it's connected
-      if (!connector) {
-        missingConnectors.push(tool.url);
-      }
+    if (!isConnected) {
+      missingConnectors.push(tool.url);
     }
   }
 
@@ -88,51 +86,38 @@ export const autoConnectRainmakerMCP = async (
   try {
     setIsConnectingConnector(true);
 
-    // Get OAuth metadata from agent config tools array
-    let oauthMetadata:
-      | {
-        tokenEndpoint?: string;
-        clientId?: string;
-        resource?: string;
-      }
-      | undefined;
-
-    // Find Rainmaker MCP tool in tools array
-    const rainmakerTool = config?.tools?.find(
-      (tool: any) => tool.url === RAINMAKER_MCP_CONNECTOR_URL
+    const rainmakerTool = config?.tools?.find((tool: { type?: string; name?: string; url?: string }) =>
+      isRainmakerMcpRemoteTool(tool)
     );
 
-    if (rainmakerTool?.oauthMetadata) {
-      oauthMetadata = {
-        tokenEndpoint: rainmakerTool.oauthMetadata.tokenEndpoint,
-        clientId: rainmakerTool.oauthMetadata.clientId,
-        resource: rainmakerTool.oauthMetadata.resource,
-      };
+    if (!rainmakerTool?.url) {
+      setIsConnectingConnector(false);
+      return false;
     }
+
+    const oauthMetadata = toTokenConnectOAuthMetadata(rainmakerTool.oauthMetadata);
+    const connectorUrl = rainmakerTool.url;
 
     if (!store) {
       setIsConnectingConnector(false);
       return false;
     }
 
-    // Check if connector with matching connectorId already exists
+    // Check if connector with matching connectorId already exists and is active
     const connectedConnectors = await loadConnectors();
-    const expectedConnectorId = `${RAINMAKER_MCP_CONNECTOR_URL}::${oauthMetadata?.clientId || ''}`;
-    const existingConnector = connectedConnectors.find(
-      (c) => c.connectorId === expectedConnectorId
+    const clientId = oauthMetadata?.clientId || '';
+    const { isConnected } = getToolConnectionStatus(
+      connectorUrl,
+      connectedConnectors,
+      clientId
     );
 
-    // If connector exists in array, it's already connected
-    if (existingConnector) {
+    if (isConnected) {
       setIsConnectingConnector(false);
       return true;
     }
 
-    await connectToolWithTokens(
-      store,
-      RAINMAKER_MCP_CONNECTOR_URL,
-      oauthMetadata
-    );
+    await connectToolWithTokens(store, connectorUrl, oauthMetadata);
 
     // Reload connectors after successful connection
     await loadConnectors();

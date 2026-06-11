@@ -586,7 +586,12 @@
     "control": {
       "title": "设备控制",
       "deviceNotFound": "设备未找到",
-      "fallbackNoParams": "此设备未配置参数。"
+      "fallbackNoParams": "此设备未配置参数。",
+      "refreshToken": "刷新令牌",
+      "refreshingToken": "正在刷新…",
+      "tokenRefreshed": "令牌刷新成功",
+      "tokenRefreshFailed": "刷新设备令牌失败",
+      "authServiceNotFound": "此设备没有可刷新的认证服务"
     },
     "pop": {
       "title": "所有权证明",
@@ -1243,6 +1248,22 @@
     "agentConfigNotFound": "未找到配置的智能体",
     "agentConfigNotFoundDescription": "找不到配置的智能体。请更新您的智能体设置。",
     "updateAgent": "更新智能体",
+    "attachImage": "附加图片",
+    "attachImageSourceTitle": "添加图片",
+    "takePhoto": "拍照",
+    "chooseFromGallery": "从相册选择",
+    "viewQuota": "查看配额",
+    "attachedImage": "已附加图片",
+    "removeAttachment": "移除附件",
+    "uploadingImage": "正在上传图片...",
+    "imagePermissionDenied": "需要相册权限才能附加图片",
+    "cameraPermissionDenied": "需要相机权限才能拍照",
+    "imageUploadFailed": "图片上传失败，请重试。",
+    "imageConversationNotReady": "会话尚未就绪，请稍后再试。",
+    "imageNotSupportedForAgent": "此智能体不支持图片附件。",
+    "mediaTypeNotAllowed": "此智能体不支持该文件类型。",
+    "mediaTooLarge": "文件过大，最大允许 {{maxSizeMb}} MB。",
+    "mediaMaxFiles": "每条消息最多可附加 {{maxFiles}} 张图片。",
     "messageDisplayConfig": {
       "title": "消息显示设置",
       "showUser": "显示用户消息",
@@ -1300,6 +1321,8 @@
     "displayName": "显示名称",
     "tools": "工具",
     "noTools": "未配置工具",
+    "enabledTools": "已启用的工具",
+    "noEnabledTools": "无已启用的工具",
     "connected": "已连接",
     "connect": "连接",
     "connecting": "正在连接...",
@@ -1350,6 +1373,16 @@
     "agentUpdated": "智能体更新成功",
     "agentDeleted": "智能体删除成功",
     "agentSetForChat": "已设置聊天智能体",
+    "scan": {
+      "title": "扫描智能体二维码",
+      "alignQRCode": "将智能体二维码对准框内",
+      "cameraPermissionRequired": "扫描智能体二维码需要相机权限，请授予权限后继续。",
+      "grantPermission": "授予权限",
+      "invalidQRCode": "无效的二维码",
+      "invalidQRCodeMessage": "此二维码不包含有效的智能体链接。",
+      "scanAgent": "扫描智能体二维码",
+      "addAgent": "添加新智能体"
+    },
     "confirmDelete": {
       "title": "删除智能体",
       "message": "您确定要删除此智能体吗？此操作无法撤销。"

@@ -34,9 +34,16 @@ export const getAgents = (user: ESPCDFUser): AgentConfig[] => {
 
     if (customData?.[CUSTOM_DATA_KEYS.AI_AGENTS]?.value) {
       // Filter out default agent from stored agents (should not be stored)
-      storedAgents = (customData[CUSTOM_DATA_KEYS.AI_AGENTS].value as AgentConfig[]).filter(
-        (agent) => agent.agentId !== DEFAULT_AGENT_ID && !agent.isDefault
-      );
+      storedAgents = (
+        customData[CUSTOM_DATA_KEYS.AI_AGENTS].value as AgentConfig[]
+      )
+        .filter(
+          (agent) => agent.agentId !== DEFAULT_AGENT_ID && !agent.isDefault,
+        )
+        .map((agent) => ({
+          ...agent,
+          source: agent.source ?? AGENT_SOURCE.CUSTOM,
+        }));
     }
 
     // Always include default agent from constants (never stored)
@@ -89,6 +96,8 @@ export const saveAgents = async (
 
 /**
  * Retrieves selected agent id for downstream consumers.
+ * Returns the persisted selection when set; only falls back to the default
+ * agent when nothing is stored (template/user agents are not in local custom data).
  */
 export const getSelectedAgentId = async (
   user: ESPCDFUser,
@@ -103,35 +112,31 @@ export const getSelectedAgentId = async (
     const storedAgentId = customData?.[CUSTOM_DATA_KEYS.SELECTED_AI_AGENT]
       ?.value as string | undefined;
 
-    const agentsList = agents || getAgents(user);
-
     if (storedAgentId && storedAgentId.trim() !== '') {
       const trimmedStoredId = storedAgentId.trim();
-      const agentExists = agentsList.some(
-        (agent) =>
-          agent.agentId === trimmedStoredId ||
-          agent.agentId.trim() === trimmedStoredId
-      );
 
-      if (agentExists) {
-        return Promise.resolve(trimmedStoredId);
-      }
-
-      const defaultAgent = agentsList.find((agent) => agent.isDefault);
-      if (defaultAgent) {
-        return Promise.resolve(defaultAgent.agentId);
+      if (agents && agents.length > 0) {
+        const agentExists = agents.some(
+          (agent) => agent.agentId.trim() === trimmedStoredId
+        );
+        if (agentExists) {
+          return trimmedStoredId;
+        }
+      } else {
+        return trimmedStoredId;
       }
     }
 
+    const agentsList = agents || getAgents(user);
     const defaultAgent = agentsList.find((agent) => agent.isDefault);
     if (defaultAgent) {
-      return Promise.resolve(defaultAgent.agentId);
+      return defaultAgent.agentId;
     }
   } catch {
     // Silent error handling
   }
 
-  return Promise.resolve(DEFAULT_AGENT_ID);
+  return DEFAULT_AGENT_ID;
 };
 
 /**

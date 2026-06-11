@@ -5,7 +5,8 @@
  */
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import { Keyboard, FlatList } from "react-native";
+import { Keyboard } from "react-native";
+import { FlatList } from "react-native-gesture-handler";
 import { useRouter } from "expo-router";
 import { useTranslation } from "react-i18next";
 import { useCDF } from "@shared/hooks/useCDF";
@@ -21,6 +22,7 @@ import {
   getChatFontSize,
   type WebSocketMessage,
   type MessageDisplayConfig,
+  type PendingChatMediaAttachment,
 } from "@features/agent/utils";
 import {
   getConnectedConnectors,
@@ -34,10 +36,37 @@ import {
   checkRequiredConnectors,
   autoConnectRainmakerMCP,
 } from "@features/agent/utils/chat/connectorManager";
+import { isRainmakerMcpRemoteTool } from "@features/agent/utils";
 import { processWebSocketMessage } from "@features/agent/utils/chat/messageProcessor";
-import { RAINMAKER_MCP_CONNECTOR_URL, DEFAULT_AGENT_ID } from "@/config/agent.config";
-import { MAX_MESSAGES_IN_MEMORY } from "@shared/utils/constants";
-import type { ChatMessage } from "@src/types/global";
+import {
+  ensureThinkingBeforeAssistant,
+  getNewAssistantInsertIndex,
+  getThinkingInsertIndex,
+  insertChatMessageAtIndex,
+} from "@features/agent/utils/chat/messageOrdering";
+import {
+  toAgentChatMediaReference,
+  uploadChatMediaAttachment,
+} from "@features/agent/utils/chat/mediaUpload";
+import { AgentMediaValidationError } from "@features/agent/utils/chat/mediaConfig";
+import { handleLocalToolRequest } from "@features/agent/utils/chat/localToolRegistry";
+import { DEFAULT_AGENT_ID } from "@/config/agent.config";
+import {
+  AGENT_WS_CONTENT_TYPE_MULTIMODAL,
+  AGENT_WS_CONTENT_TYPE_TEXT,
+  AGENT_WS_MESSAGE_TYPE_ASSISTANT,
+  AGENT_WS_MESSAGE_TYPE_ASSISTANT_DELTA,
+  AGENT_WS_MESSAGE_TYPE_THINKING_DELTA,
+  AGENT_WS_MESSAGE_TYPE_TOOL_CALL_INFO,
+  AGENT_WS_MESSAGE_TYPE_TOOL_RESULT_INFO,
+  AGENT_WS_MESSAGE_TYPE_USER,
+  AGENT_CHAT_MESSAGE_TYPE_ASSISTANT,
+  AGENT_CHAT_MESSAGE_TYPE_THINKING,
+  AGENT_CHAT_THINKING_INDICATOR_DELAY_MS,
+  AGENT_CHAT_THINKING_PREFIX,
+  MAX_MESSAGES_IN_MEMORY,
+} from "@shared/utils/constants";
+import type { ChatMediaAttachment, ChatMessage } from "@src/types/global";
 
 const DEFAULT_CONFIG: MessageDisplayConfig = {
   showUser: true,
@@ -101,7 +130,11 @@ export const useAgentChat = (onTimeout?: () => void) => {
   const [expandedJsonMessages, setExpandedJsonMessages] = useState<Set<string>>(new Set());
   const [thinkingMessages, setThinkingMessages] = useState<string[]>([]);
   const [isThinking, setIsThinking] = useState(false);
+  const [isTransactionActive, setIsTransactionActive] = useState(false);
+  const [showThinkingIndicator, setShowThinkingIndicator] = useState(false);
+  const [isThinkingIndicatorPaused, setIsThinkingIndicatorPaused] = useState(false);
   const [isConversationDone, setIsConversationDone] = useState(false);
+  const [isAssistantStreaming, setIsAssistantStreaming] = useState(false);
 
   // ==================== Conversations State ====================
   const [conversations, setConversations] = useState<ConversationListItem[]>([]);
@@ -110,12 +143,18 @@ export const useAgentChat = (onTimeout?: () => void) => {
   // ==================== WebSocket State ====================
   const [isConnected, setIsConnected] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
+  const [isUploadingMedia, setIsUploadingMedia] = useState(false);
   const wsRef = useRef<WebSocket | null>(null);
+  const streamingAssistantIdRef = useRef<string | null>(null);
+  const streamingAssistantTextRef = useRef<string>("");
+  const streamingThinkingIdRef = useRef<string | null>(null);
+  const streamingThinkingTextRef = useRef<string>("");
 
   // ==================== Scroll State ====================
   const flatListRef = useRef<FlatList>(null);
   const isUserScrollingRef = useRef(false);
   const shouldAutoScrollRef = useRef(true);
+  const isAssistantStreamingRef = useRef(false);
 
   // ==================== Refs for stable callback dependencies ====================
   const messageDisplayConfigRef = useRef<MessageDisplayConfig>(DEFAULT_CONFIG);
@@ -137,22 +176,34 @@ export const useAgentChat = (onTimeout?: () => void) => {
     };
   }, []);
 
-  // ==================== Auto-scroll Effect ====================
-  useEffect(() => {
-    if (
-      messageHistory.length > 0 &&
-      shouldAutoScrollRef.current &&
-      flatListRef.current
-    ) {
-      const scrollTimeout = setTimeout(() => {
-        if (shouldAutoScrollRef.current && flatListRef.current) {
-          flatListRef.current.scrollToEnd({ animated: true });
-        }
-      }, 150);
+  // ==================== Scroll Functions ====================
+  /**
+   * Scrolls the message list to the latest content at the bottom.
+   * @param animated - Whether to animate the scroll transition.
+   */
+  const scrollToLatest = useCallback((animated = true) => {
+    setTimeout(() => {
+      flatListRef.current?.scrollToEnd({ animated });
+    }, 50);
+  }, []);
 
-      return () => clearTimeout(scrollTimeout);
-    }
-  }, [messageHistory.length]);
+  /**
+   * Marks assistant streaming as active and hides thinking/loading UI.
+   */
+  const markAssistantStreaming = useCallback(() => {
+    isAssistantStreamingRef.current = true;
+    setIsAssistantStreaming(true);
+    setIsThinking(false);
+  }, []);
+
+  /**
+   * Clears assistant streaming state after a transaction completes.
+   */
+  const clearAssistantStreaming = useCallback(() => {
+    isAssistantStreamingRef.current = false;
+    setIsAssistantStreaming(false);
+    setIsThinking(false);
+  }, []);
 
   // ==================== Agent Functions ====================
   /**
@@ -349,13 +400,14 @@ export const useAgentChat = (onTimeout?: () => void) => {
 
         // Step 4: Handle missing connectors
         if (!allConnected) {
-          const rainmakerMCPMissing = missingConnectors.includes(RAINMAKER_MCP_CONNECTOR_URL);
+          const rainmakerTool = config?.tools?.find((tool: { type?: string; name?: string; url?: string }) =>
+            isRainmakerMcpRemoteTool(tool)
+          );
+          const rainmakerMCPMissing =
+            rainmakerTool?.url != null &&
+            missingConnectors.includes(rainmakerTool.url);
 
           if (rainmakerMCPMissing) {
-            const rainmakerTool = config?.tools?.find(
-              (tool: any) => tool.url === RAINMAKER_MCP_CONNECTOR_URL
-            );
-
             if (rainmakerTool?.oauthMetadata?.clientId) {
               const connected = await autoConnectRainmakerMCP(
                 store,
@@ -504,8 +556,9 @@ export const useAgentChat = (onTimeout?: () => void) => {
    * @param {boolean} isUser - Whether the message is from the user (true) or assistant (false).
    * @param {string} [messageType="unknown"] - The type of message (e.g., "user", "assistant", "thinking", "timeout").
    * @param {string} [toolName] - Optional name of the tool associated with the message.
-   * @param {any} [jsonData] - Optional JSON data to attach to the message.
-   * @returns {void}
+   * @param {unknown} [jsonData] - Optional JSON data to attach to the message.
+   * @param {ChatMediaAttachment[]} [media] - Optional uploaded media attachments.
+   * @returns {string} The generated message ID.
    * @example
    * ```tsx
    * addChatMessage("Hello, how can I help?", false, "assistant");
@@ -519,7 +572,8 @@ export const useAgentChat = (onTimeout?: () => void) => {
       isUser: boolean,
       messageType: string = "unknown",
       toolName?: string,
-      jsonData?: any
+      jsonData?: unknown,
+      media?: ChatMediaAttachment[]
     ) => {
       const messageId = `${Date.now()}-${Math.random()}`;
       const newMessage: ChatMessage = {
@@ -531,18 +585,204 @@ export const useAgentChat = (onTimeout?: () => void) => {
         toolName,
         jsonData,
         isJsonExpanded: false,
+        media,
       };
 
       setMessageHistory((prev) => {
-        const updated = [...prev, newMessage];
-        if (updated.length > MAX_MESSAGES_IN_MEMORY) {
-          return updated.slice(-MAX_MESSAGES_IN_MEMORY);
+        let updated: ChatMessage[];
+
+        if (messageType === AGENT_CHAT_MESSAGE_TYPE_THINKING) {
+          updated = insertChatMessageAtIndex(
+            prev,
+            newMessage,
+            getThinkingInsertIndex(prev),
+            MAX_MESSAGES_IN_MEMORY
+          );
+        } else if (messageType === AGENT_CHAT_MESSAGE_TYPE_ASSISTANT) {
+          updated = insertChatMessageAtIndex(
+            prev,
+            newMessage,
+            getNewAssistantInsertIndex(prev),
+            MAX_MESSAGES_IN_MEMORY
+          );
+        } else {
+          updated = [...prev, newMessage];
+          if (updated.length > MAX_MESSAGES_IN_MEMORY) {
+            updated = updated.slice(-MAX_MESSAGES_IN_MEMORY);
+          }
         }
+
         return updated;
       });
+
+      scrollToLatest();
+
+      return messageId;
     },
-    []
+    [scrollToLatest]
   );
+
+  /**
+   * Updates an existing chat message in place (used for streaming deltas).
+   * @param messageId - Target message ID.
+   * @param text - Updated message text.
+   * @returns void
+   */
+  const updateChatMessageById = useCallback((messageId: string, text: string) => {
+    setMessageHistory((prev) =>
+      ensureThinkingBeforeAssistant(
+        prev.map((message) =>
+          message.id === messageId ? { ...message, text } : message
+        )
+      )
+    );
+    scrollToLatest();
+  }, [scrollToLatest]);
+
+  /**
+   * Appends streamed text to an in-flight assistant or thinking message.
+   * @param deltaText - Incremental text chunk from the websocket.
+   * @param streamType - Whether this is assistant response or thinking content.
+   * @returns void
+   */
+  const appendStreamingDelta = useCallback(
+    (deltaText: string, streamType: "response" | "thinking") => {
+      if (streamType === "thinking") {
+        if (!messageDisplayConfigRef.current.showThinking) {
+          return;
+        }
+
+        setIsThinking(true);
+        setIsThinkingIndicatorPaused(true);
+
+        const idRef = streamingThinkingIdRef;
+        const textRef = streamingThinkingTextRef;
+
+        if (idRef.current === null) {
+          const id = `${Date.now()}-${Math.random()}`;
+          idRef.current = id;
+          textRef.current = deltaText;
+          const messageText = `${AGENT_CHAT_THINKING_PREFIX} ${deltaText}`;
+
+          setMessageHistory((prev) => {
+            const newMessage: ChatMessage = {
+              id,
+              text: messageText,
+              isUser: false,
+              timestamp: new Date(),
+              messageType: AGENT_CHAT_MESSAGE_TYPE_THINKING,
+            };
+            return insertChatMessageAtIndex(
+              prev,
+              newMessage,
+              getThinkingInsertIndex(prev),
+              MAX_MESSAGES_IN_MEMORY
+            );
+          });
+          scrollToLatest();
+          return;
+        }
+
+        textRef.current = `${textRef.current}${deltaText}`;
+        updateChatMessageById(
+          idRef.current,
+          `${AGENT_CHAT_THINKING_PREFIX} ${textRef.current}`
+        );
+        return;
+      }
+
+      markAssistantStreaming();
+      setIsThinkingIndicatorPaused(true);
+
+      const idRef = streamingAssistantIdRef;
+      const textRef = streamingAssistantTextRef;
+
+      if (idRef.current === null) {
+        const id = `${Date.now()}-${Math.random()}`;
+        idRef.current = id;
+        textRef.current = deltaText;
+        const messageText = deltaText;
+
+        setMessageHistory((prev) => {
+          const newMessage: ChatMessage = {
+            id,
+            text: messageText,
+            isUser: false,
+            timestamp: new Date(),
+            messageType: AGENT_CHAT_MESSAGE_TYPE_ASSISTANT,
+          };
+          return insertChatMessageAtIndex(
+            prev,
+            newMessage,
+            getNewAssistantInsertIndex(prev),
+            MAX_MESSAGES_IN_MEMORY
+          );
+        });
+        scrollToLatest();
+        return;
+      }
+
+      textRef.current = `${textRef.current}${deltaText}`;
+      updateChatMessageById(idRef.current, textRef.current);
+    },
+    [markAssistantStreaming, updateChatMessageById, scrollToLatest]
+  );
+
+  /**
+   * Finalizes a streamed assistant message with the server-provided final text.
+   * @param finalText - Final assistant message content.
+   * @returns Whether an in-flight stream bubble was updated.
+   */
+  const finalizeStreamedAssistant = useCallback(
+    (finalText: string): boolean => {
+      const streamId = streamingAssistantIdRef.current;
+      if (streamId === null) {
+        return false;
+      }
+
+      updateChatMessageById(streamId, finalText);
+      streamingAssistantIdRef.current = null;
+      streamingAssistantTextRef.current = "";
+      return true;
+    },
+    [updateChatMessageById]
+  );
+
+  /**
+   * Closes the in-flight assistant bubble before tool cards are inserted.
+   * @returns void
+   */
+  const endStreamingAssistantBubble = useCallback(() => {
+    const streamId = streamingAssistantIdRef.current;
+    if (streamId === null) {
+      return;
+    }
+
+    const accumulated = streamingAssistantTextRef.current;
+    streamingAssistantIdRef.current = null;
+    streamingAssistantTextRef.current = "";
+
+    if (!accumulated || accumulated.trim() === "") {
+      setMessageHistory((prev) =>
+        prev.filter((message) => message.id !== streamId)
+      );
+    }
+  }, []);
+
+  /**
+   * Clears all streaming refs when a transaction completes.
+   * @returns void
+   */
+  const clearStreamingState = useCallback(() => {
+    streamingAssistantIdRef.current = null;
+    streamingAssistantTextRef.current = "";
+    streamingThinkingIdRef.current = null;
+    streamingThinkingTextRef.current = "";
+    setIsTransactionActive(false);
+    setShowThinkingIndicator(false);
+    setIsThinkingIndicatorPaused(false);
+    clearAssistantStreaming();
+  }, [clearAssistantStreaming]);
 
   /**
    * Adds a thinking message to the thinking messages array.
@@ -649,7 +889,8 @@ export const useAgentChat = (onTimeout?: () => void) => {
     setExpandedJsonMessages(new Set());
     thinkingMessagesRef.current = [];
     setThinkingMessages([]);
-  }, []);
+    clearStreamingState();
+  }, [clearStreamingState]);
 
   // ==================== Update refs when state changes ====================
   useEffect(() => {
@@ -659,6 +900,41 @@ export const useAgentChat = (onTimeout?: () => void) => {
   useEffect(() => {
     thinkingMessagesRef.current = thinkingMessages;
   }, [thinkingMessages]);
+
+  useEffect(() => {
+    if (!isTransactionActive) {
+      setShowThinkingIndicator(false);
+      return;
+    }
+
+    const toolsVisible =
+      messageDisplayConfig.showToolCallInfo ||
+      messageDisplayConfig.showToolResultInfo;
+
+    if (toolsVisible || isThinkingIndicatorPaused) {
+      setShowThinkingIndicator(false);
+      return;
+    }
+
+    const timeout = setTimeout(() => {
+      setShowThinkingIndicator(true);
+    }, AGENT_CHAT_THINKING_INDICATOR_DELAY_MS);
+
+    return () => {
+      clearTimeout(timeout);
+    };
+  }, [
+    isTransactionActive,
+    isThinkingIndicatorPaused,
+    messageDisplayConfig.showToolCallInfo,
+    messageDisplayConfig.showToolResultInfo,
+  ]);
+
+  useEffect(() => {
+    if (showThinkingIndicator) {
+      scrollToLatest();
+    }
+  }, [showThinkingIndicator, scrollToLatest]);
 
   useEffect(() => {
     onTimeoutRef.current = onTimeout;
@@ -684,17 +960,42 @@ export const useAgentChat = (onTimeout?: () => void) => {
    */
   const handleWebSocketMessage = useCallback(
     (message: WebSocketMessage) => {
+      if (message.type === AGENT_WS_MESSAGE_TYPE_ASSISTANT) {
+        const content =
+          typeof message.content === "string"
+            ? message.content
+            : JSON.stringify(message.content);
+
+        setIsThinkingIndicatorPaused(true);
+
+        const combinedThinking = flushThinkingMessages();
+        if (combinedThinking && messageDisplayConfigRef.current.showThinking) {
+          addChatMessage(combinedThinking, false, AGENT_CHAT_MESSAGE_TYPE_THINKING);
+        }
+
+        if (finalizeStreamedAssistant(content)) {
+          setIsThinking(false);
+          setMessageHistory((prev) => ensureThinkingBeforeAssistant(prev));
+          return;
+        }
+      }
+
       const processed = processWebSocketMessage(
         message,
         messageDisplayConfigRef.current,
         thinkingMessagesRef.current
       );
 
+      if (processed.shouldEndStreamingBubble) {
+        endStreamingAssistantBubble();
+      }
+
       switch (processed.action) {
         case "timeout":
           if (processed.text) {
             addChatMessage(processed.text, false, "timeout");
           }
+          setIsTransactionActive(false);
           if (wsRef.current) {
             wsRef.current.close();
             wsRef.current = null;
@@ -726,11 +1027,16 @@ export const useAgentChat = (onTimeout?: () => void) => {
         case "update_state":
           if (processed.shouldSetConversationDone) {
             setIsConversationDone(true);
+            setIsTransactionActive(false);
+            clearStreamingState();
           }
-          if (processed.shouldSetThinking !== undefined) {
+          if (
+            processed.shouldSetThinking !== undefined &&
+            !isAssistantStreamingRef.current
+          ) {
             setIsThinking(processed.shouldSetThinking);
           }
-          if (processed.shouldFlushThinking) {
+          if (processed.shouldFlushThinking && !isAssistantStreamingRef.current) {
             const combined = flushThinkingMessages();
             if (combined) {
               addChatMessage(combined, false, "thinking");
@@ -739,10 +1045,19 @@ export const useAgentChat = (onTimeout?: () => void) => {
           break;
 
         case "add":
-          if (processed.shouldSetThinking !== undefined) {
+          if (
+            processed.messageType === AGENT_WS_MESSAGE_TYPE_TOOL_CALL_INFO ||
+            processed.messageType === AGENT_WS_MESSAGE_TYPE_TOOL_RESULT_INFO
+          ) {
+            setIsThinkingIndicatorPaused(true);
+          }
+          if (
+            processed.shouldSetThinking !== undefined &&
+            !isAssistantStreamingRef.current
+          ) {
             setIsThinking(processed.shouldSetThinking);
           }
-          if (processed.shouldFlushThinking) {
+          if (processed.shouldFlushThinking && !isAssistantStreamingRef.current) {
             const combined = flushThinkingMessages();
             if (combined) {
               addChatMessage(combined, false, "thinking");
@@ -765,6 +1080,13 @@ export const useAgentChat = (onTimeout?: () => void) => {
               addThinkingMessage(processed.text);
             }
             setIsThinking(true);
+            setIsThinkingIndicatorPaused(true);
+          }
+          if (
+            processed.messageType === AGENT_WS_MESSAGE_TYPE_TOOL_CALL_INFO ||
+            processed.messageType === AGENT_WS_MESSAGE_TYPE_TOOL_RESULT_INFO
+          ) {
+            setIsThinkingIndicatorPaused(false);
           }
           break;
       }
@@ -778,6 +1100,9 @@ export const useAgentChat = (onTimeout?: () => void) => {
       setIsConversationDone,
       store,
       router,
+      finalizeStreamedAssistant,
+      endStreamingAssistantBubble,
+      clearStreamingState,
     ]
   );
 
@@ -827,6 +1152,64 @@ export const useAgentChat = (onTimeout?: () => void) => {
         wsRef.current.onmessage = (event) => {
           try {
             const data: WebSocketMessage = JSON.parse(event.data);
+
+            if (data.type === AGENT_WS_MESSAGE_TYPE_ASSISTANT_DELTA) {
+              const deltaText =
+                typeof data.content === "string"
+                  ? data.content
+                  : JSON.stringify(data.content);
+              appendStreamingDelta(deltaText, "response");
+              return;
+            }
+
+            if (data.type === AGENT_WS_MESSAGE_TYPE_THINKING_DELTA) {
+              const deltaText =
+                typeof data.content === "string"
+                  ? data.content
+                  : JSON.stringify(data.content);
+              appendStreamingDelta(deltaText, "thinking");
+              return;
+            }
+
+            if (data.type === "tool_request") {
+              void handleLocalToolRequest(
+                data,
+                {
+                  espCDFUser: user,
+                  getAgentId: () => getSelectedAgentId(user),
+                  getConversationId: () => getConversationId(user),
+                  onAssistantMediaUploaded: async (media, messageText) => {
+                    if (wsRef.current?.readyState === WebSocket.OPEN) {
+                      const mediaMessageData: WebSocketMessage = {
+                        type: AGENT_WS_MESSAGE_TYPE_USER,
+                        content_type: AGENT_WS_CONTENT_TYPE_MULTIMODAL,
+                        content: {
+                          text: messageText,
+                          media: [toAgentChatMediaReference(media)],
+                        },
+                      };
+                      wsRef.current.send(JSON.stringify(mediaMessageData));
+                    }
+                    if (messageDisplayConfigRef.current.showUser) {
+                      addChatMessage(
+                        messageText,
+                        true,
+                        "user",
+                        undefined,
+                        undefined,
+                        [media],
+                      );
+                    }
+                  },
+                },
+                (response) => {
+                  if (wsRef.current?.readyState === WebSocket.OPEN) {
+                    wsRef.current.send(JSON.stringify(response));
+                  }
+                },
+              );
+              return;
+            }
             handleWebSocketMessage(data);
           } catch (error) {
             console.error("Failed to parse message:", error);
@@ -860,7 +1243,7 @@ export const useAgentChat = (onTimeout?: () => void) => {
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional hook deps
-    [store, handleWebSocketMessage, addChatMessage, t, toast]
+    [store, handleWebSocketMessage, addChatMessage, appendStreamingDelta, t, toast]
   );
 
   /**
@@ -888,33 +1271,87 @@ export const useAgentChat = (onTimeout?: () => void) => {
 
   /**
    * Sends a message through the WebSocket connection.
-   * @description Sends a user message to the server via WebSocket if connected.
-   * Does nothing if message is empty, not connected, or WebSocket is not ready.
+   * @description Sends a user text message or multimodal message with an uploaded image.
    * @param {string} message - The message text to send.
-   * @returns {void}
-   * @example
-   * ```tsx
-   * sendMessage("Turn on the living room lights");
-   * ```
+   * @param {PendingChatMediaAttachment[] | null} [pendingMedia] - Optional local images to upload first.
+   * @returns {Promise<ChatMediaAttachment[] | undefined>} Uploaded media metadata when images were sent.
    */
   const sendMessage = useCallback(
-    (message: string) => {
-      if (!message || !isConnected || !wsRef.current) return;
+    async (
+      message: string,
+      pendingMedia?: PendingChatMediaAttachment[] | null
+    ): Promise<ChatMediaAttachment[] | undefined> => {
+      const trimmedMessage = message.trim();
+      const attachments = pendingMedia?.filter(Boolean) ?? [];
+      const hasMedia = attachments.length > 0;
 
-      if (wsRef.current.readyState === WebSocket.OPEN) {
-        try {
+      if ((!trimmedMessage && !hasMedia) || !isConnected || !wsRef.current) {
+        return undefined;
+      }
+
+      if (wsRef.current.readyState !== WebSocket.OPEN) {
+        return undefined;
+      }
+
+      setIsTransactionActive(true);
+
+      try {
+        if (hasMedia) {
+          const agentId = await getSelectedAgentId(user);
+          const conversationId = await getConversationId(user);
+
+          if (!agentId || !conversationId) {
+            toast.showError(t("chat.imageConversationNotReady"));
+            return undefined;
+          }
+
+          setIsUploadingMedia(true);
+          const uploadedMedia: ChatMediaAttachment[] = [];
+          for (const attachment of attachments) {
+            const uploaded = await uploadChatMediaAttachment(
+              agentId,
+              conversationId,
+              attachment
+            );
+            uploadedMedia.push(uploaded);
+          }
+          setIsUploadingMedia(false);
+
           const messageData: WebSocketMessage = {
-            type: "user",
-            content_type: "text",
-            content: message,
+            type: AGENT_WS_MESSAGE_TYPE_USER,
+            content_type: AGENT_WS_CONTENT_TYPE_MULTIMODAL,
+            content: {
+              text: trimmedMessage,
+              media: uploadedMedia.map(toAgentChatMediaReference),
+            },
           };
           wsRef.current.send(JSON.stringify(messageData));
-        } catch {
-          // Silent error handling
+          return uploadedMedia;
         }
+
+        const messageData: WebSocketMessage = {
+          type: AGENT_WS_MESSAGE_TYPE_USER,
+          content_type: AGENT_WS_CONTENT_TYPE_TEXT,
+          content: trimmedMessage,
+        };
+        wsRef.current.send(JSON.stringify(messageData));
+        return undefined;
+      } catch (error) {
+        setIsUploadingMedia(false);
+        console.error("[useAgentChat] Failed to send message:", error);
+        if (error instanceof AgentMediaValidationError) {
+          toast.showError(
+            error.maxSizeMb
+              ? t(error.errorKey, { maxSizeMb: error.maxSizeMb })
+              : t(error.errorKey)
+          );
+        } else {
+          toast.showError(t("chat.imageUploadFailed"));
+        }
+        throw error;
       }
     },
-    [isConnected]
+    [isConnected, user, toast, t]
   );
 
   /**
@@ -983,10 +1420,8 @@ export const useAgentChat = (onTimeout?: () => void) => {
    * ```
    */
   const scrollToEnd = useCallback((animated: boolean = true) => {
-    if (flatListRef.current) {
-      flatListRef.current.scrollToEnd({ animated });
-    }
-  }, []);
+    scrollToLatest(animated);
+  }, [scrollToLatest]);
 
   /**
    * Handles the scroll begin drag event.
@@ -1067,13 +1502,16 @@ export const useAgentChat = (onTimeout?: () => void) => {
       messageHistoryLengthRef.current > 0 &&
       flatListRef.current
     ) {
-      setTimeout(() => {
-        if (shouldAutoScrollRef.current && flatListRef.current) {
-          flatListRef.current.scrollToEnd({ animated: true });
-        }
-      }, 50);
+      scrollToLatest();
     }
-  }, []);
+  }, [scrollToLatest]);
+
+  /**
+   * Recovers scroll positioning when scrollToIndex fails due to unmeasured rows.
+   */
+  const handleScrollToIndexFailed = useCallback(() => {
+    scrollToLatest(false);
+  }, [scrollToLatest]);
 
   // ==================== Conversations Functions ====================
   /**
@@ -1163,7 +1601,10 @@ export const useAgentChat = (onTimeout?: () => void) => {
     expandedJsonMessages,
     thinkingMessages,
     isThinking,
+    isTransactionActive,
+    showThinkingIndicator,
     isConversationDone,
+    isAssistantStreaming,
     setIsThinking,
     setIsConversationDone,
     addChatMessage,
@@ -1176,6 +1617,7 @@ export const useAgentChat = (onTimeout?: () => void) => {
     // WebSocket state
     isConnected,
     isConnecting,
+    isUploadingMedia,
     initializeWebSocket,
     sendMessage,
     disconnect,
@@ -1185,6 +1627,7 @@ export const useAgentChat = (onTimeout?: () => void) => {
     enableAutoScroll,
     disableAutoScroll,
     scrollToEnd,
+    handleScrollToIndexFailed,
     handleScrollBeginDrag,
     handleScrollEndDrag,
     handleMomentumScrollEnd,

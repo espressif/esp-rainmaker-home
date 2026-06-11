@@ -19,6 +19,7 @@ export function ChatSettingsScreen() {
   const { t } = useTranslation();
   const {
     agentConfig,
+    agentTools,
     isLoading,
     error,
     fontSize,
@@ -33,9 +34,7 @@ export function ChatSettingsScreen() {
     confirmDisconnectTool,
     closeDisconnectDialog,
     handleConnectTool,
-    getToolConnectionStatus,
-    getExpectedConnectorId,
-    isToolInConfig,
+    getRemoteToolConnectionStatus,
     connectingToolUrl,
   } = useChatSettings();
 
@@ -58,15 +57,14 @@ export function ChatSettingsScreen() {
           isLoading={isLoading}
           error={error}
           agentConfig={agentConfig}
+          agentTools={agentTools}
           fontSize={fontSize}
           conversationId={conversationId}
           onRetry={loadAgentConfig}
           onFontSizeChange={handleFontSizeChange}
           onConnectTool={handleConnectTool}
           onDisconnectTool={handleDisconnectTool}
-          getToolConnectionStatus={getToolConnectionStatus}
-          getExpectedConnectorId={getExpectedConnectorId}
-          isToolInConfig={isToolInConfig}
+          getRemoteToolConnectionStatus={getRemoteToolConnectionStatus}
           connectingToolUrl={connectingToolUrl}
           disconnectingToolUrl={disconnectingToolUrl}
         />

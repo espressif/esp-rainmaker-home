@@ -669,6 +669,8 @@ export const WEBRTC_TRANSCEIVER_DIRECTION_RECVONLY = "recvonly";
 export const WEBRTC_TRANSCEIVER_DIRECTION_SENDRECV = "sendrecv";
 /** Auto-hide delay (ms) for the in-video media controls overlay after a tap. */
 export const CAMERA_CONTROLS_AUTO_HIDE_MS = 3000;
+/** Delay (ms) before re-applying loudspeaker routing after WebRTC audio connects (iOS). */
+export const WEBRTC_LOUDSPEAKER_ROUTE_DELAY_MS = 500;
 /**
  * Max wait (ms) for a local-control SDP answer before falling back to cloud KVS signaling.
  * Covers the full local handshake: secure session connect + mic getUserMedia +
@@ -688,6 +690,122 @@ export const WEBRTC_LOCAL_MAX_POLL_FAILURES = 5;
  * The CLI uses `local-cli-`; we use `local-app-`.
  */
 export const WEBRTC_LOCAL_PEER_ID_PREFIX = "local-app-";
+
+// AGENT CHAT WEBSOCKET
+export const AGENT_WS_MESSAGE_TYPE_USER = "user";
+export const AGENT_WS_MESSAGE_TYPE_ASSISTANT = "assistant";
+export const AGENT_WS_MESSAGE_TYPE_ASSISTANT_DELTA = "assistant_delta";
+export const AGENT_WS_MESSAGE_TYPE_THINKING = "thinking";
+export const AGENT_WS_MESSAGE_TYPE_THINKING_DELTA = "thinking_delta";
+export const AGENT_WS_MESSAGE_TYPE_TOOL_CALL_INFO = "tool_call_info";
+export const AGENT_WS_MESSAGE_TYPE_TOOL_RESULT_INFO = "tool_result_info";
+export const AGENT_WS_MESSAGE_TYPE_TRANSACTION_END = "transaction_end";
+export const AGENT_WS_MESSAGE_TYPE_HANDSHAKE_ACK = "handshake_ack";
+export const AGENT_WS_MESSAGE_TYPE_HANDSHAKE = "handshake";
+export const AGENT_WS_MESSAGE_TYPE_USAGE_INFO = "usage_info";
+export const AGENT_WS_MESSAGE_TYPE_TIMEOUT = "timeout";
+export const AGENT_WS_MESSAGE_TYPE_SYSTEM = "system";
+export const AGENT_WS_CONTENT_TYPE_TEXT = "text";
+export const AGENT_WS_CONTENT_TYPE_JSON = "json";
+export const AGENT_WS_CONTENT_TYPE_MULTIMODAL = "multimodal";
+export const AGENT_CHAT_MESSAGE_TYPE_THINKING = "thinking";
+export const AGENT_CHAT_MESSAGE_TYPE_THINKING_INDICATOR = "thinking_indicator";
+export const AGENT_CHAT_THINKING_INDICATOR_MESSAGE_ID = "__thinking-indicator__";
+export const AGENT_CHAT_MESSAGE_TYPE_TOOL = "tool";
+export const AGENT_CHAT_MESSAGE_TYPE_SYSTEM = "system";
+export const AGENT_CHAT_MESSAGE_TYPE_ASSISTANT = "assistant";
+export const AGENT_CHAT_TOOL_PREFIX_EXECUTING = "Executing tool";
+export const AGENT_CHAT_TOOL_PREFIX_RESULT = "Tool result";
+export const AGENT_CHAT_THINKING_PREFIX = "Thinking:";
+export const AGENT_CHAT_THINKING_INDICATOR_DELAY_MS = 1000;
+export const AGENT_MEDIA_TYPE_IMAGE = "image";
+export const AGENT_MEDIA_TYPE_VIDEO = "video";
+export const AGENT_MEDIA_TYPE_DOCUMENT = "document";
+export const AGENT_CHAT_MESSAGE_ROLE_USER = "user";
+export const AGENT_CHAT_MESSAGE_ROLE_ASSISTANT = "assistant";
+export const HTTP_METHOD_PUT = "PUT";
+export const IMAGE_MIME_TYPE_JPEG = "image/jpeg";
+export const IMAGE_MIME_TYPE_PNG = "image/png";
+export const IMAGE_MIME_TYPE_WEBP = "image/webp";
+export const IMAGE_MIME_TYPE_GIF = "image/gif";
+
+// GALLERY / FILE LIST (CDF getFiles + media classification)
+/** RainMaker file list entity type for node-scoped files. */
+export const GALLERY_FILE_ENTITY_TYPE_NODE = "node";
+/** Classified media kind: image. */
+export const GALLERY_MEDIA_TYPE_IMAGE = "image";
+/** Classified media kind: video. */
+export const GALLERY_MEDIA_TYPE_VIDEO = "video";
+/** Classified media kind: neither image nor video. */
+export const GALLERY_MEDIA_TYPE_OTHER = "other";
+/** Grid filter that shows every media kind. */
+export const GALLERY_FILTER_ALL = "all";
+/** Filename prefix used by firmware for still snapshots. */
+export const GALLERY_NAME_PREFIX_SNAPSHOT = "snapshot";
+/** Filename prefix used by firmware for video clips. */
+export const GALLERY_NAME_PREFIX_CLIP = "clip";
+/** Extensions treated as images when MIME type is missing. */
+export const GALLERY_IMAGE_EXTENSIONS = [
+  "jpg",
+  "jpeg",
+  "png",
+  "webp",
+  "gif",
+  "bmp",
+] as const;
+/** Extensions treated as videos when MIME type is missing. */
+export const GALLERY_VIDEO_EXTENSIONS = [
+  "mp4",
+  "mkv",
+  "webm",
+  "mov",
+  "m4v",
+] as const;
+
+// CAMERA CMD-RESP (jpeg-capture / snapshot upload)
+/** Framework command id (0x1001) carried by every cmd-resp request. */
+export const CAMERA_SNAPSHOT_COMMAND_ID = 4097;
+/** Device-side response timeout (seconds) the cmd-resp framework waits for. */
+export const NODE_CMD_DEFAULT_TIMEOUT = 1000;
+/** Camera command name understood by the firmware. */
+export const CAMERA_CMD_JPEG_CAPTURE = "jpeg-capture";
+/** `jpeg-capture` arg that tells the device to upload the snapshot to RainMaker storage. */
+export const CAMERA_CMD_ARG_UPLOAD = "--upload";
+/** `jpeg-capture` arg flag selecting JPEG quality (1-100); lower = smaller file. */
+export const CAMERA_CMD_ARG_QUALITY = "--quality";
+/** `jpeg-capture` arg flag selecting capture resolution as `[width, height]`. */
+export const CAMERA_CMD_ARG_RES = "--res";
+/**
+ * `jpeg-capture` arg flag carrying the agent id. Together with `--conv-id` it
+ * lets the firmware target the agent `media/upload-url` endpoint.
+ */
+export const CAMERA_CMD_ARG_AGENT_ID = "--agent-id";
+/**
+ * `jpeg-capture` arg flag carrying the agent conversation id. The firmware
+ * uploads the snapshot into this conversation via the agent media upload flow.
+ */
+export const CAMERA_CMD_ARG_CONV_ID = "--conv-id";
+/**
+ * Capture quality (JPEG, 1-100) used for cloud snapshots. Kept low to shrink the
+ * file so device upload + phone download/re-upload stay fast.
+ */
+export const CAMERA_CAPTURE_QUALITY = "30";
+/** Capture resolution (`[width, height]`) used for cloud snapshots. 720p. */
+export const CAMERA_CAPTURE_RESOLUTION: [number, number] = [1280, 720];
+/** Status-polling interval for an in-flight cmd-resp request. */
+export const NODE_CMD_POLL_INTERVAL_MS = 2000;
+/** Max poll attempts before treating cmd-resp as timed out client-side. */
+export const NODE_CMD_POLL_MAX_ATTEMPTS = 15;
+/** `pollUntilReady` label for camera snapshot cmd-resp status waits. */
+export const NODE_CMD_POLL_LABEL_SNAPSHOT = "camera snapshot cmd-resp";
+/** Terminal cmd-resp status: success. */
+export const NODE_CMD_STATUS_SUCCESS = "success";
+/** Terminal cmd-resp status: failure. */
+export const NODE_CMD_STATUS_FAILURE = "failure";
+/** Terminal cmd-resp status: timed out. */
+export const NODE_CMD_STATUS_TIMED_OUT = "timed_out";
+/** Threshold (bytes) above which a snapshot size is shown in MB rather than KB. */
+export const SNAPSHOT_SIZE_MB_THRESHOLD = 1024 * 1024;
 
 // MATTER DATA VALUE TYPES (Apple MTRDataValueDictionary / CHIP TLV wire shape)
 export const MATTER_DATA_VALUE_TYPE_NULL = "Null";
