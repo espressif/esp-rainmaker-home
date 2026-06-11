@@ -8,6 +8,9 @@ package com.app
 
 import android.app.Application
 import android.content.res.Configuration
+import android.media.AudioAttributes
+import com.oney.WebRTCModule.WebRTCModuleOptions
+import org.webrtc.audio.JavaAudioDeviceModule
 import com.app.utils.ESPAppUtilityModule
 import com.app.discovery.ESPDiscoveryModule
 import com.app.local_control.ESPLocalControlModule
@@ -124,6 +127,17 @@ class MainApplication : Application(), ReactApplication {
     }
 
     override fun onCreate() {
+        // Route WebRTC audio through the media stream (loudspeaker) instead of the call stream
+        // (earpiece). Must run before WebRTCModule initializes via loadReactNative.
+        val webrtcOptions = WebRTCModuleOptions.getInstance()
+        val audioAttributes = AudioAttributes.Builder()
+            .setUsage(AudioAttributes.USAGE_MEDIA)
+            .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+            .build()
+        webrtcOptions.audioDeviceModule = JavaAudioDeviceModule.builder(this)
+            .setAudioAttributes(audioAttributes)
+            .createAudioDeviceModule()
+
         super.onCreate()
         loadReactNative(this)
         try {

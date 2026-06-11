@@ -5,49 +5,52 @@
  */
 
 /**
- * Type definitions for KVS Signaling Client
+ * Shared camera signaling types used by local-control transport and the
+ * WebRTC hook. Cloud KVS types live in `@modules/kvs`.
  */
 
-/**
- * AWS credentials for SigV4 authentication
- */
-export interface AWSCredentials {
-  accessKeyId: string;
-  secretAccessKey: string;
-  sessionToken: string;
-}
+import type { RTCSessionDescription, RTCIceCandidate } from "react-native-webrtc";
 
 /**
- * Configuration for KVS Signaling Client
+ * Event types emitted by either the cloud KVS or local-control signaling client.
+ * Values must stay aligned with `WEBRTC_SIGNALING_EVENTS` / module `SIGNALING_EVENTS`.
  */
-export interface SignalingClientConfig {
-  channelARN: string;
-  channelEndpoint: string;
-  clientId: string;
-  region: string;
-  credentials: AWSCredentials;
-}
+export type SignalingEventType =
+  | "open"
+  | "close"
+  | "error"
+  | "sdpAnswer"
+  | "iceCandidate";
 
 /**
- * Event types emitted by the signaling client
+ * Event handler function signature for {@link SignalingTransport}.
  */
-export type SignalingEventType = "open" | "close" | "error" | "sdpAnswer" | "iceCandidate";
-
-/**
- * Event handler function signature
- */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- emitter payloads differ per event
 export type SignalingEventHandler = (...args: any[]) => void;
 
 /**
- * Incoming signaling message structure
+ * Common surface implemented by both the cloud KVS signaling client and the
+ * local-control signaling client, so the WebRTC hook can use either as a
+ * drop-in transport.
  */
-export type SignalingMessage = {
-  messageType?: string;
-  action?: string;
-  messagePayload?: string;
-};
+export interface SignalingTransport {
+  on(event: SignalingEventType, handler: SignalingEventHandler): void;
+  off(event: SignalingEventType, handler: SignalingEventHandler): void;
+  open(): Promise<void>;
+  sendSdpOffer(offer: RTCSessionDescription): void;
+  sendIceCandidate(candidate: RTCIceCandidate): void;
+  close(): void;
+}
 
 /**
- * Message handler function signature
+ * Local-control transport parameters for a LAN-reachable node. `pop`/`securityType`
+ * come from the node's `esp.service.local_control` service params.
  */
-export type MessageHandler = (message: SignalingMessage) => void;
+export interface LocalTransportConfig {
+  /** Device base URL, e.g. `http://192.168.1.42:8080`. */
+  baseUrl: string;
+  /** esp_local_ctrl security type (0 none, 1 Security1, 2 Security2). */
+  securityType: number;
+  /** Proof of possession; "" when not required. */
+  pop: string;
+}

@@ -664,7 +664,30 @@ export const WEBRTC_DEFAULT_MESSAGES = {
 
 // WebRTC Media constants
 export const WEBRTC_MEDIA_KIND_VIDEO = "video";
+export const WEBRTC_MEDIA_KIND_AUDIO = "audio";
 export const WEBRTC_TRANSCEIVER_DIRECTION_RECVONLY = "recvonly";
+export const WEBRTC_TRANSCEIVER_DIRECTION_SENDRECV = "sendrecv";
+/** Auto-hide delay (ms) for the in-video media controls overlay after a tap. */
+export const CAMERA_CONTROLS_AUTO_HIDE_MS = 3000;
+/**
+ * Max wait (ms) for a local-control SDP answer before falling back to cloud KVS signaling.
+ * Covers the full local handshake: secure session connect + mic getUserMedia +
+ * fragmented offer send (several round-trips) + answer poll.
+ */
+export const WEBRTC_LOCAL_FALLBACK_TIMEOUT_MS = 15000;
+
+// Local-control WebRTC signaling (esp_local_ctrl) constants
+export const ESPRM_WEBRTC_SIGNAL_ENDPOINT = "webrtc_signal";
+export const WEBRTC_LOCAL_POLL_INTERVAL_FAST_MS = 100;
+export const WEBRTC_LOCAL_POLL_INTERVAL_SLOW_MS = 200;
+export const WEBRTC_LOCAL_POLL_TIMEOUT_MS = 30000;
+export const WEBRTC_LOCAL_MAX_POLL_FAILURES = 5;
+/**
+ * Peer-id prefix MUST start with `local-`: the firmware keys on it to route the
+ * SDP answer back over the local-control channel (vs the cloud KVS channel).
+ * The CLI uses `local-cli-`; we use `local-app-`.
+ */
+export const WEBRTC_LOCAL_PEER_ID_PREFIX = "local-app-";
 
 // MATTER DATA VALUE TYPES (Apple MTRDataValueDictionary / CHIP TLV wire shape)
 export const MATTER_DATA_VALUE_TYPE_NULL = "Null";

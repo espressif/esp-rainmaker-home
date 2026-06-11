@@ -86,13 +86,20 @@ export function mergeLocalTransportFromNodeMap(
 
     if (Object.keys(carryOver).length === 0) return node;
 
-    const merged = {
-      ...node,
-      availableTransports: {
-        ...(node.availableTransports || {}),
-        ...carryOver,
+    // Preserve the ESPCDFNode prototype: a plain `{ ...node }` spread yields a
+    // bare object, dropping class methods (`subscribe`, etc.), which makes the
+    // store synchronizer throw `node.subscribe is not a function`. Build with
+    // Object.create + Object.assign to keep the prototype chain.
+    const merged = Object.assign(
+      Object.create(Object.getPrototypeOf(node)) as ESPCDFNode,
+      node,
+      {
+        availableTransports: {
+          ...(node.availableTransports || {}),
+          ...carryOver,
+        },
       },
-    } as unknown as ESPCDFNode;
+    );
     const raw = merged._raw as Record<string, unknown> | undefined;
     if (raw && typeof raw === "object") {
       const prevAt = raw.availableTransports as Record<string, unknown> | undefined;

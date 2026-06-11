@@ -929,6 +929,14 @@
         "connectionFailed": "Connection failed"
       },
       "loading": "Connecting video ...",
+      "gallery": "Camera Gallery",
+      "capture": {
+        "button": "Take Camera Snapshot",
+        "capturing": "Capturing…",
+        "submitted": "File upload request submitted",
+        "failed": "Failed to capture snapshot",
+        "timedOut": "Capture timed out"
+      },
       "connectionState": {
         "connected": "CONNECTED",
         "disconnected": "DISCONNECTED",

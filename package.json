@@ -3,6 +3,7 @@
   "main": "expo-router/entry",
   "version": "6.0.1",
   "versionCode": 51,
+  "workspaces": ["modules/*"],
   "scripts": {
     "start": "expo start",
     "start:dev": "APP_ENV=development expo start -c",
@@ -23,7 +24,7 @@
     "web": "expo start --web",
     "test": "jest --watchAll",
     "lint": "expo lint",
-    "lint:arch": "depcruise src config app --config .dependency-cruiser.cjs --validate --output-type err",
+    "lint:arch": "depcruise src config app modules --config .dependency-cruiser.cjs --validate --output-type err",
     "lint:i18n": "node scripts/check-i18n.js",
     "typecheck": "tsc --noEmit",
     "check:arch": "npm run lint:arch",
@@ -33,8 +34,7 @@
     "prepare": "husky"
   },
   "dependencies": {
-    "@aws-sdk/client-kinesis-video": "^3.700.0",
-    "@aws-sdk/client-kinesis-video-signaling": "^3.700.0",
+    "@modules/kvs": "*",
     "@espressif/rainmaker-base-cdf": "2.3.0",
     "@espressif/rainmaker-base-sdk": "3.4.0",
     "@espressif/rainmaker-matter-sdk": "3.1.0",

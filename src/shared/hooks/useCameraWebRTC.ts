@@ -5,6 +5,7 @@
  */
 
 import { useState, useRef, useCallback, useEffect } from "react";
+import { Platform, PermissionsAndroid } from "react-native";
 import type { ESPCDFAssumeRoleResponse } from "@store";
 import { useCDF } from "./useCDF";
 import { useToast } from "./useToast";
@@ -15,32 +16,27 @@ import {
   WEBRTC_DEFAULT_MESSAGES,
   WEBRTC_SIGNALING_EVENTS,
   WEBRTC_MEDIA_KIND_VIDEO,
+  WEBRTC_MEDIA_KIND_AUDIO,
   WEBRTC_TRANSCEIVER_DIRECTION_RECVONLY,
+  WEBRTC_LOCAL_FALLBACK_TIMEOUT_MS,
 } from "@shared/utils/constants";
 
-// WebRTC and AWS KVS imports
-import {
-  KinesisVideoClient,
-  DescribeSignalingChannelCommand,
-  GetSignalingChannelEndpointCommand,
-} from "@aws-sdk/client-kinesis-video";
-import {
-  KinesisVideoSignalingClient,
-  GetIceServerConfigCommand,
-} from "@aws-sdk/client-kinesis-video-signaling";
+// WebRTC and KVS imports
 import {
   MediaStream,
   RTCPeerConnection,
   RTCSessionDescription,
   RTCIceCandidate,
+  mediaDevices,
 } from "react-native-webrtc";
-import { KVSSignalingClient, type AWSCredentials } from "@shared/utils/camera/kvsSignalingClient";
 import {
-  getOrFetchChannelInfo,
-  getOrFetchIceServers,
+  createKvsClient,
+  KvsSignalingClient,
+  type AwsCredentials,
   type IceServer,
-  type IceServersFetchResult,
-} from "@shared/utils/camera/kvsChannelCache";
+} from "@modules/kvs";
+import { LocalSignalingClient } from "@shared/utils/camera/localSignalingClient";
+import type { SignalingTransport, LocalTransportConfig } from "@shared/utils/camera/types";
 import { getVideoStats } from "@shared/utils/camera/getVideoStats";
 import { getAwsRegionFromToken } from "@shared/utils/camera/getAwsRegion";
 import type { VideoStats } from "@src/types/global";
@@ -60,7 +56,7 @@ interface ExtendedRTCPeerConnection extends RTCPeerConnection {
  * Resolves immediately on open, rejects on error, so it can be raced
  * in parallel with ICE server credential fetching.
  */
-function waitForSignalingOpen(signalingClient: KVSSignalingClient): Promise<void> {
+function waitForSignalingOpen(signalingClient: KvsSignalingClient): Promise<void> {
   return new Promise((resolve, reject) => {
     const onOpen = () => {
       signalingClient.off(WEBRTC_SIGNALING_EVENTS.OPEN, onOpen);
@@ -89,7 +85,11 @@ function waitForSignalingOpen(signalingClient: KVSSignalingClient): Promise<void
  * @param channelName - The channel name for video streaming
  * @returns Object containing streaming state and control functions
  */
-export const useCameraWebRTC = (nodeId: string, channelName: string | null) => {
+export const useCameraWebRTC = (
+  nodeId: string,
+  channelName: string | null,
+  localTransport?: LocalTransportConfig | null
+) => {
   const { espCDFUser } = useCDF();
   const toast = useToast();
   const { t } = useTranslation();
@@ -103,12 +103,21 @@ export const useCameraWebRTC = (nodeId: string, channelName: string | null) => {
   const statsUpdateTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   const peerConnectionRef = useRef<ExtendedRTCPeerConnection | null>(null);
-  const signalingClientRef = useRef<KVSSignalingClient | null>(null);
+  const signalingClientRef = useRef<SignalingTransport | null>(null);
   const channelARNRef = useRef<string | null>(null);
   const pendingIceCandidatesRef = useRef<RTCIceCandidate[]>([]);
   const remoteDescriptionSetRef = useRef<boolean>(false);
   const videoStreamSetRef = useRef<boolean>(false);
   const videoStreamRef = useRef<MediaStream | null>(null);
+
+  // Two-way audio: local mic (send) starts muted; remote audio (receive) can be
+  // muted client-side. Refs let the track/cleanup handlers read current state.
+  const [isMicEnabled, setIsMicEnabled] = useState<boolean>(false);
+  const [isSpeakerMuted, setIsSpeakerMuted] = useState<boolean>(false);
+  const localAudioStreamRef = useRef<MediaStream | null>(null);
+  const localAudioTrackRef = useRef<any>(null);
+  const remoteAudioTrackRef = useRef<any>(null);
+  const isSpeakerMutedRef = useRef<boolean>(false);
 
   const awsRegionRef = useRef<string>("us-east-1");
 
@@ -183,7 +192,7 @@ export const useCameraWebRTC = (nodeId: string, channelName: string | null) => {
   /**
    * Obtain and validate AWS credentials
    */
-  const ensureValidCredentials = useCallback(async (): Promise<AWSCredentials | null> => {
+  const ensureValidCredentials = useCallback(async (): Promise<AwsCredentials | null> => {
     let creds = credentials;
     if (!creds || !validateCredentials(creds)) {
       creds = await getCredentials();
@@ -200,144 +209,53 @@ export const useCameraWebRTC = (nodeId: string, channelName: string | null) => {
   }, [credentials, getCredentials]);
 
   /**
-   * Get signaling channel ARN
-   * Responsibility: Retrieve the channel ARN for a given channel name
-   * @param channelName - The name of the channel
-   * @param kinesisVideoClient - The Kinesis Video client instance
-   * @returns The channel ARN
-   * @throws If the channel ARN is not found
+   * Builds a credentials-bound KVS client for the current region.
+   * @param awsCredentials - Temporary AWS credentials from assume-role.
+   * @returns A {@link createKvsClient} instance for signaling helpers.
    */
-  const getSignalingChannelARN = useCallback(async (
-    channelName: string,
-    kinesisVideoClient: KinesisVideoClient
-  ): Promise<string> => {
-    const describeSignalingChannelResponse = await kinesisVideoClient.send(
-      new DescribeSignalingChannelCommand({ ChannelName: channelName })
-    );
-    const channelARN = describeSignalingChannelResponse.ChannelInfo?.ChannelARN;
-
-    if (!channelARN) {
-      throw new Error("Failed to get KVS signaling channel ARN. Channel may not exist.");
-    }
-
-    channelARNRef.current = channelARN;
-    return channelARN;
+  const getKvsClient = useCallback((awsCredentials: AwsCredentials) => {
+    return createKvsClient({
+      region: awsRegionRef.current,
+      credentials: awsCredentials,
+    });
   }, []);
 
   /**
-   * Get signaling channel endpoints
-   * Responsibility: Retrieve WSS and HTTPS endpoints for a given channel ARN
-   * @param channelARN - The channel ARN
-   * @param kinesisVideoClient - The Kinesis Video client instance
-   * @returns WSS and HTTPS signaling endpoints
-   * @throws If the endpoints are not found
-   */
-  const getSignalingChannelEndpoints = useCallback(async (
-    channelARN: string,
-    kinesisVideoClient: KinesisVideoClient
-  ): Promise<{ wssEndpoint: string; httpsEndpoint: string }> => {
-    const getSignalingChannelEndpointResponse = await kinesisVideoClient.send(
-      new GetSignalingChannelEndpointCommand({
-        ChannelARN: channelARN,
-        SingleMasterChannelEndpointConfiguration: {
-          Protocols: ["WSS", "HTTPS"],
-          Role: "VIEWER",
-        },
-      })
-    );
-
-    const endpointsByProtocol = getSignalingChannelEndpointResponse.ResourceEndpointList?.reduce(
-      (endpoints, endpoint) => {
-        if (endpoint.Protocol && endpoint.ResourceEndpoint) {
-          endpoints[endpoint.Protocol] = endpoint.ResourceEndpoint;
-        }
-        return endpoints;
-      },
-      {} as Record<string, string>
-    );
-
-    const wssEndpoint = endpointsByProtocol?.WSS;
-    const httpsEndpoint = endpointsByProtocol?.HTTPS;
-
-    if (!wssEndpoint || !httpsEndpoint) {
-      throw new Error("Failed to get KVS signaling endpoints.");
-    }
-
-    return { wssEndpoint, httpsEndpoint };
-  }, []);
-
-  /**
-   * Discover KVS channel
-   * Responsibility: Orchestrate channel discovery by getting ARN and endpoints.
-   * Results are cached with a 24 h TTL. Concurrent callers for the same channel
-   * are deduplicated – only one DescribeSignalingChannel + endpoint request is
-   * made even if startStreaming and the pre-warm effect race on a fresh launch.
-   * @param channelName - The name of the channel to discover
-   * @param awsCredentials - The AWS credentials to use for the discovery
-   * @returns Channel ARN and signaling endpoints
-   * @throws If the KVS channel information is not found
+   * Discovers the KVS signaling channel (ARN + endpoints) via `@modules/kvs`.
+   * Results are cached inside the module with in-flight deduplication.
+   * @param name - The name of the channel to discover.
+   * @param awsCredentials - The AWS credentials to use for the discovery.
+   * @returns Channel ARN and signaling endpoints.
    */
   const discoverKVSChannel = useCallback(async (
-    channelName: string,
-    awsCredentials: AWSCredentials
+    name: string,
+    awsCredentials: AwsCredentials
   ): Promise<{ channelARN: string; wssEndpoint: string; httpsEndpoint: string }> => {
-    const info = await getOrFetchChannelInfo(channelName, async () => {
-      const kinesisVideoClient = new KinesisVideoClient({
-        region: awsRegionRef.current,
-        credentials: awsCredentials,
-      });
-
-      const channelARN = await getSignalingChannelARN(channelName, kinesisVideoClient);
-      const { wssEndpoint, httpsEndpoint } = await getSignalingChannelEndpoints(channelARN, kinesisVideoClient);
-
-      return { channelARN, wssEndpoint, httpsEndpoint };
-    });
-
+    const info = await getKvsClient(awsCredentials).signaling.discoverChannel(name);
     channelARNRef.current = info.channelARN;
     return info;
-  }, [getSignalingChannelARN, getSignalingChannelEndpoints]);
+  }, [getKvsClient]);
 
   /**
-   * Get ICE server configuration
-   * Responsibility: Configure ICE servers for WebRTC.
-   * Results are cached for 240 s (AWS credentials expire at 300 s). Concurrent
-   * callers for the same channel are deduplicated – only one GetIceServerConfig
-   * request is made even if startStreaming and the pre-warm effect race.
+   * Fetches ICE servers for WebRTC via `@modules/kvs` (cached).
+   * @param name - Channel name used as the cache key.
+   * @param channelARN - Signaling channel ARN.
+   * @param httpsEndpoint - HTTPS signaling endpoint from discovery.
+   * @param awsCredentials - Temporary AWS credentials.
+   * @returns ICE server list for RTCPeerConnection.
    */
   const getIceServerConfiguration = useCallback(async (
-    channelName: string,
+    name: string,
     channelARN: string,
     httpsEndpoint: string,
-    awsCredentials: AWSCredentials
+    awsCredentials: AwsCredentials
   ): Promise<IceServer[]> => {
-    return getOrFetchIceServers(channelName, async (): Promise<IceServersFetchResult> => {
-      const kinesisVideoSignalingChannelsClient = new KinesisVideoSignalingClient({
-        region: awsRegionRef.current,
-        credentials: awsCredentials,
-        endpoint: httpsEndpoint,
-      });
-
-      const getIceServerConfigResponse = await kinesisVideoSignalingChannelsClient.send(
-        new GetIceServerConfigCommand({ ChannelARN: channelARN })
-      );
-
-      const servers: IceServer[] = getIceServerConfigResponse.IceServerList?.map((iceServer) => ({
-        urls: iceServer.Uris || [],
-        username: iceServer.Username,
-        credential: iceServer.Password,
-      })) || [];
-
-      servers.push({
-        urls: [`stun:stun.kinesisvideo.${awsRegionRef.current}.amazonaws.com:443`],
-      });
-
-      // Derive TTL from the API response so the cache expires 60 s before credentials do
-      const responseTtl = getIceServerConfigResponse.IceServerList?.[0]?.Ttl;
-      const ttlMs = responseTtl ? (responseTtl - 60) * 1000 : undefined;
-
-      return { servers, ttlMs };
-    });
-  }, []);
+    return getKvsClient(awsCredentials).signaling.getIceServers(
+      name,
+      channelARN,
+      httpsEndpoint,
+    );
+  }, [getKvsClient]);
 
   /**
    * Generate UUID v4
@@ -355,23 +273,24 @@ export const useCameraWebRTC = (nodeId: string, channelName: string | null) => {
    * Create signaling client only (without a peer connection).
    * Called before ICE server fetch so the WebSocket handshake can overlap
    * with the GetIceServerConfig round-trip.
+   * @param channelARN - Signaling channel ARN.
+   * @param wssEndpoint - WSS resource endpoint.
+   * @param awsCredentials - Temporary AWS credentials.
+   * @returns Viewer {@link KvsSignalingClient}.
    */
   const createSignalingClient = useCallback((
     channelARN: string,
     wssEndpoint: string,
-    awsCredentials: AWSCredentials
-  ): KVSSignalingClient => {
-    const localSenderClientID = generateUUID();
-    const signalingClient = new KVSSignalingClient({
+    awsCredentials: AwsCredentials
+  ): KvsSignalingClient => {
+    const signalingClient = getKvsClient(awsCredentials).signaling.createViewerClient({
       channelARN,
       channelEndpoint: wssEndpoint,
-      clientId: localSenderClientID,
-      region: awsRegionRef.current,
-      credentials: awsCredentials,
+      clientId: generateUUID(),
     });
     signalingClientRef.current = signalingClient;
     return signalingClient;
-  }, [generateUUID]);
+  }, [generateUUID, getKvsClient]);
 
   /**
    * Create peer connection with resolved ICE servers.
@@ -386,18 +305,62 @@ export const useCameraWebRTC = (nodeId: string, channelName: string | null) => {
   }, []);
 
   /**
-   * Configures the peer connection to receive video only.
-   * Adds a recvonly video transceiver before offer creation so SDP negotiation
-   * does not require a local media stream and does not request audio.
+   * Requests Android microphone permission for mic-send. iOS/other return true
+   * (handled by the OS prompt on getUserMedia). Returns false when unavailable
+   * so audio gracefully degrades to receive-only.
+   * @returns Whether mic capture may proceed.
+   */
+  const ensureMicPermission = useCallback(async (): Promise<boolean> => {
+    if (Platform.OS !== "android") return true;
+    try {
+      const result = await PermissionsAndroid.request(
+        PermissionsAndroid.PERMISSIONS.RECORD_AUDIO
+      );
+      return result === PermissionsAndroid.RESULTS.GRANTED;
+    } catch {
+      return false;
+    }
+  }, []);
+
+  /**
+   * Configures the peer connection media for one-way video + two-way audio:
+   * a recvonly video transceiver, plus a sendrecv audio path carrying the local
+   * mic (started muted). If the mic is unavailable/denied, falls back to a
+   * recvonly audio transceiver so incoming device audio is still received.
    * @param peerConnection - The RTCPeerConnection instance to configure
    */
-  const configurePeerConnectionForVideoOnly = useCallback((
+  const configurePeerConnectionMedia = useCallback(async (
     peerConnection: ExtendedRTCPeerConnection
   ) => {
     peerConnection.addTransceiver(WEBRTC_MEDIA_KIND_VIDEO, {
       direction: WEBRTC_TRANSCEIVER_DIRECTION_RECVONLY,
     });
-  }, []);
+
+    try {
+      if (!(await ensureMicPermission())) {
+        throw new Error("Microphone permission not granted");
+      }
+      const micStream = (await mediaDevices.getUserMedia({
+        audio: true,
+      })) as MediaStream;
+      const micTrack = micStream.getAudioTracks()[0];
+      if (!micTrack) throw new Error("No microphone track");
+      // Start muted — the user unmutes via the mic toggle.
+      micTrack.enabled = false;
+      localAudioStreamRef.current = micStream;
+      localAudioTrackRef.current = micTrack;
+      peerConnection.addTrack(micTrack, micStream);
+      setIsMicEnabled(false);
+    } catch (err) {
+      if (__DEV__) {
+        console.log("Mic unavailable; receiving audio only:", err);
+      }
+      // Still negotiate to RECEIVE remote audio even without a local mic.
+      peerConnection.addTransceiver(WEBRTC_MEDIA_KIND_AUDIO, {
+        direction: WEBRTC_TRANSCEIVER_DIRECTION_RECVONLY,
+      });
+    }
+  }, [ensureMicPermission]);
 
   /**
    * Setup signaling client event handlers
@@ -406,7 +369,7 @@ export const useCameraWebRTC = (nodeId: string, channelName: string | null) => {
    * explicitly in startStreaming after the parallel ICE + connect phase.
    */
   const setupSignalingClientHandlers = useCallback((
-    signalingClient: KVSSignalingClient,
+    signalingClient: SignalingTransport,
     peerConnection: ExtendedRTCPeerConnection
   ) => {
     signalingClient.on(WEBRTC_SIGNALING_EVENTS.SDP_ANSWER, async (answer: RTCSessionDescription) => {
@@ -475,7 +438,7 @@ export const useCameraWebRTC = (nodeId: string, channelName: string | null) => {
    * @returns Handler function for onicecandidate event
    */
   const createIceCandidateHandler = useCallback((
-    signalingClient: KVSSignalingClient
+    signalingClient: SignalingTransport
   ): ((event: { candidate: RTCIceCandidate | null }) => void) => {
     return ({ candidate }: { candidate: RTCIceCandidate | null }) => {
       if (candidate && candidate.candidate) {
@@ -525,6 +488,13 @@ export const useCameraWebRTC = (nodeId: string, channelName: string | null) => {
    */
   const createTrackHandler = useCallback((): ((event: { streams: MediaStream[]; track: any; transceiver: any; receiver: any }) => void) => {
     return (event: { streams: MediaStream[]; track: any; transceiver: any; receiver: any }) => {
+      // Incoming audio: keep a ref so it can be muted, and apply current state.
+      if (event.track && event.track.kind === WEBRTC_MEDIA_KIND_AUDIO) {
+        remoteAudioTrackRef.current = event.track;
+        event.track.enabled = !isSpeakerMutedRef.current;
+        return;
+      }
+
       if (videoStreamSetRef.current) return;
       if (!event.track || event.track.kind !== WEBRTC_MEDIA_KIND_VIDEO) return;
 
@@ -551,7 +521,7 @@ export const useCameraWebRTC = (nodeId: string, channelName: string | null) => {
    */
   const setupPeerConnectionHandlers = useCallback((
     peerConnection: ExtendedRTCPeerConnection,
-    signalingClient: KVSSignalingClient
+    signalingClient: SignalingTransport
   ) => {
     peerConnection.onicecandidate = createIceCandidateHandler(signalingClient);
     peerConnection.onconnectionstatechange = createConnectionStateChangeHandler(peerConnection);
@@ -588,6 +558,19 @@ export const useCameraWebRTC = (nodeId: string, channelName: string | null) => {
         videoStreamRef.current = null;
       }
 
+      // Release the local mic and reset audio toggle state.
+      if (localAudioStreamRef.current) {
+        localAudioStreamRef.current.getTracks().forEach((track) => track.stop());
+        localAudioStreamRef.current = null;
+      }
+      localAudioTrackRef.current = null;
+      remoteAudioTrackRef.current = null;
+      isSpeakerMutedRef.current = false;
+      if (updateState) {
+        setIsMicEnabled(false);
+        setIsSpeakerMuted(false);
+      }
+
       channelARNRef.current = null;
       pendingIceCandidatesRef.current = [];
       remoteDescriptionSetRef.current = false;
@@ -619,6 +602,101 @@ export const useCameraWebRTC = (nodeId: string, channelName: string | null) => {
   }, [toast, t, cleanupResources]);
 
   /**
+   * Attempts to establish the stream over the device's local-control (LAN)
+   * signaling path. Resolves true once an SDP answer is applied, or false on
+   * any error/timeout so the caller can fall back to cloud KVS. Uses empty ICE
+   * servers — the device is on the same LAN, so host candidates connect directly.
+   * @param cfg - Local transport parameters (baseUrl, securityType, pop).
+   * @returns Whether the local signaling path produced an SDP answer.
+   */
+  const runLocalStreaming = useCallback((cfg: LocalTransportConfig): Promise<boolean> => {
+    return new Promise<boolean>((resolve) => {
+      let settled = false;
+      let timeoutId: ReturnType<typeof setTimeout> | null = null;
+      const finish = (ok: boolean) => {
+        if (settled) return;
+        settled = true;
+        if (timeoutId) {
+          clearTimeout(timeoutId);
+          timeoutId = null;
+        }
+        resolve(ok);
+      };
+
+      try {
+        const peerConnection = createPeerConnection([]);
+        const client = new LocalSignalingClient({
+          nodeId,
+          baseUrl: cfg.baseUrl,
+          securityType: cfg.securityType,
+          pop: cfg.pop,
+        });
+        signalingClientRef.current = client;
+
+        client.on(WEBRTC_SIGNALING_EVENTS.SDP_ANSWER, async (answer: RTCSessionDescription) => {
+          try {
+            await peerConnection.setRemoteDescription(answer);
+            remoteDescriptionSetRef.current = true;
+            const pending = pendingIceCandidatesRef.current;
+            for (let i = 0; i < pending.length; i++) {
+              try {
+                await peerConnection.addIceCandidate(pending[i]);
+              } catch {
+                // ICE candidate errors are often non-fatal
+              }
+            }
+            pendingIceCandidatesRef.current = [];
+            finish(true);
+          } catch {
+            finish(false);
+          }
+        });
+
+        client.on(WEBRTC_SIGNALING_EVENTS.ICE_CANDIDATE, async (candidate: RTCIceCandidate) => {
+          if (!remoteDescriptionSetRef.current) {
+            pendingIceCandidatesRef.current.push(candidate);
+            return;
+          }
+          try {
+            await peerConnection.addIceCandidate(candidate);
+          } catch {
+            // ICE candidate errors are often non-fatal
+          }
+        });
+
+        // Any signaling error → give up on local; the caller falls back to KVS.
+        client.on(WEBRTC_SIGNALING_EVENTS.ERROR, () => finish(false));
+
+        peerConnection.onicecandidate = createIceCandidateHandler(client);
+        peerConnection.onconnectionstatechange = createConnectionStateChangeHandler(peerConnection);
+        peerConnection.ontrack = createTrackHandler();
+
+        timeoutId = setTimeout(() => finish(false), WEBRTC_LOCAL_FALLBACK_TIMEOUT_MS);
+
+        (async () => {
+          await client.open();
+          await configurePeerConnectionMedia(peerConnection);
+          const offer = await peerConnection.createOffer({
+            offerToReceiveAudio: true,
+            offerToReceiveVideo: true,
+          });
+          await peerConnection.setLocalDescription(offer);
+          client.sendSdpOffer(offer);
+        })().catch(() => finish(false));
+      } catch {
+        finish(false);
+      }
+    });
+  }, [
+    nodeId,
+    createPeerConnection,
+    createIceCandidateHandler,
+    createConnectionStateChangeHandler,
+    createTrackHandler,
+    configurePeerConnectionMedia,
+  ]);
+
+  /**
    * Start video streaming
    * Flow:
    * 1. Region + credentials resolved in parallel.
@@ -628,12 +706,28 @@ export const useCameraWebRTC = (nodeId: string, channelName: string | null) => {
    * 5. SDP offer created and sent immediately
    */
   const startStreaming = useCallback(async () => {
-    if (!validateChannelName()) return;
-
     try {
       setIsLoading(true);
       setError(null);
       resetStreamState();
+
+      // Prefer local-control (LAN) signaling when the node is locally reachable;
+      // fall back to cloud KVS on any local failure or timeout.
+      if (localTransport) {
+        const localOk = await runLocalStreaming(localTransport);
+        if (localOk) return;
+        if (__DEV__) {
+          console.log("Local signaling unavailable; falling back to cloud KVS");
+        }
+        cleanupResources(false);
+        resetStreamState();
+      }
+
+      // Cloud KVS path (primary when there's no LAN transport, or the fallback).
+      if (!validateChannelName()) {
+        setIsLoading(false);
+        return;
+      }
 
       // Resolve region + credentials in parallel
       const [, awsCredentials] = await Promise.all([
@@ -674,12 +768,12 @@ export const useCameraWebRTC = (nodeId: string, channelName: string | null) => {
       // Attach peer connection handlers
       setupPeerConnectionHandlers(peerConnection, signalingClient);
 
-      // Force recv-only video negotiation to prevent audio request paths
-      configurePeerConnectionForVideoOnly(peerConnection);
+      // Negotiate recvonly video + (best-effort) two-way audio before the offer.
+      await configurePeerConnectionMedia(peerConnection);
 
       // Send offer immediately – WebSocket is already open, no onopen wait needed
       const offer = await peerConnection.createOffer({
-        offerToReceiveAudio: false,
+        offerToReceiveAudio: true,
         offerToReceiveVideo: true,
       });
       await peerConnection.setLocalDescription(offer);
@@ -689,6 +783,9 @@ export const useCameraWebRTC = (nodeId: string, channelName: string | null) => {
     }
   }, [
     channelName,
+    localTransport,
+    runLocalStreaming,
+    cleanupResources,
     validateChannelName,
     resetStreamState,
     ensureValidCredentials,
@@ -698,7 +795,7 @@ export const useCameraWebRTC = (nodeId: string, channelName: string | null) => {
     createPeerConnection,
     setupSignalingClientHandlers,
     setupPeerConnectionHandlers,
-    configurePeerConnectionForVideoOnly,
+    configurePeerConnectionMedia,
     handleStreamingError,
   ]);
 
@@ -708,6 +805,30 @@ export const useCameraWebRTC = (nodeId: string, channelName: string | null) => {
   const stopStreaming = useCallback(() => {
     cleanupResources(true);
   }, [cleanupResources]);
+
+  /**
+   * Toggles the local microphone (audio sent to the device). No-op until a mic
+   * track exists (i.e. permission granted and stream started).
+   */
+  const toggleMic = useCallback(() => {
+    const track = localAudioTrackRef.current;
+    if (!track) return;
+    const next = !track.enabled;
+    track.enabled = next;
+    setIsMicEnabled(next);
+  }, []);
+
+  /**
+   * Toggles muting of the incoming device audio (speaker). Tracks the desired
+   * state in a ref so a not-yet-arrived remote audio track adopts it on arrival.
+   */
+  const toggleSpeaker = useCallback(() => {
+    const nextMuted = !isSpeakerMutedRef.current;
+    isSpeakerMutedRef.current = nextMuted;
+    setIsSpeakerMuted(nextMuted);
+    const track = remoteAudioTrackRef.current;
+    if (track) track.enabled = !nextMuted;
+  }, []);
 
   // Cleanup WebRTC resources on unmount
   useEffect(() => {
@@ -828,5 +949,9 @@ export const useCameraWebRTC = (nodeId: string, channelName: string | null) => {
     stats,
     getStats,
     setStatsUpdatesEnabled,
+    isMicEnabled,
+    toggleMic,
+    isSpeakerMuted,
+    toggleSpeaker,
   };
 };

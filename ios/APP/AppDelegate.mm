@@ -1,5 +1,6 @@
 #import "AppDelegate.h"
 
+#import <WebRTC/WebRTC.h>
 #import <React/RCTBundleURLProvider.h>
 #import <React/RCTLinkingManager.h>
 #import <CoreBluetooth/CoreBluetooth.h>
@@ -24,6 +25,18 @@
 
 - (BOOL)application:(UIApplication *)application didFinishLaunchingWithOptions:(NSDictionary *)launchOptions
 {
+  // Route WebRTC camera audio through the loudspeaker/media path instead of the
+  // default call-style earpiece path. This must be configured via WebRTC's own
+  // audio-session configuration before the module starts, otherwise WebRTC will
+  // later overwrite direct AVAudioSession changes.
+  RTCAudioSessionConfiguration *audioConfiguration =
+      [RTCAudioSessionConfiguration webRTCConfiguration];
+  audioConfiguration.category = AVAudioSessionCategoryPlayAndRecord;
+  audioConfiguration.mode = AVAudioSessionModeVideoChat;
+  audioConfiguration.categoryOptions =
+      AVAudioSessionCategoryOptionDefaultToSpeaker | AVAudioSessionCategoryOptionAllowBluetooth;
+  [RTCAudioSessionConfiguration setWebRTCConfiguration:audioConfiguration];
+
   self.moduleName = @"main";
 
   // You can add your custom initial props in the dictionary below.
