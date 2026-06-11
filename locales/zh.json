@@ -1171,6 +1171,7 @@
     "errors": {
       "scheduleEnableFailed": "启用定时失败",
       "scheduleDisableFailed": "禁用定时失败",
+      "invalidRelativeTime": "延迟须在 1 分钟至 3 小时之间",
       "scheduleCreationFailed": "创建定时失败",
       "scheduleDeletionFailed": "删除定时失败",
       "scheduleNotFound": "未找到定时",
@@ -1227,6 +1228,15 @@
     },
     "time": {
       "title": "时间",
+      "triggerType": "何时",
+      "fixedTime": "指定时间",
+      "afterDelay": "延迟后",
+      "relativeMaxHint": "最多可选择 {{hours}} 小时延迟",
+      "relativeDurationHours": "{{hours}} 小时后",
+      "relativeDurationMinutes": "{{minutes}} 分钟后",
+      "relativeDurationHoursMinutes": "{{hours}} 小时 {{minutes}} 分钟后",
+      "hours": "小时",
+      "minutes": "分钟",
       "setTime": "设置时间",
       "repeat": "重复",
       "once": "一次",

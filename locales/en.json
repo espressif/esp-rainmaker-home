@@ -1219,6 +1219,7 @@
     "errors": {
       "scheduleEnableFailed": "Failed to enable schedule",
       "scheduleDisableFailed": "Failed to disable schedule",
+      "invalidRelativeTime": "Delay must be between 1 minute and 3 hours",
       "scheduleCreationFailed": "Failed to create schedule",
       "scheduleDeletionFailed": "Failed to delete schedule",
       "scheduleNotFound": "Schedule not found",
@@ -1275,6 +1276,15 @@
     },
     "time": {
       "title": "Time",
+      "triggerType": "When",
+      "fixedTime": "At a time",
+      "afterDelay": "After delay",
+      "relativeMaxHint": "Choose a delay up to {{hours}} hours",
+      "relativeDurationHours": "in {{hours}}h",
+      "relativeDurationMinutes": "in {{minutes}}m",
+      "relativeDurationHoursMinutes": "in {{hours}}h {{minutes}}m",
+      "hours": "Hours",
+      "minutes": "Minutes",
       "setTime": "Set Time",
       "repeat": "Repeat",
       "once": "Once",

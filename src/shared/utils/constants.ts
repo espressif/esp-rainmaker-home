@@ -508,6 +508,15 @@ export const ESPRM_PARAM_SIMPLE_TIME_SERIES_PROPERTY = "simple_ts";
 
 export const SCHEDULE_DAYS = ["M", "T", "W", "Th", "F", "S", "Su"];
 
+// SCHEDULE TRIGGER
+export const SCHEDULE_TRIGGER_MODE_FIXED = "fixed";
+export const SCHEDULE_TRIGGER_MODE_RELATIVE = "relative";
+export const SCHEDULE_RELATIVE_MAX_HOURS = 3;
+export const SCHEDULE_RELATIVE_MAX_SECONDS =
+  SCHEDULE_RELATIVE_MAX_HOURS * 60 * 60;
+export const SCHEDULE_RELATIVE_MIN_SECONDS = 60;
+export const SCHEDULE_RELATIVE_DEFAULT_SECONDS = 30 * 60;
+
 export const NODE_TYPE = {
   PURE_MATTER: "pure_matter",
   RAINMAKER_MATTER: "rainmaker_matter",

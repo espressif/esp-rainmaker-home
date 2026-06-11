@@ -1941,6 +1941,56 @@ export const globalStyles = StyleSheet.create({
   scheduleTimeButton: {
     alignItems: "flex-end",
   },
+  scheduleTriggerTypeContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    alignSelf: "flex-end",
+    backgroundColor: tokens.colors.bg1,
+    borderRadius: tokens.radius.sm,
+    padding: tokens.spacing._5 / 2,
+    gap: tokens.spacing._5 / 2,
+  },
+  scheduleTriggerTypeButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: tokens.spacing._5 / 2,
+    paddingVertical: tokens.spacing._5,
+    paddingHorizontal: tokens.spacing._10,
+    borderRadius: tokens.radius.sm,
+    backgroundColor: "transparent",
+  },
+  scheduleTriggerTypeButtonActive: {
+    backgroundColor: tokens.colors.white,
+    shadowColor: tokens.colors.black,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  scheduleTriggerTypeText: {
+    fontSize: tokens.fontSize.xxs,
+    fontFamily: tokens.fonts.regular,
+    color: tokens.colors.text_secondary,
+  },
+  scheduleTriggerTypeTextActive: {
+    fontFamily: tokens.fonts.medium,
+    color: tokens.colors.text_primary,
+    fontWeight: "600",
+  },
+  scheduleRelativePickerHint: {
+    textAlign: "center",
+    fontSize: tokens.fontSize.xs,
+    color: tokens.colors.text_secondary,
+    marginBottom: tokens.spacing._10,
+    paddingHorizontal: tokens.spacing._15,
+  },
+  scheduleRelativePickerLabels: {
+    flexDirection: "row",
+    justifyContent: "space-around",
+    paddingHorizontal: tokens.spacing._30,
+    marginTop: tokens.spacing._5,
+  },
 
   // Scene Management Styles
   sceneCard: {
