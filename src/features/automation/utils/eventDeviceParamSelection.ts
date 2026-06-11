@@ -6,6 +6,10 @@
 
 import type { ESPCDFAutomationNodeParamsEvent } from "@store";
 import { ESPCDFAutomationConditionOperator } from "@store";
+import {
+  resolveParamDataType,
+  type ParamTypeMetadata,
+} from "@shared/utils/paramUtils";
 
 export interface EventConditionOption {
   label: string;
@@ -54,11 +58,15 @@ export function getAvailableEventConditions(): EventConditionOption[] {
 }
 
 /**
- * Whether the parameter type should show condition selector (numeric types).
+ * Whether the parameter should show the condition selector (numeric types).
  * Bool and string use only EQUAL in UI.
+ *
+ * Resolves the effective data type (normalized declared type, with bool-label
+ * and value-type fallbacks) instead of string-matching `dataType` directly.
+ * Shows the selector only for int/float, which also keeps object/array params
+ * on EQUAL — matching the firmware's eq/ne restriction for those types.
  */
-export function shouldShowConditionSelector(dataType: string | undefined): boolean {
-  if (!dataType) return false;
-  const lower = dataType.toLowerCase();
-  return lower !== "bool" && lower !== "string";
+export function shouldShowConditionSelector(param: ParamTypeMetadata): boolean {
+  const dataType = resolveParamDataType(param);
+  return dataType === "int" || dataType === "float";
 }

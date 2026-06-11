@@ -30,6 +30,7 @@ import {
     ESPRMNGUser,
     ESPTransport,
     decodeToken,
+    NodeMQTTOrchestrator
 } from "@espressif/rmng-base-sdk";
 import { ESPRMNGBaseAdaptorIdentifier } from "@config/sdk.identifiers";
 import { transformToESPCDFGroup } from "./transformToESPCDFGroup";
@@ -208,6 +209,7 @@ export function transformToESPCDFUser(
             };
         },
         async logout(): Promise<void> {
+            NodeMQTTOrchestrator.clear();
             await esprmngUser.logout();
         },
         async setTimeZone(timezone: string): Promise<ESPCDFAPIResponse> {

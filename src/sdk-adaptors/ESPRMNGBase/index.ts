@@ -7,7 +7,7 @@ import {
     ESPSDKAdaptorAPIRequest,
     ESPSDKAdaptorAPIResponse
 } from "@store";
-import { ESPRMNGBase, ESPRMNGAuth, ESPRMNGBaseConfig } from "@espressif/rmng-base-sdk";
+import { ESPRMNGBase, ESPRMNGAuth, ESPRMNGBaseConfig, NodeMQTTOrchestrator, ESPRMNGMqtt} from "@espressif/rmng-base-sdk";
 import { ESPCDFUser } from "@store";
 import { transformToESPCDFUser } from "./transformers/transformToESPCDFUser";
 import { assertSignupPasswordPolicy } from "./utils/common";
@@ -51,6 +51,7 @@ export class ESPRMNGBaseSDKAdaptor implements ESPSDKAdaptor {
             if (!esprmngUser) {
                 throw new Error("Login failed: No user returned");
             }
+            NodeMQTTOrchestrator.initialize(ESPRMNGMqtt.getInstance());
             const cdfUser = transformToESPCDFUser(esprmngUser);
             console.log("[ESPRMNGBaseSDKAdaptor] User logged in");
             return {
@@ -72,6 +73,7 @@ export class ESPRMNGBaseSDKAdaptor implements ESPSDKAdaptor {
             if (!esprmngUser) {
                 throw new Error("No logged in user found");
             }
+            NodeMQTTOrchestrator.initialize(ESPRMNGMqtt.getInstance());
             const cdfUser = transformToESPCDFUser(esprmngUser);
             return {
                 status: "success",

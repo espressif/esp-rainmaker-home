@@ -59,13 +59,23 @@ export const useSelectDeviceRoom = (): UseSelectDeviceRoomReturn => {
 
   const rooms = useMemo(
     () => getSelectableRoomsForHome(home),
-    [home],
+    [home?.subGroups],
   );
 
+  /** Keep local selection aligned with store room instances when the list changes. */
   useEffect(() => {
-    if (!selectedRoomId || rooms.length === 0) return;
-    const match = rooms.find((r) => r.id === selectedRoomId);
-    if (match) setSelectedRoom(match);
+    if (rooms.length === 0) return;
+
+    setSelectedRoom((prev) => {
+      const targetId =
+        (selectedRoomId && !prev ? selectedRoomId : undefined) ?? prev?.id;
+      if (!targetId) return prev;
+
+      const match = rooms.find((r) => r.id === targetId);
+      if (!match) return prev;
+
+      return prev === match ? prev : match;
+    });
   }, [selectedRoomId, rooms]);
 
   const handleSelectRoom = useCallback((room: ESPCDFGroup) => {
