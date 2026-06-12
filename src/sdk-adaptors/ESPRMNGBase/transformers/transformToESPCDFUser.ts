@@ -366,11 +366,10 @@ export function transformToESPCDFUser(
             const token = deviceToken?.trim();
             if (token) {
                 try {
-                    const userCode = await esprmngUser.registerClient(
+                    await esprmngUser.registerClient(
                         RMNG_APP_PLATFORM_ID,
                         token
                     );
-                    cdfUser.userInfo.userCode = userCode;
                 } catch (error) {
                     console.warn(
                         "[transformToESPCDFUser] registerForNotification: push token registration failed:",
