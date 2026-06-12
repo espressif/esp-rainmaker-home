@@ -102,7 +102,7 @@ export const EventDeviceParamSelectionScreen = observer(() => {
 
   const conditionOptions = useMemo(() => getAvailableEventConditions(), []);
   const showConditionSelector = selectedParam
-    ? shouldShowConditionSelector(selectedParam.dataType)
+    ? shouldShowConditionSelector(selectedParam)
     : false;
 
   return (

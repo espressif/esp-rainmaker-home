@@ -18,12 +18,10 @@ import { Trash2, ChevronRight } from "lucide-react-native";
 import { tokens } from "@shared/theme/tokens";
 import { globalStyles } from "@shared/theme/globalStyleSheet";
 
-// SDK
-import { ESPCDFDevice } from "@store";
-
 // Hooks
-import { useLocalSearchParams, router, useRouter } from "expo-router";
+import { router, useRouter } from "expo-router";
 import { useCDF } from "@shared/hooks/useCDF";
+import { useSettings } from "@features/control/hooks";
 import { useTranslation } from "react-i18next";
 import { useToast } from "@shared/hooks/useToast";
 
@@ -86,11 +84,8 @@ const Settings = observer(() => {
   const { t } = useTranslation();
   const toast = useToast();
   const routerNav = useRouter();
-
-  const { id, device: _device } = useLocalSearchParams<{
-    id?: string;
-    device?: string;
-  }>();
+  const { node, device, displayName, isConnected, isPrimary } = useSettings();
+  const id = node?.id;
 
   // State
   const [deviceName, setDeviceName] = useState("");
@@ -114,30 +109,22 @@ const Settings = observer(() => {
     "remove",
   ]);
 
-  // Get device info
-  const nodeList = store?.nodeStore?.nodesList || [];
-  const node = nodeList.find((n) => n.id === id);
-  const device = node?.devices?.find((d) => d.name === _device) as
-    | ESPCDFDevice
-    | undefined;
-  const isConnected = node?.connectivityStatus?.isConnected || false;
-  const isPrimary = node?.isPrimaryUser || false;
-
   /**
-   * Effect: Initialize valid sections
-   * Determines which sections should be shown based on device capabilities
+   * Effect: Initialize valid sections and keep the name field aligned with the store.
+   * Determines which sections should be shown based on device capabilities.
    */
   useEffect(() => {
     const nameParam = device?.params?.find(
       (param) => param.type === ESPRM_NAME_PARAM_TYPE,
     );
     if (nameParam) {
-      // displayName is resolved in unified-dev transformers (Matter → name param → SDK display name)
-      setDeviceName(device?.displayName || "");
+      if (!isEditingName) {
+        setDeviceName(displayName);
+      }
     } else {
       setValidSection((prev) => prev.filter((section) => section !== "name"));
     }
-  }, [device, node]);
+  }, [device, displayName, isEditingName]);
 
   /**
    * Saves device name changes
@@ -305,7 +292,7 @@ const Settings = observer(() => {
     if (!readmeUrl) return;
 
     const headerName = node?.nodeConfig?.info?.name || "Device";
-    const deviceDisplayName = device?.displayName || headerName;
+    const deviceDisplayName = displayName || headerName;
 
     routerNav.push({
       pathname: "/(control)/Guide" as any,
@@ -490,7 +477,7 @@ const Settings = observer(() => {
           {/* Device Name Section */}
           {validSection.includes("name") && (
             <DeviceName
-              initialDeviceName={device?.displayName || ""}
+              initialDeviceName={displayName}
               deviceName={deviceName}
               setDeviceName={setDeviceName}
               isEditingName={isEditingName}

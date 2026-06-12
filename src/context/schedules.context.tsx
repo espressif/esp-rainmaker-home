@@ -9,6 +9,10 @@ import { createContext, useContext, useReducer } from "react";
 import { useCDF } from "@shared/hooks/useCDF";
 import { ESPCDFDevice } from "@store";
 import { deepClone, generateRandomId } from "@shared/utils/common";
+import {
+  createStoreParamLookup,
+  sanitizeDeviceActionsMap,
+} from "@shared/utils/paramValueValidation";
 import { useToast } from "@shared/hooks/useToast";
 import { useTranslation } from "react-i18next";
 import { SUCESS } from "@shared/utils/constants";
@@ -263,6 +267,18 @@ export function ScheduleProvider({ children }: ScheduleProviderProps) {
     }
   };
 
+  /**
+   * Coerces every action value to the param's wire type (e.g. untouched
+   * slider "" → 0) so the firmware never receives values it cannot parse.
+   */
+  const sanitizeActionsForSave = (
+    actions: Record<string, any>,
+  ): Record<string, any> =>
+    sanitizeDeviceActionsMap(
+      actions,
+      createStoreParamLookup(store?.nodeStore ?? {}),
+    );
+
   // Handle schedule creation/update
   const handleSaveSchedule = async () => {
     try {
@@ -280,12 +296,14 @@ export function ScheduleProvider({ children }: ScheduleProviderProps) {
         return false;
       }
 
+      const sanitizedActions = sanitizeActionsForSave(state.actions);
+
       const scheduleData = {
         id: state.scheduleId,
         name: state.scheduleName.trim(),
         info: state.info || "",
-        nodes: Object.keys(state.actions),
-        action: state.actions || {},
+        nodes: Object.keys(sanitizedActions),
+        action: sanitizedActions,
         triggers: state.triggers,
         enabled: state.enabled ?? false,
         validity: state.validity,
@@ -421,12 +439,14 @@ export function ScheduleProvider({ children }: ScheduleProviderProps) {
   const handleScheduleSync = async () => {
     dispatch({ type: "SET_SYNCING", payload: true });
     try {
+      const sanitizedActions = sanitizeActionsForSave(state.actions);
+
       const scheduleData = {
         id: state.scheduleId,
         name: state.scheduleName,
         description: "",
         nodes: state.nodes.map((node) => node.id),
-        action: state.actions,
+        action: sanitizedActions,
         triggers: state.triggers,
         enabled: state.enabled,
         validity: state.validity,

@@ -13,6 +13,11 @@ import React, {
   useCallback,
 } from "react";
 import { deepClone } from "@shared/utils/common";
+import {
+  createStoreParamLookup,
+  sanitizeAutomationActions,
+  sanitizeAutomationEvents,
+} from "@shared/utils/paramValueValidation";
 
 import {
   ESPCDFAutomation,
@@ -388,7 +393,7 @@ interface AutomationProviderProps {
 export function AutomationProvider({ children }: AutomationProviderProps) {
   const [state, dispatch] = useReducer(automationReducer, initialState);
   const {
-    store: { automationStore, groupStore },
+    store: { automationStore, groupStore, nodeStore },
   } = useCDF();
   // Helper functions to make state updates more convenient
   const setAutomationInfo = useCallback((automation: ESPCDFAutomation) => {
@@ -681,8 +686,27 @@ export function AutomationProvider({ children }: AutomationProviderProps) {
       isDisabled: false,
     };
   };
+  /**
+   * Coerces event/action values to each param's wire type (e.g. untouched
+   * slider "" → 0). The firmware rejects type-mismatched trigger values and
+   * then disables ALL triggers on the node, so every value is normalized to
+   * something parseable before the payload leaves the app.
+   */
+  const sanitizeAutomationPayload = () => {
+    const lookup = createStoreParamLookup(nodeStore ?? {});
+    return {
+      actions: sanitizeAutomationActions(getAutomationActions(), lookup),
+      events: sanitizeAutomationEvents(
+        getNodeAutomationEvent(),
+        state.nodeId,
+        lookup,
+      ),
+    };
+  };
+
   // Automation management
   const updateAutomation = async () => {
+    const { actions, events } = sanitizeAutomationPayload();
     // automation payload for update operation
     // Note: eventOperator is excluded as the backend doesn't support updating
     // event_operator for existing automations (it's only used during creation)
@@ -691,8 +715,8 @@ export function AutomationProvider({ children }: AutomationProviderProps) {
       enabled: state.enabled,
       retrigger: state.retrigger,
       nodeId: state.nodeId,
-      events: getNodeAutomationEvent(),
-      actions: getAutomationActions(),
+      events,
+      actions,
       // eventOperator is intentionally excluded - backend doesn't support it in updates
     };
 
@@ -711,14 +735,15 @@ export function AutomationProvider({ children }: AutomationProviderProps) {
   };
 
   const createAutomation = async () => {
+    const { actions, events } = sanitizeAutomationPayload();
     const automationDetails = {
       name: state.automationName,
       enabled: state.enabled,
       nodeId: state.nodeId,
       eventType: state.eventType,
-      events: getNodeAutomationEvent(),
+      events,
       eventOperator: state.eventOperator,
-      actions: getAutomationActions(),
+      actions,
       retrigger: state.retrigger,
     };
 

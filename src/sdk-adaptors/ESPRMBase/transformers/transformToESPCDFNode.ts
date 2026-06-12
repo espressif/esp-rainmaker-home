@@ -15,9 +15,11 @@ import {
 } from "@store";
 import { ESPRMDevice, ESPRMNode, ESPRMService } from "@espressif/rainmaker-base-sdk";
 import {
+    ESPRM_NAME_PARAM_TYPE,
     HEADLESS_ERROR_UNKNOWN,
 } from "@shared/utils/constants";
 import { safeTransform } from "@sdk-adaptors/shared/utils/safeTransform";
+import { syncCdfDeviceDisplayName } from "@sdk-adaptors/shared/utils/common";
 import { transformToESPCDFDevice } from "./transformToESPCDFDevice";
 import { transformToESPCDFService } from "./transformToESPCDFService";
 
@@ -26,9 +28,13 @@ import { transformToESPCDFService } from "./transformToESPCDFService";
  * This subscribes to typed property change events and updates the raw node accordingly
  * Using fixed event types provides better type safety and maintainability
  * @param rawNode - Mutable SDK node backing the CDF entity.
+ * @param cdfNode - Live CDF node whose derived fields (e.g. displayName) stay in sync.
  * @returns Callback invoked on each CDF property change event.
  */
-const createPropertyChangeSyncCallback = (rawNode: ESPRMNode): ESPCDFPropertyChangeCallback => {
+const createPropertyChangeSyncCallback = (
+    rawNode: ESPRMNode,
+    cdfNode: ESPCDFNode,
+): ESPCDFPropertyChangeCallback => {
     return (event: ESPCDFPropertyChangeEvent) => {
         try {
             // Use discriminated union to handle each event type with proper typing
@@ -41,6 +47,9 @@ const createPropertyChangeSyncCallback = (rawNode: ESPRMNode): ESPCDFPropertyCha
                         const param = device.params?.find(p => p.name === event.paramName);
                         if (param) {
                             param.value = event.value;
+                            if (param.type === ESPRM_NAME_PARAM_TYPE) {
+                                syncCdfDeviceDisplayName(cdfNode, event.deviceName);
+                            }
                         }
                     }
                     break;
@@ -62,6 +71,9 @@ const createPropertyChangeSyncCallback = (rawNode: ESPRMNode): ESPCDFPropertyCha
                 case 'metadataChanged': {
                     // Direct property on node
                     rawNode.metadata = event.metadata;
+                    for (const device of cdfNode.devices ?? []) {
+                        syncCdfDeviceDisplayName(cdfNode, device.name);
+                    }
                     break;
                 }
 
@@ -203,7 +215,7 @@ export function transformToESPCDFNode(
 
     // Subscribe to property change events to sync to _raw
     // This creates an event-based sync mechanism
-    const syncCallback = createPropertyChangeSyncCallback(node);
+    const syncCallback = createPropertyChangeSyncCallback(node, cdfNode);
     cdfNode.onPropertyChange(syncCallback);
 
     return cdfNode;
