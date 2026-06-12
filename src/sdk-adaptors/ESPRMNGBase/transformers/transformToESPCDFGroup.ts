@@ -9,6 +9,7 @@ import { normalizeRmngSdkResponseToCdf, throwNormalizedRmngShareError } from "..
 import {
     ESPRMNG_GROUP_SHARING_SCOPE_PARENT,
     ESPRMNG_GROUP_SHARING_SCOPE_SUBGROUP_ROOM,
+    ESPRMNG_AUTOMATION_STATUS,
 } from "../utils/constants";
 import { buildCdfGroupSharingInfoFromRmngUsers } from "../utils/rmngGroupSharingTransform";
 import {
@@ -311,7 +312,7 @@ export function transformToESPCDFGroup(
                 name: automationData.name,
                 conditions: { and: [] },
                 actions: { targets: [] },
-                enabled: automationData.enabled ?? true,
+                status: automationData.enabled ? ESPRMNG_AUTOMATION_STATUS.ENABLED : ESPRMNG_AUTOMATION_STATUS.DISABLED,
                 retrigger: automationData.retrigger ?? false,
             });
             const { triggerItems, triggerIds } = cdfEventsToTriggerItems(automationData.events, nodeId, automation.id);
