@@ -25,10 +25,10 @@
   "dependencies": {
     "@aws-sdk/client-kinesis-video": "^3.700.0",
     "@aws-sdk/client-kinesis-video-signaling": "^3.700.0",
-    "@espressif/rainmaker-base-cdf": "2.1.0",
+    "@espressif/rainmaker-base-cdf": "file:local-sdk/espressif-rainmaker-base-cdf-2.1.0.tgz",
     "@espressif/rainmaker-base-sdk": "3.1.0",
     "@espressif/rainmaker-matter-sdk": "3.0.0",
-    "@espressif/rmng-base-sdk": "1.2.0",
+    "@espressif/rmng-base-sdk": "file:local-sdk/espressif-rmng-base-sdk-1.2.0.tgz",
     "@expo/vector-icons": "^14.0.2",
     "@react-native-async-storage/async-storage": "^2.1.2",
     "@react-native-community/checkbox": "^0.5.17",
