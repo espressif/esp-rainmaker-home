@@ -5,7 +5,7 @@
  */
 
 import { useMemo } from "react";
-import { ActivityIndicator, View } from "react-native";
+import { ActivityIndicator, Pressable, View } from "react-native";
 import { Plus } from "lucide-react-native";
 import { tokens } from "@shared/theme/tokens";
 import { globalStyles } from "@shared/theme/globalStyleSheet";
@@ -83,12 +83,12 @@ const HomeScreen = () => {
         label={t("group.home.title")}
         showBack={false}
         rightSlot={
-          <Plus
+          <Pressable
             {...testProps("button_add_device_header")}
-            size={24}
-            color={tokens.colors.primary}
             onPress={() => redirectOperations("AddDevice")}
-          />
+          >
+            <Plus size={24} color={tokens.colors.primary} />
+          </Pressable>
         }
         qaId="header_home"
       />
