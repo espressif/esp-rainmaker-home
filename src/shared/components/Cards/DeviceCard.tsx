@@ -112,14 +112,9 @@ const DeviceCard: React.FC<DeviceCardProps> = ({
   const storeNode = store.nodeStore.nodesByIDMap[node.id] ?? node;
   const registeredTransports =
     store.subscriptionStore.registeredTransports[node.id];
-  const deviceConnected = useMemo(
-    () => isDeviceConnected(storeNode, registeredTransports),
-    [storeNode, registeredTransports],
-  );
-  const availableLocally = useMemo(
-    () => isDeviceLocallyAvailable(storeNode, registeredTransports),
-    [storeNode, registeredTransports],
-  );
+
+  const deviceConnected = isDeviceConnected(storeNode, registeredTransports);
+  const availableLocally = isDeviceLocallyAvailable(storeNode, registeredTransports);
 
   let cardWidth = 180;
   if (width <= 500) {
