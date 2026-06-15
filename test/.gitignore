@@ -37,6 +37,8 @@ ENV/
 # Test artifacts
 *.html
 *.log
+# Built app binaries downloaded/built for test runs
+artifacts/
 # Allow report template and assets
 !templates/espressif_logo.png
 !templates/report_template.html
@@ -73,4 +75,23 @@ IMPLEMENTATION_PLAN.md
 config/deployment.yaml
 config/report_config.yaml
 config/app.yaml
+config/esp_devices.yaml
+config/mobiles.yaml
 
+# Local secrets — never commit (setup_test_env.sh loads this if present)
+.esp_test_secrets.env
+
+# Hardware manager runtime state
+hardware/.resource_locks.db
+hardware/.resource_locks.db-*
+
+# CI run summary for MR notification (scripts/notify_mr.py)
+reports/
+
+# CI-downloaded firmware bundles (FIRMWARE_ROOT)
+firmwares/
+esp_rainmaker_firmware_*/
+
+# deployment config lock
+config/deployment.yaml.lock
+config/*.tmp

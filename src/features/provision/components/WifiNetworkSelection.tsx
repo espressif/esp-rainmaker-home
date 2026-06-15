@@ -5,7 +5,7 @@
  */
 
 import React from "react";
-import { ActivityIndicator, Text, TouchableOpacity, StyleSheet } from "react-native";
+import { ActivityIndicator, Text, TouchableOpacity, View, StyleSheet } from "react-native";
 import { ChevronDown } from "lucide-react-native";
 import { tokens } from "@shared/theme/tokens";
 import { globalStyles } from "@shared/theme/globalStyleSheet";
@@ -48,11 +48,9 @@ export const WifiNetworkSelection: React.FC<WifiNetworkSelectionProps> = ({
       {selectedWifi || placeholder}
     </Text>
     {isLoading ? (
-      <ActivityIndicator
-        size="small"
-        color={tokens.colors.gray}
-        {...testProps("loading_select_network_wifi")}
-      />
+      <View {...testProps("loading_select_network_wifi")}>
+        <ActivityIndicator size="small" color={tokens.colors.gray} />
+      </View>
     ) : (
       <ChevronDown size={20} color={tokens.colors.gray} />
     )}

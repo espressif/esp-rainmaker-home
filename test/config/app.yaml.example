@@ -7,6 +7,7 @@ rainmaker-home:
   activity: "${APP_ACTIVITY:-com.app.MainActivity}"
   android_path: "${ANDROID_PATH}"
   apk_path: "artifacts/android/app-release.apk"
+  ipa_path: "${IPA_PATH:-artifacts/ios/app-release.ipa}"
   package: "${ANDROID_APP_APPLICATION_ID}"
   bundle_id: "${IOS_APP_APPLICATION_ID}"
   xcode_org_id: "${XCODE_ORG_ID}"

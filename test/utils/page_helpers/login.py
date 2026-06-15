@@ -88,6 +88,13 @@ class Login(BasePage):
         return True
 
     def ensure_login_screen(self):
+        # A leftover system alert (e.g. a SoftAP "Join Wi-Fi" prompt from a prior
+        # run) can sit on top of the app and block every interaction; clear it
+        # before deciding which screen we're on.
+        perms = self.get_other_page_helper('permissions')
+        if perms.any_system_alert_present(timeout=1):
+            logger.info("Dismissing a stale system alert before login")
+            perms.handle_all_permissions(action="allow", timeout=3)
         if self.check_screen_displayed(timeout=2):
             return self
         logger.info("App opened to home/user screen (session persisted); navigating to login via logout")

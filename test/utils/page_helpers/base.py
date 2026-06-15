@@ -10,10 +10,24 @@ from appium.webdriver.common.appiumby import AppiumBy
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from selenium.common.exceptions import TimeoutException, NoSuchElementException
+from selenium.common.exceptions import (
+    NoSuchElementException,
+    StaleElementReferenceException,
+    TimeoutException,
+)
 from utils.locator_loader import LocatorLoader
 
 logger = logging.getLogger(__name__)
+
+
+def _is_stale_reference_error(error):
+    """Return True for Selenium/Appium stale element exceptions."""
+    if isinstance(error, StaleElementReferenceException):
+        return True
+    error_name = error.__class__.__name__
+    error_message = str(error)
+    return "Stale" in error_name or "StaleObject" in error_message
+
 
 class BasePage:
     def __init__(self, driver, page_helper_manager=None, default_timeout=5):
@@ -155,6 +169,15 @@ class BasePage:
         """Check if element is visible (quick check)"""
         return self.find_visible(locator_name_or_type, value=value, timeout=timeout, poll=poll) is not None
 
+    def find_all(self, locator_name_or_type, value=None):
+        """Return all elements matching a JSON locator (may be empty)."""
+        if value is None:
+            by, locator_value = self.get_element_locator(locator_name_or_type)
+        else:
+            by = self.get_locator(locator_name_or_type)
+            locator_value = value
+        return self.driver.find_elements(by, locator_value)
+
     def get_text(self, locator_name_or_type=None, value=None, timeout=None, poll=0.25, element=None):
         """Get element text"""
         if element is not None:
@@ -171,37 +194,35 @@ class BasePage:
             return element.text
         return None
 
-    def wait_for_element_to_disappear(self, locator_name_or_type, value=None, timeout=None, poll=0.5):
-        """Wait for element to disappear"""
-        timeout = timeout or self.default_timeout
-        
+    def _resolve_locator(self, locator_name_or_type, value=None):
+        """Resolve a JSON locator name or raw type/value pair."""
         if value is None:
-            by, locator_value = self.get_element_locator(locator_name_or_type)
-        else:
-            by = self.get_locator(locator_name_or_type)
-            locator_value = value
-        
-        try:
-            WebDriverWait(self.driver, timeout, poll_frequency=poll).until_not(
-                EC.presence_of_element_located((by, locator_value))
-            )
-            return True
-        except TimeoutException:
-            return False
+            return self.get_element_locator(locator_name_or_type)
+        return self.get_locator(locator_name_or_type), value
 
-    def wait_and_click(self, locator_name_or_type, value=None, timeout=None, poll=0.5):
-        """Wait for element and click with retry logic"""
+    def wait_for_element_to_disappear(self, locator_name_or_type, value=None, timeout=None, poll=0.25):
+        """Wait for element to disappear; stale refs mean the UI node was replaced."""
         timeout = timeout or self.default_timeout
-        
-        for attempt in range(3):
+        by, locator_value = self._resolve_locator(locator_name_or_type, value)
+
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            remaining = max(0.1, deadline - time.monotonic())
             try:
-                element = self.find_clickable(locator_name_or_type, value, timeout, poll=poll)
-                element.click()
-                return element
-            except Exception as e:
-                if attempt == 2:  # Last attempt
-                    raise e
-                time.sleep(1)
+                WebDriverWait(self.driver, remaining, poll_frequency=poll).until_not(
+                    EC.presence_of_element_located((by, locator_value))
+                )
+                return True
+            except StaleElementReferenceException:
+                return True
+            except TimeoutException:
+                continue
+            except Exception as exc:
+                if _is_stale_reference_error(exc):
+                    return True
+                raise
+
+        return False
 
     # Helper methods to access other pages through page_helper_manager
     def get_other_page_helper(self, page_name: str):
@@ -214,23 +235,6 @@ class BasePage:
         
         return getattr(self.page_helper_manager, page_name)
     
-    def use_locator_from_other_page(self, page_name: str, locator_name: str):
-        """
-        Get locator from another page's JSON file
-        Usage: self.use_locator_from_other_page('consent', 'proceed_button')
-        """
-        locator_data = self.locator_loader.get_locator(page_name, locator_name)
-        if not locator_data:
-            raise ValueError(f"Locator '{locator_name}' not found in {page_name} page")
-        
-        locator_type = locator_data.get("by")
-        locator_value = locator_data.get("value")
-        
-        if not locator_type or not locator_value:
-            raise ValueError(f"Invalid locator structure for '{locator_name}' in {page_name}. Expected 'by' and 'value' keys.")
-        
-        return self.get_locator(locator_type), locator_value
-    
     def get_locator_text(self, locator_name: str) -> str:
         """Get expected text for a locator from JSON file"""
         locator_data = self.locator_loader.get_locator(self.page_name, locator_name)
@@ -240,26 +244,49 @@ class BasePage:
         
         return locator_data.get("text", f"Text for {locator_name}")
     
-    def check_screen_displayed(self, timeout=10, poll=0.25):
+    def check_screen_displayed(self, timeout=10, poll=0.25, quiet=False, handle_alerts=True):
         """
         Generic screen detection method that checks for title element with expected text
-        
+
         This method can be overridden by specific page helpers for custom logic.
         By default, it looks for a 'title' element and compares its text
         with the expected text from the JSON locator file.
+
+        When the screen is not detected and a system permission alert is
+        blocking it (location/Bluetooth/local network/...), the alert is
+        accepted once and the check retried — keeps every flow alive on
+        first-run devices for both Android and iOS.
+
+        Args:
+            timeout: Seconds to wait for the expected title.
+            poll: Poll interval for WebDriverWait.
+            quiet: When True, timeouts are logged at DEBUG (for screen probing).
+            handle_alerts: Clear a blocking system alert and retry once.
         """
         try:
             expected_text = self.get_locator_text("title")
             by, locator_value = self.get_element_locator("title")
             last_seen_text = None
+
             def _title_matches(driver):
                 nonlocal last_seen_text
+
                 try:
-                    element = driver.find_element(by, locator_value)
-                    if not element.is_displayed():
-                        return False
-                    last_seen_text = element.text
-                    return last_seen_text == expected_text
+                    elements = driver.find_elements(by, locator_value)
+
+                    for element in elements:
+                        try:
+                            text = element.text
+                            if text:
+                                last_seen_text = text
+                            if text == expected_text:
+                                return True
+                        except StaleElementReferenceException:
+                            continue
+                    return False
+
+                except StaleElementReferenceException:
+                    return False
                 except Exception:
                     return False
 
@@ -267,58 +294,121 @@ class BasePage:
             logger.info(f"Screen detected: {self.page_name} - '{expected_text}'")
             return True
         except TimeoutException:
+            log = logger.debug if quiet else logger.warning
             if last_seen_text is None:
-                logger.warning(f"Screen detection timeout after {timeout}s - Expected: '{expected_text}'")
-            else:
-                logger.warning(
-                    "Screen detection timeout after %ss - Expected: '%s', Last seen: '%s'",
+                log(
+                    "Screen detection timeout after %ss - Expected: '%s' (%s)",
                     timeout,
                     expected_text,
+                    self.page_name,
+                )
+            else:
+                log(
+                    (
+                        "Screen detection timeout after %ss - Expected: '%s' (%s), "
+                        "Last seen: '%s'"
+                    ),
+                    timeout,
+                    expected_text,
+                    self.page_name,
                     last_seen_text,
+                )
+            # Only clear alerts on real screen assertions, not on fast `quiet`
+            # race-detection probes (e.g. the continue-tap screen scan) — those
+            # would otherwise each pay a ~1s Android alert poll on every miss.
+            if handle_alerts and not quiet and self._clear_blocking_system_alert():
+                logger.info("System alert cleared; rechecking %s screen", self.page_name)
+                return self.check_screen_displayed(
+                    timeout=min(timeout, 5), poll=poll, quiet=quiet, handle_alerts=False
                 )
             return False
         except Exception as e:
-            logger.warning(f"Screen detection failed: {e}")
+            log = logger.debug if quiet else logger.warning
+            log("Screen detection failed (%s): %s", self.page_name, e)
+            return False
+
+    def _clear_blocking_system_alert(self) -> bool:
+        """Accept any system permission alert covering the expected screen."""
+        if not self.page_helper_manager:
+            return False
+        try:
+            permissions = self.get_other_page_helper("permissions")
+            return bool(permissions.handle_all_permissions(action="allow", timeout=4))
+        except Exception as error:
+            logger.debug("Alert clearing skipped: %s", error)
             return False
     
-    def hide_keyboard_if_visible(self):
-        """Hide keyboard if visible (useful for iOS and Android)"""
-        try:
-            platform = getattr(self.driver, '_test_info', {}).get('platform', 'android')
+    def _is_keyboard_shown(self) -> bool:
+        """Return True when the soft keyboard is reported as visible."""
+        if self.platform == "android":
+            try:
+                return bool(self.driver.is_keyboard_shown())
+            except Exception:
+                return False
+        elif self.platform == "ios":
+            try:
+                return self.driver.find_element("xpath", "//XCUIElementTypeKeyboard").is_displayed()
+            except Exception:
+                return False
+        else:
+            return False
             
-            if platform.lower() == 'ios':
-                # iOS: hide_keyboard is unreliable; try multiple strategies
-                for key in ["Return", "Done", "Go"]:
+    def hide_keyboard_if_visible(self):
+        """Hide keyboard if visible; return True only when keyboard is gone (or was never shown)."""
+        try:
+            if not self._is_keyboard_shown():
+                return True
+
+            if self.platform == "ios":
+                for key in ["Done", "Return", "Go"]:
                     try:
                         self.driver.hide_keyboard(strategy="pressKey", key=key)
-                        logger.info(f"iOS keyboard hidden via pressKey" + (f" key={key}" if key else ""))
-                        return True
                     except Exception:
                         continue
-                # Fallback: tap in content area (upper quarter, below status bar)
+                    if not self._is_keyboard_shown():
+                        logger.info("iOS keyboard hidden via pressKey key=%s", key)
+                        return True
+
+                for strategy in ("tapOutside", "pressKey"):
+                    try:
+                        self.driver.hide_keyboard(strategy=strategy)
+                    except Exception:
+                        continue
+                    if not self._is_keyboard_shown():
+                        logger.info("iOS keyboard hidden via strategy=%s", strategy)
+                        return True
+
                 try:
                     size = self.driver.get_window_size()
                     x, y = size["width"] // 2, int(size["height"] * 0.25)
                     self.driver.tap([(x, y)])
-                    logger.info("iOS keyboard hidden via tap in content area")
+                    if not self._is_keyboard_shown():
+                        logger.info("iOS keyboard hidden via tap in content area")
+                        return True
                 except Exception:
-                    logger.warning("iOS keyboard hide failed with all strategies")
-                
-            elif platform.lower() == 'android':
-                # Android keyboard hiding methods
+                    pass
+
+            elif self.platform == "android":
                 try:
-                    # Method 1: Hide keyboard using Appium method
                     self.driver.hide_keyboard()
-                    logger.info("Android keyboard hidden via hide_keyboard")
+                    if not self._is_keyboard_shown():
+                        logger.info("Android keyboard hidden via hide_keyboard")
+                        return True
                 except Exception:
-                    try:
-                        # Method 2: Press back button to dismiss keyboard
-                        self.driver.press_keycode(4)  # Back button
+                    pass
+                try:
+                    self.driver.press_keycode(4)
+                    if not self._is_keyboard_shown():
                         logger.info("Android keyboard hidden via back button")
-                    except Exception:
-                        logger.warning("Android keyboard hide failed with hide_keyboard and back button")
-            
-            return True
+                        return True
+                except Exception:
+                    pass
+
+            if not self._is_keyboard_shown():
+                return True
+
+            logger.warning("Keyboard still visible after hide attempts")
+            return False
         except Exception as e:
             logger.warning(f"Failed to hide keyboard: {e}")
             return False

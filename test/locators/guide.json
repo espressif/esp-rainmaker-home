@@ -1,0 +1,12 @@
+{
+  "title": {
+    "by": "id",
+    "value": "title",
+    "text": "ESP RainMaker Device"
+  },
+  "continue_button": {
+    "by": "id",
+    "value": "button_continue_guide",
+    "text": "Continue"
+  }
+}

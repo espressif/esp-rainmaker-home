@@ -6,15 +6,18 @@
 """
 Pytest plugin for automatic test report generation and email distribution.
 """
+import json
 import os
 import logging
+import re
+import socket
 import time
 import yaml
 from pathlib import Path
 from typing import Dict, List, Optional
 from datetime import datetime
 
-from utils.common_utils import resolve_single_artifact
+from utils.common_utils import read_app_version, resolve_single_artifact
 
 logger = logging.getLogger(__name__)
 
@@ -44,7 +47,6 @@ class PytestReportPlugin:
         self.test_results: List[Dict] = []
         self.tracked_tests: set = set()  # Track which tests we've already recorded to avoid duplicates
         self.device_model: str = None
-        self.chipset: str = None
         self.session = None  # Store session for marker access
         
         if not UTILITIES_AVAILABLE:
@@ -145,13 +147,16 @@ class PytestReportPlugin:
             return
         logger.info("Report plugin: pytest_sessionstart entered")
         self.session = session
-        self.run_id = datetime.now().strftime("%H%M%S_%d%m%Y")
-        self.start_time = time.time()
         try:
             self.device_model = session.config.getoption("--model", default=None)
-            self.chipset = session.config.getoption("--chip", default=None)
         except Exception:
             pass
+        # Make run_id unique per process so parallel Android+iOS runs never share
+        # a run directory (second-resolution timestamps collide). The model slug
+        # keeps it readable; the PID guarantees uniqueness if models match.
+        model_slug = re.sub(r"[^A-Za-z0-9]+", "", (self.device_model or "").split(",")[0]) or "dev"
+        self.run_id = f"{datetime.now().strftime('%H%M%S_%d%m%Y')}_{model_slug}_{os.getpid()}"
+        self.start_time = time.time()
         if self.artifact_host:
             try:
                 self.artifact_host.current_run_id = self.run_id
@@ -220,8 +225,18 @@ class PytestReportPlugin:
                 'artifacts': {},
                 'logs': logs.strip(),
                 'stdout': stdout.strip(),
-                'stderr': stderr.strip()
+                'stderr': stderr.strip(),
+                'hardware_info': getattr(report, 'hardware_info', []),
             }
+
+            if not test_result['hardware_info'] and self.session:
+                try:
+                    from hardware.manager import get_hardware_report_for_session
+                    test_result['hardware_info'] = get_hardware_report_for_session(
+                        self.session
+                    ).get(report.nodeid, [])
+                except Exception:
+                    pass
             
             # Resolve artifact URLs from report.debug_artifacts
             if hasattr(report, 'debug_artifacts'):
@@ -230,27 +245,24 @@ class PytestReportPlugin:
                 for key, value in artifacts.items():
                     if key.endswith('_url') and value:
                         test_result['artifacts'][key] = value
-                # Resolve each artifact type if URL missing
-                url = self._resolve_artifact_url(
-                    artifacts, 'screenshot_url', 'screenshot', 'screenshot',
-                    'screenshot_organized_path', nodeid
-                )
-                if url:
-                    test_result['artifacts']['screenshot_url'] = url
-                url = self._resolve_artifact_url(
-                    artifacts, 'adb_logs_url', 'adb_logs', 'log',
-                    'log_organized_path', nodeid
-                )
-                if not url and artifacts.get('log_url') and 'adb_logs' in artifacts:
-                    url = artifacts['log_url']
-                if url:
-                    test_result['artifacts']['adb_logs_url'] = url
-                url = self._resolve_artifact_url(
-                    artifacts, 'page_source_url', 'page_source', 'page_source',
-                    'page_source_organized_path', nodeid
-                )
-                if url:
-                    test_result['artifacts']['page_source_url'] = url
+                # (url_key, path_key, artifact_type, organized_key)
+                artifact_specs = [
+                    ('screenshot_url', 'screenshot', 'screenshot', 'screenshot_organized_path'),
+                    ('adb_logs_url', 'adb_logs', 'log', 'log_organized_path'),
+                    ('page_source_url', 'page_source', 'page_source', 'page_source_organized_path'),
+                    ('serial_log_url', 'serial_log', 'serial_log', 'serial_log_organized_path'),
+                ]
+                for url_key, path_key, artifact_type, organized_key in artifact_specs:
+                    url = self._resolve_artifact_url(
+                        artifacts, url_key, path_key, artifact_type, organized_key, nodeid
+                    )
+                    # Reuse a generic log_url for ADB logs when nothing else resolved
+                    if not url and url_key == 'adb_logs_url' and artifacts.get('log_url') and 'adb_logs' in artifacts:
+                        url = artifacts['log_url']
+                    if url:
+                        test_result['artifacts'][url_key] = url
+                if artifacts.get('chip_serial_log_name'):
+                    test_result['artifacts']['chip_serial_log_name'] = artifacts['chip_serial_log_name']
             # Video comes from report.video_path
             if hasattr(report, 'video_path') and report.video_path and self.artifact_host:
                 url = self.artifact_host.get_artifact_url(report.video_path)
@@ -265,7 +277,10 @@ class PytestReportPlugin:
             
             if not hasattr(self, 'appium_log_url') or not self.appium_log_url:
                 try:
-                    from conftest import grid_manager
+                    # Read the active grid from its own module — `import conftest`
+                    # resolves to the nearest subdir conftest (no grid_manager).
+                    from utils.grid_manager import AppiumGridManager
+                    grid_manager = AppiumGridManager.active_instance
                     if grid_manager and hasattr(grid_manager, 'servers'):
                         for server_key, server_info in grid_manager.servers.items():
                             if 'log_file' in server_info:
@@ -290,6 +305,9 @@ class PytestReportPlugin:
                 except Exception as e:
                     logger.warning(f"Could not get Appium log URL: {e}")
             
+            if getattr(self, 'appium_log_url', None):
+                test_result['artifacts']['appium_log_url'] = self.appium_log_url
+
             self.test_results.append(test_result)
     
     def pytest_sessionfinish(self, session, exitstatus):
@@ -328,17 +346,18 @@ class PytestReportPlugin:
         # Generate report
         if self.report_generator:
             try:
-                # Build chipset string from model and chip
-                chipset_str = "Mobile Devices"
-                if self.device_model and self.chipset:
-                    chipset_str = f"{self.device_model} - {self.chipset}"
-                elif self.device_model:
-                    chipset_str = self.device_model
-                elif self.chipset:
-                    chipset_str = self.chipset
-                else:
-                    chipset_str = self.config.get('report', {}).get('chipset', 'Mobile Devices')
-                
+                hardware_info_by_test = {}
+                try:
+                    from hardware.manager import get_hardware_report_for_session
+                    hardware_info_by_test = get_hardware_report_for_session(session)
+                except Exception:
+                    pass
+
+                # "Android, SM-S711B" style label for the report header
+                platform_label = self._platform_label()
+                app_version = read_app_version()
+
+
                 # Try to get Appium log URL if not already captured
                 appium_log_url = getattr(self, 'appium_log_url', None)
                 if not appium_log_url:
@@ -375,25 +394,31 @@ class PytestReportPlugin:
                     test_results=self.test_results,
                     run_id=self.run_id,
                     test_lab=self.config.get('report', {}).get('test_lab', 'Pune'),
-                    chipset=chipset_str,
+                    chipset=platform_label,
                     execution_time=execution_time,
-                    appium_log_url=appium_log_url
+                    appium_log_url=appium_log_url,
+                    hardware_info_by_test=hardware_info_by_test,
+                    app_version=app_version,
                 )
                 
                 if report_path:
                     # Generate report URL
                     if self.artifact_host:
                         report_url = self.artifact_host.get_artifact_url(report_path)
-                        # Replace localhost/127.0.0.1 with esp-auto-mac.local if needed
+                        # Rewrite loopback hosts to this machine's name so links work off-box.
                         if report_url and ('localhost' in report_url or '127.0.0.1' in report_url):
-                            report_url = report_url.replace('localhost', 'esp-auto-mac.local').replace('127.0.0.1', 'esp-auto-mac.local')
+                            host = socket.gethostname()
+                            report_url = report_url.replace('localhost', host).replace('127.0.0.1', host)
                     else:
                         report_url = None
                     
+                    # Persist run summary for CI post-steps (MR comment, notifications)
+                    self._write_run_summary(report_path, report_url)
+
                     # Send email if configured
                     if self.email_sender and self.config.get('email', {}).get('send_on_completion', False):
                         self._send_report_email(report_path, report_url)
-                    
+
                     # Run cleanup of old artifacts
                     try:
                         from utils.artifact_cleanup import cleanup_old_artifacts
@@ -409,6 +434,61 @@ class PytestReportPlugin:
             except Exception as e:
                 logger.error(f"Error generating report: {e}")
     
+    def _platform_label(self) -> str:
+        """Report header value: 'Android, SM-S711B' / 'iOS, iPhone Air'."""
+        model = self.device_model or ""
+        platform = ""
+        try:
+            with open("config/mobiles.yaml") as f:
+                mobiles = yaml.safe_load(f) or {}
+            platform = str((mobiles.get("mobiles", {}).get(model) or {}).get("platform", ""))
+        except Exception:
+            pass
+        if platform and model:
+            return f"{platform}, {model}"
+        return model or platform or "Mobile Devices"
+
+    def _write_run_summary(self, report_path: str, report_url: str = None):
+        """
+        Persist run summary JSON for CI post-steps (e.g. scripts/notify_mr.py).
+
+        Written to reports/last_run_summary.json relative to test/.
+        """
+        try:
+            # Bucket each test exactly once so the totals always sum to total_tests.
+            total_pass = sum(1 for t in self.test_results if t['outcome'] == 'passed')
+            total_fail = sum(1 for t in self.test_results if t['outcome'] == 'failed')
+            total_skip = sum(1 for t in self.test_results if t['outcome'] == 'skipped')
+            total_tests = len(self.test_results)
+            total_abort = total_tests - total_pass - total_fail - total_skip
+            graded = total_pass + total_fail + total_abort
+            pass_pct = (total_pass / graded * 100) if graded else 0
+            if total_fail == 0 and total_abort == 0:
+                run_status = 'ALL PASSED'
+            elif pass_pct >= 70:
+                run_status = 'MOSTLY PASSED'
+            else:
+                run_status = 'FAILED'
+            summary = {
+                'run_id': self.run_id,
+                'model': getattr(self, 'device_model', None) or '',
+                'report_path': report_path,
+                'report_url': report_url or '',
+                'total_tests': total_tests,
+                'total_pass': total_pass,
+                'total_fail': total_fail,
+                'total_skip': total_skip,
+                'total_abort': total_abort,
+                'pass_percentage': round(pass_pct, 1),
+                'status': run_status,
+            }
+            out_dir = Path('reports')
+            out_dir.mkdir(parents=True, exist_ok=True)
+            (out_dir / 'last_run_summary.json').write_text(json.dumps(summary, indent=2))
+            logger.info("Run summary written: reports/last_run_summary.json")
+        except Exception as e:
+            logger.warning(f"Could not write run summary: {e}")
+
     def _send_report_email(self, report_path: str, report_url: str = None):
         """Send report email to stakeholders"""
         if not self.email_sender:
@@ -460,8 +540,14 @@ class PytestReportPlugin:
             recipients_config = stakeholders_config.get('default', {})
             logger.info(f"Using 'default' stakeholder list for email recipients")
         
-        recipients = recipients_config.get('recipients', [])
-        
+        recipients = list(recipients_config.get('recipients', []))
+
+        # Always notify the person whose change triggered the CI pipeline
+        trigger_email = os.environ.get("GITLAB_USER_EMAIL", "").strip()
+        if trigger_email and trigger_email not in recipients:
+            recipients.append(trigger_email)
+            logger.info(f"Added pipeline triggerer to recipients: {trigger_email}")
+
         if not recipients:
             logger.warning("No email recipients configured")
             return
@@ -470,26 +556,30 @@ class PytestReportPlugin:
         total_pass = sum(1 for t in self.test_results if t['outcome'] == 'passed' and not t.get('retry'))
         total_fail = sum(1 for t in self.test_results if t['outcome'] == 'failed')
         total_retry = sum(1 for t in self.test_results if t.get('retry', False))
-        total_abort = sum(1 for t in self.test_results if t['outcome'] not in ['passed', 'failed'])
+        total_skip = sum(1 for t in self.test_results if t['outcome'] == 'skipped')
         total_tests = len(self.test_results)
+        # Skipped tests are intentional non-runs — exclude from the pass ratio.
+        total_abort = total_tests - total_pass - total_fail - total_retry - total_skip
         effective_pass = total_pass + total_retry
-        pass_percentage = round((effective_pass / total_tests * 100), 1) if total_tests > 0 else 0
-        
+        graded = total_tests - total_skip
+        pass_percentage = round((effective_pass / graded * 100), 1) if graded > 0 else 0
+
         summary_stats = {
             'total_pass': total_pass,
             'total_fail': total_fail,
             'total_retry': total_retry,
+            'total_skip': total_skip,
             'total_abort': total_abort,
             'total_tests': total_tests,
             'pass_percentage': pass_percentage
         }
-        
+
         # Determine status for subject (effective_pass = pass + pass-on-retry)
-        if total_tests > 0 and effective_pass == 0 and total_fail == 0:
+        if graded > 0 and effective_pass == 0 and total_fail == 0:
             status = "ABORTED"
-        elif total_fail == 0:
+        elif total_fail == 0 and total_abort == 0:
             status = "ALL PASSED"
-        elif pass_percentage > 70:
+        elif pass_percentage >= 70:
             status = "MOSTLY PASSED"
         else:
             status = "FAILED"
@@ -499,7 +589,10 @@ class PytestReportPlugin:
         subject_template = email_config.get('subject_template', 'Test Report - {date} - {status}')
         date_str = datetime.now().strftime("%d-%m-%Y")
         subject = subject_template.format(date=date_str, status=status)
-        
+        app_version = read_app_version()
+        if app_version:
+            subject = f"{subject} - v{app_version}"
+
         # Send email
         attach_report = email_config.get('attach_report', True)
         attach_screenshot = email_config.get('attach_screenshot', True)
@@ -510,7 +603,8 @@ class PytestReportPlugin:
             report_url=report_url,
             summary_stats=summary_stats,
             attach_report=attach_report,
-            attach_screenshot=attach_screenshot
+            attach_screenshot=attach_screenshot,
+            app_version=app_version
         )
         
         if success:

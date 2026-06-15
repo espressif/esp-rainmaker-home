@@ -1,0 +1,35 @@
+{
+  "title": {
+    "by": "id",
+    "value": "title",
+    "text": "Scan Bluetooth Devices"
+  },
+  "scanning_indicator": {
+    "by": "id",
+    "value": "scanning_devices_scan_ble"
+  },
+  "device_list": {
+    "by": "id",
+    "value": "scroll_scan_ble"
+  },
+  "device_card": {
+    "by": "id",
+    "value": "button_scanned_device_ble"
+  },
+  "device_name_text": {
+    "by": "id",
+    "value": "text_device_name"
+  },
+  "all_devices_title": {
+    "by": "id",
+    "value": "text_all_devices_title"
+  },
+  "rescan_button": {
+    "by": "id",
+    "value": "button_rescan_scan_soft_ap"
+  },
+  "button_permission": {
+    "by": "id",
+    "value": "button_permission"
+  }
+}

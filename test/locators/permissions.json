@@ -1,0 +1,55 @@
+{
+  "_comment": "System permission dialog locators. Union XPaths cover both platforms: the foreign branch simply matches nothing.",
+  "allow_button": {
+    "by": "xpath",
+    "value": "//android.widget.Button[@resource-id='com.android.permissioncontroller:id/permission_allow_button'] | //XCUIElementTypeButton[@name='Allow']"
+  },
+  "allow_while_using": {
+    "by": "xpath",
+    "value": "//android.widget.Button[@resource-id='com.android.permissioncontroller:id/permission_allow_foreground_only_button'] | //XCUIElementTypeButton[@name='Allow While Using App']"
+  },
+  "while_using_button": {
+    "by": "xpath",
+    "value": "//android.widget.Button[@resource-id='com.android.permissioncontroller:id/permission_allow_foreground_only_button'] | //XCUIElementTypeButton[@name='Allow While Using App']"
+  },
+  "always_allow": {
+    "by": "xpath",
+    "value": "//android.widget.Button[@resource-id='com.android.permissioncontroller:id/permission_allow_always_button'] | //XCUIElementTypeButton[@name='Always Allow']"
+  },
+  "deny_button": {
+    "by": "xpath",
+    "value": "//android.widget.Button[@resource-id='com.android.permissioncontroller:id/permission_deny_button'] | //XCUIElementTypeButton[@name=\"Don't Allow\"]"
+  },
+  "dont_allow_button": {
+    "by": "xpath",
+    "value": "//XCUIElementTypeButton[@name=\"Don't Allow\"]"
+  },
+  "generic_allow": {
+    "by": "xpath",
+    "value": "//android.widget.Button[@text='Allow' or @text='ALLOW' or @text='OK'] | //XCUIElementTypeButton[@name='Allow' or @name='OK' or @name='Allow Once']"
+  },
+  "generic_deny": {
+    "by": "xpath",
+    "value": "//android.widget.Button[@text='Deny' or @text='DENY' or @text='Cancel'] | //XCUIElementTypeButton[@name=\"Don't Allow\" or @name='Cancel']"
+  },
+  "samsung_allow": {
+    "by": "xpath",
+    "value": "//android.widget.Button[@resource-id='com.android.permissioncontroller:id/permission_allow_button' or @text='Allow']"
+  },
+  "samsung_deny": {
+    "by": "xpath",
+    "value": "//android.widget.Button[@resource-id='com.android.permissioncontroller:id/permission_deny_button' or @text='Deny']"
+  },
+  "xiaomi_allow": {
+    "by": "xpath",
+    "value": "//android.widget.Button[@text='Allow' or @text='Accept']"
+  },
+  "xiaomi_deny": {
+    "by": "xpath",
+    "value": "//android.widget.Button[@text='Deny' or @text='Refuse']"
+  },
+  "android_permission_dialog": {
+    "by": "xpath",
+    "value": "//*[@resource-id='com.android.permissioncontroller:id/grant_dialog']"
+  }
+}

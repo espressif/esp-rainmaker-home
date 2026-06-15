@@ -9,16 +9,17 @@ Main conftest.py with Appium 2 standalone server support
 import pytest
 from pytest_bdd import when, given, then, parsers
 import yaml
-import pathlib
 import sys
 import logging
 import atexit
 import os
 import subprocess
 from pathlib import Path
-from typing import List, Optional, Dict
-# Configure logging early (before other imports that might use logger)
-logging.basicConfig(level=logging.WARNING, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+from typing import Optional
+# Logging is captured by pytest itself (see pytest.ini: log_level / log_format).
+# We deliberately do NOT add a root StreamHandler here — it would also emit every
+# record to stderr, which pytest captures separately, duplicating each log line
+# (in a second format) in the per-test report logs.
 logger = logging.getLogger(__name__)
 
 # Appium imports
@@ -38,6 +39,7 @@ from utils.api_user_helper import ApiUserHelper
 from utils.registered_user_resolver import (
     load_deployment_config,
     load_registered_users,
+    mutate_registered_users,
     resolve_registered_user_password,
 )
 
@@ -76,15 +78,6 @@ def _deployment_config_path() -> Path:
     return _repo_root() / "config" / "deployment.yaml"
 
 
-def _save_registered_users(config: dict, deployment: str, users: List[Dict[str, str]]) -> None:
-    config.setdefault(deployment, {})
-    config[deployment]["registered_users"] = users
-    config_path = _deployment_config_path()
-    with open(config_path, "w") as f:
-        yaml.safe_dump(config, f, default_flow_style=False)
-    logger.info("Saved %s registered users to %s", len(users), config_path)
-
-
 def _load_deployment_config(deployment: str) -> dict:
     config = load_deployment_config(deployment)
     logger.info("Loaded deployment config for '%s' from %s", deployment, _deployment_config_path())
@@ -94,6 +87,7 @@ def _load_deployment_config(deployment: str) -> dict:
 @pytest.fixture(scope="session")
 def api_user_factory(pytestconfig):
     deployment = pytestconfig.getoption("--deployment")
+    model = pytestconfig.getoption("--model", default=None)
     config = _load_deployment_config(deployment)
     env_config = config.get(deployment, {})
     base_uri = env_config.get("uri")
@@ -101,18 +95,17 @@ def api_user_factory(pytestconfig):
     if not base_uri:
         raise ValueError(f"Missing 'uri' for deployment '{deployment}' in config/deployment.yaml")
     helper = ApiUserHelper(base_uri)
-    users = load_registered_users(config, deployment)
-    logger.info("Loaded %s registered users for '%s'", len(users), deployment)
+    users = load_registered_users(config, deployment, model)
+    logger.info("Loaded %s registered users for %s/%s", len(users), deployment, model)
 
     def create_users(count: int = 1, user_password: Optional[str] = None):
-        nonlocal users, config
-        config = _load_deployment_config(deployment)
-        users = load_registered_users(config, deployment)
-        logger.info("Creating %s registered user(s) via API for '%s'", count, deployment)
-        for _ in range(count):
-            created = helper.create_and_confirm_user(user_password or password)
-            users.append(created)
-        _save_registered_users(config, deployment, users)
+        nonlocal users
+        logger.info("Creating %s registered user(s) via API for %s/%s", count, deployment, model)
+        # Create via API first (slow network), then persist under the lock so the
+        # brief read-modify-write doesn't block concurrent runs the whole time.
+        created = [helper.create_and_confirm_user(user_password or password) for _ in range(count)]
+        users = mutate_registered_users(deployment, model, lambda existing: existing + created)
+        logger.info("Saved %s registered users for %s/%s", len(users), deployment, model)
         return users if count > 1 else users[-1]
 
     return create_users
@@ -122,17 +115,16 @@ def api_user_factory(pytestconfig):
 def registered_user_resolver(pytestconfig, api_user_factory):
     def resolve(user_token: str, password: Optional[str] = None) -> str:
         deployment = pytestconfig.getoption("--deployment")
+        model = pytestconfig.getoption("--model", default=None)
         config = _load_deployment_config(deployment)
         if user_token.startswith("registered user"):
             parts = user_token.split()
             index = int(parts[-1]) if len(parts) > 2 and parts[-1].isdigit() else 1
             index = max(1, index)
-            users = load_registered_users(config, deployment)
+            users = load_registered_users(config, deployment, model)
             logger.info(
-                "Resolving %s for '%s': have %s registered user(s)",
-                user_token,
-                deployment,
-                len(users),
+                "Resolving %s for %s/%s: have %s registered user(s)",
+                user_token, deployment, model, len(users),
             )
             if len(users) < index:
                 missing = index - len(users)
@@ -142,10 +134,10 @@ def registered_user_resolver(pytestconfig, api_user_factory):
                     return created["email"]
                 users = created
                 if len(users) < index:
-                    users = load_registered_users(config, deployment)
+                    users = load_registered_users(config, deployment, model)
             if len(users) < index:
                 raise IndexError(
-                    f"Registered users not available for '{user_token}' in deployment '{deployment}'"
+                    f"Registered users not available for '{user_token}' in {deployment}/{model}"
                 )
             logger.info("Resolved %s from deployment config", user_token)
             return users[index - 1]["email"]
@@ -159,8 +151,73 @@ def registered_user_resolver(pytestconfig, api_user_factory):
 def registered_user_password_resolver(pytestconfig):
     def resolve(user_token: str) -> str:
         deployment = pytestconfig.getoption("--deployment")
-        return resolve_registered_user_password(user_token, deployment)
+        model = pytestconfig.getoption("--model", default=None)
+        return resolve_registered_user_password(user_token, deployment, model)
     return resolve
+
+
+@pytest.fixture(scope="function")
+def provision_config_resolver(hardware_config):
+    """Resolve provisioning tokens (ssid, ssid_password, ...) from esp_devices.yaml wifi section."""
+    return hardware_config.provision_value
+
+
+@pytest.fixture(scope="session")
+def hardware_config():
+    """Load esp_devices.yaml hardware configuration once per session."""
+    from hardware.config import HardwareConfig
+
+    return HardwareConfig.load()
+
+
+@pytest.fixture(scope="session")
+def resource_manager(hardware_config):
+    """Shared hardware service factory for the pytest session."""
+    from hardware.manager import ResourceManager
+
+    manager = ResourceManager.get_instance(hardware_config)
+    manager.refresh_inventory()
+    return manager
+
+
+@pytest.fixture(scope="function")
+def hardware_session(request, resource_manager, per_test_debug_dir):
+    """
+    Mutable per-test hardware context populated by BDD steps.
+
+    Steps orchestrate: allocate → reset → flash → serial log → release.
+    """
+    session = {
+        "requirement": None,
+        "resource": None,        # most-recently acquired chip (single-chip tests)
+        "resources": [],         # every chip acquired this test (multi-chip safe)
+        "build_metadata": None,
+        "firmware_image": None,
+        "artifact_dir": per_test_debug_dir,
+        "failed": False,
+        "error": "",
+        "test_name": request.node.nodeid,
+    }
+    yield session
+
+    # Release every chip the test acquired (fall back to the single slot).
+    resources = session.get("resources") or ([session["resource"]] if session.get("resource") else [])
+    if any(r.qr_payload for r in resources):
+        from hardware.qr import QrDisplay
+
+        QrDisplay.close()  # never leave the QR preview behind on failures
+    for resource in resources:
+        try:
+            resource_manager.serial_logger.stop(resource)
+        except Exception as error:
+            logger.warning("Serial stop during teardown failed for %s: %s", resource.mac_address, error)
+        resource_manager.release(
+            resource.mac_address,
+            failed=session.get("failed", False),
+            error=session.get("error", ""),
+        )
+
+    return session
 
 
 @when(parsers.parse('user login with "{email}" and "{password}"'))
@@ -243,7 +300,6 @@ def _get_model_index_based_port(model: str, base_port: int = 4444, port_incremen
 def pytest_addoption(parser):
     """Add custom command line options"""
     parser.addoption("--model", action="store", help="Device model (e.g., SM-M315F) or comma-separated models")
-    parser.addoption("--chip", action="store", help="ESP chip types (e.g., esp32,esp32s2)")
     parser.addoption("--base-port", action="store", default=4444, type=int, help="Base port for Appium servers")
     parser.addoption("--start-servers", action="store_true", default=True, help="Auto-start Appium servers")
     parser.addoption("--debug-dir", action="store", default="debug", help="Debug artifacts directory")
@@ -324,11 +380,8 @@ def pytest_configure(config):
     config.addinivalue_line("markers", "sanity: mark test as sanity test")
     config.addinivalue_line("markers", "smoke: mark test as smoke test")
     config.addinivalue_line("markers", "regression: mark test as regression test")
-    config.addinivalue_line("markers", "login: mark test as login-related")
-    config.addinivalue_line("markers", "ui: mark test as UI validation test")
-    config.addinivalue_line("markers", "negative: mark test as negative test case")
-    config.addinivalue_line("markers", "navigation: mark test as navigation test")
-    config.addinivalue_line("markers", "bdd: mark test as BDD scenario test")
+    config.addinivalue_line("markers", "user_management: mark test as user management test")
+    config.addinivalue_line("markers", "provisioning: mark tests ESP provisioning test")
 
 def pytest_unconfigure(config):
     """Cleanup when pytest exits"""
@@ -441,43 +494,48 @@ def _install_android_app(adb_path: str, udid: Optional[str], apk_path: str, pack
 
 def _uninstall_ios_app(udid: Optional[str], bundle_id: str, model: str) -> bool:
     """
-    Uninstall iOS app using ideviceinstaller.
-    
+    Uninstall iOS app using devicectl (ships with Xcode), with
+    ideviceinstaller as fallback for hosts without Xcode.
+
     Args:
-        udid: Device UDID (optional)
+        udid: Device UDID (required for devicectl)
         bundle_id: App bundle ID
         model: Device model name for logging
-        
+
     Returns:
         True if app was uninstalled or not found, False on error
     """
     try:
-        # Build ideviceinstaller command
-        idevice_cmd = ["ideviceinstaller"]
         if udid:
-            idevice_cmd.extend(["-u", udid])
-        
-        # Check if app is installed
-        list_cmd = idevice_cmd + ["-l"]
-        result = subprocess.run(list_cmd, capture_output=True, text=True, timeout=10)
-        
+            uninstall_cmd = ["xcrun", "devicectl", "device", "uninstall", "app",
+                             "--device", udid, bundle_id]
+            result = subprocess.run(uninstall_cmd, capture_output=True, text=True, timeout=60)
+            if result.returncode == 0:
+                logger.info(f"Uninstalled {bundle_id} from {model} via devicectl")
+                return True
+            # Not installed comes back as an error from devicectl — treat as success
+            if "was not found" in (result.stderr or "") or "not installed" in (result.stderr or "").lower():
+                logger.info(f"App {bundle_id} is not installed on {model}")
+                return True
+            logger.warning(f"devicectl uninstall failed: {result.stderr.strip()[:200]}")
+
+        # Fallback: ideviceinstaller (libimobiledevice)
+        idevice_cmd = ["ideviceinstaller"] + (["-u", udid] if udid else [])
+        result = subprocess.run(idevice_cmd + ["-l"], capture_output=True, text=True, timeout=10)
         if result.returncode == 0 and bundle_id in result.stdout:
-            logger.info(f"App {bundle_id} is installed on {model}, uninstalling...")
-            uninstall_cmd = idevice_cmd + ["-U", bundle_id]
-            uninstall_result = subprocess.run(uninstall_cmd, capture_output=True, text=True, timeout=60)
-            
+            uninstall_result = subprocess.run(
+                idevice_cmd + ["-U", bundle_id], capture_output=True, text=True, timeout=60
+            )
             if uninstall_result.returncode == 0:
                 logger.info(f"Successfully uninstalled {bundle_id} from {model}")
                 return True
-            else:
-                logger.warning(f"Failed to uninstall {bundle_id}: {uninstall_result.stderr}")
-                return False
-        else:
-            logger.info(f"App {bundle_id} is not installed on {model}")
-            return True  # Not installed is considered success
-            
+            logger.warning(f"Failed to uninstall {bundle_id}: {uninstall_result.stderr}")
+            return False
+        logger.info(f"App {bundle_id} is not installed on {model}")
+        return True  # Not installed is considered success
+
     except FileNotFoundError:
-        logger.error("ideviceinstaller not found. Install libimobiledevice: brew install libimobiledevice")
+        logger.error("Neither devicectl (Xcode) nor ideviceinstaller available for iOS uninstall")
         return False
     except subprocess.TimeoutExpired:
         logger.error(f"Uninstall timeout for {bundle_id} on {model}")
@@ -489,14 +547,15 @@ def _uninstall_ios_app(udid: Optional[str], bundle_id: str, model: str) -> bool:
 
 def _install_ios_app(udid: Optional[str], ipa_path: str, bundle_id: str, model: str) -> bool:
     """
-    Install iOS app using ideviceinstaller.
-    
+    Install iOS app using devicectl (ships with Xcode), with
+    ideviceinstaller as fallback for hosts without Xcode.
+
     Args:
-        udid: Device UDID (optional)
+        udid: Device UDID (required for devicectl)
         ipa_path: Path to IPA file
         bundle_id: App bundle ID
         model: Device model name for logging
-        
+
     Returns:
         True if installation successful, False otherwise
     """
@@ -504,26 +563,30 @@ def _install_ios_app(udid: Optional[str], ipa_path: str, bundle_id: str, model: 
         if not os.path.exists(ipa_path):
             logger.error(f"IPA file not found: {ipa_path}")
             return False
-        
-        # Build ideviceinstaller command
-        idevice_cmd = ["ideviceinstaller"]
-        if udid:
-            idevice_cmd.extend(["-u", udid])
-        
-        # Install IPA
+
         logger.info(f"Installing {bundle_id} on {model} from {ipa_path}")
-        install_cmd = idevice_cmd + ["-i", ipa_path]
-        install_result = subprocess.run(install_cmd, capture_output=True, text=True, timeout=120)
-        
+        if udid:
+            install_cmd = ["xcrun", "devicectl", "device", "install", "app",
+                           "--device", udid, ipa_path]
+            result = subprocess.run(install_cmd, capture_output=True, text=True, timeout=180)
+            if result.returncode == 0:
+                logger.info(f"Successfully installed {bundle_id} on {model} via devicectl")
+                return True
+            logger.warning(f"devicectl install failed: {result.stderr.strip()[:200]}")
+
+        # Fallback: ideviceinstaller (libimobiledevice)
+        idevice_cmd = ["ideviceinstaller"] + (["-u", udid] if udid else [])
+        install_result = subprocess.run(
+            idevice_cmd + ["-i", ipa_path], capture_output=True, text=True, timeout=120
+        )
         if install_result.returncode == 0:
             logger.info(f"Successfully installed {bundle_id} on {model}")
             return True
-        else:
-            logger.error(f"Failed to install {bundle_id}: {install_result.stderr}")
-            return False
-            
+        logger.error(f"Failed to install {bundle_id}: {install_result.stderr}")
+        return False
+
     except FileNotFoundError:
-        logger.error("ideviceinstaller not found. Install libimobiledevice: brew install libimobiledevice")
+        logger.error("Neither devicectl (Xcode) nor ideviceinstaller available for iOS install")
         return False
     except subprocess.TimeoutExpired:
         logger.error(f"Install timeout for {bundle_id} on {model}")
@@ -695,21 +758,11 @@ def driver(request, appium_grid, app_installer):
                 pass  # Ignore cleanup errors
 
 def _expected_app_version_display() -> str:
-    """Expected app version string as shown in UI (e.g. 'Version 3.5.0'). Loads .env"""
-    repo = _repo_root()
-    env_path = repo.parent / ".env"
-    
-    if env_path.exists():
-        try:
-            with open(env_path) as f:
-                for line in f:
-                    if line.strip().startswith("APP_VERSION="):
-                        v = line.split("=", 1)[1].strip().strip('"').strip("'")
-                        if v:
-                            return f"Version {v}"
-        except Exception:
-            logger.warning(f"Error loading .env file: {e}")
-    return "Version N/A"
+    """Expected app version string as shown in UI (e.g. 'Version 3.5.0')."""
+    from utils.common_utils import read_app_version
+
+    version = read_app_version()
+    return f"Version {version}" if version else "Version N/A"
 
 
 @pytest.fixture(scope="session")
@@ -718,65 +771,53 @@ def expected_app_version():
     return _expected_app_version_display()
 
 
+@pytest.fixture(autouse=True)
+def per_test_debug_dir(request):
+    """Per-test artifact folder: test/debug/YYYYMMDD_HHMMSS_<test_name>/."""
+    from hardware.artifacts import TestArtifactDir
+
+    existing = getattr(request.node, "_test_artifact_dir", None)
+    if existing is not None:
+        yield existing
+        return
+
+    debug_root = request.config.getoption("--debug-dir", "debug")
+    artifact_dir = TestArtifactDir.for_test(request.node, debug_root=debug_root)
+    request.node._test_artifact_dir = artifact_dir
+    yield artifact_dir
+
+
 @pytest.fixture(scope="function")
-def helper(driver):
+def helper(driver, per_test_debug_dir, request):
     """Page helper manager fixture providing access to all page helpers"""
     if not driver:
         pytest.skip("No driver available")
-    return PageHelperManager(driver)
+    page_helper = PageHelperManager(driver)
+    page_helper._test_artifact_dir = per_test_debug_dir
+    return page_helper
 
 # Autouse fixtures for automatic screen recording
 @pytest.fixture(autouse=True)
-def auto_screen_recording(request, driver):
+def auto_screen_recording(request, driver, per_test_debug_dir):
     """Automatically start screen recording for each test"""
     global debug_helper
-    
+
     # Skip if no driver or recording disabled
     if not driver or not debug_helper or not request.config.getoption("--enable-recording"):
         yield
         return
-    
-    test_name = request.node.name
+
     model = driver._test_info.get('model', 'unknown')
-    
+
     # Start recording
-    recording_id = debug_helper.start_screen_recording(driver, test_name)
-    
+    recording_id = debug_helper.start_screen_recording(driver, per_test_debug_dir)
+
     # Store recording info for cleanup
     if recording_id:
         setattr(request.node, '_recording_id', recording_id)
-        logger.info(f"Started automatic recording for {test_name} on {model}")
-    
-    yield  # Test runs here
+        logger.info(f"Started automatic recording for {request.node.name} on {model}")
 
-@pytest.fixture(scope="function")
-def esp_device_config(request):
-    """Provide ESP device configuration based on model and chip"""
-    models = request.config.getoption("--model")
-    chip = request.config.getoption("--chip")
-    
-    if not models or not chip:
-        return {}
-    
-    model = models.split(",")[0].strip()
-    
-    if not grid_manager:
-        return {}
-        
-    esp_config = grid_manager.esp_devices_config
-    
-    if model in esp_config:
-        device_esp_config = esp_config[model]
-        chips = [c.strip() for c in chip.split(",")]
-        
-        result = {}
-        for chip_type in chips:
-            if chip_type in device_esp_config:
-                result[chip_type] = device_esp_config[chip_type]
-        
-        return result
-    
-    return {}
+    yield  # Test runs here
 
 @pytest.fixture(scope="function")
 def config(request):
@@ -813,6 +854,54 @@ def config(request):
     logger.warning(f"No test_data.yaml found in {test_dir}")
     return {}
 
+def _find_chip_serial_log_path(item) -> Optional[Path]:
+    """Resolve chip UART log path from hardware session or artifact directory."""
+    serial_path = getattr(item, "_chip_serial_log_path", None)
+    if serial_path:
+        return Path(serial_path)
+
+    if not hasattr(item, "funcargs"):
+        return None
+    hardware_session = item.funcargs.get("hardware_session")
+    if not hardware_session:
+        return None
+    resource = hardware_session.get("resource")
+    if not resource:
+        return None
+
+    if resource.serial_log_path:
+        return Path(resource.serial_log_path)
+
+    artifact_dir = getattr(item, "_test_artifact_dir", None)
+    if artifact_dir is not None:
+        candidate = artifact_dir.serial_log_path(resource)
+        if candidate.exists():
+            return candidate
+        chip = resource.chip_type.lower()
+        mac = resource.mac_address.replace(":", "").lower()
+        for pattern in (f"{chip}_{mac}.log", f"{chip}_*.log", "esp*.log"):
+            matches = sorted(artifact_dir.root.glob(pattern))
+            if matches:
+                return matches[0]
+    return None
+
+
+def _attach_serial_log_to_report(item, report) -> None:
+    """
+    Attach the ESP chip serial log path to the test report.
+
+    The report plugin resolves the hosted URL from debug_artifacts["serial_log"]
+    (see PytestReportPlugin._resolve_artifact_url) — no URL handling here.
+    """
+    serial_path = _find_chip_serial_log_path(item)
+    if not serial_path or not serial_path.exists() or serial_path.stat().st_size == 0:
+        return
+
+    report.debug_artifacts = getattr(report, "debug_artifacts", {})
+    report.debug_artifacts["serial_log"] = str(serial_path)
+    report.debug_artifacts["chip_serial_log_name"] = serial_path.name
+
+
 # Test execution hooks with automatic debug capabilities
 @pytest.hookimpl(hookwrapper=True)
 def pytest_runtest_makereport(item, call):
@@ -822,6 +911,30 @@ def pytest_runtest_makereport(item, call):
     outcome = yield
     report = outcome.get_result()
     
+    # Mark hardware allocation failed
+    if call.when == "call" and report.outcome in ("failed", "error") and hasattr(item, "funcargs"):
+        hardware_session = item.funcargs.get("hardware_session")
+        if hardware_session is not None:
+            hardware_session["failed"] = True
+            if hasattr(report, "longrepr") and report.longrepr:
+                hardware_session["error"] = str(report.longrepr)[:500]
+
+    # Save screen recording for every outcome so passing tests get a video link too.
+    # Also runs on setup failure so an already-started recorder is not orphaned.
+    stop_recording = call.when == "call" or (call.when == "setup" and report.outcome != "passed")
+    if stop_recording and debug_helper and hasattr(item, 'funcargs'):
+        driver = item.funcargs.get('driver')
+        recording_id = getattr(item, '_recording_id', None)
+        if driver and recording_id:
+            item._recording_id = None  # consumed; avoid double stop in failure capture
+            video_path = debug_helper.stop_screen_recording(
+                driver, recording_id, getattr(item, "_test_artifact_dir", None)
+            )
+            if video_path:
+                report.video_path = video_path
+                report.debug_artifacts = getattr(report, "debug_artifacts", {})
+                report.debug_artifacts["video"] = video_path
+
     # Handle test failure - automatically capture debug artifacts
     if call.when == "call" and report.outcome == "failed" and debug_helper:
         if hasattr(item, 'funcargs'):
@@ -829,7 +942,7 @@ def pytest_runtest_makereport(item, call):
             if 'driver' in item.funcargs and item.funcargs['driver']:
                 driver = item.funcargs['driver']
                 test_name = item.name
-                recording_id = getattr(item, '_recording_id', None)
+                artifact_dir = getattr(item, "_test_artifact_dir", None)
                 
                 # Get run_id and artifact_host from report plugin if available
                 run_id = None
@@ -849,23 +962,31 @@ def pytest_runtest_makereport(item, call):
                     except Exception as e:
                         logger.warning(f"Error getting run_id / artifact_host from pytest_report_plugin: {e}")
                 
-                artifacts = debug_helper.capture_all_artifacts(driver, test_name, recording_id, run_id)
-                
+                artifacts = debug_helper.capture_all_artifacts(
+                    driver, artifact_dir, run_id
+                )
+
                 # Add artifacts to report for HTML display
                 if artifacts.get('screenshot_b64'):
                     report.screenshot_b64 = artifacts['screenshot_b64']
-                
-                if artifacts.get('video'):
-                    report.video_path = artifacts['video']
-                
+
                 if artifacts:
-                    report.debug_artifacts = artifacts
+                    report.debug_artifacts = {**getattr(report, "debug_artifacts", {}), **artifacts}
                     logger.info(f"Debug artifacts captured for {test_name}: {list(artifacts.keys())}")
-                
+
                 if hasattr(report, 'sections'):
                     # Store sections for later extraction
                     report._test_sections = report.sections
-    
+
+    if call.when == "call":
+        _attach_serial_log_to_report(item, report)
+        hardware_session = item.funcargs.get("hardware_session") if hasattr(item, "funcargs") else None
+        if hardware_session and hardware_session.get("build_metadata"):
+            from hardware.manager import get_hardware_report_for_session
+
+            hw_store = get_hardware_report_for_session(item.session)
+            report.hardware_info = hw_store.get(item.nodeid, [])
+
     # Store device info for HTML report
     if hasattr(item, 'funcargs'):
         if 'driver' in item.funcargs and item.funcargs['driver']:

@@ -1,0 +1,32 @@
+{
+  "title": {
+    "by": "id",
+    "value": "title",
+    "text": "Add Device"
+  },
+  "qr_code_option": {
+    "by": "id",
+    "value": "text_add_device_selection_scan_qr_code",
+    "text": "Scan QR Code"
+  },
+  "bluetooth_option": {
+    "by": "id",
+    "value": "text_add_device_selection_bluetooth",
+    "text": "Bluetooth"
+  },
+  "soft_ap_option": {
+    "by": "id",
+    "value": "text_add_device_selection_softap",
+    "text": "SoftAP"
+  },
+  "on_network_option": {
+    "by": "id",
+    "value": "text_add_device_selection_on_network",
+    "text": "On Network"
+  },
+  "text_add_device_selection_note": {
+    "by": "id",
+    "value": "text_add_device_selection_note",
+    "text": "Please read quick user guide and choose an option to add device"
+  }
+}

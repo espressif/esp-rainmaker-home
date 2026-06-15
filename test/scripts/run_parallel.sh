@@ -9,7 +9,7 @@
 # Runs Android and iOS tests simultaneously without conflicts
 
 # Defaults
-DEVICES=("iPhone 13:esp32s2" "SM-M315F:esp32c3")
+DEVICES=("iPhone 13" "SM-M315F")
 MARKER="sanity"
 TS=$(date +"%Y-%m-%d_%H-%M-%S")
 
@@ -19,13 +19,13 @@ usage() {
     echo "Run pytest on multiple devices in parallel."
     echo ""
     echo "Options:"
-    echo "  -d, --devices DEVICES   Comma-separated list (model:chip). Default: iPhone 13:esp32s2,SM-M315F:esp32c3"
+    echo "  -d, --devices DEVICES   Comma-separated list of device models. Default: iPhone 13,SM-M315F"
     echo "  -m, --marker MARKER     Pytest marker (sanity, regression). Default: sanity"
     echo "  -h, --help             Show this help"
     echo ""
     echo "Examples:"
     echo "  $0 -m regression"
-    echo "  $0 -d 'iPhone 13:esp32s2,SM-M315F:esp32c3' -m sanity"
+    echo "  $0 -d 'iPhone 13,SM-M315F' -m sanity"
 }
 
 while [[ $# -gt 0 ]]; do
@@ -59,12 +59,10 @@ echo "Parallel tests: marker=$MARKER, devices=${DEVICES[*]}"
 echo ""
 
 run_device_tests() {
-    local DEVICE="$1"
-    local MODEL="${DEVICE%%:*}"
-    local CHIP="${DEVICE##*:}"
-    echo "$MODEL ($CHIP) started at $(date '+%H:%M:%S')"
+    local MODEL="$1"
+    echo "$MODEL started at $(date '+%H:%M:%S')"
     python3 -m pytest -m "$MARKER" --html="${MODEL}_${TS}.html" --self-contained-html \
-        --model "$MODEL" --chip "$CHIP" --tb=short --disable-warnings -v
+        --model "$MODEL" --tb=short --disable-warnings -v
     local EXIT=$?
     [[ $EXIT -eq 0 ]] && echo "$MODEL done" || echo "$MODEL failed ($EXIT)"
     return $EXIT
@@ -86,8 +84,7 @@ done
 
 echo ""
 echo "📊 ${SUCCESS}/${#DEVICES[@]} passed"
-for DEVICE in "${DEVICES[@]}"; do
-    MODEL="${DEVICE%%:*}"
+for MODEL in "${DEVICES[@]}"; do
     [[ -f "${MODEL}_${TS}.html" ]] && echo "  ✓ ${MODEL}_${TS}.html" || echo "  ✗ $MODEL: no report"
 done
 

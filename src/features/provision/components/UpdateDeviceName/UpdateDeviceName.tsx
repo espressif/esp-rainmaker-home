@@ -47,10 +47,10 @@ export const UpdateDeviceNameSection: React.FC<UpdateDeviceNameSectionProps> = (
           <View
             key={d.name}
             style={[styles.inputRow, isLast && styles.inputRowLast]}
-            {...testProps(`row_device_name_${d.name}`)}
+            {...testProps("row_device_name_name")}
           >
             <Image
-              {...testProps(`image_device_${d.name}`)}
+              {...testProps("image_device_name")}
               source={getDeviceImage(d.type, true)}
               style={styles.rowDeviceImage}
               resizeMode="contain"
@@ -65,13 +65,13 @@ export const UpdateDeviceNameSection: React.FC<UpdateDeviceNameSectionProps> = (
                     onFieldChange={(val) => setDeviceName(d.name, val)}
                     border={false}
                     marginBottom={false}
-                    qaId={`input_device_name_${d.name}`}
+                    qaId="device_name"
                   />
                 </View>
                 <View
                   style={styles.nameEditIcon}
                   pointerEvents="none"
-                  {...testProps(`icon_edit_device_name_${d.name}`)}
+                  {...testProps("icon_edit_device_name")}
                 >
                   <Edit3 size={20} color={tokens.colors.text_secondary} />
                 </View>

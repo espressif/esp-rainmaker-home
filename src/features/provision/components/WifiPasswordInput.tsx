@@ -58,7 +58,7 @@ export const WifiPasswordInput: React.FC<WifiPasswordInputProps> = ({
     />
     <TouchableOpacity
       style={styles.eyeIcon}
-      {...testProps("button_show_password_wifi")}
+      {...testProps("button_toggle_password_wifi")}
       onPress={onToggleShowPassword}
     >
       {showPassword ? (

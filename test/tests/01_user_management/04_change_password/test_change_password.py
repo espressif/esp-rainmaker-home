@@ -24,7 +24,13 @@ def on_change_password_screen_for_user(helper, login_user, registered_user_passw
     assert helper.home.check_screen_displayed(timeout=10), "Home screen is not displayed"
     helper.home.click("user_button")
     helper.user.click("settings_button")
-    helper.settings.click("account_security_item")
+    try:
+        helper.settings.click("account_security_item")
+    except Exception:
+        # On iOS the first tap on the settings gear is sometimes dropped, leaving
+        # the app on the User tab (Settings never opens). Re-open Settings once.
+        helper.user.click("settings_button")
+        helper.settings.click("account_security_item")
     helper.account_security.click("change_password_button")
     assert helper.change_password.check_screen_displayed(), "Change password screen is not displayed"
 

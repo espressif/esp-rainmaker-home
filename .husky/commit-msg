@@ -1,6 +1,6 @@
 commit_msg=$(cat "$1")
 
-pattern="^(Task|Feature|Bugfix|Hotfix|Enhancement|Release): .+"
+pattern="^(Task|Feature|Bugfix|Hotfix|Enhancement|Release|Test): .+"
 
 if ! echo "$commit_msg" | grep -qE "$pattern"; then
   echo ""
@@ -13,6 +13,7 @@ if ! echo "$commit_msg" | grep -qE "$pattern"; then
   echo "     Hotfix:       <message>"
   echo "     Enhancement:  <message>"
   echo "     Release:      <message>"
+  echo "     Test:         <message>"
   echo ""
   echo "   Your message: \"$commit_msg\""
   echo ""

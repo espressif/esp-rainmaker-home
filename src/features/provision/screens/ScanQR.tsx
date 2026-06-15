@@ -209,17 +209,20 @@ const ScannerOverlay = ({
           />
 
           {isProcessing ? (
-            <ActivityIndicator
+            <View
+              {...testProps("view_scan_processing")}
               style={{
                 position: "absolute",
                 top: 0,
                 left: 0,
                 right: 0,
                 bottom: 0,
+                justifyContent: "center",
+                alignItems: "center",
               }}
-              size={70}
-              color="#1875D6"
-            />
+            >
+              <ActivityIndicator size={70} color="#1875D6" />
+            </View>
           ) : (
             <Animated.View
               {...testProps("view_scan_line")}
@@ -284,7 +287,7 @@ const CameraPermissionScreen = ({
             : t("device.scan.qr.noCameraPermission")}
         </Text>
         <Text
-          {...testProps("text_permission_msg_scan_qr_")}
+          {...testProps("text_permission_msg_scan_qr")}
           style={[globalStyles.textGray, globalStyles.permissionDescription]}
         >
           {t("device.scan.qr.cameraPermissionRequired")}
@@ -881,7 +884,7 @@ const ScanQR = () => {
                 style={globalStyles.cameraControlsContainer}
               >
                 <TouchableOpacity
-                  {...testProps("button_toggle")}
+                  {...testProps("button_camera_toggle")}
                   style={globalStyles.cameraToggle}
                   onPress={toggleCamera}
                   disabled={isProcessing}

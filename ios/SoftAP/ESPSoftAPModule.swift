@@ -56,19 +56,11 @@ class ESPSoftAPModule: NSObject, RCTBridgeModule {
     @objc(checkSoftAPConnection:rejecter:)
   func checkSoftAPConnection(resolver resolve: @escaping RCTPromiseResolveBlock,
                              rejecter reject: @escaping RCTPromiseRejectBlock) {
-    
-    // Get current WiFi SSID
-    guard let currentSSID = getCurrentSSID() else {
-      resolve(nil)
-      return
-    }
-    
     // Test if device responds to ESP protocol
     getDeviceVersionInfo { capabilities in
       if let caps = capabilities {
-        // Return both device name and capabilities
         let result: [String: Any] = [
-          "deviceName": currentSSID,
+          "deviceName": self.getCurrentSSID() ?? "ESP SoftAP Device",
           "capabilities": caps
         ]
         resolve(result)
@@ -113,23 +105,18 @@ class ESPSoftAPModule: NSObject, RCTBridgeModule {
    * Gets device version info by sending HTTP request to the device
    */
   private func getDeviceVersionInfo(completion: @escaping ([String]?) -> Void) {
-    guard let baseUrl = getCurrentSSID() else {
-      completion(nil)
-      return
-    }
-    
     let urlString = "http://192.168.4.1/proto-ver"
     guard let url = URL(string: urlString) else {
       completion(nil)
       return
     }
-    
+
     var request = URLRequest(url: url)
     request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-type")
     request.setValue("text/plain", forHTTPHeaderField: "Accept")
     request.httpMethod = "POST"
     request.httpBody = Data("ESP".utf8)
-    request.timeoutInterval = 2.0
+    request.timeoutInterval = 5.0
     
     let task = URLSession.shared.dataTask(with: request) { data, response, error in
       guard let data = data, error == nil else {

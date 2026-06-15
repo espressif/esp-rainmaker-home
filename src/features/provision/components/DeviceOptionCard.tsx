@@ -42,14 +42,14 @@ export const DeviceOptionCard: React.FC<DeviceOptionCardProps> = ({
       <Typo
         variant="h3"
         style={styles.title}
-        qaId="text_add_device_selection_title"
+        qaId={`text_add_device_selection_${label.toLowerCase().replace(/\s+/g, "_")}`}
       >
         {label}
       </Typo>
       <Typo
         variant="body"
         style={styles.description}
-        qaId="text_add_device_selection_description"
+        qaId={`text_add_device_selection_description_${label.toLowerCase().replace(/\s+/g, "_")}`}
       >
         {description}
       </Typo>

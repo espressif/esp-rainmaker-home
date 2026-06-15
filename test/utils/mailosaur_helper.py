@@ -28,12 +28,16 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
-_DEFAULT_DOMAIN = "rhgabfsb.mailosaur.net"
 _CONFIG_PATH = Path(__file__).resolve().parents[1] / "config" / "deployment.yaml"
 
 
 def _load_mailosaur_config() -> dict:
-    """Load Mailosaur config from deployment.yaml. Prefer env vars for secrets."""
+    """
+    Load Mailosaur config from env vars / deployment.yaml (gitignored).
+
+    The account identifiers (server id, domain) are environment-specific and
+    are not hard-coded here so they stay out of source control.
+    """
     try:
         import yaml
         if _CONFIG_PATH.exists():
@@ -42,15 +46,15 @@ def _load_mailosaur_config() -> dict:
             mailosaur = config.get("mailosaur", {})
             return {
                 "api_key": os.getenv("MAILOSAUR_API_KEY") or mailosaur.get("api_key", ""),
-                "server_id": mailosaur.get("server_id", "rhgabfsb"),
-                "domain": mailosaur.get("domain", _DEFAULT_DOMAIN),
+                "server_id": os.getenv("MAILOSAUR_SERVER_ID") or mailosaur.get("server_id", ""),
+                "domain": os.getenv("MAILOSAUR_DOMAIN") or mailosaur.get("domain", ""),
             }
     except Exception as e:
         logger.warning(f"Could not load mailosaur config: {e}")
     return {
         "api_key": os.getenv("MAILOSAUR_API_KEY", ""),
-        "server_id": "rhgabfsb",
-        "domain": _DEFAULT_DOMAIN,
+        "server_id": os.getenv("MAILOSAUR_SERVER_ID", ""),
+        "domain": os.getenv("MAILOSAUR_DOMAIN", ""),
     }
 
 
@@ -79,7 +83,7 @@ class MailosaurHelper:
         Generate unique mailosaur email address for testing
         
         Returns:
-            str: Generated email address (e.g., "uuid@rhgabfsb.mailosaur.net")
+            str: Generated email address (e.g., "uuid@example.mailosaur.net")
             
         Raises:
             Exception: If email generation fails
@@ -100,7 +104,7 @@ class MailosaurHelper:
         Extract verification code from email received within specified timeout
         
         Args:
-            email_id (str): Email address to check (must be @rhgabfsb.mailosaur.net)
+            email_id (str): Email address to check (must be @example.mailosaur.net)
             timeout_minutes (int): How far back to search for emails (default: 2 minutes)
             pattern (str): Regex pattern to extract verification code
             subject_contains (str): Optional subject filter to match specific email type

@@ -1,0 +1,49 @@
+{
+    "title": {
+        "by": "id",
+        "value": "title",
+        "text": "Connecting Device"
+    },
+    "back_button": {
+        "by": "id",
+        "value": "button_back"
+    },
+    "continue_button": {
+        "by": "id",
+        "value": "button_continue_provision",
+        "text": "Continue"
+    },
+    "provisioning_step_description_text": {
+        "by": "id",
+        "value": "text_description_provision"
+    },
+    "provisioning_error_text": {
+        "by": "id",
+        "value": "text_error_provision"
+    },
+    "success_icon": {
+        "by": "id",
+        "value": "icon_succeed_provision"
+    },
+    "failed_icon": {
+        "by": "id",
+        "value": "icon_failed_provision"
+    },
+    "pending_icon": {
+        "by": "id",
+        "value": "icon_pending_provision"
+    },
+    "progress_icon": {
+        "by": "id",
+        "value": "activity_indicator_in_progress_provision"
+    },
+    "toast_title": {
+        "by": "id",
+        "value": "toast_title",
+        "text": "Device provisioned successfully"
+    },
+    "toast_message": {
+        "by": "id",
+        "value": "toast_message"
+    }
+}

@@ -73,6 +73,7 @@ const SelectDeviceRoom = () => {
           style={styles.scrollView}
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
+          {...testProps("scroll_view_select_device_room")}
         >
           <View {...testProps("view_select_device_room")} style={styles.content}>
             <SelectDeviceRoomOptions

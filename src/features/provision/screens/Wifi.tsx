@@ -90,11 +90,13 @@ const Wifi = () => {
         <KeyboardAvoidingView
           behavior={Platform.OS === "ios" ? "padding" : "height"}
           style={{ flex: 1 }}
+          {...testProps("keyboard_avoiding_view_wifi")}
         >
           <ScrollView
             contentContainerStyle={styles.content}
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
+            {...testProps("scroll_view_wifi")}
           >
             <View style={styles.imageContainer} {...testProps("view_wifi")}>
               <Image

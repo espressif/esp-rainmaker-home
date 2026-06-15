@@ -6,7 +6,9 @@ local_hosting:
   artifacts_dir: "~/esp-auto-reports/artifacts"
   reports_dir: "~/esp-auto-reports/html"
   http_server_port: 8000
-  base_url: "http://esp-auto-mac.local:8000"
+  # Leave empty to auto-use this host's name (http://<hostname>:<port>) — correct
+  # on whichever runner generates the report (e.g. the mac-mini for iOS).
+  base_url: "${REPORT_BASE_URL:-}"
   auto_start_server: false
   cleanup_days: 15
 
