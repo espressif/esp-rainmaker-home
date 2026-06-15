@@ -59,7 +59,12 @@ export async function addDeviceProvision(
       password,
       wrappedOnProgress,
       groupId,
-      provisionType
+      provisionType,
+      {
+        waitForOnline: true,
+        onlineTimeoutMs: 20000,
+        user: user._raw,
+      }
     );
   } catch (error) {
     console.error(`${LOG_PREFIX} Provision failed:`, error);

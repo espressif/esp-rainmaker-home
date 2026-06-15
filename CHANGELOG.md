@@ -5,6 +5,24 @@ All notable changes to the ESP RainMaker Home app will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.1.1]
+
+### Fixed
+
+- [RMNG] Reinitialize MQTT client on logout/login so live updates resume after account switching
+- [RMNG] Device card now reflects live MQTT connectivity changes instead of stale memoized state
+- [RMNG] Primary parameter resolution now correctly identifies power/ON-OFF params
+- [RMNG] Device name edits persist instead of reverting after save
+- [RMNG] Group sharing now uses the user code from the latest profile response
+- [RMNG] Validate default values when saving automations and schedules to prevent invalid payloads
+- Newly created rooms now appear in the room picker during provisioning
+
+### Enhanced
+
+- [RMNG] Added enable/disable flow for automations
+- [RMNG] Provisioning now waits for the device to report online before completing node setup
+- Increased param control throttle to 400 ms
+
 ## [5.1.0]
 
 ### Added

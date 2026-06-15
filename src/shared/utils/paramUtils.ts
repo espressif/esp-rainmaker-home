@@ -138,14 +138,139 @@ export function coerceParamValueToBoolean(value: unknown): boolean {
   return Boolean(value);
 }
 
+// --- Param data type resolution & value coercion ---
+
+/** Effective wire type of a param value, as the firmware understands it. */
+export type ResolvedParamDataType =
+  | "int"
+  | "float"
+  | "bool"
+  | "string"
+  | "object"
+  | "array";
+
+/** Subset of param metadata needed to resolve the effective data type. */
+export type ParamTypeMetadata = {
+  dataType?: string;
+  type?: string;
+  uiType?: string;
+  value?: unknown;
+  bounds?: Record<string, any>;
+};
+
+/**
+ * Resolves the effective data type of a param value.
+ *
+ * Normalizes the declared `dataType` (rmng-base-sdk >= 1.2.1 delivers it
+ * reliably; older versions dropped it on the node-config cache round trip).
+ * For params with no usable declaration, falls back to boolean-control
+ * labels and the current value's JS type.
+ */
+export function resolveParamDataType(
+  param: ParamTypeMetadata,
+): ResolvedParamDataType {
+  const declared = String(param.dataType ?? "").trim().toLowerCase();
+  if (declared === "int" || declared === "integer") return "int";
+  if (declared === "float" || declared === "double") return "float";
+  if (declared === "bool" || declared === "boolean") return "bool";
+  if (declared === "object") return "object";
+  if (declared === "array") return "array";
+
+  if (isBooleanControlParamByLabels(param)) return "bool";
+
+  if (typeof param.value === "number") {
+    return Number.isInteger(param.value) ? "int" : "float";
+  }
+  if (typeof param.value === "boolean") return "bool";
+  return "string";
+}
+
+/**
+ * Coerces a UI-held param value to the type the firmware expects. Always
+ * returns a value the firmware can parse — never throws or rejects.
+ *
+ * Numeric types: empty/missing/unparseable values become the lower bound
+ * (or 0) so an untouched slider saves its displayed default instead of `""`;
+ * numeric strings are converted; results are clamped to bounds and rounded
+ * for ints. Booleans reuse {@link coerceParamValueToBoolean}. Object/array
+ * values pass through untouched.
+ */
+export function coerceParamValueForDataType(
+  value: unknown,
+  dataType: ResolvedParamDataType,
+  bounds?: Record<string, any>,
+): unknown {
+  switch (dataType) {
+    case "bool":
+      return coerceParamValueToBoolean(value);
+
+    case "int":
+    case "float": {
+      const fallback = typeof bounds?.min === "number" ? bounds.min : 0;
+      let num: number;
+      if (typeof value === "number") {
+        num = value;
+      } else if (typeof value === "boolean") {
+        num = value ? 1 : 0;
+      } else if (typeof value === "string" && value.trim() !== "") {
+        num = Number(value.trim());
+      } else {
+        num = fallback;
+      }
+      if (!Number.isFinite(num)) {
+        num = fallback;
+      }
+      if (typeof bounds?.min === "number" && num < bounds.min) num = bounds.min;
+      if (typeof bounds?.max === "number" && num > bounds.max) num = bounds.max;
+      if (dataType === "int") num = Math.round(num);
+      return num;
+    }
+
+    case "object":
+    case "array":
+      return value;
+
+    case "string":
+    default: {
+      if (value == null) return "";
+      // Structured values under a string-typed param are passed through
+      // rather than stringified to "[object Object]".
+      if (typeof value === "object") return value;
+      return typeof value === "string" ? value : String(value);
+    }
+  }
+}
+
+/**
+ * Resolves a param's effective type and coerces `value` for write.
+ * Single entry point used by the schedule/automation validation layer.
+ */
+export function sanitizeWritableParamValue(
+  param: ParamTypeMetadata,
+  value: unknown,
+): { dataType: ResolvedParamDataType; value: unknown } {
+  const dataType = resolveParamDataType(param);
+  return { dataType, value: coerceParamValueForDataType(value, dataType, param.bounds) };
+}
+
 /**
  * Handles default writable param value logic for this module.
+ * Numeric params default to the lower bound rather than 0, so untouched
+ * sliders with non-zero minimums (e.g. CCT, min 2700) save an in-range value.
  */
 export function defaultWritableParamValue(param: ESPCDFDeviceParam): unknown {
-  const fromDataType = defaultValueBasedOnParamDataType(param.dataType ?? "");
-  if (fromDataType !== "") return fromDataType;
-  if (isBooleanControlParam(param)) return false;
-  return fromDataType;
+  const resolved = resolveParamDataType(param);
+  switch (resolved) {
+    case "int":
+    case "float": {
+      const min = param.bounds?.min;
+      return typeof min === "number" ? min : 0;
+    }
+    case "bool":
+      return false;
+    default:
+      return "";
+  }
 }
 
 /**

@@ -15,10 +15,15 @@ import { ESPRMNGDevice, ESPRMNGNode, ESPRMNGService } from "@espressif/rmng-base
 import type {
     ESPCDFNodeOperation,
     ESPCDFPropertyChangeCallback,
+    ESPCDFPropertyChangeEvent,
 } from "@store";
+import { syncCdfDeviceDisplayName } from "@sdk-adaptors/shared/utils/common";
 import { EVENT_NODE_PARAMS_CHANGED } from "@store";
 import { ESPRMNGBaseAdaptorIdentifier } from "@config/sdk.identifiers";
-import { HEADLESS_ERROR_UNKNOWN } from "@shared/utils/constants";
+import {
+    ESPRM_NAME_PARAM_TYPE,
+    HEADLESS_ERROR_UNKNOWN,
+} from "@shared/utils/constants";
 import { mapShadowDocumentToNodeUpdateEvents, normalizeRmngSdkResponseToCdf } from "../utils/common";
 import { safeTransform } from "@sdk-adaptors/shared/utils/safeTransform";
 import { refreshRmngNodeIfShadowNcfgVersionChanged } from "../utils/rmngNcfgVersionShadowRefresh";
@@ -30,15 +35,42 @@ import { ianaTzToEspPosixTz } from "@shared/utils/timezone";
 const MQTT_TRANSPORT_KEY = "mqtt";
 
 /**
- * Builds a no-op property-change handler for RMNG nodes until raw-node sync is implemented.
- * @param _rawNode - Mutable SDK node backing the CDF entity (reserved for future sync).
+ * Syncs CDF display names on property changes and mirrors name-param values on the raw node.
+ * @param rawNode - Mutable SDK node backing the CDF entity.
+ * @param cdfNode - Live CDF node whose derived fields stay in sync.
  * @returns Callback registered on the CDF node for property change events.
  */
 const createPropertyChangeSyncCallback = (
-    _rawNode: ESPRMNGNode,
+    rawNode: ESPRMNGNode,
+    cdfNode: ESPCDFNode,
 ): ESPCDFPropertyChangeCallback => {
-    return () => {
-        // Sync CDF changes back to raw node when needed
+    return (event: ESPCDFPropertyChangeEvent) => {
+        switch (event.type) {
+            case "deviceParamChanged": {
+                const device = rawNode.devices?.find(
+                    (candidate) => candidate.id === event.deviceName,
+                );
+                if (device) {
+                    const param = device.params?.find(
+                        (candidate) => candidate.id === event.paramName,
+                    );
+                    if (param) {
+                        param.value = event.value;
+                        if (param.type === ESPRM_NAME_PARAM_TYPE) {
+                            syncCdfDeviceDisplayName(cdfNode, event.deviceName);
+                        }
+                    }
+                }
+                break;
+            }
+            case "metadataChanged":
+                for (const device of cdfNode.devices ?? []) {
+                    syncCdfDeviceDisplayName(cdfNode, device.name);
+                }
+                break;
+            default:
+                break;
+        }
     };
 };
 
@@ -174,7 +206,7 @@ export function transformToESPCDFNode(node: ESPRMNGNode): ESPCDFNode {
         },
         _raw: node,
     });
-    const syncCallback = createPropertyChangeSyncCallback(node);
+    const syncCallback = createPropertyChangeSyncCallback(node, cdfNode);
     cdfNode.onPropertyChange(syncCallback);
 
     return cdfNode;

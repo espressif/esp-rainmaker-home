@@ -62,3 +62,9 @@ export const ESPRMNG_GROUP_USER_ACCESS_SUBGROUP = "subgroup";
 export const ESPRMNG_GROUP_SHARING_SCOPE_PARENT = "parent_group";
 // Nested room group: secondary users are subgroup-scoped members from parent list.
 export const ESPRMNG_GROUP_SHARING_SCOPE_SUBGROUP_ROOM = "subgroup_room";
+
+// Automation status type
+export const ESPRMNG_AUTOMATION_STATUS = {
+    ENABLED: "enabled",
+    DISABLED: "disabled",
+} as const;

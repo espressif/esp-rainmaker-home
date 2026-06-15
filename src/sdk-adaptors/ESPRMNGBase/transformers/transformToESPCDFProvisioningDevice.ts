@@ -62,7 +62,8 @@ export function createCDFProvisioningDeviceFromAdapterDescriptor(
             password: string,
             onProgress?: (response: any) => void,
             groupId?: string,
-            provisionType?: string
+            provisionType?: string,
+            options?: Record<string, any>
         ): Promise<void> {
             const LOG = "[RMNG-provision]";
 
@@ -81,7 +82,7 @@ export function createCDFProvisioningDeviceFromAdapterDescriptor(
             }
             const progress = onProgress ?? (() => {});
             const gid = groupId ?? "";
-            await device.provision(ssid, password, progress, gid, provisionType);
+            await device.provision(ssid, password, progress, gid, provisionType, options);
             console.log(`${LOG} WiFi provision OK`);
         },
         async initiateUserNodeMapping(_params?: Record<string, any>): Promise<any> {

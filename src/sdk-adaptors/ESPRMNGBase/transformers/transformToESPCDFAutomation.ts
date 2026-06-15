@@ -24,7 +24,6 @@ import {
 } from "@store";
 import type { ESPCDFAutomationEvent } from "@store";
 import { ESPRMNGAutomation, ESPRMNGNode } from "@espressif/rmng-base-sdk";
-import { AUTOMATION_RMNG_ENABLE_DISABLE_UNSUPPORTED_I18N_KEY } from "@shared/utils/constants";
 import {
     targetsToCdfActions,
     cdfActionsToTargets,
@@ -32,6 +31,7 @@ import {
     parseTriggerId,
 } from "../utils/automation";
 import { normalizeRmngSdkResponseToCdf } from "../utils/common";
+import { ESPRMNG_AUTOMATION_STATUS } from "../utils/constants";
 
 
 /** Resolved event objects for UI (deviceName, param, check, value). Used when trigger details are resolved in getAutomations. */
@@ -73,7 +73,7 @@ export function transformToESPCDFAutomation(
         async update(data: ESPCDFAutomationEditInput): Promise<ESPCDFAPIResponse> {
             const payload: Partial<ESPRMNGAutomation> = {};
             if (data.name !== undefined) payload.name = data.name;
-            if (data.enabled !== undefined) payload.enabled = data.enabled;
+            if (data.enabled !== undefined) payload.status = data.enabled ? ESPRMNG_AUTOMATION_STATUS.ENABLED : ESPRMNG_AUTOMATION_STATUS.DISABLED;
             if (data.retrigger !== undefined) payload.retrigger = data.retrigger;
             if (data.actions !== undefined) {
                 payload.actions = { targets: cdfActionsToTargets(data.actions) };
@@ -134,22 +134,17 @@ export function transformToESPCDFAutomation(
             }
             return normalizeRmngSdkResponseToCdf(res, "Automation deleted successfully");
         },
-        /**
-         * RMNG currently does not support the enable/disable functionality for automation.
-         * Throws an `Error` carrying `description` as an i18next key (`automation.errors.*`) for the UI layer to translate.
-         */
-        async enable(_enabled: boolean): Promise<ESPCDFAPIResponse> {
-            const description = AUTOMATION_RMNG_ENABLE_DISABLE_UNSUPPORTED_I18N_KEY;
-            const error = new Error(description) as Error & { description: string };
-            error.description = description;
-            throw error;
+        async enable(enabled: boolean): Promise<ESPCDFAPIResponse> {
+            const status = enabled ? ESPRMNG_AUTOMATION_STATUS.ENABLED : ESPRMNG_AUTOMATION_STATUS.DISABLED;
+            const res = await automation.update({ status });
+            return normalizeRmngSdkResponseToCdf(res, `Automation ${status} successfully`);
         },
     };
 
     return new ESPCDFAutomation({
         id: automation.id,
         name: automation.name,
-        enabled: automation.enabled ?? false,
+        enabled: (automation.status ?? ESPRMNG_AUTOMATION_STATUS.ENABLED) === ESPRMNG_AUTOMATION_STATUS.ENABLED,
         nodeId,
         eventType: ESPCDFAutomationEventType.NODE_PARAMS,
         events,

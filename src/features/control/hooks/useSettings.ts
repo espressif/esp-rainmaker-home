@@ -4,39 +4,30 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useEffect, useRef, useMemo, useCallback } from "react";
+import { useEffect, useRef, useMemo } from "react";
 import { useRouter, useLocalSearchParams } from "expo-router";
-import { useTranslation } from "react-i18next";
 import { useCDF } from "@shared/hooks/useCDF";
 import { ESPCDFDevice, ESPCDFNode } from "@store";
 import { ESPRM_NAME_PARAM_TYPE } from "@shared/utils/constants";
-import {
-  extractDeviceType,
-  findDeviceConfig,
-  getSubDeviceInitialDisplayName,
-  type DeviceConfig,
-} from "@shared/utils/device";
+import { getSubDeviceInitialDisplayName } from "@shared/utils/device";
 
-interface UseControlReturn {
+interface UseSettingsReturn {
   node: ESPCDFNode | undefined;
   device: ESPCDFDevice | undefined;
   displayName: string;
-  deviceType: string;
-  deviceConfig: DeviceConfig | null | undefined;
-  handleMorePress: () => void;
+  isConnected: boolean;
+  isPrimary: boolean;
 }
 
 /**
- * Resolves Control screen state from route params and the live node-store entry.
- * Reads `nodesByIDMap` so param, metadata, and connectivity updates on the
- * target node stay in sync with the store (used inside an `observer` screen).
+ * Resolves Settings screen node/device state from route params and the live node store.
+ * Mirrors {@link useControl} so param and display-name updates stay in sync with the store.
  *
- * @returns Node, device, derived display metadata, and settings navigation handler
+ * @returns Node, device, derived display name, and connectivity / role flags
  */
-export const useControl = (): UseControlReturn => {
+export const useSettings = (): UseSettingsReturn => {
   const { store } = useCDF();
   const router = useRouter();
-  const { t } = useTranslation();
   const { id, device: _device } = useLocalSearchParams<{
     id?: string;
     device?: string;
@@ -67,29 +58,13 @@ export const useControl = (): UseControlReturn => {
     }
   }, [_device, device, router]);
 
-  const handleMorePress = useCallback(() => {
-    router.push(`/(control)/Settings?id=${id}&device=${_device}`);
-  }, [router, id, _device]);
-
-  const deviceType = useMemo(
-    () => (device ? extractDeviceType(device.type) : ""),
-    [device, device?.type],
-  );
-
-  const deviceConfig = useMemo(
-    () => (deviceType ? findDeviceConfig(deviceType) : null),
-    [deviceType],
-  );
-
   const nameParamValue = device?.params?.find(
     (param) => param.type === ESPRM_NAME_PARAM_TYPE,
   )?.value as string | undefined;
 
   const displayName = useMemo(() => {
-    if (!device || !node) return t("device.control.title");
-    return (
-      getSubDeviceInitialDisplayName(device, node) || t("device.control.title")
-    );
+    if (!device || !node) return "";
+    return getSubDeviceInitialDisplayName(device, node);
   }, [
     device,
     node,
@@ -97,15 +72,16 @@ export const useControl = (): UseControlReturn => {
     device?.displayName,
     device?.name,
     node?.nodeConfig?.info?.name,
-    t,
   ]);
+
+  const isConnected = node?.connectivityStatus?.isConnected ?? false;
+  const isPrimary = node?.isPrimaryUser ?? false;
 
   return {
     node,
     device,
     displayName,
-    deviceType,
-    deviceConfig,
-    handleMorePress,
+    isConnected,
+    isPrimary,
   };
 };
