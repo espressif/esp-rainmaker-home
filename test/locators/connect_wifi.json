@@ -1,0 +1,90 @@
+{
+  "title": {
+    "by": "id",
+    "value": "title",
+    "text": "Connect to Wi-Fi"
+  },
+  "select_network_button": {
+    "by": "id",
+    "value": "button_select_network_wifi"
+  },
+  "text_selected_wifi": {
+    "by": "id",
+    "value": "text_selected_wifi",
+    "text": "Selected Network"
+  },
+  "network_selection_loading": {
+    "by": "id",
+    "value": "loading_select_network_wifi"
+  },
+  "refresh_wifi_button": {
+    "by": "id",
+    "value": "button_refresh_wifi"
+  },
+  "network_modal_title": {
+    "by": "id",
+    "value": "text_title_wifi",
+    "text": "Available Wi-Fi"
+  },
+  "close_wifi_modal_button": {
+    "by": "id",
+    "value": "button_close_wifi"
+  },
+  "text_last_used_wifi": {
+    "by": "id",
+    "value": "text_last_used_wifi",
+    "text": "Last used"
+  },
+  "wifi_password_input": {
+    "by": "id",
+    "value": "input_password",
+    "text": "Password"
+  },
+  "password_toggle_wifi": {
+    "by": "id",
+    "value": "button_toggle_password_wifi"
+  },
+  "checkbox_save_network_wifi": {
+    "by": "id",
+    "value": "checkbox_save_network_wifi"
+  },
+  "text_save_network_wifi": {
+    "by": "id",
+    "value": "text_save_network_wifi",
+    "text": "Save Wi-Fi"
+  },
+  "button_connect_wifi": {
+    "by": "id",
+    "value": "button_connect_wifi",
+    "text": "Connect"
+  },
+  "button_join_other_network_wifi": {
+    "by": "id",
+    "value": "button_join_other_network_wifi",
+    "text": "Join Other Network"
+  },
+  "ssid_join_network_wifi": {
+    "by": "id",
+    "value": "input_ssid_join_network_wifi",
+    "text": "Network Name"
+  },
+  "password_join_network_wifi": {
+    "by": "id",
+    "value": "input_password_join_network_wifi",
+    "text": "Password"
+  },
+  "cancel_join_network_wifi_button": {
+    "by": "id",
+    "value": "button_cancel_join_network_wifi",
+    "text": "Cancel"
+  },
+  "connect_join_network_wifi_button": {
+    "by": "id",
+    "value": "button_connect_join_network_wifi",
+    "text": "Connect"
+  },
+  "password_toggle_join_network": {
+    "by": "id",
+    "value": "button_toggle_password_join_network_wifi"
+  }
+}

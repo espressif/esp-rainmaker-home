@@ -13,6 +13,7 @@ import logging
 import subprocess
 from pathlib import Path
 
+from hardware.artifacts import TestArtifactDir, timestamped_test_folder_name
 from utils.common_utils import safe_test_name
 from typing import Optional, Dict
 
@@ -39,21 +40,28 @@ class DebugHelper:
                 logger.warning(f"Could not initialize artifact host: {e}")
                 self.use_artifact_host = False
     
-    def _get_test_debug_dir(self, test_name: str, timestamp: str = None) -> Path:
-        """Get test-specific debug directory: timestamp_test_name"""
-        timestamp = timestamp or time.strftime("%H%M%S_%d%m%Y")
-        safe_name = safe_test_name(test_name, max_len=120)
-        test_debug_dir = self.debug_dir / f"{timestamp}_{safe_name}"
-        test_debug_dir.mkdir(exist_ok=True)
-        return test_debug_dir
+
+    def _resolve_output_dir(
+        self, artifact_dir: TestArtifactDir
+    ) -> Path:
+        """
+        Resolve where failure artifacts are written.
+
+        Prefer the per-test artifact_dir from pytest; fall back to debug_dir.
+        """
+        root = getattr(artifact_dir, "root", artifact_dir) or self.debug_dir
+        output_dir = Path(root)
+        output_dir.mkdir(parents=True, exist_ok=True)
+        return output_dir
         
-    def capture_screenshot(self, driver, test_name: str, timestamp: str = None) -> Optional[str]:
+    def capture_screenshot(
+        self, driver, artifact_dir: TestArtifactDir
+    ) -> Optional[str]:
         """Capture screenshot and return file path"""
         try:
-            timestamp = timestamp or time.strftime("%H%M%S_%d%m%Y")
             model = getattr(driver, '_test_info', {}).get('model', 'unknown')
             
-            test_debug_dir = self._get_test_debug_dir(test_name, timestamp)
+            test_debug_dir = self._resolve_output_dir(artifact_dir)
             screenshot_path = test_debug_dir / f"screenshot_{model}.png"
             
             driver.save_screenshot(str(screenshot_path))
@@ -64,30 +72,15 @@ class DebugHelper:
             logger.error(f"Failed to capture screenshot: {e}")
             return None
     
-    def get_screenshot_base64(self, driver, test_name: str, timestamp: str = None) -> Optional[str]:
-        """
-        Get screenshot as base64 for HTML reports.
-        Captures a screenshot and returns its base64 encoding.
-        """
-        screenshot_path = self.capture_screenshot(driver, test_name, timestamp)
-        
-        if screenshot_path and os.path.exists(screenshot_path):
-            try:
-                with open(screenshot_path, 'rb') as f:
-                    return base64.b64encode(f.read()).decode()
-            except Exception as e:
-                logger.error(f"Failed to encode screenshot to base64: {e}")
-                return None
-        return None
-    
-    def capture_page_source(self, driver, test_name: str, timestamp: str = None) -> Optional[str]:
+    def capture_page_source(
+        self, driver, artifact_dir: TestArtifactDir
+    ) -> Optional[str]:
         """Capture page XML dump"""
         try:
-            timestamp = timestamp or time.strftime("%H%M%S_%d%m%Y")
             model = getattr(driver, '_test_info', {}).get('model', 'unknown')
             platform = getattr(driver, '_test_info', {}).get('platform', 'unknown')
             
-            test_debug_dir = self._get_test_debug_dir(test_name, timestamp)
+            test_debug_dir = self._resolve_output_dir(artifact_dir)
             xml_path = test_debug_dir / f"page_source_{model}.xml"
             
             # Get page source with timeout
@@ -99,7 +92,7 @@ class DebugHelper:
             
             # Save with proper encoding
             with open(xml_path, 'w', encoding='utf-8', errors='replace') as f:
-                f.write(f"<!-- Platform: {platform}, Model: {model}, Timestamp: {timestamp} -->\n")
+                f.write(f"<!-- Platform: {platform}, Model: {model} -->\n")
                 f.write(page_source)
             
             file_size = os.path.getsize(xml_path)
@@ -110,12 +103,12 @@ class DebugHelper:
             logger.error(f"Failed to capture page source: {e}")
             return None
     
-    def start_screen_recording(self, driver, test_name: str) -> Optional[str]:
+    def start_screen_recording(self, driver, artifact_dir: TestArtifactDir) -> Optional[str]:
         """Start screen recording"""
         try:
             model = getattr(driver, '_test_info', {}).get('model', 'unknown')
             platform = getattr(driver, '_test_info', {}).get('platform', 'android')
-            safe_name = safe_test_name(test_name, max_len=120)
+            safe_name = safe_test_name(artifact_dir.name, max_len=120)
             
             if platform.lower() == 'android':
                 # Android screen recording options
@@ -144,25 +137,18 @@ class DebugHelper:
             logger.error(f"Failed to start screen recording: {e}")
             return None
     
-    def stop_screen_recording(self, driver, recording_id: str, timestamp: str = None) -> Optional[str]:
+    def stop_screen_recording(
+        self,
+        driver,
+        recording_id: str,
+        artifact_dir: TestArtifactDir,
+    ) -> Optional[str]:
         """Stop screen recording and save file"""
         try:
             if not recording_id:
                 return None
-                
-            timestamp = timestamp or time.strftime("%H%M%S_%d%m%Y")
-            # Extract test name from recording_id (format: recording_test_name_model)
-            # Remove 'recording_' prefix and model suffix
-            if recording_id.startswith('recording_'):
-                parts = recording_id.split('_')
-                if len(parts) >= 3:  # recording_test_name_model
-                    test_name = '_'.join(parts[1:-1])  # Get test_name part
-                else:
-                    test_name = parts[1] if len(parts) > 1 else 'unknown'
-            else:
-                test_name = 'unknown'
             
-            test_debug_dir = self._get_test_debug_dir(test_name, timestamp)
+            test_debug_dir = self._resolve_output_dir(artifact_dir)
             video_path = test_debug_dir / f"recording.mp4"
             
             video_data = driver.stop_recording_screen()
@@ -178,21 +164,21 @@ class DebugHelper:
             logger.error(f"Failed to stop screen recording: {e}")
             return None
     
-    def capture_adb_logs(self, driver, test_name: str, timestamp: str = None) -> Optional[str]:
+    def capture_adb_logs(
+        self, driver, artifact_dir: TestArtifactDir
+    ) -> Optional[str]:
         """
         Capture app-relevant ADB logcat logs (filtered by package / last N lines).
         """
         try:
             model = getattr(driver, '_test_info', {}).get('model', 'unknown')
-            platform = getattr(driver, '_test_info', {}).get('platform', 'android')
+            platform = getattr(driver, '_test_info', {}).get('platform', 'unknown')
 
             if platform.lower() != 'android':
                 return None
 
-            timestamp = timestamp or time.strftime("%H%M%S_%d%m%Y")
-            test_debug_dir = self._get_test_debug_dir(test_name, timestamp)
-            log_path = test_debug_dir / f"adb_logs_{model}.txt"
-
+            log_path = artifact_dir.android_logcat_log()
+            
             udid = driver.capabilities.get('udid')
             adb_prefix = ['adb', '-s', udid] if udid else ['adb']
 
@@ -228,15 +214,25 @@ class DebugHelper:
             logger.error("Failed to capture ADB logs: %s", e)
             return None
     
-    def capture_all_artifacts(self, driver, test_name: str, recording_id: str = None, 
-                               run_id: str = None) -> dict:
-        """Capture all debug artifacts on test failure"""
-        timestamp = time.strftime("%H%M%S_%d%m%Y")
+    def capture_all_artifacts(
+        self,
+        driver,
+        artifact_dir: TestArtifactDir,
+        run_id: str = None,
+    ) -> dict:
+        """
+        Capture failure artifacts: screenshot, page source, ADB logs.
+
+        Screen recordings are stopped per-outcome in conftest
+        pytest_runtest_makereport, not here.
+        """
         artifacts = {}
         artifact_paths = {}
         
         # Screenshot
-        screenshot_path = self.capture_screenshot(driver, test_name, timestamp)
+        screenshot_path = self.capture_screenshot(
+            driver, artifact_dir
+        )
         if screenshot_path:
             artifacts['screenshot'] = screenshot_path
             artifact_paths['screenshot'] = screenshot_path
@@ -250,20 +246,17 @@ class DebugHelper:
                 logger.error(f"Failed to encode screenshot to base64: {e}")
         
         # Page source/XML dump
-        xml_path = self.capture_page_source(driver, test_name, timestamp)
+        xml_path = self.capture_page_source(
+            driver, artifact_dir
+        )
         if xml_path:
             artifacts['page_source'] = xml_path
             artifact_paths['page_source'] = xml_path
         
-        # Screen recording
-        if recording_id:
-            video_path = self.stop_screen_recording(driver, recording_id, timestamp)
-            if video_path:
-                artifacts['video'] = video_path
-                artifact_paths['video'] = video_path
-        
         # ADB logs
-        adb_logs_path = self.capture_adb_logs(driver, test_name, timestamp)
+        adb_logs_path = self.capture_adb_logs(
+            driver, artifact_dir
+        )
         if adb_logs_path:
             artifacts['adb_logs'] = adb_logs_path
             artifact_paths['log'] = adb_logs_path
@@ -275,7 +268,7 @@ class DebugHelper:
                     self._artifact_host.current_run_id = run_id
                 
                 organized = self._artifact_host.organize_all_artifacts(
-                    artifact_paths, test_name, run_id
+                    artifact_paths, artifact_dir.name, run_id
                 )
                 
                 for artifact_type, org_data in organized.items():

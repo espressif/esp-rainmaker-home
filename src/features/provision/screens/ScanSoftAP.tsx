@@ -608,7 +608,7 @@ const AndroidScanSoftAP = () => {
 
         // Check if device requires POP (Proof of Possession)
         if (
-          !deviceCapabilities.includes("no_pop") ||
+          !deviceCapabilities.includes("no_pop") &&
           !deviceCapabilities.includes("no_sec")
         ) {
           // Navigate to POP screen

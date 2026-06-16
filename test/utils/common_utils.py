@@ -65,6 +65,28 @@ def normalize_input(value: str) -> str:
     )
 
 
+def read_app_version() -> str:
+    """Return the app version under test from .env (APP_VERSION) or package.json."""
+    from pathlib import Path
+
+    repo_root = Path(__file__).resolve().parents[2]
+    env_path = repo_root / ".env"
+    try:
+        if env_path.exists():
+            for line in env_path.read_text().splitlines():
+                if line.strip().startswith("APP_VERSION="):
+                    version = line.split("=", 1)[1].strip().strip('"').strip("'")
+                    if version:
+                        return version
+        import json
+        package_json = repo_root / "package.json"
+        if package_json.exists():
+            return str(json.loads(package_json.read_text()).get("version", ""))
+    except Exception as error:
+        logger.warning("Could not read app version: %s", error)
+    return ""
+
+
 # --- Artifact resolution ---
 
 def resolve_single_artifact(

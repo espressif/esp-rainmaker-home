@@ -118,7 +118,7 @@ const JoinOtherNetworkModal: React.FC<JoinOtherNetworkModalProps> = ({
               autoCorrect={false}
               returnKeyType="next"
               onSubmitEditing={() => passwordInputRef.current?.focus()}
-              qaId="input_ssid_join_network_wifi"
+              qaId="ssid_join_network_wifi"
             />
 
             {/* ── Password input ── */}
@@ -139,7 +139,7 @@ const JoinOtherNetworkModal: React.FC<JoinOtherNetworkModalProps> = ({
                   handleConnect();
                 }
               }}
-              qaId="input_password_join_network_wifi"
+              qaId="password_join_network_wifi"
             />
 
             {/* ── Button row ── */}

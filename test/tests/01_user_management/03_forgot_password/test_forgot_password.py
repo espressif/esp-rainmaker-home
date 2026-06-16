@@ -67,7 +67,7 @@ def enter_verification_code(helper, code):
         email = getattr(helper.forgot_password, "last_reset_email", None)
         assert email, "No reset email stored. Request reset code first."
         code = get_verification_code(email)
-    helper.reset_password.send_keys("code_input", code)
+    helper.reset_password.send_keys("code_input", code, clear_first=True)
     helper.reset_password.hide_keyboard_if_visible()
 
 

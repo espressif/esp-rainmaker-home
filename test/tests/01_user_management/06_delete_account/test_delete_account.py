@@ -23,7 +23,7 @@ def _create_temp_user(pytestconfig) -> dict:
     config = load_deployment_config(deployment)
     env_config = config.get(deployment, {})
     base_uri = env_config.get("uri")
-    password = env_config.get("password", "Welcome01")
+    password = env_config.get("password", "Welcome@01")
     if not base_uri:
         raise ValueError(f"Missing 'uri' for deployment '{deployment}' in config/deployment.yaml")
     helper = ApiUserHelper(base_uri)

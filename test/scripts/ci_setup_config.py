@@ -87,6 +87,8 @@ def main():
     _generate_from_example("deployment.yaml.example", "deployment.yaml")
     _generate_from_example("report_config.yaml.example", "report_config.yaml")
     _generate_from_example("app.yaml.example", "app.yaml")
+    _generate_from_example("esp_devices.yaml.example", "esp_devices.yaml")
+    _generate_from_example("mobiles.yaml.example", "mobiles.yaml")
     print("CI config generation complete.")
 
 

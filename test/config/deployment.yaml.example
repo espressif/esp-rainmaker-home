@@ -12,3 +12,14 @@ production:
   ses_email: "${DEPLOYMENT_SES_EMAIL:-noreply-esp-rainmaker@espressif.com}"
   uri: "${DEPLOYMENT_URI}"
   password: "${DEPLOYMENT_PASSWORD:-Welcome01}"
+  # registered_users is keyed by device model so parallel Android/iOS runs use
+  # separate credential pools and never sign in with each other's account.
+  # Filled in automatically on first run (--model picks the bucket); pre-seed
+  # with known accounts like this if you want stable creds:
+  # registered_users:
+  #   SM-S711B:
+  #     - email: "android-user@example.mailosaur.net"
+  #       password: "Welcome01"
+  #   iPhone 13:
+  #     - email: "ios-user@example.mailosaur.net"
+  #       password: "Welcome01"

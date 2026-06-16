@@ -1,0 +1,43 @@
+{
+  "title": {
+    "by": "id",
+    "value": "title",
+    "text": "Connect to Device"
+  },
+  "instruction_title": {
+    "by": "id",
+    "value": "typo_instruction_title"
+  },
+  "instruction_description": {
+    "by": "id",
+    "value": "typo_instruction_description"
+  },
+  "scanning_indicator": {
+    "by": "id",
+    "value": "scanning_devices_scan_soft_ap"
+  },
+  "device_card": {
+    "by": "id",
+    "value": "button_scanned_device_soft_ap"
+  },
+  "device_name_text": {
+    "by": "id",
+    "value": "text_name_device"
+  },
+  "connect_button": {
+    "by": "id",
+    "value": "button_connect_scan_soft_ap"
+  },
+  "system_join_connect": {
+    "by": "xpath",
+    "value": "//android.widget.Button[@resource-id='android:id/button1'] | //XCUIElementTypeButton[@name='Join']"
+  },
+  "rescan_button": {
+    "by": "id",
+    "value": "button_rescan_scan_soft_ap"
+  },
+  "button_permission": {
+    "by": "id",
+    "value": "button_permission"
+  }
+}

@@ -1,0 +1,25 @@
+{
+    "title": {
+        "by": "id",
+        "value": "title",
+        "text": "Name your device"
+    },
+    "back_button": {
+        "by": "id",
+        "value": "button_back"
+    },
+    "continue_button": {
+        "by": "id",
+        "value": "button_continue_device_name",
+        "text": "Continue"
+    },
+    "skip_button": {
+        "by": "id",
+        "value": "button_skip_update_device_name",
+        "text": "Skip"
+    },
+    "device_name_input": {
+        "by": "id",
+        "value": "input_device_name"
+    }
+}

@@ -1,0 +1,19 @@
+{
+  "title": {
+    "by": "id",
+    "value": "title",
+    "text": "Proof of Possession"
+  },
+  "subtitle": {
+    "by": "id",
+    "value": "text_subtitle_pop"
+  },
+  "pop_input": {
+    "by": "id",
+    "value": "input_pop_code"
+  },
+  "verify_button": {
+    "by": "id",
+    "value": "button_verify_pop"
+  }
+}

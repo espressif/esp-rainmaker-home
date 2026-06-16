@@ -42,11 +42,11 @@ export const SelectDeviceRoomOptions = ({
 
   return (
     <>
-      <Text style={styles.sectionTitle}>
+      <Text style={styles.sectionTitle} {...testProps("text_title_select_a_room")}>
         {t("device.deviceDetails.selectARoom")}
       </Text>
       {!hasExistingRooms && (
-        <Text style={styles.emptyHint}>
+        <Text style={styles.emptyHint} {...testProps("text_no_rooms_available")}>
           {t("device.deviceDetails.noRoomsAvailable")}
         </Text>
       )}
@@ -55,7 +55,7 @@ export const SelectDeviceRoomOptions = ({
         rooms.map((room: ESPCDFGroup) => (
           <Pressable
             key={room.id}
-            {...testProps(`room_option_${room.id}`)}
+            {...testProps("button_room_name")}
             style={[
               styles.roomRow,
               selectedRoom?.id === room.id && styles.roomRowSelected,
@@ -67,6 +67,7 @@ export const SelectDeviceRoomOptions = ({
                 styles.roomRowText,
                 selectedRoom?.id === room.id && styles.roomRowTextSelected,
               ]}
+              {...testProps("text_room_name")}
             >
               {room.name}
             </Text>
@@ -74,7 +75,7 @@ export const SelectDeviceRoomOptions = ({
         ))}
 
       <Pressable
-        {...testProps("button_create_new_room_row")}
+        {...testProps("button_create_new_room")}
         style={[
           styles.createRoomRow,
           hasExistingRooms && styles.createRoomRowAfterList,
@@ -85,7 +86,7 @@ export const SelectDeviceRoomOptions = ({
           size={20}
           color={selectDeviceRoomIconColors.createRoomPlus}
         />
-        <Text style={styles.createRoomRowText}>
+        <Text style={styles.createRoomRowText} {...testProps("text_create_new_room")} >
           {t("device.deviceDetails.createRoomAction")}
         </Text>
         <ChevronRight

@@ -64,10 +64,12 @@ const User: React.FC = observer(() => {
           }}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
+          {...testProps("scroll_view_user_profile")}
         >
           <ProfileSection
             userInfo={user?.userInfo || undefined}
             onPress={() => handleNavigation("handleSettings")}
+            qaId="button_profile_section_user"
           />
 
           {features.voiceAssistants && (

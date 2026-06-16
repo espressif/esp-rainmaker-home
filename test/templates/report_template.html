@@ -51,6 +51,14 @@
             font-size: 32px;
             margin-bottom: 10px;
         }
+
+        .header h1 .app-version {
+            font-size: 26px;
+            font-weight: 800;
+            color: #ffd54f;
+            letter-spacing: 0.5px;
+            text-shadow: 0 1px 2px rgba(0,0,0,0.25);
+        }
         
         .job-info {
             display: grid;
@@ -250,8 +258,20 @@
             color: #667eea;
             text-decoration: none;
         }
-        
+
         .log-link:hover {
+            text-decoration: underline;
+        }
+
+        .count-link {
+            font-weight: 600;
+            text-decoration: none;
+        }
+
+        .count-link.pass { color: #20c997; }
+        .count-link.fail { color: #dc3545; }
+
+        .count-link:hover {
             text-decoration: underline;
         }
         
@@ -296,6 +316,64 @@
             margin: 0 0 10px 0;
             color: #667eea;
             font-size: 14px;
+        }
+
+        .test-detail-panel {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 24px;
+        }
+
+        .test-detail-main {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .test-detail-hardware {
+            flex: 0 0 340px;
+            display: grid;
+            grid-template-columns: max-content minmax(0, 1fr);
+            column-gap: 6px;
+            align-content: start;
+            padding-right: 24px;
+        }
+
+        .test-detail-hardware strong {
+            text-align: right;
+        }
+
+        .test-detail-hardware span {
+            word-break: break-all;
+        }
+
+        .test-detail-hardware .hw-device {
+            grid-column: 1 / -1;
+            text-align: left;
+            color: #667eea;
+            margin-top: 6px;
+        }
+
+        .appium-log-section {
+            margin-top: 0px;
+            padding: 0px 20px 24px 20px;
+            text-align: center;
+        }
+
+        .appium-log-button {
+            display: inline-block;
+            font-size: 16px;
+            font-weight: 600;
+            color: #1976d2;
+            text-decoration: none;
+            padding: 12px 24px;
+            border: 2px solid #1976d2;
+            border-radius: 4px;
+            background: white;
+        }
+
+        .appium-log-button:hover {
+            background: #e3f2fd;
         }
         
         .test-log-content {
@@ -350,7 +428,7 @@
             <div class="logo-container">
                 <img src="espressif_logo.png" alt="ESPRESSIF" class="logo" />
             </div>
-            <h1>{{ report_title }}</h1>
+            <h1>{{ report_title }}{% if app_version %} <span class="app-version">- v{{ app_version }}</span>{% endif %}</h1>
             <div class="job-info">
                 <div class="info-item">
                     <label>Created</label>
@@ -361,8 +439,8 @@
                     <value>{{ test_lab }}</value>
                 </div>
                 <div class="info-item">
-                    <label>Chipset</label>
-                    <value>{{ chipset }}</value>
+                    <label>Platform</label>
+                    <value>{{ platform }}</value>
                 </div>
                 <div class="info-item">
                     <label>Execution Time</label>
@@ -373,7 +451,7 @@
             <a href="{{ download_url }}" class="download-link">Download Build Artifacts</a>
             {% endif %}
         </div>
-        
+
         <div class="summary-section">
             <div class="summary-stats">
                 <h2>Test Summary</h2>
@@ -433,7 +511,7 @@
                     <tr>
                         <td>{{ suite.id }}</td>
                         <td>
-                            <a href="#" class="expand-toggle" onclick="toggleTestDetails('suite-{{ suite.id }}'); return false;">{{ suite.name }}</a>
+                            <a href="#" class="expand-toggle" data-suite="suite-{{ suite.id }}" onclick="showTestDetails('suite-{{ suite.id }}', 'all'); return false;">{{ suite.name }}</a>
                         </td>
                         <td>
                             <div class="progress-bar">
@@ -444,11 +522,23 @@
                             </div>
                             <span style="margin-left: 10px; clear: both; display: block;">{{ suite.pass_percentage }}%</span>
                         </td>
-                        <td>{{ suite.pass_count }}</td>
-                        <td>{{ suite.fail_count }}</td>
+                        <td>
+                            {% if suite.pass_count > 0 %}
+                            <a href="#" class="count-link pass" title="Show passed tests only" onclick="showTestDetails('suite-{{ suite.id }}', 'passed'); return false;">{{ suite.pass_count }}</a>
+                            {% else %}
+                            {{ suite.pass_count }}
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if suite.fail_count > 0 %}
+                            <a href="#" class="count-link fail" title="Show failed tests only" onclick="showTestDetails('suite-{{ suite.id }}', 'failed'); return false;">{{ suite.fail_count }}</a>
+                            {% else %}
+                            {{ suite.fail_count }}
+                            {% endif %}
+                        </td>
                         <td>
                             {% if suite.tests|length > 0 %}
-                            <a href="#" class="log-link" onclick="toggleTestDetails('suite-{{ suite.id }}'); return false;">View</a>
+                            <a href="#" class="log-link" onclick="showTestDetails('suite-{{ suite.id }}', 'all'); return false;">View</a>
                             {% else %}
                             -
                             {% endif %}
@@ -461,8 +551,10 @@
                         <td colspan="7" class="test-details-cell">
                             <div class="test-details-content">
                                 {% for test in suite.tests %}
-                                <div class="test-log-section">
+                                <div class="test-log-section" data-outcome="{{ test.outcome }}">
                                     <h4>Test: {{ test.nodeid.split('::')[-1] }}</h4>
+                                    <div class="test-detail-panel">
+                                        <div class="test-detail-main">
                                     <div><strong>Status:</strong> {{ test.outcome|upper }}</div>
                                     <div><strong>Duration:</strong> {{ "%.2f"|format(test.duration) }}s</div>
                                     {% if test.artifacts.video_url %}
@@ -477,10 +569,31 @@
                                     {% if test.artifacts.page_source_url %}
                                     <div><strong>Page Source:</strong> <a href="{{ test.artifacts.page_source_url }}" target="_blank" class="log-link">View Page Source</a></div>
                                     {% endif %}
+                                    {% if test.artifacts.serial_log_url %}
+                                    <div><strong>Chip Serial Log:</strong> <a href="{{ test.artifacts.serial_log_url }}" target="_blank" class="log-link">{{ test.artifacts.chip_serial_log_name or 'View UART Log' }}</a></div>
+                                    {% endif %}
                                     {# Only show log_url if adb_logs_url is not present to avoid duplicates #}
                                     {% if test.artifacts.log_url and not test.artifacts.adb_logs_url %}
                                     <div><strong>Log:</strong> <a href="{{ test.artifacts.log_url }}" target="_blank" class="log-link">View Log</a></div>
                                     {% endif %}
+                                        </div>
+                                        {% set hw_list = [test.hardware_info] if test.hardware_info is mapping else test.hardware_info %}
+                                        {% if hw_list %}
+                                        <div class="test-detail-hardware">
+                                            {% for hw in hw_list %}
+                                            {% if hw_list|length > 1 %}<strong class="hw-device">Device {{ loop.index }}</strong><span></span>{% endif %}
+                                            {% if hw.chip_type %}<strong>Chip:</strong><span>{{ hw.chip_type }}</span>{% endif %}
+                                            {% if hw.mac_address %}<strong>MAC:</strong><span>{{ hw.mac_address }}</span>{% endif %}
+                                            {% if hw.usb_port %}<strong>Port:</strong><span>{{ hw.usb_port }}</span>{% endif %}
+                                            {% if hw.provisioning_mode %}<strong>Prov Mode:</strong><span>{{ hw.provisioning_mode }}</span>{% endif %}
+                                            {% if hw.product %}<strong>Product:</strong><span>{{ hw.product }}</span>{% endif %}
+                                            {% if hw.firmware_type %}<strong>Firmware:</strong><span>{{ hw.firmware_type }}</span>{% endif %}
+                                            {% if hw.esp_idf_commit %}<strong>ESP-IDF:</strong><span>{{ hw.esp_idf_commit }}</span>{% endif %}
+                                            {% if hw.esp_rainmaker_commit %}<strong>RainMaker:</strong><span>{{ hw.esp_rainmaker_commit }}</span>{% endif %}
+                                            {% endfor %}
+                                        </div>
+                                        {% endif %}
+                                    </div>
                                     {% if test.logs or test.stdout or test.stderr %}
                                     <h4 style="margin-top: 15px;">Test Logs</h4>
                                     <div class="test-log-content">
@@ -508,37 +621,36 @@
         </div>
     </div>
     
-    <!-- Appium Server Logs Section - Common for all tests -->
     {% if appium_log_url %}
-    <div class="section" style="margin-top: 40px; padding: 20px; background: #e3f2fd; border: 2px solid #2196f3; border-radius: 8px;">
-        <h2 style="color: #1976d2; font-size: 20px; margin-bottom: 15px; display: flex; align-items: center;">
-            <span style="font-size: 24px; margin-right: 10px;">📱</span>
-            Appium Server Logs
-        </h2>
-        <p style="color: #666; font-size: 14px; margin-bottom: 15px;">
-            Server logs for entire test run - shared across all tests
-        </p>
-        <div>
-            <a href="{{ appium_log_url }}" target="_blank" class="log-link" style="font-size: 16px; font-weight: bold; color: #1976d2; text-decoration: none; padding: 10px 20px; background: white; border: 2px solid #1976d2; border-radius: 4px; display: inline-block;">
-                View Appium Server Logs →
-            </a>
-        </div>
+    <div class="appium-log-section">
+        <a href="{{ appium_log_url }}" target="_blank" class="appium-log-button">View Appium Server Logs →</a>
     </div>
     {% endif %}
     
     <script>
-        // Toggle test details expansion
-        function toggleTestDetails(suiteId) {
+        // Expand suite details filtered by outcome.
+        // filter: 'all' (suite name / View link), 'passed' (pass count), 'failed' (fail count).
+        // Clicking the same control again collapses the details.
+        function showTestDetails(suiteId, filter) {
             const row = document.getElementById(suiteId);
-            const toggle = event.target.closest('.expand-toggle');
-            
-            if (row.classList.contains('expanded')) {
+            const toggle = document.querySelector('.expand-toggle[data-suite="' + suiteId + '"]');
+            const expanded = row.classList.contains('expanded');
+            const currentFilter = row.dataset.filter || 'all';
+
+            if (expanded && currentFilter === filter) {
                 row.classList.remove('expanded');
                 if (toggle) toggle.classList.remove('expanded');
-            } else {
-                row.classList.add('expanded');
-                if (toggle) toggle.classList.add('expanded');
+                return;
             }
+
+            row.dataset.filter = filter;
+            row.querySelectorAll('.test-log-section').forEach(function (section) {
+                const match = filter === 'all' || section.dataset.outcome === filter;
+                section.style.display = match ? '' : 'none';
+            });
+
+            row.classList.add('expanded');
+            if (toggle) toggle.classList.add('expanded');
         }
         
         // Chart.js configuration

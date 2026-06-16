@@ -38,5 +38,19 @@
     "by": "id",
     "value": "button_add",
     "text": "Add"
+  },
+  "add_device_button": {
+    "by": "id",
+    "value": "button_add_device_header",
+    "text": "Add Device"
+  },
+  "add_device_banner_button": {
+    "by": "id",
+    "value": "button_add_device_banner",
+    "text": "Add Device"
+  },
+  "device_names_text": {
+    "by": "id",
+    "value": "text_device_name"
   }
 }

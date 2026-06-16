@@ -15,6 +15,11 @@ pytest-metadata>=3.0.0
 
 # Utilities
 requests>=2.28.0
+qrcode[pil]>=7.4
+
+# ESP hardware manager
+pyserial>=3.5
+esptool>=4.7
 
 # Email testing with Mailosaur
 mailosaur>=7.0.0

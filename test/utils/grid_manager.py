@@ -20,13 +20,19 @@ import yaml
 logger = logging.getLogger(__name__)
 
 class AppiumGridManager:
+    # Most-recently-created grid, so out-of-fixture code (e.g. the report plugin)
+    # can reach it via this unambiguous module instead of `import conftest`
+    # (which resolves to the nearest subdir conftest and lacks grid_manager).
+    active_instance = None
+
     def __init__(self, config_path: str = "config", base_port: int = 4444, debug_dir: str = "debug"):
         self.config_path = Path(config_path)
         self.debug_dir = Path(debug_dir)
         self.debug_dir.mkdir(exist_ok=True)
-        
+
         self.base_port = base_port
         self.servers = {}  # Track individual Appium servers per device
+        AppiumGridManager.active_instance = self
         
         # Load configurations
         self.mobiles_config = self._load_config("mobiles.yaml")
@@ -167,10 +173,10 @@ class AppiumGridManager:
         # app_path = rainmaker_home_config.get("ipa_path")
         # if app_path and os.path.exists(app_path):
         #     capabilities["app"] = app_path
-        
+
         capabilities.update(kwargs)
         return capabilities
-    
+
     def _is_server_running(self, port: int) -> bool:
         """Check if Appium server is running on port"""
         try:

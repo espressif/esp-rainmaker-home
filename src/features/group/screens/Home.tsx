@@ -115,12 +115,13 @@ const HomeScreen = () => {
           />
         )}
         {isLoading ? (
+          <View {...testProps("activity_indicator_home")}>
           <ActivityIndicator
-            {...testProps("activity_indicator_home")}
             style={globalStyles.homeActivityIndicator}
             size="large"
             color={tokens.colors.primary}
           />
+          </View>
         ) : roomDevices?.length > 0 || showGroupControlOnHome ? (
           <View
             {...testProps("view_home_devices_and_groups")}

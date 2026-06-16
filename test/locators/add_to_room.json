@@ -1,0 +1,34 @@
+{
+    "title": {
+        "by": "id",
+        "value": "title",
+        "text": "Add to a room"
+    },
+    "back_button": {
+        "by": "id",
+        "value": "button_back"
+    },
+    "continue_button": {
+        "by": "id",
+        "value": "button_continue_select_device_room",
+        "text": "Continue"
+    },
+    "skip_button": {
+        "by": "id",
+        "value": "button_skip_select_device_room",
+        "text": "Skip"
+    },
+    "room_names_list_text": {
+        "by": "id",
+        "value": "text_room_name"
+    },
+    "text_create_new_room": {
+        "by": "id",
+        "value": "text_create_new_room",
+        "text": "Create new room"
+    },
+    "button_create_new_room": {
+        "by": "id",
+        "value": "button_create_new_room"
+    }
+}

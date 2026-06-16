@@ -14,10 +14,27 @@ import threading
 import socket
 from pathlib import Path
 from typing import Optional, Dict
-from http.server import HTTPServer, SimpleHTTPRequestHandler
+import re
+from http.server import HTTPServer, SimpleHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import unquote
 
 logger = logging.getLogger(__name__)
+
+
+def _primary_ip() -> str:
+    """Best-effort primary LAN IP so artifact/report links work even when name
+    resolution (DNS/mDNS) fails. Override with config base_url / REPORT_BASE_URL."""
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        s.connect(("8.8.8.8", 80))  # no packets sent; just selects the egress interface
+        return s.getsockname()[0]
+    except Exception:
+        try:
+            return socket.gethostbyname(socket.gethostname())
+        except Exception:
+            return "127.0.0.1"
+    finally:
+        s.close()
 
 
 class ArtifactHandler(SimpleHTTPRequestHandler):
@@ -27,6 +44,20 @@ class ArtifactHandler(SimpleHTTPRequestHandler):
         self.base_path = base_path or Path.cwd()
         super().__init__(*args, **kwargs)
     
+    def do_HEAD(self):
+        """
+        Handle HEAD the same way as GET (headers only).
+
+        Video players and download managers often probe with HEAD before
+        ranged GETs; the inherited SimpleHTTPRequestHandler.do_HEAD resolves
+        paths from the process cwd and ignores base_path, so route it here.
+        """
+        self._head_only = True
+        try:
+            self.do_GET()
+        finally:
+            self._head_only = False
+
     def do_GET(self):
         """Handle GET requests"""
         try:
@@ -72,9 +103,6 @@ class ArtifactHandler(SimpleHTTPRequestHandler):
                 self.send_error(404, "Directory listing not supported.")
                 return
             
-            # Serve file
-            self.send_response(200)
-            
             # Set content type based on extension
             ext = file_path.suffix.lower()
             content_types = {
@@ -89,44 +117,84 @@ class ArtifactHandler(SimpleHTTPRequestHandler):
                 '.json': 'application/json',
             }
             content_type = content_types.get(ext, 'application/octet-stream')
-            # For XML, add charset
+
+            # XML is rewritten in memory (BOM/declaration fixes); everything else
+            # streams from disk with Content-Length and Range support so browsers
+            # render immediately and videos can seek.
             if ext == '.xml':
-                content_type = 'application/xml; charset=utf-8'
+                body = self._load_xml_body(file_path)
+                self.send_response(200)
+                self.send_header('Content-type', 'application/xml; charset=utf-8')
+                self.send_header('Access-Control-Allow-Origin', '*')
+                self.send_header('Content-Length', str(len(body)))
+                self.end_headers()
+                if not getattr(self, '_head_only', False):
+                    self.wfile.write(body)
+                return
+
+            file_size = file_path.stat().st_size
+            start, end = 0, max(file_size - 1, 0)
+            range_match = re.match(r'bytes=(\d*)-(\d*)$', self.headers.get('Range') or '')
+            if range_match and (range_match.group(1) or range_match.group(2)):
+                if range_match.group(1):
+                    start = int(range_match.group(1))
+                    if range_match.group(2):
+                        end = min(int(range_match.group(2)), end)
+                else:  # suffix range: bytes=-N (last N bytes)
+                    start = max(file_size - int(range_match.group(2)), 0)
+                if start >= file_size:
+                    self.send_response(416)
+                    self.send_header('Content-Range', f'bytes */{file_size}')
+                    self.end_headers()
+                    return
+                self.send_response(206)
+                self.send_header('Content-Range', f'bytes {start}-{end}/{file_size}')
+            else:
+                self.send_response(200)
+
+            length = end - start + 1 if file_size else 0
             self.send_header('Content-type', content_type)
             self.send_header('Access-Control-Allow-Origin', '*')
+            self.send_header('Accept-Ranges', 'bytes')
+            self.send_header('Content-Length', str(length))
             self.end_headers()
-            
-            # Read and send file
-            # For XML files, ensure proper encoding and strip BOM if present
-            if ext == '.xml':
-                try:
-                    import re
-                    with open(file_path, 'r', encoding='utf-8-sig') as f:
-                        content = f.read()
-                    # Ensure XML declaration is at the start
-                    content = content.lstrip()
-                    if not content.startswith('<?xml'):
-                        # Try to find XML declaration and move it to start
-                        xml_decl_match = re.search(r'<\?xml[^>]*\?>', content)
-                        if xml_decl_match:
-                            xml_decl = xml_decl_match.group(0)
-                            content = xml_decl + '\n' + content.replace(xml_decl, '', 1).lstrip()
-                        else:
-                            # Add XML declaration if missing
-                            content = '<?xml version="1.0" encoding="UTF-8"?>' + content
-                    self.wfile.write(content.encode('utf-8'))
-                except Exception as e:
-                    logger.error(f"Error serving XML file: {e}")
-                    # Fallback to binary mode
-                    with open(file_path, 'rb') as f:
-                        shutil.copyfileobj(f, self.wfile)
-            else:
-                with open(file_path, 'rb') as f:
-                    shutil.copyfileobj(f, self.wfile)
-                
+
+            if getattr(self, '_head_only', False):
+                return
+
+            with open(file_path, 'rb') as f:
+                f.seek(start)
+                remaining = length
+                while remaining > 0:
+                    chunk = f.read(min(65536, remaining))
+                    if not chunk:
+                        break
+                    self.wfile.write(chunk)
+                    remaining -= len(chunk)
+
+        except (BrokenPipeError, ConnectionResetError):
+            pass  # client closed the tab / stopped the video — not an error
         except Exception as e:
             logger.error(f"Error serving file: {e}")
             self.send_error(500, str(e))
+
+    @staticmethod
+    def _load_xml_body(file_path: Path) -> bytes:
+        """Load XML ensuring the declaration is first and BOM is stripped."""
+        try:
+            with open(file_path, 'r', encoding='utf-8-sig') as f:
+                content = f.read().lstrip()
+            if not content.startswith('<?xml'):
+                xml_decl_match = re.search(r'<\?xml[^>]*\?>', content)
+                if xml_decl_match:
+                    xml_decl = xml_decl_match.group(0)
+                    content = xml_decl + '\n' + content.replace(xml_decl, '', 1).lstrip()
+                else:
+                    content = '<?xml version="1.0" encoding="UTF-8"?>' + content
+            return content.encode('utf-8')
+        except Exception as e:
+            logger.error(f"Error preparing XML file: {e}")
+            return file_path.read_bytes()
     
     def log_message(self, format, *args):
         """Suppress default logging"""
@@ -223,7 +291,7 @@ class ArtifactHost:
         self.artifacts_dir.mkdir(parents=True, exist_ok=True)
         self.server_base_path = self.artifacts_dir.parent
         self.port = port
-        self.base_url = base_url or f"http://esp-auto-mac.local:{port}"
+        self.base_url = base_url or f"http://{_primary_ip()}:{port}"
         self.server: Optional[HTTPServer] = None
         self.server_thread: Optional[threading.Thread] = None
         self.current_run_id: Optional[str] = None
@@ -262,7 +330,7 @@ class ArtifactHost:
             
             # Fallback to network IP if .local is not configured or not accessible
             if not self.base_url or 'localhost' in self.base_url or '127.0.0.1' in self.base_url:
-                self.base_url = f"http://esp-auto-mac.local:{self.port}"
+                self.base_url = f"http://{_primary_ip()}:{self.port}"
             
             # If base_url was explicitly set to use IP, keep it; otherwise prefer .local
             # Network IP is available as fallback but .local is preferred
@@ -275,7 +343,8 @@ class ArtifactHost:
             # Create server - bind to 0.0.0.0 to allow network access from all interfaces
             # This allows access via localhost (127.0.0.1), network IP, and mDNS (.local)
             # Note: Ensure macOS firewall allows incoming connections on this port
-            self.server = HTTPServer(('0.0.0.0', self.port), handler)
+            # Threading: one slow download (video) must not block other links.
+            self.server = ThreadingHTTPServer(('0.0.0.0', self.port), handler)
             # Set socket options for better network accessibility
             self.server.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             
@@ -382,6 +451,7 @@ class ArtifactHost:
             'video': 'videos',
             'log': 'logs',
             'adb_logs': 'logs',
+            'serial_log': 'logs',
             'page_source': 'page_sources',
         }
         subdir = type_map.get(artifact_type, 'logs')
@@ -437,9 +507,9 @@ class ArtifactHost:
             # Check if server is already running (standalone mode)
             if self.is_server_running():
                 logger.debug(f"Using existing server on port {self.port}")
-                # Prefer esp-auto-mac.local (mDNS) - only update if not already set
+                # Prefer the host's own name (mDNS) - only update if not already set
                 if not self.base_url or 'localhost' in self.base_url or '127.0.0.1' in self.base_url:
-                    self.base_url = f"http://esp-auto-mac.local:{self.port}"
+                    self.base_url = f"http://{_primary_ip()}:{self.port}"
             elif self.server is None:
                 # Server not running and not started - log warning but don't start
                 logger.warning(f"Server not running on port {self.port}. Start it manually with: python scripts/start_artifact_server.py")
@@ -594,7 +664,7 @@ def get_artifact_host() -> ArtifactHost:
                 hosting_config = config.get('local_hosting', {})
                 artifacts_dir = hosting_config.get('artifacts_dir', 'reports/artifacts')
                 port = hosting_config.get('http_server_port', 8000)
-                base_url = hosting_config.get('base_url', f'http://esp-auto-mac.local:{port}')
+                base_url = hosting_config.get('base_url') or f'http://{_primary_ip()}:{port}'
                 _artifact_host = ArtifactHost(artifacts_dir=artifacts_dir, port=port, base_url=base_url)
                 logger.info(f"Initialized artifact host from config: {artifacts_dir}")
             else:

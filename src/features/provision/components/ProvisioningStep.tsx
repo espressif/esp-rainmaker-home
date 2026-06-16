@@ -28,13 +28,29 @@ export const ProvisioningStep: React.FC<ProvisioningStepProps> = ({
   const getStatusIcon = () => {
     switch (status) {
       case "progress":
-        return <ActivityIndicator {...testProps("activity_indicator_in_progress_provision")} size="small" color={tokens.colors.primary} />;
+        return (
+          <View {...testProps("activity_indicator_in_progress_provision")}>
+            <ActivityIndicator size="small" color={tokens.colors.primary} />
+          </View>
+        );
       case "succeed":
-        return <Check {...testProps("icon_succeed_provision")} size={24} color={tokens.colors.green} />;
+        return (
+          <View {...testProps("icon_succeed_provision")}>
+            <Check size={24} color={tokens.colors.green} />
+          </View>
+        );
       case "failed":
-        return <X {...testProps("icon_failed_provision")} size={24} color={tokens.colors.red} />;
+        return (
+          <View {...testProps("icon_failed_provision")}>
+            <X size={24} color={tokens.colors.red} />
+          </View>
+        );
       default:
-        return <Circle {...testProps("icon_pending_provision")} size={24} color={tokens.colors.gray} />;
+        return (
+          <View {...testProps("icon_pending_provision")}>
+            <Circle size={24} color={tokens.colors.gray} />
+          </View>
+        );
     }
   };
 

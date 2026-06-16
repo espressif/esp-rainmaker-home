@@ -182,7 +182,7 @@ ios_ipa:
 
 android_test:
   stage: test
-  tags: [mac-mobile-qa]
+  tags: [mac-mini-runner]
   needs:
     - job: android_apk
       artifacts: true
@@ -204,17 +204,107 @@ android_test:
     - . .venv/bin/activate
     - python -m pip install -U pip
     - pip install -r requirements.txt
+    # Export non-secret test defaults (CI/CD variables and .env still take precedence), then generate config
+    - . scripts/setup_test_env.sh
     - python scripts/ci_setup_config.py
 
-    - MODEL="${MODEL:-SM-S711B}"
-    - CHIP="${CHIP:-esp32c3}"
+    - MODEL="${MODEL:-motorola edge 60 pro}"
     - MARKER="${MARKER:-sanity}"
 
+    # Provisioning firmware bundles from Jenkins (set DOWNLOAD_FIRMWARES=y on
+    # runs that include chip tests; needs JENKINS_USER/JENKINS_API_TOKEN vars).
+    - if [ "${DOWNLOAD_FIRMWARES:-n}" = "y" ]; then python scripts/download_firmwares.py; fi
+
+    # Run tests without aborting the job, so the MR comment is always posted.
+    # The report email (incl. GITLAB_USER_EMAIL pipeline triggerer) is sent by
+    # the pytest report plugin at session finish.
     - |
+      set +e
       python -m pytest \
         --model "${MODEL}" \
-        --chip "${CHIP}" \
         -m "${MARKER}" \
         --tb=short \
         --disable-warnings \
         -v
+      TEST_EXIT=$?
+      set -e
+
+    # Comment on the triggering MR with the report link (needs GITLAB_MR_TOKEN
+    # CI variable: project access token with `api` scope).
+    - python scripts/notify_mr.py || true
+
+    - |
+      STATUS=$(python -c "import json;print(json.load(open('reports/last_run_summary.json'))['status'])" 2>/dev/null || true)
+      echo "Run status: ${STATUS:-<none>} (pytest exit ${TEST_EXIT})"
+      case "$STATUS" in
+        "ALL PASSED"|"MOSTLY PASSED") exit 0 ;;
+        *) exit "${TEST_EXIT}" ;;
+      esac
+
+###############################################################
+# IOS — Run tests on iPhone Air attached to mac-mini-runner
+###############################################################
+
+ios_test:
+  stage: test
+  tags: [mac-mini-runner]
+  before_script: []
+  needs:
+    - job: ios_ipa
+      artifacts: true
+  rules:
+    - if: $CI_MERGE_REQUEST_ID
+  script:
+    - set -euo pipefail
+
+    # Node/Appium come from nvm on the mac-mini (same convention as ios_ipa)
+    - export NVM_DIR="$HOME/.nvm"
+    - '[ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"'
+    - export PATH="/opt/homebrew/bin:$PATH"
+    - command -v appium >/dev/null || { echo "appium not found (npm i -g appium)"; exit 1; }
+
+    - IPA_PATH=$(ls "${CI_PROJECT_DIR}"/artifacts/ios/*.ipa 2>/dev/null | head -1)
+    - if [ -z "${IPA_PATH}" ]; then echo "IPA not found under artifacts/ios"; ls -la artifacts/ios || true; exit 1; fi
+    - echo "IPA_PATH=${IPA_PATH}"
+
+    - if [ -f .env.example ]; then cp .env.example .env; fi
+    - mkdir -p test/artifacts/ios
+    - cp "${IPA_PATH}" test/artifacts/ios/app-release.ipa
+
+    - cd test
+    - python3 -m venv .venv
+    - . .venv/bin/activate
+    - python -m pip install -U pip
+    - pip install -r requirements.txt
+    # Export non-secret test defaults (CI/CD variables and .env still take precedence), then generate config
+    - . scripts/setup_test_env.sh
+    - python scripts/ci_setup_config.py
+
+    - MODEL="${IOS_MODEL:-iPhone Air}"
+    - MARKER="${MARKER:-sanity}"
+
+    # WebDriverAgent is built fresh from the Apple account signed in to Xcode on
+    # this runner (no prebuilt-WDA bootstrap).
+
+    - if [ "${DOWNLOAD_FIRMWARES:-n}" = "y" ]; then python scripts/download_firmwares.py; fi
+
+    - |
+      set +e
+      python -m pytest \
+        --model "${MODEL}" \
+        -m "${MARKER}" \
+        --tb=short \
+        --disable-warnings \
+        -v
+      TEST_EXIT=$?
+      set -e
+
+    - python scripts/notify_mr.py || true
+
+    - |
+      STATUS=$(python -c "import json;print(json.load(open('reports/last_run_summary.json'))['status'])" 2>/dev/null || true)
+      echo "Run status: ${STATUS:-<none>} (pytest exit ${TEST_EXIT})"
+      case "$STATUS" in
+        "ALL PASSED"|"MOSTLY PASSED") exit 0 ;;
+        *) exit "${TEST_EXIT}" ;;
+      esac

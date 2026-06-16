@@ -1,0 +1,60 @@
+{
+  "title": {
+    "by": "id",
+    "value": "title",
+    "text": "Scan QR Code"
+  },
+  "qr_code_icon": {
+    "by": "id",
+    "value": "icon_qr_code"
+  },
+  "qr_guide_text": {
+    "by": "id",
+    "value": "text_qr_guide"
+  },
+  "permission_title_scan_qr_text": {
+    "by": "id",
+    "value": "text_permission_title_scan_qr"
+  },
+  "permission_msg_scan_qr_text": {
+    "by": "id",
+    "value": "text_permission_msg_scan_qr_"
+  },
+  "permission_msg_ble_scan_qr_text": {
+    "by": "id",
+    "value": "text_permission_msg_scan_qr"
+  },
+  "button_permission": {
+    "by": "id",
+    "value": "button_permission"
+  },
+  "grant_permission_scan_qr_text": {
+    "by": "id",
+    "value": "text_grant_permission_scan_qr"
+  },
+  "view_scanner_overlay": {
+    "by": "id",
+    "value": "view_scanner_overlay"
+  },
+  "align_qr_text": {
+    "by": "id",
+    "value": "text_align_qr"
+  },
+  "camera_toggle_button": {
+    "by": "id",
+    "value": "button_camera_toggle"
+  },
+  "scan_processing_indicator": {
+    "by": "id",
+    "value": "view_scan_processing"
+  },
+  "rescan_button": {
+    "by": "id",
+    "value": "button_rescan"
+  },
+  "scan_again_text": {
+    "by": "id",
+    "value": "text_scan_again",
+    "text": "Scan Again"
+  }
+}

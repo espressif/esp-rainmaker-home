@@ -6,17 +6,34 @@
 """
 Test report generator for creating professional HTML reports
 """
-import os
 import json
+import shutil
+import socket
 import yaml
 import logging
 from pathlib import Path
 from datetime import datetime
 from typing import Dict, List, Optional, Any
+
+
+def _primary_ip() -> str:
+    """Best-effort primary LAN IP so report links work even when name resolution
+    (DNS/mDNS) fails. Set REPORT_BASE_URL to override with a fixed host."""
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        s.connect(("8.8.8.8", 80))  # no packets sent; just selects the egress interface
+        return s.getsockname()[0]
+    except Exception:
+        try:
+            return socket.gethostbyname(socket.gethostname())
+        except Exception:
+            return "127.0.0.1"
+    finally:
+        s.close()
 from collections import defaultdict
 
 try:
-    from jinja2 import Template, Environment, FileSystemLoader
+    from jinja2 import Environment, FileSystemLoader
     JINJA2_AVAILABLE = True
 except ImportError:
     JINJA2_AVAILABLE = False
@@ -227,12 +244,14 @@ class ReportGenerator:
                     return artifacts[key]
         return None
     
-    def generate_report(self, test_results: List[Dict], 
+    def generate_report(self, test_results: List[Dict],
                         run_id: str = None,
                         test_lab: str = "Pune",
                         chipset: str = "Mobile Devices",
                         execution_time: str = None,
-                        appium_log_url: str = None) -> str:
+                        appium_log_url: str = None,
+                        hardware_info_by_test: Optional[Dict[str, Dict[str, str]]] = None,
+                        app_version: str = "") -> str:
         """
         Generate HTML report from test results
         
@@ -264,6 +283,11 @@ class ReportGenerator:
             }
             categories = {}
         else:
+            if hardware_info_by_test:
+                for test in test_results:
+                    if not test.get("hardware_info"):
+                        test["hardware_info"] = hardware_info_by_test.get(test.get("nodeid", ""), {})
+
             stats = self._calculate_summary_stats(test_results)
             # Categorize tests
             categories = self._categorize_tests(test_results)
@@ -289,7 +313,7 @@ class ReportGenerator:
                     
                     if effective_run_id:
                         # Point to artifacts directory for this run
-                        base_url = self.config.get('local_hosting', {}).get('base_url', 'http://esp-auto-mac.local:8000')
+                        base_url = self.config.get('local_hosting', {}).get('base_url') or f'http://{_primary_ip()}:8000'
                         suite.log_url = f"{base_url}/artifacts/{effective_run_id}"
                     else:
                         # Fallback: use first test's log URL if available
@@ -301,34 +325,28 @@ class ReportGenerator:
                                     suite.log_url = log_url.rsplit('/logs/', 1)[0]
                                     break
                 
-                # Try to find Appium server log URL from any test
+                # Per-suite Appium log URL from the first test that has one
                 for test in suite.tests:
-                    artifacts = test.get('artifacts', {})
-                    if 'appium_log_url' in artifacts:
-                        suite.appium_log_url = artifacts['appium_log_url']
+                    appium_url = test.get('artifacts', {}).get('appium_log_url')
+                    if appium_url:
+                        suite.appium_log_url = appium_url
                         break
-        
-        # Get Appium log URL from first test that has it (common for all)
-        appium_log_url = None
-        for category, suites in categories.items():
-            for suite in suites:
-                for test in suite.tests:
-                    artifacts = test.get('artifacts', {})
-                    if 'appium_log_url' in artifacts:
-                        appium_log_url = artifacts['appium_log_url']
-                        break
-                if appium_log_url:
-                    break
-            if appium_log_url:
-                break
+
+        # Session-level Appium log URL: explicit arg, else first suite that has one
+        resolved_appium_log_url = appium_log_url or next(
+            (suite.appium_log_url for suites in categories.values()
+             for suite in suites if suite.appium_log_url),
+            None,
+        )
         
         # Prepare template data
         now = datetime.now()
         template_data = {
             'report_title': self.config.get('report', {}).get('title', 'Test Report'),
+            'app_version': app_version,
             'created_time': now.strftime("%d-%m-%Y %H:%M:%S"),
             'test_lab': test_lab,
-            'chipset': chipset,
+            'platform': chipset,
             'execution_time': execution_time or self._calculate_execution_time(test_results),
             'download_url': None,  # Can be added later
             'total_pass': stats['total_pass'],
@@ -338,7 +356,7 @@ class ReportGenerator:
             'total_tests': stats['total_tests'],
             'pass_percentage': stats['pass_percentage'],
             'test_categories': categories,
-            'appium_log_url': appium_log_url
+            'appium_log_url': resolved_appium_log_url,
         }
         
         # Render template
@@ -359,13 +377,16 @@ class ReportGenerator:
         report_path = self.reports_dir / report_filename
         with open(report_path, 'w', encoding='utf-8') as f:
             f.write(html_content)
-        
+
+        latest_path = self.reports_dir / "report_latest.html"
+        shutil.copy2(report_path, latest_path)
+        logger.info("Updated report alias: %s", latest_path)
+
         # Copy logo to reports directory if it exists in templates
         logo_source = self.template_dir / "espressif_logo.png"
         if logo_source.exists():
             logo_dest = self.reports_dir / "espressif_logo.png"
             if not logo_dest.exists():
-                import shutil
                 shutil.copy2(logo_source, logo_dest)
         
         logger.info(f"Report generated: {report_path}")

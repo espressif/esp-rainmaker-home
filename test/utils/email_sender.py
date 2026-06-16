@@ -105,8 +105,18 @@ class EmailSender:
             return None
     
     def _create_email_body(self, report_path: str = None, report_url: str = None,
-                          summary_stats: Dict = None, screenshot_path: str = None) -> str:
+                          summary_stats: Dict = None, screenshot_path: str = None,
+                          app_version: str = "") -> str:
         """Create HTML email body"""
+        # App version banner — prominent, right below the heading
+        app_version_html = ""
+        if app_version:
+            app_version_html = f'''
+            <div style="text-align: center; margin: 6px 0 14px 0;">
+                <span style="display: inline-block; background: #667eea; color: #ffd54f; font-size: 18px; font-weight: 800; letter-spacing: 0.5px; padding: 6px 18px; border-radius: 14px;">App Version: v{app_version}</span>
+            </div>
+            '''
+
         # Report link at the top (before summary) - always show
         report_link_html = ""
         if report_url:
@@ -160,6 +170,10 @@ class EmailSender:
                         <td style="padding: 8px;">{summary_stats.get('total_fail', 0)}</td>
                     </tr>
                     <tr>
+                        <td style="padding: 8px; background: #e2e3e5;"><strong>Skip:</strong></td>
+                        <td style="padding: 8px;">{summary_stats.get('total_skip', 0)}</td>
+                    </tr>
+                    <tr>
                         <td style="padding: 8px; background: #fff3cd;"><strong>Pass in Retries:</strong></td>
                         <td style="padding: 8px;">{summary_stats.get('total_retry', 0)}</td>
                     </tr>
@@ -193,6 +207,7 @@ class EmailSender:
         <body>
             <div class="container">
                 <div class="content">
+                    {app_version_html}
                     {report_link_html}
                     {screenshot_html}
                     {stats_html}
@@ -207,7 +222,7 @@ class EmailSender:
     def send_report_email(self, recipients: List[str], subject: str,
                          report_path: str = None, report_url: str = None,
                          summary_stats: Dict = None, attach_report: bool = True,
-                         attach_screenshot: bool = True) -> bool:
+                         attach_screenshot: bool = True, app_version: str = "") -> bool:
         """
         Send test report email via SMTP
         
@@ -237,7 +252,7 @@ class EmailSender:
                 screenshot_path = self._capture_report_screenshot(report_path)
             
             # Create email body (with screenshot embedded)
-            html_body = self._create_email_body(report_path, report_url, summary_stats, screenshot_path)
+            html_body = self._create_email_body(report_path, report_url, summary_stats, screenshot_path, app_version)
             
             # Create message
             msg = MIMEMultipart('related')  # Use 'related' to support embedded images

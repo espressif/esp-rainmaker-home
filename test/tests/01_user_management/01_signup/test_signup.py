@@ -15,7 +15,13 @@ scenarios('signup.feature')
 
 @given("user navigates to sign up screen")
 def navigate_to_signup(helper):
-    if helper.login.check_screen_displayed():
+    # Clear any launch permission alert first. On iOS the first tap after an alert
+    # is sometimes absorbed — the tap is acknowledged (HTTP 200) but onPress never
+    # fires and the app stays on login — so verify navigation and retry the tap once.
+    if helper.permissions.any_system_alert_present(timeout=1):
+        helper.permissions.handle_all_permissions(action="allow", timeout=3)
+    helper.login.click("signup_button")
+    if not helper.signup.check_screen_displayed(timeout=3):
         helper.login.click("signup_button")
     logger.info("Navigated to sign up screen")
 

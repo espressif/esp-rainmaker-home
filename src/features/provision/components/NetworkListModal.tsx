@@ -10,6 +10,7 @@ import {
   Text,
   Modal,
   FlatList,
+  Pressable,
   TouchableOpacity,
   ActivityIndicator,
   StyleSheet,
@@ -46,14 +47,14 @@ export const NetworkListModal: React.FC<NetworkListModalProps> = ({
       onRequestClose={onClose}
       {...testProps("modal_wifi")}
     >
-      <TouchableOpacity
-        style={styles.modalOverlay}
-        activeOpacity={1}
-        {...testProps("button_close_wifi")}
-        onPress={onClose}
-      >
+      <View style={styles.modalOverlay}>
+        <Pressable
+          style={styles.modalBackdrop}
+          onPress={onClose}
+          {...testProps("button_close_wifi")}
+        />
         <View style={styles.modalContent} {...testProps("view_wifi")}>
-          <View style={styles.modalHandle} {...testProps("view_wifi")} />
+          <View style={styles.modalHandle} {...testProps("view_wifi_modal_handle")} />
 
           <View style={styles.modalHeader} {...testProps("view_wifi")}>
             <Text style={styles.modalTitle} {...testProps("text_title_wifi")}>
@@ -97,7 +98,7 @@ export const NetworkListModal: React.FC<NetworkListModalProps> = ({
             showsVerticalScrollIndicator={false}
           />
         </View>
-      </TouchableOpacity>
+      </View>
     </Modal>
   );
 };
@@ -106,7 +107,9 @@ const styles = StyleSheet.create({
   modalOverlay: {
     flex: 1,
     backgroundColor: "rgba(0, 0, 0, 0.5)",
-    justifyContent: "flex-end",
+  },
+  modalBackdrop: {
+    flex: 1,
   },
   modalContent: {
     backgroundColor: tokens.colors.white,
