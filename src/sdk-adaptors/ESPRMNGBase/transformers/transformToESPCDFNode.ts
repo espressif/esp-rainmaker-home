@@ -10,8 +10,14 @@ import {
     ESPCDFNodeConfig,
     ESPCDFNodeInfoInterface,
     ESPCDFAPIResponse,
+    ESPCDFNodeTransport,
 } from "@store";
-import { ESPRMNGDevice, ESPRMNGNode, ESPRMNGService } from "@espressif/rmng-base-sdk";
+import {
+    ESPRMNGDevice,
+    ESPRMNGNode,
+    ESPRMNGService,
+    ESPTransportMode,
+} from "@espressif/rmng-base-sdk";
 import type {
     ESPCDFNodeOperation,
     ESPCDFPropertyChangeCallback,
@@ -68,6 +74,30 @@ const createPropertyChangeSyncCallback = (
                     syncCdfDeviceDisplayName(cdfNode, device.name);
                 }
                 break;
+            case "availableTransportsChanged": {
+                // Mirror the CDF-managed LAN transport onto the raw RMNG node so the
+                // SDK's transport handler routes local-first for subsequent set/get
+                // params. The CDF store is the single source of truth (updated by
+                // `handleNodeTransportUpdate` from local discovery); this projects it
+                // onto `_raw`. Unlike the legacy adaptor we do NOT blanket-replace
+                // `rawNode.availableTransports`: the RMNG node self-manages its
+                // `mqtt` transport from connectivity, so we touch only the
+                // discovery-managed `local` transport via the node's generic
+                // addTransport/removeTransport helpers. The event carries the full
+                // transport map, so absence of `local` means it was removed (service lost).
+                const localBaseUrl =
+                    event.availableTransports?.[ESPCDFNodeTransport.LOCAL]?.metadata
+                        ?.baseUrl;
+                if (typeof localBaseUrl === "string" && localBaseUrl) {
+                    rawNode.addTransport(ESPTransportMode.local, {
+                        type: ESPTransportMode.local,
+                        metadata: { baseUrl: localBaseUrl },
+                    });
+                } else {
+                    rawNode.removeTransport(ESPTransportMode.local);
+                }
+                break;
+            }
             default:
                 break;
         }
