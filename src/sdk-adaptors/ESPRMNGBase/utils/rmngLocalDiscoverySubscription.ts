@@ -7,6 +7,7 @@
 import { DeviceEventEmitter } from "react-native";
 import { ESPRMNGUser, ESPRMNGEventType } from "@espressif/rmng-base-sdk";
 import { DISCOVERY_LOST_EVENT } from "@shared/utils/constants";
+import ESPLocalControlAdapter from "@/src/native-adaptors/implementations/ESPLocalControlAdapter";
 
 /**
  * Starts RMNG LAN discovery against the new transport-aware SDK.
@@ -50,8 +51,10 @@ export async function startRmngLocalDiscoverySubscription(
             const nodeId = (payload as { nodeId?: string })?.nodeId;
             if (!nodeId) return;
             console.log("[Discovery_Lost_Event] nodeId:", nodeId);
+            // Best-effort: evict the native local-control cache (session/PoP/IP).
             // The CDF transport removal (-> sync callback -> removeLocalTransport)
             // is driven by the localDiscovery lost handler.
+            void ESPLocalControlAdapter.disconnect(nodeId);
         },
     );
 

@@ -7,7 +7,10 @@
 import type { ESPLocalControlAdapterInterface } from "@store";
 import ESPLocalControlModule from "../interfaces/ESPLocalControlInterface";
 
-const ESPLocalControlAdapter: ESPLocalControlAdapterInterface = {
+const ESPLocalControlAdapter: ESPLocalControlAdapterInterface & {
+  /** Evicts the native module's cached session/credentials for a node. */
+  disconnect: (nodeId: string) => Promise<void>;
+} = {
   /**
    * Checks if a device with the given node ID is connected locally.
    * @param nodeId - The unique identifier of the device.
@@ -19,6 +22,7 @@ const ESPLocalControlAdapter: ESPLocalControlAdapterInterface = {
       const res = await ESPLocalControlModule.isConnected(nodeId);
       return res;
     } catch (error) {
+      console.error("[ESPLocalControlAdapter][isConnected] error", nodeId, String(error));
       throw error;
     }
   },
@@ -79,6 +83,25 @@ const ESPLocalControlAdapter: ESPLocalControlAdapterInterface = {
       return res;
     } catch (error) {
       throw error;
+    }
+  },
+
+  /**
+   * Drops the native module's cached session/credentials for a node so the next
+   * `connect()` performs a fresh handshake. Best-effort: older native builds
+   * without `disconnect` are a no-op. Used to recover from a stale PoP/IP after
+   * a factory-reset + re-provision, or when the node drops off mDNS.
+   * @param nodeId - The unique identifier of the device.
+   */
+  disconnect: async (nodeId: string): Promise<void> => {
+    try {
+      const native = ESPLocalControlModule as unknown as {
+        disconnect?: (nodeId: string) => void;
+      };
+      native.disconnect?.(nodeId);
+    } catch (error) {
+      // Best-effort cache invalidation; never block discovery teardown.
+      console.log("[localCtrl][DIAG] disconnect error", nodeId, String(error));
     }
   },
 };
