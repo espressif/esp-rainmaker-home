@@ -309,11 +309,18 @@ export const PARAM_BOUNDS_ACTION_BUTTON_ONLY = "actionButtonOnly";
 export const PARAM_BOUNDS_DISABLED_WHEN_SIBLING_VALUE =
   "disabledWhenSiblingValue";
 
+/** Icon tokens for {@link ParamControlBoardActionSpec} (transport play/pause or lock/unlock). */
+export type ParamControlBoardIcon =
+  | "play"
+  | "pause"
+  | "lock"
+  | "unlock";
+
 /** One state → action mapping for control-board params. */
 export type ParamControlBoardActionSpec = {
   action: string;
   label: string;
-  icon: "play" | "pause";
+  icon: ParamControlBoardIcon;
 };
 
 /** Sibling-param gate spec for {@link PARAM_BOUNDS_DISABLED_WHEN_SIBLING_VALUE}. */
