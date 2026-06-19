@@ -18,6 +18,12 @@ export const RAINMAKER_EVENT_TO_CDF_NODE_SUBSCRIPTION_EVENTS: Record<string, str
   "rmaker.event.node_connected": ESP_CDF_NODE_SUBSCRIPTION_EVENTS.NODE_CONNECTED,
   "rmaker.event.node_disconnected":
     ESP_CDF_NODE_SUBSCRIPTION_EVENTS.NODE_DISCONNECTED,
+  // RainMaker NG (rmng) subscription-channel event types.
+  "rmng.event.node_params_changed":
+    ESP_CDF_NODE_SUBSCRIPTION_EVENTS.NODE_PARAMS_CHANGED,
+  "rmng.event.node_connected": ESP_CDF_NODE_SUBSCRIPTION_EVENTS.NODE_CONNECTED,
+  "rmng.event.node_disconnected":
+    ESP_CDF_NODE_SUBSCRIPTION_EVENTS.NODE_DISCONNECTED,
 };
 
 /**
