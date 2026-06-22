@@ -5,6 +5,7 @@
  */
 
 import {
+    ESPCDF,
     ESPCDFNode,
     ESPCDFNodeConfig,
     ESPCDFNodeOperation,
@@ -20,6 +21,7 @@ import {
 } from "@shared/utils/constants";
 import { safeTransform } from "@sdk-adaptors/shared/utils/safeTransform";
 import { syncCdfDeviceDisplayName } from "@sdk-adaptors/shared/utils/common";
+import { projectRegisteredTransportsOntoRawNode } from "@sdk-adaptors/shared/utils/projectRegisteredTransports";
 import { transformToESPCDFDevice } from "./transformToESPCDFDevice";
 import { transformToESPCDFService } from "./transformToESPCDFService";
 
@@ -217,6 +219,20 @@ export function transformToESPCDFNode(
     // This creates an event-based sync mechanism
     const syncCallback = createPropertyChangeSyncCallback(node, cdfNode);
     cdfNode.onPropertyChange(syncCallback);
+
+    // Re-project the durable registered LAN transport onto this freshly-built raw
+    // node so RM param writes (ESPRMDeviceParam.setValue -> delegatedTransportHandler)
+    // route local-first immediately, rather than over the cloud until a discovery
+    // event re-fires. ESPRMNode has no addTransport, so the helper assigns
+    // availableTransports directly. Inert for Matter nodes (matter_local is not in
+    // their [local, cloud] transport order and matter writes use a controller
+    // invoke) — see the helper for the full rationale.
+    projectRegisteredTransportsOntoRawNode(
+        node,
+        ESPCDF.instance?.subscriptionStore?.getRegisteredTransportsSnapshot?.()?.[
+            nodeId
+        ],
+    );
 
     return cdfNode;
 }

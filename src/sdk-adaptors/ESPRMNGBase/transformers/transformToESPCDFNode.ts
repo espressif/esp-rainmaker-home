@@ -24,6 +24,7 @@ import type {
     ESPCDFPropertyChangeEvent,
 } from "@store";
 import { syncCdfDeviceDisplayName } from "@sdk-adaptors/shared/utils/common";
+import { projectRegisteredTransportsOntoRawNode } from "@sdk-adaptors/shared/utils/projectRegisteredTransports";
 import { EVENT_NODE_PARAMS_CHANGED } from "@store";
 import { ESPRMNGBaseAdaptorIdentifier } from "@config/sdk.identifiers";
 import {
@@ -238,6 +239,18 @@ export function transformToESPCDFNode(node: ESPRMNGNode): ESPCDFNode {
     });
     const syncCallback = createPropertyChangeSyncCallback(node, cdfNode);
     cdfNode.onPropertyChange(syncCallback);
+
+    // Re-project the durable registered LAN transport onto this freshly-built raw
+    // node so `node.setParams` routes local-first immediately — a new instance
+    // (home sync or ncfg shadow refresh) otherwise seeds only `mqtt` and routes
+    // over MQTT until a home switch re-subscribes discovery. See the helper for
+    // the full rationale.
+    projectRegisteredTransportsOntoRawNode(
+        node,
+        ESPCDF.instance?.subscriptionStore?.getRegisteredTransportsSnapshot?.()?.[
+            nodeId
+        ],
+    );
 
     return cdfNode;
 }
