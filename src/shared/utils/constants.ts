@@ -88,15 +88,45 @@ export const ESPRM_CHANNEL_PARAM_TYPE = "esp.param.channel";
 export const ESPRM_LOCAL_CONTROL_TYPE_PARAM_TYPE = "esp.param.local_control_type";
 export const ESPRM_LOCAL_CONTROL_POP_PARAM_TYPE = "esp.param.local_control_pop";
 
+import {
+  MATTER_DEVICE_TYPE_DOOR_LOCK,
+  MATTER_DEVICE_TYPE_HUMIDITY_SENSOR,
+  MATTER_DEVICE_TYPE_ILLUMINANCE_SENSOR,
+  MATTER_DEVICE_TYPE_OCCUPANCY_SENSOR,
+  MATTER_DEVICE_TYPE_RVC,
+  MATTER_DEVICE_TYPE_TEMPERATURE_SENSOR,
+} from "@config/matter.constants";
+
 /**
  * `extractDeviceType` values with no meaningful power param for card UI: DeviceCard uses node
  * connectivity (`isConnected`) for `getDeviceImage` instead of `ESPRM_POWER_PARAM_TYPE`.
  */
+export {
+  MATTER_DEVICE_TYPE_DOOR_LOCK,
+  MATTER_DEVICE_TYPE_HUMIDITY_SENSOR,
+  MATTER_DEVICE_TYPE_ILLUMINANCE_SENSOR,
+  MATTER_DEVICE_TYPE_OCCUPANCY_SENSOR,
+  MATTER_DEVICE_TYPE_RVC,
+  MATTER_DEVICE_TYPE_TEMPERATURE_SENSOR,
+};
+
+/** Param `name` values shown as live readings on the home device card. */
+export const DEVICE_CARD_SENSOR_PARAM_NAME_BATTERY = "Battery";
+export const DEVICE_CARD_SENSOR_PARAM_NAME_HUMIDITY = "Humidity";
+export const DEVICE_CARD_SENSOR_PARAM_NAME_ILLUMINANCE = "Illuminance";
+export const DEVICE_CARD_SENSOR_PARAM_NAME_OCCUPANCY = "Occupancy";
+export const DEVICE_CARD_SENSOR_PARAM_NAME_TEMPERATURE = "Temperature";
+
 export const POWER_PARAM_UNSUPPORTED_DEVICE_TYPES = new Set<string>([
   "temperature-sensor",
   "ai assistant",
   "camera",
-  "matter:17",
+  MATTER_DEVICE_TYPE_RVC,
+  MATTER_DEVICE_TYPE_TEMPERATURE_SENSOR,
+  MATTER_DEVICE_TYPE_HUMIDITY_SENSOR,
+  MATTER_DEVICE_TYPE_OCCUPANCY_SENSOR,
+  MATTER_DEVICE_TYPE_ILLUMINANCE_SENSOR,
+  MATTER_DEVICE_TYPE_DOOR_LOCK,
 ]);
 
 // PARAM NAMES
@@ -110,6 +140,9 @@ export const ESPRM_UI_TEXT_PARAM_TYPE = "esp.ui.text";
 export const ESPRM_UI_STATUS_PARAM_TYPE = "esp.ui.status";
 export const ESPRM_UI_ACTION_BUTTON_PARAM_TYPE = "esp.ui.action-button";
 export const ESPRM_UI_CONTROL_BOARD_PARAM_TYPE = "esp.ui.control-board";
+export const ESPRM_UI_LOCK_CONTROL_PARAM_TYPE = "esp.ui.lock-control";
+/** UI slug for an unlocked lock-control state (icon + engaged styling). */
+export const LOCK_CONTROL_UNLOCKED_STATE = "unlocked";
 export const ESPRM_UI_TOGGLE_PARAM_TYPE = "esp.ui.toggle";
 export const ESPRM_UI_SLIDER_PARAM_TYPE = "esp.ui.slider";
 export const ESPRM_UI_HUE_SLIDER_PARAM_TYPE = "esp.ui.hue-slider";

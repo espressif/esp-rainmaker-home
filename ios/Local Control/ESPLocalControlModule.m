@@ -23,6 +23,7 @@ RCT_EXTERN_METHOD(sendData:(NSString *)nodeId
                   data:(NSString *)data
                   resolve:(RCTPromiseResolveBlock)resolve
                   reject:(RCTPromiseRejectBlock)reject)
+RCT_EXTERN_METHOD(disconnect:(NSString *)nodeId)
 
 @end
 

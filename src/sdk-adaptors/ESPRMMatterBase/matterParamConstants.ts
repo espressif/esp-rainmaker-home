@@ -70,3 +70,72 @@ export const RVC_TRANSPORT_ACTIONS_BY_STATE: Record<
     icon: "play",
   },
 };
+
+/** TemperatureMeasurement MeasuredValue null sentinel (int16 `0x8000`). */
+export const MATTER_TEMPERATURE_MEASURED_NULL = -32768;
+
+/** RelativeHumidityMeasurement / IlluminanceMeasurement null sentinel (`0xFFFF`). */
+export const MATTER_HUMIDITY_MEASURED_NULL = 0xffff;
+export const MATTER_ILLUMINANCE_MEASURED_NULL = 0xffff;
+
+/** Matter sensor attribute scale divisors (linear: raw / factor). */
+export const MATTER_TEMPERATURE_SCALE_FACTOR = 100;
+export const MATTER_HUMIDITY_SCALE_FACTOR = 100;
+
+/**
+ * IlluminanceMeasurement log encoding (cluster 0x0400, MeasuredValue):
+ * `MeasuredValue = SCALE × log10(lux) + OFFSET` → lux = 10^((value − OFFSET) / SCALE).
+ */
+export const MATTER_ILLUMINANCE_SCALE_FACTOR = 10000;
+export const MATTER_ILLUMINANCE_MEASURED_VALUE_OFFSET = 1;
+
+/** OccupancySensing Occupancy bitmap — bit 0 set means occupied. */
+export const MATTER_OCCUPANCY_BITMAP_OCCUPIED = 0x01;
+
+/** Occupancy semantic slugs for UI mapping. */
+export const MATTER_OCCUPANCY_STATE_OCCUPIED = "occupied";
+export const MATTER_OCCUPANCY_STATE_UNOCCUPIED = "unoccupied";
+
+/** Door Lock cluster (0x0101) command ids. */
+export const MATTER_DOOR_LOCK_CMD_LOCK_DOOR = 0x00;
+export const MATTER_DOOR_LOCK_CMD_UNLOCK_DOOR = 0x01;
+
+/** Door Lock control-board action tokens. */
+export const MATTER_DOOR_LOCK_ACTION_LOCK = "lock";
+export const MATTER_DOOR_LOCK_ACTION_UNLOCK = "unlock";
+
+/** Door Lock LockState attribute semantic slugs. */
+export const MATTER_DOOR_LOCK_STATE_NOT_FULLY_LOCKED = "not_fully_locked";
+export const MATTER_DOOR_LOCK_STATE_LOCKED = "locked";
+export const MATTER_DOOR_LOCK_STATE_UNLOCKED = "unlocked";
+export const MATTER_DOOR_LOCK_STATE_UNLATCHED = "unlatched";
+
+/**
+ * Maps Door Lock LockState slugs to control-board actions (lock / unlock only).
+ * Passed to the SDK via cluster param `meta.controlBoardActions`.
+ */
+export const MATTER_DOOR_LOCK_ACTIONS_BY_STATE: Record<
+  string,
+  ParamControlBoardActionSpec
+> = {
+  [MATTER_DOOR_LOCK_STATE_LOCKED]: {
+    action: MATTER_DOOR_LOCK_ACTION_UNLOCK,
+    label: "Unlock",
+    icon: "unlock",
+  },
+  [MATTER_DOOR_LOCK_STATE_UNLOCKED]: {
+    action: MATTER_DOOR_LOCK_ACTION_LOCK,
+    label: "Lock",
+    icon: "lock",
+  },
+  [MATTER_DOOR_LOCK_STATE_NOT_FULLY_LOCKED]: {
+    action: MATTER_DOOR_LOCK_ACTION_LOCK,
+    label: "Lock",
+    icon: "lock",
+  },
+  [MATTER_DOOR_LOCK_STATE_UNLATCHED]: {
+    action: MATTER_DOOR_LOCK_ACTION_LOCK,
+    label: "Lock",
+    icon: "lock",
+  },
+};

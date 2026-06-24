@@ -299,6 +299,26 @@ class ESPLocalControlModule(reactContext: ReactApplicationContext) :
     }
 
     /**
+     * Drops the cached per-node connection state so the next `connect()` /
+     * `sendData()` performs a fresh handshake with current credentials.
+     *
+     * Call this when the node's local-control details may have changed — e.g.
+     * after a factory-reset + re-provision (new PoP), a new DHCP IP, or when the
+     * node drops off mDNS. Without this, `isConnected()` (mere map membership)
+     * keeps reporting `true`, so the caller skips `connect()` and the stale
+     * PoP/IP captured in [localDeviceMap] is reused forever (until app restart).
+     *
+     * Only the per-node entry is evicted here; the module-wide [session] is reset
+     * lazily by the next `connect()`, so we don't tear down an unrelated node's
+     * active session.
+     */
+    @ReactMethod
+    fun disconnect(nodeId: String) {
+        Log.d(TAG, "disconnect: evicting cached local-control state for $nodeId")
+        localDeviceMap.remove(nodeId)
+    }
+
+    /**
      * Connects to an ESP device using the given parameters.
      *
      * @param nodeId Unique identifier of the device.
@@ -496,10 +516,17 @@ class ESPLocalControlModule(reactContext: ReactApplicationContext) :
                 device.username,
                 object : ResponseListener {
                     override fun onSuccess(returnData: ByteArray?) {
-                        sendDataToDevice(finalUrl, decodedData, promise)
+                        sendDataToDevice(nodeId, finalUrl, decodedData, promise)
                     }
 
                     override fun onFailure(e: Exception) {
+                        // Re-handshake failed (e.g. stale PoP/IP after re-provision):
+                        // evict the cached entry so the next sendData() re-runs
+                        // connect() with current credentials instead of looping on
+                        // the stale ones. The param write still falls back to MQTT.
+                        localDeviceMap.remove(nodeId)
+                        session = null
+                        sessionState = SessionState.NOT_CREATED
                         promise.reject(
                             "SESSION_NOT_INITIALIZED",
                             "Failed to initialize session. Error: ${e.message}"
@@ -508,18 +535,19 @@ class ESPLocalControlModule(reactContext: ReactApplicationContext) :
                 }
             )
         } else {
-            sendDataToDevice(finalUrl, decodedData, promise)
+            sendDataToDevice(nodeId, finalUrl, decodedData, promise)
         }
     }
 
     /**
      * Sends data to the device via the established session.
      *
+     * @param nodeId Unique identifier of the device (used to evict cached state on failure).
      * @param finalUrl Fully constructed URL for the endpoint.
      * @param data Data to send.
      * @param promise Promise to resolve with the device's response.
      */
-    private fun sendDataToDevice(finalUrl: String, data: ByteArray, promise: Promise) {
+    private fun sendDataToDevice(nodeId: String, finalUrl: String, data: ByteArray, promise: Promise) {
         session?.sendDataToDevice(finalUrl, data, object : ResponseListener {
             @RequiresApi(Build.VERSION_CODES.O)
             override fun onSuccess(returnData: ByteArray?) {
@@ -528,6 +556,11 @@ class ESPLocalControlModule(reactContext: ReactApplicationContext) :
             }
 
             override fun onFailure(e: Exception?) {
+                // Send failed on a previously-good session (socket died / device
+                // rebooted): evict so the next call forces a fresh connect().
+                localDeviceMap.remove(nodeId)
+                session = null
+                sessionState = SessionState.NOT_CREATED
                 promise.reject("SEND_DATA_FAILED", e?.message ?: "Failed to send data")
             }
         })

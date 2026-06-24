@@ -10,14 +10,21 @@ import {
     ESPCDFNodeConfig,
     ESPCDFNodeInfoInterface,
     ESPCDFAPIResponse,
+    ESPCDFNodeTransport,
 } from "@store";
-import { ESPRMNGDevice, ESPRMNGNode, ESPRMNGService } from "@espressif/rmng-base-sdk";
+import {
+    ESPRMNGDevice,
+    ESPRMNGNode,
+    ESPRMNGService,
+    ESPTransportMode,
+} from "@espressif/rmng-base-sdk";
 import type {
     ESPCDFNodeOperation,
     ESPCDFPropertyChangeCallback,
     ESPCDFPropertyChangeEvent,
 } from "@store";
 import { syncCdfDeviceDisplayName } from "@sdk-adaptors/shared/utils/common";
+import { projectRegisteredTransportsOntoRawNode } from "@sdk-adaptors/shared/utils/projectRegisteredTransports";
 import { EVENT_NODE_PARAMS_CHANGED } from "@store";
 import { ESPRMNGBaseAdaptorIdentifier } from "@config/sdk.identifiers";
 import {
@@ -68,6 +75,30 @@ const createPropertyChangeSyncCallback = (
                     syncCdfDeviceDisplayName(cdfNode, device.name);
                 }
                 break;
+            case "availableTransportsChanged": {
+                // Mirror the CDF-managed LAN transport onto the raw RMNG node so the
+                // SDK's transport handler routes local-first for subsequent set/get
+                // params. The CDF store is the single source of truth (updated by
+                // `handleNodeTransportUpdate` from local discovery); this projects it
+                // onto `_raw`. Unlike the legacy adaptor we do NOT blanket-replace
+                // `rawNode.availableTransports`: the RMNG node self-manages its
+                // `mqtt` transport from connectivity, so we touch only the
+                // discovery-managed `local` transport via the node's generic
+                // addTransport/removeTransport helpers. The event carries the full
+                // transport map, so absence of `local` means it was removed (service lost).
+                const localBaseUrl =
+                    event.availableTransports?.[ESPCDFNodeTransport.LOCAL]?.metadata
+                        ?.baseUrl;
+                if (typeof localBaseUrl === "string" && localBaseUrl) {
+                    rawNode.addTransport(ESPTransportMode.local, {
+                        type: ESPTransportMode.local,
+                        metadata: { baseUrl: localBaseUrl },
+                    });
+                } else {
+                    rawNode.removeTransport(ESPTransportMode.local);
+                }
+                break;
+            }
             default:
                 break;
         }
@@ -208,6 +239,18 @@ export function transformToESPCDFNode(node: ESPRMNGNode): ESPCDFNode {
     });
     const syncCallback = createPropertyChangeSyncCallback(node, cdfNode);
     cdfNode.onPropertyChange(syncCallback);
+
+    // Re-project the durable registered LAN transport onto this freshly-built raw
+    // node so `node.setParams` routes local-first immediately — a new instance
+    // (home sync or ncfg shadow refresh) otherwise seeds only `mqtt` and routes
+    // over MQTT until a home switch re-subscribes discovery. See the helper for
+    // the full rationale.
+    projectRegisteredTransportsOntoRawNode(
+        node,
+        ESPCDF.instance?.subscriptionStore?.getRegisteredTransportsSnapshot?.()?.[
+            nodeId
+        ],
+    );
 
     return cdfNode;
 }

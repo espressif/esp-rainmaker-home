@@ -166,6 +166,7 @@ const CLUSTER_DEFAULT_ATTRIBUTES: Readonly<
   // concrete-path resolution (returned `status=0x86 UnsupportedAttribute`
   // for 0x0B / 0x0E / 0x12 explicit subscribes).
   [0x002f]: [0x000c],
+  [0x0400]: [0x0000], // IlluminanceMeasurement: MeasuredValue
   [0x0402]: [0x0000], // TemperatureMeasurement: MeasuredValue
   [0x0405]: [0x0000], // RelativeHumidityMeasurement: MeasuredValue
   [0x0406]: [0x0000], // OccupancySensing: Occupancy

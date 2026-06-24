@@ -484,6 +484,8 @@
       "errorRemovingUser": "移除用户共享失败",
       "errorRemovingHome": "移除家庭出错",
       "errorLeavingHome": "退出家庭出错",
+      "homeNotEmpty": "This home isn't empty. Remove all rooms and devices first.",
+      "roomNotEmpty": "This room isn't empty. Remove all devices first.",
       "userNotFound": "用户未找到",
       "addingSelfNotAllowed": "不允许添加自己"
     }

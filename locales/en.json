@@ -484,6 +484,8 @@
       "errorRemovingUser": "Failed to remove user sharing",
       "errorRemovingHome": "Error removing home",
       "errorLeavingHome": "Error leaving home",
+      "homeNotEmpty": "This home isn't empty. Remove all rooms and devices first.",
+      "roomNotEmpty": "This room isn't empty. Remove all devices first.",
       "userNotFound": "User not found",
       "addingSelfNotAllowed": "Adding self not allowed"
     }

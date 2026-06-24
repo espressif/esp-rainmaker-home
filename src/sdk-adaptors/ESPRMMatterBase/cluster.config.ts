@@ -11,6 +11,20 @@
  * Passed to the SDK via `getMatterSDKConfig()` → `clusterConfig`.
  */
 
+import {
+  MATTER_CLUSTER_ID_COLOR_CONTROL,
+  MATTER_CLUSTER_ID_DOOR_LOCK,
+  MATTER_CLUSTER_ID_ILLUMINANCE_MEASUREMENT,
+  MATTER_CLUSTER_ID_LEVEL_CONTROL,
+  MATTER_CLUSTER_ID_OCCUPANCY_SENSING,
+  MATTER_CLUSTER_ID_ON_OFF,
+  MATTER_CLUSTER_ID_POWER_SOURCE,
+  MATTER_CLUSTER_ID_RELATIVE_HUMIDITY_MEASUREMENT,
+  MATTER_CLUSTER_ID_RVC_CLEAN_MODE,
+  MATTER_CLUSTER_ID_RVC_OPERATIONAL_STATE,
+  MATTER_CLUSTER_ID_RVC_RUN_MODE,
+  MATTER_CLUSTER_ID_TEMPERATURE_MEASUREMENT,
+} from "./constants";
 import type { ClusterConfigMap } from "@espressif/rainmaker-matter-sdk";
 import { MATTER_PARAM_VALUE_UNKNOWN } from "@espressif/rainmaker-matter-sdk";
 import {
@@ -18,9 +32,11 @@ import {
   ESPRM_UI_ACTION_BUTTON_PARAM_TYPE,
   ESPRM_UI_STATUS_PARAM_TYPE,
   ESPRM_UI_CONTROL_BOARD_PARAM_TYPE,
+  ESPRM_UI_LOCK_CONTROL_PARAM_TYPE,
   ESPRM_UI_TOGGLE_PARAM_TYPE,
   ESPRM_UI_SLIDER_PARAM_TYPE,
   ESPRM_UI_HUE_SLIDER_PARAM_TYPE,
+  ESPRM_TEMPERATURE_PARAM_TYPE,
   PARAM_CONTROL_INVOKE_VALUE,
 } from "@shared/utils/constants";
 import {
@@ -43,9 +59,26 @@ import {
 } from "./utils/common";
 import {
   MATTER_COLOR_CMD_MOVE_TO_HUE,
+  MATTER_DOOR_LOCK_ACTION_LOCK,
+  MATTER_DOOR_LOCK_ACTION_UNLOCK,
+  MATTER_DOOR_LOCK_ACTIONS_BY_STATE,
+  MATTER_DOOR_LOCK_CMD_LOCK_DOOR,
+  MATTER_DOOR_LOCK_CMD_UNLOCK_DOOR,
+  MATTER_DOOR_LOCK_STATE_LOCKED,
+  MATTER_DOOR_LOCK_STATE_NOT_FULLY_LOCKED,
+  MATTER_DOOR_LOCK_STATE_UNLATCHED,
+  MATTER_DOOR_LOCK_STATE_UNLOCKED,
+  MATTER_HUMIDITY_MEASURED_NULL,
+  MATTER_HUMIDITY_SCALE_FACTOR,
+  MATTER_ILLUMINANCE_MEASURED_NULL,
+  MATTER_ILLUMINANCE_MEASURED_VALUE_OFFSET,
+  MATTER_ILLUMINANCE_SCALE_FACTOR,
   MATTER_LEVEL_CMD_MOVE_TO_LEVEL_WITH_ON_OFF,
-} from "./matterParamConstants";
-import {
+  MATTER_OCCUPANCY_BITMAP_OCCUPIED,
+  MATTER_OCCUPANCY_STATE_OCCUPIED,
+  MATTER_OCCUPANCY_STATE_UNOCCUPIED,
+  MATTER_TEMPERATURE_MEASURED_NULL,
+  MATTER_TEMPERATURE_SCALE_FACTOR,
   RVC_OPERATIONAL_ERROR_NO_ERROR,
   RVC_TRANSPORT_ACTION_PAUSE,
   RVC_TRANSPORT_ACTION_RESUME,
@@ -62,7 +95,7 @@ import {
 } from "./utils/rvcOperationalState";
 
 /** RVC Run Mode cluster id (RvcRunMode, ModeBase derivative). */
-const RVC_RUN_MODE_CLUSTER_ID = 0x54;
+const RVC_RUN_MODE_CLUSTER_ID = MATTER_CLUSTER_ID_RVC_RUN_MODE;
 
 /** RVC Run Mode `Cleaning` raw index — used to start the RVC. */
 const RVC_RUN_MODE_CLEANING_INDEX = 1;
@@ -81,6 +114,29 @@ const RVC_RUN_MODE_MAP: MappingDefinition = {
  * only be changed by invoking this command with a `NewMode` field.
  */
 const MODE_BASE_CHANGE_TO_MODE_COMMAND_ID = 0x00;
+
+/** Door Lock LockState index → UI slug map (cluster 0x101). */
+const DOOR_LOCK_STATE_MAP: MappingDefinition = {
+  0: { value: MATTER_DOOR_LOCK_STATE_NOT_FULLY_LOCKED, label: "Not Fully Locked" },
+  1: { value: MATTER_DOOR_LOCK_STATE_LOCKED, label: "Locked" },
+  2: { value: MATTER_DOOR_LOCK_STATE_UNLOCKED, label: "Unlocked" },
+  3: { value: MATTER_DOOR_LOCK_STATE_UNLATCHED, label: "Unlatched" },
+};
+
+const doorLockStateResolver = createMappingResolver(DOOR_LOCK_STATE_MAP);
+
+const doorLockCommandResolver = createCommandResolver([
+  {
+    value: MATTER_DOOR_LOCK_ACTION_LOCK,
+    label: "Lock",
+    commandId: MATTER_DOOR_LOCK_CMD_LOCK_DOOR,
+  },
+  {
+    value: MATTER_DOOR_LOCK_ACTION_UNLOCK,
+    label: "Unlock",
+    commandId: MATTER_DOOR_LOCK_CMD_UNLOCK_DOOR,
+  },
+]);
 
 /** RVC Clean Mode index → UI slug map (cluster 0x55). */
 const RVC_CLEAN_MODE_MAP: MappingDefinition = {
@@ -162,7 +218,7 @@ const rvcControlEncodeValue = (
 /** Matter cluster registry passed to the SDK at configure time. */
 export const matterClusterConfig: ClusterConfigMap = {
   "0x6": {
-    clusterId: 0x6,
+    clusterId: MATTER_CLUSTER_ID_ON_OFF,
     name: "On/Off",
     params: [
       {
@@ -181,7 +237,7 @@ export const matterClusterConfig: ClusterConfigMap = {
     ],
   },
   "0x8": {
-    clusterId: 0x8,
+    clusterId: MATTER_CLUSTER_ID_LEVEL_CONTROL,
     name: "Level Control",
     params: [
       {
@@ -200,7 +256,7 @@ export const matterClusterConfig: ClusterConfigMap = {
     ],
   },
   "0x300": {
-    clusterId: 0x300,
+    clusterId: MATTER_CLUSTER_ID_COLOR_CONTROL,
     name: "Color Control",
     params: [
       {
@@ -219,7 +275,7 @@ export const matterClusterConfig: ClusterConfigMap = {
     ],
   },
   "0x54": {
-    clusterId: 0x54,
+    clusterId: MATTER_CLUSTER_ID_RVC_RUN_MODE,
     name: "RVC Run Mode",
     defaultOptions: [
       { value: "idle", label: "Idle", rawMode: 0 },
@@ -245,7 +301,7 @@ export const matterClusterConfig: ClusterConfigMap = {
     ],
   },
   "0x55": {
-    clusterId: 0x55,
+    clusterId: MATTER_CLUSTER_ID_RVC_CLEAN_MODE,
     name: "RVC Clean Mode",
     defaultOptions: [
       { value: "deep_clean", label: "Deep Clean", rawMode: 0 },
@@ -271,7 +327,7 @@ export const matterClusterConfig: ClusterConfigMap = {
     ],
   },
   "0x61": {
-    clusterId: 0x61,
+    clusterId: MATTER_CLUSTER_ID_RVC_OPERATIONAL_STATE,
     name: "RVC Operational State",
     params: [
       {
@@ -346,8 +402,161 @@ export const matterClusterConfig: ClusterConfigMap = {
       },
     ],
   },
+  "0x101": {
+    clusterId: MATTER_CLUSTER_ID_DOOR_LOCK,
+    name: "Door Lock",
+    params: [
+      {
+        name: "Lock",
+        type: "command",
+        valueAttribute: 0,
+        optionsAttribute: 0,
+        uiType: ESPRM_UI_LOCK_CONTROL_PARAM_TYPE,
+        dataType: "string",
+        writeAsCommand: true,
+        properties: ["read", "write"],
+        meta: {
+          [PARAM_BOUNDS_CONTROL_BOARD_ACTIONS]: MATTER_DOOR_LOCK_ACTIONS_BY_STATE,
+        },
+        resolver: {
+          decodeOptions: doorLockCommandResolver.decodeOptions,
+          decodeValue: doorLockStateResolver.decodeValue,
+          encodeValue: doorLockCommandResolver.encodeValue,
+        },
+      },
+    ],
+  },
+  "0x400": {
+    clusterId: MATTER_CLUSTER_ID_ILLUMINANCE_MEASUREMENT,
+    name: "Illuminance Measurement",
+    params: [
+      {
+        name: "Illuminance",
+        type: "int",
+        valueAttribute: 0,
+        optionsAttribute: 0,
+        uiType: ESPRM_UI_STATUS_PARAM_TYPE,
+        dataType: "string",
+        properties: ["read"],
+        meta: {
+          [PARAM_BOUNDS_VALUE_SUFFIX]: " lux",
+        },
+        resolver: createTransformResolver({
+          decode(raw) {
+            const value = Number(raw);
+
+            if (
+              !Number.isFinite(value) ||
+              value === MATTER_ILLUMINANCE_MEASURED_NULL ||
+              value <= 0
+            ) {
+              return MATTER_PARAM_VALUE_UNKNOWN;
+            }
+
+            return String(
+              Math.round(
+                10 **
+                  ((value - MATTER_ILLUMINANCE_MEASURED_VALUE_OFFSET) /
+                    MATTER_ILLUMINANCE_SCALE_FACTOR),
+              ),
+            );
+          },
+        }),
+      },
+    ],
+  },
+  "0x402": {
+    clusterId: MATTER_CLUSTER_ID_TEMPERATURE_MEASUREMENT,
+    name: "Temperature Measurement",
+    params: [
+      {
+        name: "Temperature",
+        type: "int",
+        valueAttribute: 0,
+        optionsAttribute: 0,
+        uiType: ESPRM_TEMPERATURE_PARAM_TYPE,
+        dataType: "float",
+        properties: ["read"],
+        resolver: createTransformResolver({
+          decode(raw) {
+            const value = Number(raw);
+
+            if (
+              !Number.isFinite(value) ||
+              value === MATTER_TEMPERATURE_MEASURED_NULL
+            ) {
+              return MATTER_PARAM_VALUE_UNKNOWN;
+            }
+
+            return String(value / MATTER_TEMPERATURE_SCALE_FACTOR);
+          },
+        }),
+      },
+    ],
+  },
+  "0x405": {
+    clusterId: MATTER_CLUSTER_ID_RELATIVE_HUMIDITY_MEASUREMENT,
+    name: "Relative Humidity Measurement",
+    params: [
+      {
+        name: "Humidity",
+        type: "int",
+        valueAttribute: 0,
+        optionsAttribute: 0,
+        uiType: ESPRM_UI_STATUS_PARAM_TYPE,
+        dataType: "string",
+        properties: ["read"],
+        meta: {
+          [PARAM_BOUNDS_VALUE_SUFFIX]: "%",
+        },
+        resolver: createTransformResolver({
+          decode(raw) {
+            const value = Number(raw);
+
+            if (
+              !Number.isFinite(value) ||
+              value === MATTER_HUMIDITY_MEASURED_NULL ||
+              value > MATTER_HUMIDITY_SCALE_FACTOR * 100
+            ) {
+              return MATTER_PARAM_VALUE_UNKNOWN;
+            }
+
+            return String(Math.round(value / MATTER_HUMIDITY_SCALE_FACTOR));
+          },
+        }),
+      },
+    ],
+  },
+  "0x406": {
+    clusterId: MATTER_CLUSTER_ID_OCCUPANCY_SENSING,
+    name: "Occupancy Sensing",
+    params: [
+      {
+        name: "Occupancy",
+        type: "enum",
+        valueAttribute: 0,
+        optionsAttribute: 0,
+        uiType: ESPRM_UI_STATUS_PARAM_TYPE,
+        dataType: "string",
+        properties: ["read"],
+        resolver: createTransformResolver({
+          decode(raw) {
+            const value = Number(raw);
+
+            if (!Number.isFinite(value)) {
+              return MATTER_PARAM_VALUE_UNKNOWN;
+            }
+
+            return value & MATTER_OCCUPANCY_BITMAP_OCCUPIED
+              ? MATTER_OCCUPANCY_STATE_OCCUPIED
+              : MATTER_OCCUPANCY_STATE_UNOCCUPIED;
+          },
+        }),
+      },
+    ],
+  },
   "0x2f": {
-    clusterId: 0x2f,
+    clusterId: MATTER_CLUSTER_ID_POWER_SOURCE,
     name: "Power Source",
     params: [
       {

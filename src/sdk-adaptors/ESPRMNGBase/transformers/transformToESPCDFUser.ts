@@ -265,7 +265,7 @@ export function transformToESPCDFUser(
         },
         async subscribeToEvent(event: string, callback: (event: any) => void): Promise<void> {
             if (event === ESPCDFEventType.localDiscovery) {
-                discoveryCleanup = await startRmngLocalDiscoverySubscription(callback);
+                discoveryCleanup = await startRmngLocalDiscoverySubscription(callback, esprmngUser);
                 return;
             }
             throw new Error(`RMNGBase SDK does not support subscribeToEvent for event: ${event}`);
