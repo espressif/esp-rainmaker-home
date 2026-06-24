@@ -50,6 +50,29 @@ class ESPLocalControlModule: NSObject {
     // Resolve with the session status of the ESP device.
     resolve(espLocalDevice.isSessionEstablished())
   }
+
+  /// Resets the cached device to an unsecure stub so `isConnected` reports `false` and the
+  /// next `connect()` performs a fresh SEC1 handshake with current credentials.
+  ///
+  /// ESPProvision caches `isSessionEstablished` once at handshake and never resets it (not on
+  /// a failed send, and `ESPDevice.disconnect()` only tears down a softAP hotspot config), so
+  /// we replace the device object outright to invalidate stale session/PoP/IP state.
+  private func resetLocalDevice() {
+    espLocalDevice = ESPDevice(name: "espDevice", security: .unsecure, transport: .softap)
+  }
+
+  /// Drops the cached session/credentials for `nodeId` so the next `connect()` re-handshakes
+  /// with current credentials. Call on re-provision, PoP/IP change, or mDNS loss (wired from
+  /// the JS `DISCOVERY_LOST` handler via `ESPLocalControlAdapter.disconnect`).
+  ///
+  /// Guarded by a name match so invalidating one node never tears down a different node's
+  /// active session (this module holds a single `espLocalDevice`).
+  @objc(disconnect:)
+  func disconnect(nodeId: String) {
+    if espLocalDevice.name == nodeId {
+      resetLocalDevice()
+    }
+  }
   
   /// Establishes a connection to an ESP device using the specified parameters.
   ///
@@ -171,6 +194,10 @@ class ESPLocalControlModule: NSObject {
         
         // If an error occurred, reject the promise with the error description.
         if error != nil {
+          // Session/transport failed (e.g. device rebooted after re-provision): drop the
+          // cached device so the next call's isConnected() is false and connect()
+          // re-handshakes with current credentials instead of reusing the dead session.
+          self.resetLocalDevice()
           reject("error", error?.description, nil)
           invoked = true
           return
