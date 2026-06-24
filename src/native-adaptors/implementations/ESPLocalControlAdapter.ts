@@ -48,10 +48,7 @@ const ESPLocalControlAdapter: ESPLocalControlAdapterInterface & {
     username?: string
   ): Promise<Record<string, any>> => {
     try {
-      let _username;
-      if (!username) {
-        _username = securityType === 2 ? "wifiprov" : "";
-      }
+      const _username = username ?? (securityType === 2 ? "wifiprov" : "");
       const res = await ESPLocalControlModule.connect(
         nodeId,
         baseurl,
