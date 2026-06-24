@@ -146,8 +146,17 @@ export const useSelectDeviceRoom = (): UseSelectDeviceRoomReturn => {
         }
       }
       
-      await syncHomeWithNodes()
-      navigateAfterRoomStep();
+      await syncHomeWithNodes();
+      // New Architecture (Fabric) commit-ordering guard.
+      // syncHomeWithNodes() triggers a MobX re-render of the Home screen, which
+      // is still mounted underneath this provision stack — it grows a new room
+      // tab and a new device card. If we tear the stack down (dismissTo Home) in
+      // the SAME commit as that re-render, Fabric receives an interleaved
+      // REMOVE/INSERT batch for views that are being created and reparented at
+      // once, and crashes: "addViewAt: ... View already has a parent".
+      // Deferring the navigation by a frame lets Home's update land on its own
+      // mount transaction first, so the reveal then runs against a stable tree.
+      requestAnimationFrame(() => navigateAfterRoomStep());
     } catch (error) {
       console.error("[SelectDeviceRoom] handleFinish error:", error);
       router.dismissTo("/(group)/Home" as any);
