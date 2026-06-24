@@ -5,6 +5,32 @@ All notable changes to the ESP RainMaker Home app will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.2.0]
+ 
+### Added
+ 
+#### Matter Cluster Support
+ 
+  - Added Matter cluster support for Door Lock, Illuminance, Temperature, Humidity, Occupancy, and Power Source (battery)
+  - Added a Lock Control parameter panel with lock state and command resolvers 
+  - Extended the device catalog and icons for door locks, sensors, and the Matter controller
+  - Added live sensor readouts on device cards 
+  - Registered the new lock, sensor, and battery parameter types in the Matter parameter configuration
+ 
+### Enhanced
+ 
+  - [RMNG] Improved the group deletion flow and added a subgroup deletion flow
+  - [RMNG] Adopted the SDK's updated discovery and transport model
+  - Switched LAN discovery to the SDK's user event subscription, replacing the removed global node baseUrl map
+  - Mirrored the LAN transport onto each node on change events so set/get parameter calls route local-first
+ 
+### Fixed                                                  
+                  
+  - Forward the caller-supplied username during local control connect, falling back to "wifiprov" only on Security Type 2 when none is provided                                                                   
+  - Evict the native local-control cache when discovery is lost or a send/session fails, so re-provisioned or rebooted devices recover without an app restart
+  - Returning to Home after assigning a room during provisioning no longer crashes the app on React Native 0.83 
+  - After provisioning, commands now route over the LAN when the device is locally reachable instead of always falling back to cloud
+
 ## [5.1.1]
 
 ### Fixed
