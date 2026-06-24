@@ -241,7 +241,7 @@ export function useSettings(options: UseSettingsOptions): UseSettingsResult {
     const errorMessage = isPrimary
       ? t("group.errors.errorRemovingHome")
       : t("group.errors.errorLeavingHome");
-
+    
     action
       .then((res: any) => {
         if (res.status === SUCESS) {
@@ -251,8 +251,8 @@ export function useSettings(options: UseSettingsOptions): UseSettingsResult {
           toast.showError(res.description || errorMessage);
         }
       })
-      .catch(() => {
-        toast.showError(errorMessage);
+      .catch((error: any) => {
+        toast.showError(errorMessage, error?.description || t("group.errors.fallback"));
       })
       .finally(() => {
         setIsLoading(false);

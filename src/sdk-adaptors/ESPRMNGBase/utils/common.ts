@@ -82,9 +82,14 @@ export type NormalizedRmngShareError = RmngHttpError & {
 /**
  * Re-throw with fields the app expects (`description`, optional `errorCode`) while preserving `status` / `responseData`.
  */
-export function throwNormalizedRmngShareError(
+export function throwNormalizedRmngError(
   error: unknown,
-  fallbackMessage = "Share request failed"
+  fallbackMessage = "Request failed",
+  /**
+   * When set, used verbatim as the surfaced `description`, overriding the raw
+   * cloud body message (e.g. a localized "remove devices first" for a 409).
+   */
+  overrideDescription?: string
 ): never {
   const e = error as RmngHttpError;
   const rd = e.responseData;
@@ -100,6 +105,7 @@ export function throwNormalizedRmngShareError(
       : "";
 
   const description =
+    overrideDescription ||
     apiBodyMessage ||
     apiBodyStatus ||
     (fromHttpMessage || e.message || fallbackMessage);
@@ -110,6 +116,13 @@ export function throwNormalizedRmngShareError(
   if (typeof e.status === "number") out.status = e.status;
   if (rd && typeof rd === "object") out.responseData = rd;
   throw out;
+}
+
+export function throwNormalizedRmngShareError(
+  error: unknown,
+  fallbackMessage = "Share request failed"
+): never {
+  throwNormalizedRmngError(error, fallbackMessage);
 }
 
 /**

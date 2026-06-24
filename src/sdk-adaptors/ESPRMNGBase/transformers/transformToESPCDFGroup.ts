@@ -5,7 +5,9 @@ import { transformToESPCDFAutomation, type ResolvedAutomationEvents } from "./tr
 import { transformToESPCDFNodes } from "./transformToESPCDFNode";
 import { transformToESPCDFSchedule } from "./transformToESPCDFSchedule";
 import { apiOperatorToTriggerOperator, cdfActionsToTargets, cdfEventsToTriggerItems, triggerItemToCdfEvent } from "../utils/automation";
-import { normalizeRmngSdkResponseToCdf, throwNormalizedRmngShareError } from "../utils/common";
+import { normalizeRmngSdkResponseToCdf, throwNormalizedRmngError, throwNormalizedRmngShareError } from "../utils/common";
+import { emptyAndDeleteRmngGroup, isGroupNotEmptyError } from "../utils/groupDeletion";
+import i18n from "@/i18n";
 import {
     ESPRMNG_GROUP_SHARING_SCOPE_PARENT,
     ESPRMNG_GROUP_SHARING_SCOPE_SUBGROUP_ROOM,
@@ -154,8 +156,21 @@ export function transformToESPCDFGroup(
             });
         },
         async delete(): Promise<ESPCDFAPIResponse> {
-            const response = await group.delete();
-            return normalizeRmngSdkResponseToCdf(response, "Group deleted successfully");
+            try {
+                const response = await emptyAndDeleteRmngGroup(group);
+                return normalizeRmngSdkResponseToCdf(response, "Group deleted successfully");
+            } catch (error) {
+                // Cloud rejects non-empty groups/subgroups with 409 ("group/subgroup
+                // not empty"). Swap that raw message for a localized, actionable one;
+                // throwNormalizedRmngError keeps `status` on the re-thrown error.
+                if (isGroupNotEmptyError(error)) {
+                    const message = isSubgroup(group)
+                        ? i18n.t("group.errors.roomNotEmpty")
+                        : i18n.t("group.errors.homeNotEmpty");
+                    throwNormalizedRmngError(error, "Failed to delete group", message);
+                }
+                throwNormalizedRmngError(error, "Failed to delete group");
+            }
         },
         async updateMetadata(_metadata: Record<string, any>): Promise<ESPCDFAPIResponse> {
             throw new Error("RMNGBase SDK does not support updateMetadata");
