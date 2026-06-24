@@ -6,6 +6,7 @@
 
 import { ESPCDFDevice, ESPCDFDeviceParam } from "@store";
 import { PARAM_CONTROLS } from "@/config/params.config";
+import { MATTER_SERVER_PARAM_TYPE_ON_OFF } from "@config/matter.constants";
 import {
   ESPRM_POWER_PARAM_TYPE,
   ESPRM_UI_HIDDEN_PARAM_TYPE,
@@ -35,7 +36,7 @@ export interface ParamControlConfig {
 export type ParamsMap = Record<string, ParamControlConfig>;
 
 /**
- * RainMaker power param or Matter OnOff (`server:0x6`) when no primary param is set.
+ * RainMaker power param or Matter OnOff (`MATTER_SERVER_PARAM_TYPE_ON_OFF`) when no primary param is set.
  * @param params - Device parameters
  * @returns Matching power param, if any
  */
@@ -44,11 +45,15 @@ const findLegacyDeviceCardPowerParam = (
 ): ESPCDFDeviceParam | undefined =>
   params?.find(
     (param) =>
-      param.type === ESPRM_POWER_PARAM_TYPE || param.type === "server:0x6"
+      param.type === ESPRM_POWER_PARAM_TYPE ||
+      param.type === MATTER_SERVER_PARAM_TYPE_ON_OFF
   );
 
 /** Types that are valid power/toggle params for the device card switch. */
-const POWER_COMPATIBLE_TYPES = new Set([ESPRM_POWER_PARAM_TYPE, "server:0x6"]);
+const POWER_COMPATIBLE_TYPES = new Set([
+  ESPRM_POWER_PARAM_TYPE,
+  MATTER_SERVER_PARAM_TYPE_ON_OFF,
+]);
 
 /**
  * Resolves the param that drives the device card power switch.

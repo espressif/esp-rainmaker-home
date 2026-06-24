@@ -4,6 +4,17 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import {
+  MATTER_DEVICE_TYPE_DOOR_LOCK,
+  MATTER_DEVICE_TYPE_EXTENDED_COLOR_LIGHT,
+  MATTER_DEVICE_TYPE_GENERIC_SENSOR,
+  MATTER_DEVICE_TYPE_HUMIDITY_SENSOR,
+  MATTER_DEVICE_TYPE_ILLUMINANCE_SENSOR,
+  MATTER_DEVICE_TYPE_OCCUPANCY_SENSOR,
+  MATTER_DEVICE_TYPE_RVC,
+  MATTER_DEVICE_TYPE_TEMPERATURE_SENSOR,
+} from "@config/matter.constants";
+
 export const DEVICE_TYPE_LIST = [
   {
     label: "Lighting",
@@ -31,6 +42,18 @@ export const DEVICE_TYPE_LIST = [
     defaultIcon: "light-1",
     disabled: false,
     controlPanel: "light",
+  },
+  {
+    label: "Lighting",
+    groupLabel: "Lights",
+    type: [
+      MATTER_DEVICE_TYPE_EXTENDED_COLOR_LIGHT,
+    ],
+    name: "Light",
+    param: "Light",
+    deviceType: ["1", "2"],
+    defaultIcon: "light-3",
+    disabled: true,
   },
   {
     label: "Socket",
@@ -101,20 +124,69 @@ export const DEVICE_TYPE_LIST = [
   {
     label: "Temperature",
     groupLabel: "Temperature",
-    type: ["temperature-sensor"],
+    type: ["temperature-sensor", MATTER_DEVICE_TYPE_TEMPERATURE_SENSOR],
     name: "Temperature Sensor",
     param: "Temperature",
     deviceType: 5,
     icon: {
-      temperature: { icon: "temperature" },
+      "temperature-sensor": { icon: "temperature" },
+      [MATTER_DEVICE_TYPE_TEMPERATURE_SENSOR]: { icon: "temperature" },
     },
     defaultIcon: "temperature",
-    disabled: false
+    disabled: false,
+  },
+  {
+    label: "Humidity Sensor",
+    groupLabel: "Sensor",
+    type: [MATTER_DEVICE_TYPE_HUMIDITY_SENSOR],
+    name: "Humidity Sensor",
+    param: "Humidity",
+    icon: {
+      [MATTER_DEVICE_TYPE_HUMIDITY_SENSOR]: { icon: "humidity-sensor" },
+    },
+    defaultIcon: "humidity-sensor",
+    disabled: true,
+  },
+  {
+    label: "Occupancy Sensor",
+    groupLabel: "Sensor",
+    type: [MATTER_DEVICE_TYPE_OCCUPANCY_SENSOR],
+    name: "Occupancy Sensor",
+    param: "Occupancy",
+    icon: {
+      [MATTER_DEVICE_TYPE_OCCUPANCY_SENSOR]: { icon: "occupancy-sensor" },
+    },
+    defaultIcon: "occupancy-sensor",
+    disabled: true,
+  },
+  {
+    label: "Illuminance Sensor",
+    groupLabel: "Sensor",
+    type: [MATTER_DEVICE_TYPE_ILLUMINANCE_SENSOR],
+    name: "Illuminance Sensor",
+    param: "Illuminance",
+    icon: {
+      [MATTER_DEVICE_TYPE_ILLUMINANCE_SENSOR]: { icon: "illuminance-sensor" },
+    },
+    defaultIcon: "illuminance-sensor",
+    disabled: true,
+  },
+  {
+    label: "Door Lock",
+    groupLabel: "Security",
+    type: [MATTER_DEVICE_TYPE_DOOR_LOCK],
+    name: "Door Lock",
+    param: "Lock",
+    icon: {
+      [MATTER_DEVICE_TYPE_DOOR_LOCK]: { icon: "door-lock" },
+    },
+    defaultIcon: "door-lock",
+    disabled: true,
   },
   {
     label: "Sensor",
     groupLabel: "Sensor",
-    type: ["sensor"],
+    type: ["sensor", MATTER_DEVICE_TYPE_GENERIC_SENSOR],
     name: "Sensor",
     param: "Sensor",
     deviceType: 5,
@@ -194,7 +266,7 @@ export const DEVICE_TYPE_LIST = [
   {
     label: "RVC",
     groupLabel: "RVC",
-    type: ["matter:17"],
+    type: [MATTER_DEVICE_TYPE_RVC],
     name: "RVC",
     param: "RVC",
     icon: {
@@ -202,5 +274,17 @@ export const DEVICE_TYPE_LIST = [
     },
     defaultIcon: "rvc",
     disabled: false,
+  },
+  {
+    label: "Matter Controller",
+    groupLabel: "Matter Controller",
+    type: ["matter-controller"],
+    name: "Matter Controller",
+    param: "Matter Controller",
+    icon: {
+      "matter-controller": { icon: "matter-controller" },
+    },
+    defaultIcon: "matter-controller",
+    disabled: false
   },
 ];

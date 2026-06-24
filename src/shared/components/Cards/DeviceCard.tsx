@@ -35,6 +35,9 @@ import {
   isDeviceLocallyAvailable,
 } from "@shared/utils/device";
 import { resolveDeviceCardPowerParam } from "@shared/utils/deviceParams";
+import {
+  getDeviceCardSensorReadings,
+} from "@shared/utils/deviceCardSensor";
 import { coerceParamValueToBoolean } from "@shared/utils/paramUtils";
 
 // Constants
@@ -42,7 +45,6 @@ import {
   POWER_PARAM_UNSUPPORTED_DEVICE_TYPES,
   ESPRM_NAME_PARAM_TYPE,
   ERROR_CODES,
-  ESPRM_TEMPERATURE_PARAM_TYPE,
   MATTER_METADATA_KEY,
   MATTER_METADATA_DEVICE_NAME_KEY
 } from "@shared/utils/constants";
@@ -122,7 +124,7 @@ const DeviceCard: React.FC<DeviceCardProps> = ({
   }
 
   /**
-   * Builds paramTypeMap for non-power card fields (name, temperature).
+   * Builds paramTypeMap for non-power card fields (name).
    */
   useEffect(() => {
     if (device) {
@@ -227,16 +229,7 @@ const DeviceCard: React.FC<DeviceCardProps> = ({
     return isPowerOn;
   };
 
-  /**
-   * Formats temperature value for card display safely.
-   * Returns null when value is not a finite number.
-   */
-  const getFormattedTemperature = (): string | null => {
-    const temperatureValue = paramTypeMap[ESPRM_TEMPERATURE_PARAM_TYPE]?.value;
-    return typeof temperatureValue === "number" && Number.isFinite(temperatureValue)
-      ? `${temperatureValue.toFixed(1)}°C`
-      : null;
-  };
+  const sensorCardDisplay = getDeviceCardSensorReadings(device).join(" · ");
 
   const getDeviceName = (cdfNode: ESPCDFNode) => {
     // Check if node metadata contains Matter key
@@ -300,9 +293,9 @@ const DeviceCard: React.FC<DeviceCardProps> = ({
             />
           </Switch>
         )}
-        {getFormattedTemperature() && (
-          <Text style={styles.textValue} numberOfLines={1}>
-            {getFormattedTemperature()}
+        {sensorCardDisplay.length > 0 && (
+          <Text style={styles.textValue} numberOfLines={2}>
+            {sensorCardDisplay}
           </Text>
         )}
       </View>
