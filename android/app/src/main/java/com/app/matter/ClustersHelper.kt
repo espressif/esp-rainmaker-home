@@ -30,7 +30,8 @@ data class DeviceMatterInfo(
     val types: List<Long>,
     val serverClusters: List<Any>,
     val clientClusters: List<Any>,
-    val clusterAttributes: Map<String, List<Long>> = emptyMap()
+    val clusterAttributes: Map<String, List<Long>> = emptyMap(),
+    val clusterAcceptedCommands: Map<String, List<Long>> = emptyMap()
 )
 
 class ClustersHelper constructor(private val chipClient: ChipClient) {
@@ -128,19 +129,35 @@ class ClustersHelper constructor(private val chipClient: ChipClient) {
         clientListAttribute.forEach { clientClusters.add(it) }
 
         val clusterAttributes = mutableMapOf<String, List<Long>>()
+        val clusterAcceptedCommands = mutableMapOf<String, List<Long>>()
         serverClusters.forEach { clusterId ->
+            val clusterIdLong = clusterId.toString().toLong()
             val attributes = readClusterAttributeList(
                 connectedDevicePtr,
                 endpointInt,
-                clusterId.toString().toLong()
+                clusterIdLong
             )
             if (attributes.isNotEmpty()) {
                 clusterAttributes[clusterId.toString()] = attributes
             }
+            val acceptedCommands = readClusterAcceptedCommandList(
+                connectedDevicePtr,
+                endpointInt,
+                clusterIdLong
+            )
+            if (acceptedCommands.isNotEmpty()) {
+                clusterAcceptedCommands[clusterId.toString()] = acceptedCommands
+            }
         }
 
-        val deviceMatterInfo =
-            DeviceMatterInfo(endpointInt, types, serverClusters, clientClusters, clusterAttributes)
+        val deviceMatterInfo = DeviceMatterInfo(
+            endpointInt,
+            types,
+            serverClusters,
+            clientClusters,
+            clusterAttributes,
+            clusterAcceptedCommands
+        )
         matterDeviceInfoList.add(deviceMatterInfo)
 
         partsListAttribute?.forEach { part ->
@@ -166,15 +183,31 @@ class ClustersHelper constructor(private val chipClient: ChipClient) {
         devicePtr: Long,
         endpoint: Int,
         clusterId: Long
+    ): List<Long> = readClusterGlobalIdList(devicePtr, endpoint, clusterId, 0xFFFBL, "attribute")
+
+    /** Reads `AcceptedCommandList` (global attribute id 0xFFF9) for a server cluster. */
+    private suspend fun readClusterAcceptedCommandList(
+        devicePtr: Long,
+        endpoint: Int,
+        clusterId: Long
+    ): List<Long> = readClusterGlobalIdList(devicePtr, endpoint, clusterId, 0xFFF9L, "accepted command")
+
+    private suspend fun readClusterGlobalIdList(
+        devicePtr: Long,
+        endpoint: Int,
+        clusterId: Long,
+        globalAttributeId: Long,
+        listLabel: String
     ): List<Long> {
         return try {
-            val attributePath = ChipAttributePath.newInstance(endpoint, clusterId, 0xFFFBL)
+            val attributePath =
+                ChipAttributePath.newInstance(endpoint, clusterId, globalAttributeId)
             val attributeStates = chipClient.readAttributes(devicePtr, listOf(attributePath))
             val attributeState = attributeStates[attributePath]
 
             if (attributeState?.value is List<*>) {
-                val attributeList = attributeState.value as List<*>
-                attributeList.mapNotNull {
+                val idList = attributeState.value as List<*>
+                idList.mapNotNull {
                     when (it) {
                         is Long -> it
                         is Int -> it.toLong()
@@ -187,7 +220,7 @@ class ClustersHelper constructor(private val chipClient: ChipClient) {
         } catch (e: Exception) {
             Log.w(
                 TAG,
-                "Failed to read attribute list for cluster 0x${clusterId.toString(16)}: ${e.message}"
+                "Failed to read $listLabel list for cluster 0x${clusterId.toString(16)}: ${e.message}"
             )
             emptyList()
         }

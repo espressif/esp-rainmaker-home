@@ -16,6 +16,7 @@ import chip.devicecontroller.*
 import chip.devicecontroller.GetConnectedDeviceCallbackJni.GetConnectedDeviceCallback
 import chip.devicecontroller.model.*
 import chip.platform.*
+import com.google.gson.GsonBuilder
 import com.google.gson.JsonArray
 import com.google.gson.JsonObject
 import kotlinx.coroutines.CancellableContinuation
@@ -55,6 +56,8 @@ class ChipClient @JvmOverloads constructor(
 
     companion object {
         const val TAG = "ChipClient"
+        private const val MATTER_DATA_MODEL_LOG_LABEL =
+            "Complete Matter device data model (post-commissioning)"
         private const val DEFAULT_TIMEOUT = 15000L
         private const val INVOKE_COMMAND_TIMEOUT = 15000
 
@@ -510,13 +513,18 @@ class ChipClient @JvmOverloads constructor(
                                  * {
                                  *   "Matter": {
                                  *     "deviceName": "...",
-                                 *     "deviceType": <int>,
                                  *     "isRainmaker": <bool>,
                                  *     "group_id": "...",
                                  *     "endpoints": {
                                  *       "0x<EP>": {
+                                 *         "deviceType": [<int>...],
                                  *         "clusters": {
-                                 *           "servers": { "0x<CID>": { "attributes": ["0x<AID>"...] | null } },
+                                 *           "servers": {
+                                 *             "0x<CID>": {
+                                 *               "attributes": ["0x<AID>"...] | null,
+                                 *               "accepted_commands": ["0x<CMD>"...] | null
+                                 *             }
+                                 *           },
                                  *           "clients": { "0x<CID>": { "attributes": null } }
                                  *         }
                                  *       }
@@ -531,19 +539,24 @@ class ChipClient @JvmOverloads constructor(
 
                                             if (info.types.isNotEmpty()) {
                                                 val primaryDeviceType = info.types[0].toInt()
-                                                if (info.endpoint != 0) {
-                                                    metadataJson.addProperty(
-                                                        AppConstants.KEY_DEVICE_TYPE,
-                                                        primaryDeviceType
-                                                    )
-
-                                                    if (deviceName.isEmpty()) {
-                                                        deviceName = NodeUtils.getDefaultNameForMatterDevice(primaryDeviceType)
-                                                    }
+                                                if (info.endpoint != 0 && deviceName.isEmpty()) {
+                                                    deviceName =
+                                                        NodeUtils.getDefaultNameForMatterDevice(
+                                                            primaryDeviceType
+                                                        )
                                                 }
                                             }
 
                                             val endpointJson = JsonObject()
+                                            val deviceTypesArr = JsonArray()
+                                            for (type in info.types) {
+                                                deviceTypesArr.add(type.toInt())
+                                            }
+                                            endpointJson.add(
+                                                AppConstants.KEY_DEVICE_TYPE,
+                                                deviceTypesArr
+                                            )
+
                                             val clustersJson = JsonObject()
 
                                             val serversJson = JsonObject()
@@ -568,6 +581,26 @@ class ChipClient @JvmOverloads constructor(
                                                 } else {
                                                     clusterJson.add(
                                                         AppConstants.KEY_ATTRIBUTES,
+                                                        null
+                                                    )
+                                                }
+
+                                                val commandIds =
+                                                    info.clusterAcceptedCommands[serverCluster.toString()]
+                                                if (commandIds != null && commandIds.isNotEmpty()) {
+                                                    val commandsArr = JsonArray()
+                                                    for (commandId in commandIds) {
+                                                        commandsArr.add(
+                                                            "0x${commandId.toString(16)}"
+                                                        )
+                                                    }
+                                                    clusterJson.add(
+                                                        AppConstants.KEY_ACCEPTED_COMMANDS,
+                                                        commandsArr
+                                                    )
+                                                } else {
+                                                    clusterJson.add(
+                                                        AppConstants.KEY_ACCEPTED_COMMANDS,
                                                         null
                                                     )
                                                 }
@@ -626,20 +659,12 @@ class ChipClient @JvmOverloads constructor(
                                         )
                                         metadataJson.addProperty(AppConstants.KEY_GROUP_ID, groupId)
                                         metadataJson.add(AppConstants.KEY_ENDPOINTS, endpointsJson)
+                                        logMatterDeviceDataModel(metadataJson)
 
                                         this@ChipClient.lastCommissionedDeviceName = deviceName
 
                                     } catch (e: Exception) {
                                         Log.e(TAG, "Error building metadata: ${e.message}", e)
-                                    }
-
-                                    val primaryDeviceType =
-                                        deviceMatterInfo.firstOrNull()?.types?.firstOrNull()
-                                            ?.toInt()
-                                    if (primaryDeviceType != null) {
-                                        val defaultName = NodeUtils.getDefaultNameForMatterDevice(
-                                            primaryDeviceType
-                                        )
                                     }
 
                                 } else {
@@ -714,7 +739,6 @@ class ChipClient @JvmOverloads constructor(
                                     TAG,
                                     "Metadata fetched successfully, triggering confirm commission headless task"
                                 )
-                                Log.d(TAG, "Confirm commission body: ${body}")
 
                                 if (isControllerClusterAvailable && isRmClusterAvailable) {
                                     val sharedPreferences = context.getSharedPreferences(
@@ -1832,6 +1856,18 @@ class ChipClient @JvmOverloads constructor(
             nocChainReceived = false
         } catch (e: Exception) {
             Log.e(TAG, "Error closing ChipClient: ${e.message}", e)
+        }
+    }
+
+    /**
+     * Pretty-prints the complete Matter device data model after successful commissioning.
+     */
+    private fun logMatterDeviceDataModel(metadata: JsonObject) {
+        try {
+            val prettyJson = GsonBuilder().setPrettyPrinting().create().toJson(metadata)
+            Log.i(TAG, "$MATTER_DATA_MODEL_LOG_LABEL:\n$prettyJson")
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to log Matter device data model: ${e.message}", e)
         }
     }
 }
