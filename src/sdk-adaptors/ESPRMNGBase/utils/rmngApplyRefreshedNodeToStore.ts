@@ -7,7 +7,6 @@
 import { runInAction } from "mobx";
 import { ESPCDF, ESPCDFGroup, ESPCDFNode, ESPCDFNodeTransport } from "@store";
 import { mergeLocalTransportFromNodeMap } from "@shared/utils/mergeNodeListLocalTransport";
-import { ESPRMNGBase } from "@espressif/rmng-base-sdk";
 
 function syncGroupNodeDetails(
     groups: ESPCDFGroup[] | undefined,
@@ -34,8 +33,8 @@ function syncGroupNodeDetails(
 /**
  * Replaces a CDF node in the store using addNode (which properly re-attaches
  * the CDF synchronizer for devices/params). Preserves local transport via
- * the same merge used in provision/sync flows, and also checks the SDK's
- * nodeBaseUrlMap as a fallback source.
+ * the same merge used in provision/sync flows, falling back to the existing
+ * store node's raw SDK `availableTransports` for the LAN base URL.
  */
 export function applyRefreshedCdfNodeToStore(cdfNode: ESPCDFNode): void {
     const root = ESPCDF.instance;
@@ -54,17 +53,36 @@ export function applyRefreshedCdfNodeToStore(cdfNode: ESPCDFNode): void {
     const mergedTransports = merged.availableTransports as Record<string, unknown> | undefined;
     const mergedLocalBaseUrl = (mergedTransports?.local as { metadata?: { baseUrl?: string } })?.metadata?.baseUrl;
 
-    // Fallback: if CDF store didn't have local transport, check SDK's nodeBaseUrlMap
+    // Fallback: if the CDF merge didn't carry a local transport, read it from the
+    // existing store node's raw SDK instance (the live ESPRMNGNode that local
+    // discovery applied via addTransport). The new SDK has no global
+    // node-baseUrl map (ESPRMNGBase.getNodeBaseUrl was removed) — the LAN
+    // transport now lives per-node on availableTransports.
     if (!mergedLocalBaseUrl) {
-        const sdkBaseUrl = ESPRMNGBase.getNodeBaseUrl(cdfNode.id);
-        if (sdkBaseUrl) {
+        const existingRaw = nodeStore.getNodeById(cdfNode.id)?._raw as
+            | { availableTransports?: Record<string, { metadata?: { baseUrl?: string } }> }
+            | undefined;
+        const rawBaseUrl =
+            existingRaw?.availableTransports?.[ESPCDFNodeTransport.LOCAL]?.metadata?.baseUrl;
+        if (rawBaseUrl) {
+            const localCfg = {
+                type: ESPCDFNodeTransport.LOCAL,
+                metadata: { baseUrl: rawBaseUrl },
+            };
             merged.availableTransports = {
                 ...merged.availableTransports,
-                local: {
-                    type: ESPCDFNodeTransport.LOCAL,
-                    metadata: { baseUrl: sdkBaseUrl },
-                },
+                [ESPCDFNodeTransport.LOCAL]: localCfg,
             };
+            // Mirror onto the refreshed raw node so the SDK still routes local.
+            const raw = merged._raw as
+                | { availableTransports?: Record<string, unknown> }
+                | undefined;
+            if (raw && typeof raw === "object") {
+                raw.availableTransports = {
+                    ...(raw.availableTransports || {}),
+                    [ESPCDFNodeTransport.LOCAL]: localCfg,
+                };
+            }
         }
     }
 

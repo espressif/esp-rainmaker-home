@@ -131,6 +131,7 @@ export function getRMNGSDKConfig(): ESPRMNGBaseConfig {
     // Native bridge uses async isConnected(); rmng-base-sdk MQTTTransport types are sync.
     mqttAdapter: ESPMQTTAdapter as unknown as ESPRMNGBaseConfig["mqttAdapter"],
     provisionAdapter: rmngCompatibleProvisionAdapter as ESPRMNGBaseConfig["provisionAdapter"],
+    localDiscoveryAdapter: EspLocalDiscoveryAdapter as ESPRMNGBaseConfig["localDiscoveryAdapter"],
   };
 }
 
