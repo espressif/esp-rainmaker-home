@@ -36,6 +36,7 @@ import {
   ESPRM_UI_TOGGLE_PARAM_TYPE,
   ESPRM_UI_SLIDER_PARAM_TYPE,
   ESPRM_UI_HUE_SLIDER_PARAM_TYPE,
+  ESPRM_UI_CCT_SLIDER_PARAM_TYPE,
   ESPRM_TEMPERATURE_PARAM_TYPE,
   PARAM_CONTROL_INVOKE_VALUE,
 } from "@shared/utils/constants";
@@ -48,9 +49,11 @@ import {
 } from "@shared/utils/paramUtils";
 import {
   createBrightnessInvokeResolver,
+  createColorTemperatureInvokeResolver,
   createCommandResolver,
   createCrossClusterInvokeMarker,
   createHueInvokeResolver,
+  createSaturationInvokeResolver,
   createMappingResolver,
   createModeChangeResolver,
   createTransformResolver,
@@ -59,6 +62,8 @@ import {
 } from "./utils/common";
 import {
   MATTER_COLOR_CMD_MOVE_TO_HUE,
+  MATTER_COLOR_CMD_MOVE_TO_SATURATION,
+  MATTER_COLOR_CMD_MOVE_TO_COLOR_TEMPERATURE,
   MATTER_DOOR_LOCK_ACTION_LOCK,
   MATTER_DOOR_LOCK_ACTION_UNLOCK,
   MATTER_DOOR_LOCK_ACTIONS_BY_STATE,
@@ -271,6 +276,33 @@ export const matterClusterConfig: ClusterConfigMap = {
         properties: ["read", "write"],
         meta: { min: 0, max: 360, step: 1 },
         resolver: createHueInvokeResolver(),
+      },
+      {
+        name: "Saturation",
+        type: "int",
+        valueAttribute: 1,
+        optionsAttribute: 0,
+        uiType: ESPRM_UI_SLIDER_PARAM_TYPE,
+        dataType: "int",
+        writeAsCommand: true,
+        matterCommandId: MATTER_COLOR_CMD_MOVE_TO_SATURATION,
+        properties: ["read", "write"],
+        meta: { min: 0, max: 100, step: 1 },
+        resolver: createSaturationInvokeResolver(),
+      },
+      {
+        name: "CCT",
+        type: "int",
+        valueAttribute: 0x7,
+        optionsAttribute: 0x7,
+        uiType: ESPRM_UI_CCT_SLIDER_PARAM_TYPE,
+        dataType: "int",
+        writeAsCommand: true,
+        matterCommandId: MATTER_COLOR_CMD_MOVE_TO_COLOR_TEMPERATURE,
+        properties: ["read", "write"],
+        // Slider is in Kelvin; the resolver converts K↔mireds for attr 0x7.
+        meta: { min: 2700, max: 6500, step: 100 },
+        resolver: createColorTemperatureInvokeResolver(),
       },
     ],
   },

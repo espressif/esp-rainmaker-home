@@ -45,6 +45,13 @@ export type ResolvedAutomationEvents = {
 /** Options for transformToESPCDFAutomation. getNode is required for automation update (events/conditions) to sync node triggers. */
 export interface TransformToESPCDFAutomationOptions {
     resolvedEvents?: ResolvedAutomationEvents;
+    /** When set, used instead of parsing SDK action targets (e.g. Matter hex paths). */
+    resolvedActions?: {
+        nodeId: string;
+        deviceName: string;
+        param: string;
+        value: unknown;
+    }[];
     /** Used by operations.update to resolve node and sync triggers when events change. */
     getNode?: (nodeId: string) => Promise<ESPRMNGNode>;
     /** Optional nodeId when known (e.g. from createAutomation); otherwise derived from automation.conditions.and[0]. */
@@ -149,7 +156,7 @@ export function transformToESPCDFAutomation(
         eventType: ESPCDFAutomationEventType.NODE_PARAMS,
         events,
         eventOperator: ESPCDFAutomationEventOperator.AND,
-        actions: targetsToCdfActions(automation.actions?.targets),
+        actions: options?.resolvedActions ?? targetsToCdfActions(automation.actions?.targets),
         retrigger: automation.retrigger ?? false,
         adaptorIdentifier: identifier,
         operations,

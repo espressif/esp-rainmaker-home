@@ -20,8 +20,8 @@ import { tokens } from "@shared/theme/tokens";
 import { globalStyles } from "@shared/theme/globalStyleSheet";
 import { personalInfoStyles } from "@features/user/theme/userStyleSheet";
 import {
-  ESPRMNG_BASE_SDK_ID,
   getResolvedActiveSdk,
+  isRmngStackSdkId,
 } from "@config/sdk.config";
 
 const PersonalInfo: React.FC = observer(() => {
@@ -91,7 +91,7 @@ const PersonalInfo: React.FC = observer(() => {
           />
         </ContentWrapper>
 
-        {getResolvedActiveSdk() === ESPRMNG_BASE_SDK_ID && (
+        {isRmngStackSdkId(getResolvedActiveSdk()) && (
           <ContentWrapper
             title={t("user.profile.userCode")}
             style={{

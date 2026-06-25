@@ -255,6 +255,16 @@ class ESPMatterControl(private val reactContext: ReactApplicationContext) {
         )
     }
 
+    fun encodeCommandFieldsToTlvHex(commandFields: ReadableMap?, promise: Promise) {
+        try {
+            val tlv = MatterDataValueCodec.encodeCommandFieldsToTlv(commandFields)
+            val hex = tlv.joinToString("") { b -> "%02x".format(b) }
+            promise.resolve("0x$hex")
+        } catch (e: Exception) {
+            promise.reject("ENCODE_FAILED", e.message, e)
+        }
+    }
+
     private fun invokeInternal(
         matterNodeIdStr: String,
         endpoint: Int,

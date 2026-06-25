@@ -194,13 +194,7 @@ export async function updateRefreshTokensForAllAIDevices(
           );
 
           if (refreshTokenParam) {
-            await node?.setMultipleParams({
-              [agentAuthService.name]: [
-                {
-                  [refreshTokenParam.name]: refreshToken,
-                },
-              ],
-            });
+            await refreshTokenParam.setValue(refreshToken);
           }
         }
 

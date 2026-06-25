@@ -9,8 +9,10 @@ import type { ESPCDFNode, ESPCDFDevice } from "@store";
 import { deepClone } from "@shared/utils/common";
 import { getEventInfoFromEvents } from "@features/automation/utils/automationManagement";
 import { sortByConnectivity } from "@shared/utils/eventDeviceSelection";
+import { isBridgeParentInfrastructureNode } from "@shared/utils/rmngMatterDeviceClassification";
 import { useCDF } from "@shared/hooks/useCDF";
 import { useAutomation } from "@context/automation.context";
+import { useDeviceSelectionBase } from "@features/automation/hooks/useDeviceSelectionBase";
 import type { DeviceSelectionData } from "@src/types/global";
 
 // --- Result types (structured outcomes for UI to interpret) ---
@@ -34,6 +36,8 @@ export interface UseEventDeviceSelectionResult {
   selectedDevices: DeviceSelectionData[];
   /** Devices not selected */
   nonSelectedDevices: DeviceSelectionData[];
+  /** Whether a device row should be disabled in the picker. */
+  isDeviceDisabled: (node: ESPCDFNode, isOnline: boolean) => boolean;
   /** Select a device for event; returns navigate params on success. Caller handles router.push. */
   selectDevice: (device: DeviceSelectionData) => SelectEventDeviceResult;
 }
@@ -48,7 +52,7 @@ export function useEventDeviceSelection(
 ): UseEventDeviceSelectionResult {
   const { isEditingEvent } = params;
   const { store } = useCDF();
-  const { state, setSelectedEventDevice } = useAutomation();
+  const { state, setSelectedEventDevice, checkDeviceDisabled } = useAutomation();
 
   const currentEventInfo = useMemo(
     () => getEventInfoFromEvents(state.events),
@@ -63,6 +67,7 @@ export function useEventDeviceSelection(
     const allDevices: DeviceSelectionData[] = [];
 
     automationNodes.forEach((node) => {
+      if (isBridgeParentInfrastructureNode(node)) return;
       const nodeDevices = node?.devices ?? [];
       nodeDevices
         .filter((device) => device.params && device.params.length > 0)
@@ -98,15 +103,8 @@ export function useEventDeviceSelection(
     );
   }, [currentEventInfo, devices, state.nodeId]);
 
-  const selectedDevices = useMemo(
-    () => devices.filter((d) => d.isSelected),
-    [devices]
-  );
-
-  const nonSelectedDevices = useMemo(
-    () => devices.filter((d) => !d.isSelected),
-    [devices]
-  );
+  const { selectedDevices, nonSelectedDevices, isDeviceDisabled } =
+    useDeviceSelectionBase(devices, checkDeviceDisabled);
 
   const selectDevice = useCallback(
     (device: DeviceSelectionData): SelectEventDeviceResult => {
@@ -133,6 +131,7 @@ export function useEventDeviceSelection(
     currentEventDevice,
     selectedDevices,
     nonSelectedDevices,
+    isDeviceDisabled,
     selectDevice,
   };
 }

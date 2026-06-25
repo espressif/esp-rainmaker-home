@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   View,
   Text,
@@ -34,6 +34,7 @@ import {
   isDeviceConnected,
   isDeviceLocallyAvailable,
 } from "@shared/utils/device";
+import { parseBridgedChildParentNodeId } from "@shared/utils/matterLocalReachability";
 import { resolveDeviceCardPowerParam } from "@shared/utils/deviceParams";
 import {
   getDeviceCardSensorReadings,
@@ -101,22 +102,30 @@ const DeviceCard: React.FC<DeviceCardProps> = ({
   const { store } = useCDF();
   const { width } = useWindowDimensions();
 
-  const cardPowerParam = useMemo(
-    () => resolveDeviceCardPowerParam(device),
-    [device],
-  );
+  const storeNode = store.nodeStore.nodesByIDMap[node.id] ?? node;
+  const storeDevice =
+    storeNode.devices?.find((d) => d.name === device.name) ?? device;
+
+  const cardPowerParam = resolveDeviceCardPowerParam(storeDevice);
   const isPowerParamExisit = Boolean(cardPowerParam);
   const isPowerOn = coerceParamValueToBoolean(cardPowerParam?.value);
-
-  // Prop `node` may come from a WeakRef snapshot; cloud status and metadata use
-  // nodeStore when present. LAN reachability reads subscriptionStore.registeredTransports
-  // directly so observer() re-renders on discovery add/remove.
-  const storeNode = store.nodeStore.nodesByIDMap[node.id] ?? node;
   const registeredTransports =
     store.subscriptionStore.registeredTransports[node.id];
+  const bridgeParentNodeId = parseBridgedChildParentNodeId(storeNode.id);
+  const bridgeParentTransports = bridgeParentNodeId
+    ? store.subscriptionStore.registeredTransports[bridgeParentNodeId]
+    : undefined;
 
-  const deviceConnected = isDeviceConnected(storeNode, registeredTransports);
-  const availableLocally = isDeviceLocallyAvailable(storeNode, registeredTransports);
+  const deviceConnected = isDeviceConnected(
+    storeNode,
+    registeredTransports,
+    bridgeParentTransports,
+  );
+  const availableLocally = isDeviceLocallyAvailable(
+    storeNode,
+    registeredTransports,
+    bridgeParentTransports,
+  );
 
   let cardWidth = 180;
   if (width <= 500) {
@@ -127,15 +136,15 @@ const DeviceCard: React.FC<DeviceCardProps> = ({
    * Builds paramTypeMap for non-power card fields (name).
    */
   useEffect(() => {
-    if (device) {
-      const nextParamTypeMap = device.params?.reduce((acc, param) => {
+    if (storeDevice) {
+      const nextParamTypeMap = storeDevice.params?.reduce((acc, param) => {
         acc[param.type || ""] = param;
         return acc;
       }, {} as ParamTypeMap);
 
       setParamTypeMap(nextParamTypeMap || {});
     }
-  }, [device]);
+  }, [storeDevice]);
 
   /**
    * Handle device control
@@ -169,6 +178,31 @@ const DeviceCard: React.FC<DeviceCardProps> = ({
       });
   };
 
+  const isEndpointSplitDevice = /^ep_[0-9a-f]+$/i.test(device.name ?? "");
+
+  const getDeviceName = (cdfNode: ESPCDFNode) => {
+    const metadata = cdfNode.metadata;
+    if (metadata && metadata[MATTER_METADATA_KEY]) {
+      const deviceName =
+        metadata[MATTER_METADATA_KEY][MATTER_METADATA_DEVICE_NAME_KEY];
+      if (deviceName) {
+        return deviceName;
+      }
+    }
+    return "";
+  };
+
+  const resolveCardTitle = () => {
+    if (isEndpointSplitDevice && device.displayName) {
+      return device.displayName;
+    }
+    return (
+      getDeviceName(storeNode) ||
+      paramTypeMap[ESPRM_NAME_PARAM_TYPE]?.value ||
+      device.displayName
+    );
+  };
+
   // Render compact card
   if (compact) {
     return (
@@ -190,7 +224,7 @@ const DeviceCard: React.FC<DeviceCardProps> = ({
             { marginBottom: 5, paddingRight: 0, textAlign: "center" },
           ]}
         >
-          {device.displayName}
+          {resolveCardTitle()}
         </Text>
 
         {isPowerParamExisit && (
@@ -230,20 +264,6 @@ const DeviceCard: React.FC<DeviceCardProps> = ({
   };
 
   const sensorCardDisplay = getDeviceCardSensorReadings(device).join(" · ");
-
-  const getDeviceName = (cdfNode: ESPCDFNode) => {
-    // Check if node metadata contains Matter key
-    const metadata = cdfNode.metadata;
-    if (metadata && metadata[MATTER_METADATA_KEY]) {
-      const deviceName =
-        metadata[MATTER_METADATA_KEY][MATTER_METADATA_DEVICE_NAME_KEY];
-      if (deviceName) {
-        return deviceName;
-      }
-    }
-    // Return empty string as fallback
-    return "";
-  };
 
   // Render full card
   return (
@@ -307,9 +327,7 @@ const DeviceCard: React.FC<DeviceCardProps> = ({
             style={styles.name}
             numberOfLines={1}
           >
-            {getDeviceName(storeNode) ||
-              paramTypeMap[ESPRM_NAME_PARAM_TYPE]?.value ||
-              device.displayName}
+            {resolveCardTitle()}
           </Text>
         </View>
         <View style={styles.statusContainer}>

@@ -147,6 +147,7 @@ export const ESPRM_UI_TOGGLE_PARAM_TYPE = "esp.ui.toggle";
 export const ESPRM_UI_SLIDER_PARAM_TYPE = "esp.ui.slider";
 export const ESPRM_UI_HUE_SLIDER_PARAM_TYPE = "esp.ui.hue-slider";
 export const ESPRM_UI_HUE_CIRCLE_PARAM_TYPE = "esp.ui.hue-circle";
+export const ESPRM_UI_CCT_SLIDER_PARAM_TYPE = "esp.ui.cct-slider";
 export const ESPRM_UI_PUSH_BUTTON_PARAM_TYPE = "esp.ui.push-btn-big";
 export const ESPRM_UI_DROPDOWN_PARAM_TYPE = "esp.ui.dropdown";
 export const ESPRM_UI_HIDDEN_PARAM_TYPE = "esp.ui.hidden";
@@ -382,6 +383,10 @@ export const MATTER_EVENT_COMMISSIONING_CONFIRMATION_REQUEST =
 export const MATTER_EVENT_COMMISSIONING_CONFIRMATION_RESPONSE =
   "COMMISSIONING_CONFIRMATION_RESPONSE";
 export const MATTER_EVENT_COMMISSIONING_ERROR = "COMMISSIONING_ERROR";
+export const MATTER_EVENT_RMNG_ATTESTATION_CHALLENGE =
+  "RMNG_ATTESTATION_CHALLENGE";
+export const MATTER_EVENT_RMNG_MATTER_ATTESTATION_DATA =
+  "RMNG_MATTER_ATTESTATION_DATA";
 
 /** Android GPS commissioning service intermediate complete (not terminal). */
 export const MATTER_COMMISSIONING_SOURCE_GPS = "GPS_SERVICE";

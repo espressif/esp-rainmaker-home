@@ -17,51 +17,57 @@ import {
     ESPCDFPaginatedAPIResponse,
     ESPCDFNode,
     ESPCDFUserOperation,
-    DEFAULT_HOME_GROUP_NAME,
     ESPCDFAPIResponse,
     ESPCDFAssumeRoleRequest,
     ESPCDFAssumeRoleResponse,
+    ESPCDFSubscribeToNodeUpdatesRequestParams,
     ESPCDFEventType,
 } from "@store";
 import {
     ESPDevice,
     ESPRMNGBase,
-    ESPRMNGGroup,
     ESPRMNGUser,
+    ESPRMNGNode,
     ESPTransport,
     decodeToken,
-    NodeMQTTOrchestrator
+    NodeMQTTOrchestrator,
+    type ESPNodeUpdateData,
 } from "@espressif/rmng-base-sdk";
 import { ESPRMNGBaseAdaptorIdentifier } from "@config/sdk.identifiers";
 import { transformToESPCDFGroup } from "./transformToESPCDFGroup";
+import {
+    createHome as rmngCreateHome,
+    setCurrentHome as rmngSetCurrentHome,
+    syncHomeWithNodes as rmngSyncHomeWithNodes,
+    transformRmngSdkGroupsToCdf,
+} from "../groupSync";
 import { transformToESPCDFGroupSharingRequest } from "./transformToESPCDFGroupSharingRequest";
 import { transformToESPCDFNode } from "./transformToESPCDFNode";
 import { createCDFProvisioningDeviceFromAdapterDescriptor } from "./transformToESPCDFProvisioningDevice";
 import { addDeviceProvision } from "../utils/addDeviceProvision";
+import { orderSdkGroupsForNodeLookup } from "../utils/resolveSdkGroupForNodeId";
 import {
     applyRmngAdaptorUserCustomDataPatch,
     getRmngAdaptorUserCustomData,
     resolveRmngUserIdForCustomDataStorage,
 } from "../utils/userCustomDataStorage";
-import { filterEspProvisionDevicesByRmngCustomerId } from "../utils/filterRmngBleDevices";
+import { mapNodeUpdateDataToEvent } from "@shared/utils/subscriptionHelper";
+import { emitShadowConnectivityEvents } from "@sdk-adaptors/ESPRMNGBase/utils/common";
 import { startRmngLocalDiscoverySubscription } from "../utils/rmngLocalDiscoverySubscription";
-
+import {
+    logRmngDeviceParamsRaw,
+    logRmngGroupsFabricsRaw,
+    logRmngNodeConfigRaw,
+} from "../utils/rmngAdaptorDebugLog";
+import { filterEspProvisionDevicesByRmngCustomerId } from "../utils/filterRmngBleDevices";
 /** Matches User API `POST /v1/app-platforms/{id}/clients` path segment. */
 const RMNG_APP_PLATFORM_ID = "virtual-app";
 
 /**
- * Transforms ESPRMNGUser from the RainMaker SDK to ESPCDFUser format.
- *
- * This utility converts the SDK user object to the CDF user format with:
- * - User info (id, name, email, nickname, phone)
- * - Operations wrapper that delegates to ESPRMNGUser methods
- * - Raw reference to the original ESPRMNGUser
- * @param esprmngUser - The ESPRMNGUser instance from the SDK
- * @param identifier - The adaptor identifier
- * @param cdfContext - Optional CDF context for operations
- * @returns ESPCDFUser instance with all required operations
+ * Pure-RMNG user transform (no Matter SDK imports). Matter adaptor uses
+ * {@link ESPRMNGMatterBase/transformers/transformToESPCDFUser} at login.
  */
-export function transformToESPCDFUser(
+export function transformToESPCDFUserBase(
     esprmngUser: ESPRMNGUser | null,
 ): ESPCDFUser {
     if (!esprmngUser) {
@@ -108,23 +114,8 @@ export function transformToESPCDFUser(
         email: '',
     };
 
-    const persistLastSelectedHomeId = async (user: ESPCDFUser, homeId: string): Promise<void> => {
-        try {
-            await user.setCustomData({
-                lastSelectedHomeId: {
-                    value: homeId,
-                    perms: [
-                        { read: ["user"] },
-                        { write: ["user"] },
-                    ],
-                },
-            });
-        } catch (error) {
-            console.error("[transformToESPCDFUser] Failed to persist lastSelectedHomeId:", error);
-        }
-    };
-
     let discoveryCleanup: (() => void) | null = null;
+    const subscribedNodeIdList: string[] = [];
 
     // Create operations object that wraps ESPRMNGUser methods
     const operations: ESPCDFUserOperation = {
@@ -263,17 +254,25 @@ export function transformToESPCDFUser(
         async getGroupById(_groupId: string, _options: Record<string, any>): Promise<any> {
             throw new Error("RMNGBase SDK does not support getGroupById");
         },
-        async subscribeToEvent(event: string, callback: (event: any) => void): Promise<void> {
+        async subscribeToEvent(
+            event: string,
+            callback: (event: unknown) => void,
+            _config?: Record<string, unknown>,
+        ): Promise<void> {
             if (event === ESPCDFEventType.localDiscovery) {
                 discoveryCleanup = await startRmngLocalDiscoverySubscription(callback, esprmngUser);
                 return;
             }
-            throw new Error(`RMNGBase SDK does not support subscribeToEvent for event: ${event}`);
+            throw new Error(`RMNG SDK does not support subscribeToEvent for event: ${event}`);
         },
-        async unsubscribeFromEvent(event: string, _callback: (event: any) => void): Promise<void> {
+        async unsubscribeFromEvent(
+            event: string,
+            _callback: (event: unknown) => void,
+        ): Promise<void> {
             if (event === ESPCDFEventType.localDiscovery) {
                 discoveryCleanup?.();
                 discoveryCleanup = null;
+                return;
             }
         },
         async setMultipleNodesParams(_payload: { nodeId: string; payload: any }[]): Promise<any> {
@@ -281,9 +280,8 @@ export function transformToESPCDFUser(
         },
         async getGroups(): Promise<ESPCDFPaginatedAPIResponse<ESPCDFGroup[]>> {
             const groups = await esprmngUser.getGroups();
-            const cdfGroups: ESPCDFGroup[] = groups.map((group: ESPRMNGGroup) =>
-                transformToESPCDFGroup(group, esprmngUser, ESPRMNGBaseAdaptorIdentifier)
-            );
+            logRmngGroupsFabricsRaw("getGroups", { sdkGroups: groups });
+            const cdfGroups = transformRmngSdkGroupsToCdf(esprmngUser, groups);
             return {
                 data: cdfGroups,
                 pagination: {
@@ -294,13 +292,21 @@ export function transformToESPCDFUser(
         },
         async getNodeDetails(nodeId: string): Promise<ESPCDFNode> {
             const groups = await esprmngUser.getGroups();
-            for (const group of groups) {
+            let lastError: unknown;
+            for (const group of orderSdkGroupsForNodeLookup(groups, nodeId)) {
                 try {
                     const rmngNode = await group.getNode(nodeId, true);
+                    logRmngNodeConfigRaw("user.getNodeDetails", nodeId, rmngNode.config, {
+                        groupId: rmngNode.groupId ?? group.groupId,
+                        params: (rmngNode as { params?: unknown }).params,
+                    });
                     return transformToESPCDFNode(rmngNode);
-                } catch {
-                    // Node not in this group, try next
+                } catch (error) {
+                    lastError = error;
                 }
+            }
+            if (lastError instanceof Error) {
+                throw lastError;
             }
             throw new Error(`Node ${nodeId} not found in any group`);
         },
@@ -308,55 +314,18 @@ export function transformToESPCDFUser(
             return esprmngUser.accessToken;
         },
         async syncHomeWithNodes(user, callbacks) {
-            // Wait for MQTT to be connected before fetching nodes.
-            // getNodes() triggers SDK-internal MQTT subscriptions (shadow get/accepted topics);
-            // without a live connection those subscriptions silently fail and subsequent
-            // shadow-get responses from AWS IoT Core are never received.
-            await mqttConnectionPromise;
-
-            const groups = await esprmngUser.getGroups();
-            let cdfGroups: ESPCDFGroup[] = groups.map((group: ESPRMNGGroup) =>
-                transformToESPCDFGroup(group, esprmngUser, ESPRMNGBaseAdaptorIdentifier)
+            return rmngSyncHomeWithNodes(
+                user as ESPCDFUser,
+                callbacks,
+                esprmngUser,
+                mqttConnectionPromise,
             );
-
-            if (cdfGroups.length === 0) {
-                const newHome = await esprmngUser.createGroup(DEFAULT_HOME_GROUP_NAME);
-                const cdfHome = transformToESPCDFGroup(newHome, esprmngUser, ESPRMNGBaseAdaptorIdentifier);
-                cdfGroups = [cdfHome];
-            }
-
-            callbacks.setGroupsList(cdfGroups);
-
-            const preferredId = (user.customData as any)?.lastSelectedHomeId?.value;
-            const selectedHome = cdfGroups.find((home) => home.id === preferredId) ?? cdfGroups[0] ?? null;
-
-            callbacks.setCurrentHomeId(selectedHome?.id ?? null);
-            if (selectedHome) {
-                await persistLastSelectedHomeId(user as ESPCDFUser, selectedHome.id);
-            }
-
-            const syncNodesForGroup = async (group: ESPCDFGroup): Promise<void> => {
-                try {
-                    const nodes = await group.getNodes();
-                    if (nodes.length > 0) {
-                        callbacks.addNodesToGroup(group.id, nodes);
-                    }
-                } catch (error) {
-                    console.error(`[transformToESPCDFUser] Failed to sync nodes for group ${group.id}:`, error);
-                }
-            };
-
-            if (selectedHome) {
-                await syncNodesForGroup(selectedHome);
-            }  
-            return selectedHome;
         },
         async setCurrentHome(user, callbacks, home) {
-            callbacks.setCurrentHomeId(home.id);
-            await persistLastSelectedHomeId(user as ESPCDFUser, home.id);
+            return rmngSetCurrentHome(user as ESPCDFUser, callbacks, home);
         },
         async createHome(params, callbacks) {
-            const newHome = await esprmngUser.createGroup(params.name);
+            const newHome = await rmngCreateHome(esprmngUser, params);
             const cdfHome = transformToESPCDFGroup(newHome, esprmngUser, ESPRMNGBaseAdaptorIdentifier);
             callbacks.addGroup(cdfHome);
             return cdfHome;
@@ -398,6 +367,60 @@ export function transformToESPCDFUser(
         async assumeRole(_request: ESPCDFAssumeRoleRequest): Promise<ESPCDFAssumeRoleResponse> {
             throw new Error("ESPRMNGBase SDK assume role has different implementation which not assume role for particluar nodeId's or groupId's");
         },
+        async subscribeToNodeUpdates(
+            params: ESPCDFSubscribeToNodeUpdatesRequestParams,
+        ): Promise<void> {
+            const subscriptionManager = ESPRMNGBase.subscriptionManager;
+            const sdkNodes = params.nodeList.map((node) => node._raw as ESPRMNGNode);
+
+            const handleNodeUpdate = (update: ESPNodeUpdateData) => {
+                const nodeId = update.nodeId;
+                logRmngDeviceParamsRaw(
+                    "subscribeToNodeUpdates.handleNodeUpdate",
+                    nodeId,
+                    update.source === "matter" ? "matter" : "mqtt",
+                    update.payload,
+                    {
+                        source: update.source,
+                        metadata: update.metadata,
+                    },
+                );
+
+                const shadowDoc = (update.metadata as { shadow?: unknown } | undefined)
+                    ?.shadow;
+                if (shadowDoc) {
+                    emitShadowConnectivityEvents(nodeId, shadowDoc, (ev) =>
+                        params.onNodeUpdate?.(ev),
+                    );
+                }
+
+                const nodeUpdateEvent = mapNodeUpdateDataToEvent(update);
+                params.onNodeUpdate?.(nodeUpdateEvent);
+            };
+
+            try {
+                await subscriptionManager.subscribeToAllNodes(
+                    sdkNodes,
+                    handleNodeUpdate,
+                );
+            } catch (error) {
+                console.warn(
+                    "[transformToESPCDFUser] subscribeToAllNodes failed:",
+                    error,
+                );
+            }
+
+            subscribedNodeIdList.length = 0;
+            subscribedNodeIdList.push(...sdkNodes.map((node) => node.nodeId));
+        },
+        async unsubscribeFromNodeUpdates(): Promise<void> {
+            for (const nodeId of subscribedNodeIdList) {
+                await ESPRMNGBase.subscriptionManager
+                    .unsubscribeFromNode(nodeId)
+                    .catch(() => {});
+            }
+            subscribedNodeIdList.length = 0;
+        },
     };
 
     // Create ESPCDFUser instance
@@ -430,5 +453,13 @@ export function transformToESPCDFUser(
         .finally(() => {
             void syncRmngUserCode();
         });
+
     return cdfUser;
+}
+
+/** Pure RMNG user transform — used by {@link ESPRMNGBaseSDKAdaptor} login. */
+export function transformToESPCDFUser(
+    esprmngUser: ESPRMNGUser | null,
+): ESPCDFUser {
+    return transformToESPCDFUserBase(esprmngUser);
 }

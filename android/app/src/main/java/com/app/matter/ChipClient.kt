@@ -57,6 +57,12 @@ class ChipClient @JvmOverloads constructor(
         const val TAG = "ChipClient"
         private const val DEFAULT_TIMEOUT = 15000L
         private const val INVOKE_COMMAND_TIMEOUT = 15000
+
+        /**
+         * Fail-safe timer (seconds) re-armed just before NOC issuance, via the
+         * device attestation delegate.
+         */
+        private const val COMMISSIONING_FAILSAFE_EXPIRY_SECONDS = 90
         private const val BASIC_INFORMATION_CLUSTER_ID = 0x00000028L
         private const val DATA_MODEL_REVISION_ATTRIBUTE_ID = 0x00000000L
 
@@ -143,6 +149,7 @@ class ChipClient @JvmOverloads constructor(
     var ipkEpochKey: ByteArray? = null
     lateinit var nocKey: ByteArray
     var requestId: String? = null
+    var csrNonce: String? = null
     var lastCommissionedDeviceName: String? = null
     var lastCommissionedNodeId: Long? = null
     var matterNodeId: String? = null
@@ -184,6 +191,37 @@ class ChipClient @JvmOverloads constructor(
             // Set ESP NOC Chain Issuer
             chipDeviceController.setNOCChainIssuer(EspNOCChainIssuer())
             Log.d(TAG, "ESP NOC Chain Issuer set successfully")
+
+            // Extend the commissioning fail-safe to handle slow cloud-signed NOC flows.
+            // The default ~30s expires during RainMaker Next-Gen /verify NOC (~29s),
+            // causing session eviction and commissioning failure (0x32).
+            // Setting a DeviceAttestationDelegate re-arms the fail-safe before
+            // GenerateNOCChain. Attestation is handled by PartialDACVerifier, so always
+            // call continueCommissioning (ignoreAttestationFailure = true).
+            chipDeviceController.setDeviceAttestationDelegate(
+                COMMISSIONING_FAILSAFE_EXPIRY_SECONDS
+            ) { devicePtr, _, errorCode ->
+                // Do NOT call continueCommissioning synchronously here. This callback
+                // runs on the CHIP event-loop thread with the stack lock held; calling
+                // continueCommissioning inline re-enters the commissioner and deadlocks
+                // that thread — observed on-device as the CHIP thread going silent right
+                // after this point (no CSR sent, inbound packets unprocessed), the
+                // device's fail-safe later expiring, and commissioning failing with 0x32.
+                // Defer it so this callback unwinds and releases the lock first; the
+                // resumed flow then proceeds to SendOpCertSigningRequest → NOC.
+                Log.d(
+                    TAG,
+                    "onDeviceAttestationCompleted errorCode=$errorCode — scheduling continue " +
+                        "(fail-safe extended to ${COMMISSIONING_FAILSAFE_EXPIRY_SECONDS}s)"
+                )
+                CoroutineScope(Dispatchers.Default).launch {
+                    try {
+                        chipDeviceController.continueCommissioning(devicePtr, true)
+                    } catch (e: Exception) {
+                        Log.e(TAG, "continueCommissioning failed: ${e.message}", e)
+                    }
+                }
+            }
         }
     }
 
@@ -280,7 +318,34 @@ class ChipClient @JvmOverloads constructor(
 
         try {
             chipDeviceController.setCompletionListener(buildCommissioningCompletionListener(continuation))
-            chipDeviceController.commissionDevice(deviceId, networkCredentials)
+
+            val serverCsrNonce = csrNonce
+            Log.d(
+                TAG,
+                "[NONCE-TRACE] awaitCommissionDevice: serverCsrNonce=${serverCsrNonce?.take(16)}... (len=${serverCsrNonce?.length}, null=${serverCsrNonce == null})"
+            )
+            if (serverCsrNonce != null) {
+                try {
+                    val nonceBytes = decodeHex(serverCsrNonce)
+                    Log.d(TAG, "[NONCE-TRACE] Decoded hex -> ${nonceBytes.size} bytes: ${nonceBytes.toHexString()}")
+                    if (nonceBytes.size == 32) {
+                        val params = CommissionParameters.Builder()
+                            .setCsrNonce(nonceBytes)
+                            .setNetworkCredentials(networkCredentials)
+                            .build()
+                        Log.d(TAG, "Commissioning with server CSR nonce (${nonceBytes.size} bytes)")
+                        chipDeviceController.commissionDevice(deviceId, params)
+                    } else {
+                        Log.w(TAG, "Server CSR nonce is ${nonceBytes.size} bytes (expected 32), falling back to random nonce")
+                        chipDeviceController.commissionDevice(deviceId, networkCredentials)
+                    }
+                } catch (e: Exception) {
+                    Log.w(TAG, "Failed to decode server CSR nonce, falling back to random nonce: ${e.message}")
+                    chipDeviceController.commissionDevice(deviceId, networkCredentials)
+                }
+            } else {
+                chipDeviceController.commissionDevice(deviceId, networkCredentials)
+            }
 
         } catch (e: Exception) {
             Log.e(TAG, "Failed to commission device: ${e.message}", e)
@@ -330,13 +395,50 @@ class ChipClient @JvmOverloads constructor(
 
         try {
             chipDeviceController.setCompletionListener(buildCommissioningCompletionListener(continuation))
-            chipDeviceController.pairDevice(
-                bleGatt,
-                connId,
-                deviceId,
-                setupPinCode,
-                networkCredentials
-            )
+
+            val serverCsrNonce = csrNonce
+            if (serverCsrNonce != null) {
+                try {
+                    val nonceBytes = decodeHex(serverCsrNonce)
+                    if (nonceBytes.size == 32) {
+                        Log.d(TAG, "Pairing over BLE with server CSR nonce (${nonceBytes.size} bytes)")
+                        chipDeviceController.pairDevice(
+                            bleGatt,
+                            connId,
+                            deviceId,
+                            setupPinCode,
+                            nonceBytes,
+                            networkCredentials
+                        )
+                    } else {
+                        Log.w(TAG, "Server CSR nonce is ${nonceBytes.size} bytes (expected 32), falling back to random nonce")
+                        chipDeviceController.pairDevice(
+                            bleGatt,
+                            connId,
+                            deviceId,
+                            setupPinCode,
+                            networkCredentials
+                        )
+                    }
+                } catch (e: Exception) {
+                    Log.w(TAG, "Failed to decode server CSR nonce for BLE pairing: ${e.message}")
+                    chipDeviceController.pairDevice(
+                        bleGatt,
+                        connId,
+                        deviceId,
+                        setupPinCode,
+                        networkCredentials
+                    )
+                }
+            } else {
+                chipDeviceController.pairDevice(
+                    bleGatt,
+                    connId,
+                    deviceId,
+                    setupPinCode,
+                    networkCredentials
+                )
+            }
         } catch (e: Exception) {
             Log.e(TAG, "Failed to pair device over BLE: ${e.message}", e)
             continuation.resumeWithException(e)
@@ -753,12 +855,67 @@ class ChipClient @JvmOverloads constructor(
         triggerHeadlessNOCTask(csrBase64, deviceId)
     }
 
-    /** Trigger HeadlessJS task to issue NOC certificate. */
+    /** Initialize state and trigger HeadlessJS task with attestation data for /verify flow. */
+    private fun triggerNOCTaskWithAttestation(
+        deviceId: Long,
+        nocsrElements: String,
+        attestationSignature: String,
+        attestationChallenge: String?,
+        csr: String = ""
+    ) {
+        currentDeviceId = deviceId
+        isCommissioning = true
+        nocChainReceived = false
+        nocChainInstalled = false
+        confirmTaskTriggered = false
+
+        try {
+            val currentRequestId = requestId ?: deviceId.toString()
+            val fabric = FabricSessionManager.getCurrentFabric()
+
+            Log.d(
+                TAG,
+                "[NONCE-TRACE] triggerNOCTaskWithAttestation: requestId=$currentRequestId, nocsrElements(first40)=${nocsrElements.take(40)}, len=${nocsrElements.length}"
+            )
+
+            val intent = Intent(context, MatterHeadlessTaskService::class.java).apply {
+                putExtra(AppConstants.EXTRA_TASK_NAME, AppConstants.TASK_ISSUE_NOC)
+                putExtra(AppConstants.EXTRA_NODE_ID, deviceId.toString())
+                putExtra(AppConstants.KEY_FABRIC_ID_CAMEL, fabricId)
+                putExtra(AppConstants.KEY_GROUP_ID_CAMEL, groupId)
+                putExtra(AppConstants.KEY_REQUEST_ID_CAMEL, currentRequestId)
+                putExtra(AppConstants.KEY_NOCSR_ELEMENTS, nocsrElements)
+                putExtra(AppConstants.KEY_ATTESTATION_SIGNATURE, attestationSignature)
+                attestationChallenge?.let {
+                    putExtra(AppConstants.KEY_ATTESTATION_CHALLENGE, it)
+                }
+                // The standard RainMaker NOC task has no attestation/NOCSRElements API
+                // (only fabric.issueNodeNoC({csr})). For a RainMaker commission there is no
+                // cloud /initiate challenge, so csrNonce is null — in that case also forward
+                // the PEM CSR so that task can issue the NOC. RMNG commissions set csrNonce
+                // (the /initiate challenge) and use nocsrElements + attestation, so they are
+                // left byte-for-byte unchanged.
+                if (csrNonce.isNullOrEmpty() && csr.isNotEmpty()) {
+                    putExtra(AppConstants.KEY_CSR, csr)
+                }
+                putExtra(AppConstants.KEY_SIGV4_ACCESS_KEY, fabric?.sigv4AccessKey ?: "")
+                putExtra(AppConstants.KEY_SIGV4_SECRET_KEY, fabric?.sigv4SecretKey ?: "")
+                putExtra(AppConstants.KEY_SIGV4_SESSION_TOKEN, fabric?.sigv4SessionToken ?: "")
+                putExtra(AppConstants.KEY_SIGV4_EXPIRATION, fabric?.sigv4Expiration ?: "")
+            }
+
+            context.startService(intent)
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to trigger NOC task with attestation: ${e.message}", e)
+        }
+    }
+
+    /** Trigger HeadlessJS task to issue NOC certificate (legacy CSR-only fallback). */
     private fun triggerHeadlessNOCTask(csrBase64: String, deviceId: Long) {
         try {
             val currentRequestId = requestId ?: deviceId.toString()
+            val fabric = FabricSessionManager.getCurrentFabric()
 
-            // Create Intent to start the headless task service
             val intent = Intent(context, MatterHeadlessTaskService::class.java).apply {
                 putExtra(AppConstants.EXTRA_TASK_NAME, AppConstants.TASK_ISSUE_NOC)
                 putExtra(AppConstants.EXTRA_NODE_ID, deviceId.toString())
@@ -766,9 +923,12 @@ class ChipClient @JvmOverloads constructor(
                 putExtra(AppConstants.KEY_FABRIC_ID_CAMEL, fabricId)
                 putExtra(AppConstants.KEY_GROUP_ID_CAMEL, groupId)
                 putExtra(AppConstants.KEY_REQUEST_ID_CAMEL, currentRequestId)
+                putExtra(AppConstants.KEY_SIGV4_ACCESS_KEY, fabric?.sigv4AccessKey ?: "")
+                putExtra(AppConstants.KEY_SIGV4_SECRET_KEY, fabric?.sigv4SecretKey ?: "")
+                putExtra(AppConstants.KEY_SIGV4_SESSION_TOKEN, fabric?.sigv4SessionToken ?: "")
+                putExtra(AppConstants.KEY_SIGV4_EXPIRATION, fabric?.sigv4Expiration ?: "")
             }
 
-            // Start the headless task service
             context.startService(intent)
         } catch (e: Exception) {
             Log.e(TAG, "Failed to trigger NOC task: ${e.message}", e)
@@ -779,9 +939,13 @@ class ChipClient @JvmOverloads constructor(
     private fun triggerHeadlessConfirmCommissionTask(metadata: JSONObject) {
         try {
             val currentRequestId = requestId ?: currentDeviceId.toString()
-            val nodeId = currentDeviceId?.toString() ?: ""
+            // Use the operational Matter node id (hex, e.g. 21A2A7FDD35FABF2) the cloud/sync key
+            // nodes by - not currentDeviceId, which is the temporary commissioning id. The headless
+            // confirm task keys persisted Matter metadata by this; a temp id would mismatch on read.
+            val nodeId = matterNodeId ?: rmNodeId ?: currentDeviceId?.toString() ?: ""
             val challengeValue = metadata.optString(AppConstants.KEY_CHALLENGE, challenge ?: "")
             val challengeResponseValue = metadata.optString(AppConstants.KEY_CHALLENGE_RESPONSE, challenge ?: "")
+            val fabric = FabricSessionManager.getCurrentFabric()
 
             val intent = Intent(context, MatterHeadlessTaskService::class.java).apply {
                 putExtra(AppConstants.EXTRA_TASK_NAME, AppConstants.TASK_CONFIRM_COMMISSION)
@@ -792,11 +956,34 @@ class ChipClient @JvmOverloads constructor(
                 putExtra(AppConstants.KEY_METADATA, metadata.toString())
                 putExtra(AppConstants.KEY_CHALLENGE_CAMEL, challengeValue)
                 putExtra(AppConstants.KEY_CHALLENGE_RESPONSE_CAMEL, challengeResponseValue)
+                putExtra(AppConstants.KEY_SIGV4_ACCESS_KEY, fabric?.sigv4AccessKey ?: "")
+                putExtra(AppConstants.KEY_SIGV4_SECRET_KEY, fabric?.sigv4SecretKey ?: "")
+                putExtra(AppConstants.KEY_SIGV4_SESSION_TOKEN, fabric?.sigv4SessionToken ?: "")
+                putExtra(AppConstants.KEY_SIGV4_EXPIRATION, fabric?.sigv4Expiration ?: "")
             }
             context.startService(intent)
         } catch (e: Exception) {
             Log.e(TAG, "Failed to trigger Confirm Commission task: ${e.message}", e)
         }
+    }
+
+    /**
+     * Receive NOC from HeadlessJS task result using this client's stored fabric credentials.
+     */
+    fun receiveNOCFromTask(taskRequestId: String, operationalCert: String, taskMatterNodeId: String?) {
+        receiveNOCChain(
+            requestId = taskRequestId,
+            rootCert = rootCa,
+            // intermediateCert is intentionally empty: RainMaker/RMNG use a 2-tier PKI
+            // (Root -> NOC, no ICA). receiveNOCChain() ignores this argument and always
+            // installs an empty ICAC (see emptyIcac in receiveNOCChain). Passing rootCa
+            // here was misleading dead code, not an actual intermediate certificate.
+            intermediateCert = "",
+            operationalCert = operationalCert,
+            ipkValue = ipk,
+            adminVendorId = AppConstants.ESP_VENDOR_ID.toString(),
+            matterNodeId = taskMatterNodeId
+        )
     }
 
     /** Receive NOC chain from React Native and install it. */
@@ -856,6 +1043,9 @@ class ChipClient @JvmOverloads constructor(
                 // with CHIP_ERROR_BAD_REQUEST (0x92). RainMaker uses a 2-tier PKI
                 // (Root -> NOC, no ICA), so pass an empty byte array for the intermediate
                 // certificate; downstream this is interpreted as "no intermediate cert".
+                // NOTE: the `intermediateCert` parameter of this function is intentionally
+                // NOT consumed — the intermediate is always empty regardless of what the
+                // caller passes. Do not be misled into "fixing" the caller's value.
                 val emptyIcac = ByteArray(0)
 
                 // admin subject is the CAT id for the admin group
@@ -936,8 +1126,11 @@ class ChipClient @JvmOverloads constructor(
     }
 
     /** Get connected device pointer for cluster operations. */
+    // Cancellable so a caller's withTimeout(...) can actually cut this off. With a
+    // plain suspendCoroutine the coroutine is non-cancellable, so CHIP's ~40s
+    // AddressResolve default runs to completion regardless of any wrapping timeout.
     suspend fun awaitGetConnectedDevicePointer(deviceId: Long): Long =
-        suspendCoroutine { continuation ->
+        suspendCancellableCoroutine { continuation ->
 
             try {
                 chipDeviceController.getConnectedDevicePointer(
@@ -1295,18 +1488,93 @@ class ChipClient @JvmOverloads constructor(
 
             CoroutineScope(Dispatchers.IO).launch {
                 try {
-                    val tempCsr = Base64.encodeToString(csrInfo.csr, Base64.NO_WRAP)
-                    val finalCSR =
-                        AppConstants.CERT_BEGIN + "\n" + tempCsr + "\n" + AppConstants.CERT_END
+                    val deviceId = currentDeviceId ?: System.currentTimeMillis()
 
-                    triggerNOCTask(finalCSR, currentDeviceId ?: System.currentTimeMillis())
+                    val attestationChallengeHex: String? = attestationInfo?.challenge?.toHexString()
+                    val elementsSignatureHex: String? = csrInfo.elementsSignature?.toHexString()
+                    val csrElementsTLVBytes: ByteArray? = csrInfo.elements
 
+                    Log.d(
+                        TAG,
+                        "CSRInfo fields — elements: ${csrElementsTLVBytes?.size} bytes, " +
+                            "elementsSignature: ${csrInfo.elementsSignature?.size} bytes"
+                    )
+                    Log.d(TAG, "AttestationInfo challenge: ${attestationInfo?.challenge?.size} bytes")
+
+                    val expectedNonceHex = csrNonce
+                    if (csrElementsTLVBytes != null && expectedNonceHex != null) {
+                        val nonceTag = byteArrayOf(0x30, 0x02, 0x20)
+                        var tlvNonceHex: String? = null
+                        for (i in 0 until csrElementsTLVBytes.size - nonceTag.size - 32) {
+                            if (csrElementsTLVBytes[i] == nonceTag[0] &&
+                                csrElementsTLVBytes[i + 1] == nonceTag[1] &&
+                                csrElementsTLVBytes[i + 2] == nonceTag[2]
+                            ) {
+                                tlvNonceHex = csrElementsTLVBytes
+                                    .sliceArray(i + 3 until i + 3 + 32)
+                                    .toHexString()
+                                break
+                            }
+                        }
+                        val nonceMatches = expectedNonceHex.lowercase() == tlvNonceHex?.lowercase()
+                        Log.d(TAG, "[NONCE-TRACE] === CSR NONCE COMPARISON ===")
+                        Log.d(TAG, "[NONCE-TRACE] Expected (from API challenge): $expectedNonceHex")
+                        Log.d(TAG, "[NONCE-TRACE] In TLV NOCSRElements:          $tlvNonceHex")
+                        Log.d(TAG, "[NONCE-TRACE] Match: $nonceMatches")
+                        if (!nonceMatches) {
+                            // The device must echo the CSRNonce from the Matter CSRRequest. A mismatch
+                            // means CHIP ignored the app-provided nonce and generated a random one.
+                            // RMNG /verify rejects such requests (HTTP 400 "CSRNonce does not match the
+                            // challenge from initiate"), leading to fail-safe expiry. Fix requires
+                            // libCHIPController.so with external CSRNonce support.
+                            Log.e(
+                                TAG,
+                                "[NONCE-TRACE] CSR NONCE MISMATCH — native CHIP lib ignored the supplied " +
+                                    "csrNonce and used a random one; cloud /verify will reject this. " +
+                                    "Root cause is libCHIPController.so (no external-CSR-nonce support), " +
+                                    "not the SDK or cloud. See receiveNOCChain/awaitCommissionDevice."
+                            )
+                        }
+                    }
+
+                    val csrElementsTLVHex = csrElementsTLVBytes?.toHexString()
+
+                    if (elementsSignatureHex != null && csrElementsTLVHex != null) {
+                        Log.d(TAG, "Attestation data extracted — using /verify flow")
+                        // Build the PEM CSR alongside the attestation data. The RMNG task
+                        // uses nocsrElements + attestation; the standard RainMaker task has
+                        // only fabric.issueNodeNoC({csr}) and needs this CSR. It is forwarded
+                        // only when csrNonce is null (RainMaker), gated inside
+                        // triggerNOCTaskWithAttestation, so the RMNG flow is unaffected.
+                        val csrPem = AppConstants.CERT_BEGIN + "\n" +
+                            Base64.encodeToString(csrInfo.csr, Base64.NO_WRAP) + "\n" +
+                            AppConstants.CERT_END
+                        triggerNOCTaskWithAttestation(
+                            deviceId,
+                            csrElementsTLVHex,
+                            elementsSignatureHex,
+                            attestationChallengeHex,
+                            csrPem
+                        )
+                    } else {
+                        Log.w(
+                            TAG,
+                            "Attestation data missing (elements=${csrElementsTLVBytes?.size}, sig=${csrInfo.elementsSignature?.size}) — falling back to /matter-noc flow"
+                        )
+                        val tempCsr = Base64.encodeToString(csrInfo.csr, Base64.NO_WRAP)
+                        val finalCSR =
+                            AppConstants.CERT_BEGIN + "\n" + tempCsr + "\n" + AppConstants.CERT_END
+                        triggerNOCTask(finalCSR, deviceId)
+                    }
                 } catch (e: Exception) {
                     Log.e(TAG, "Failed to process NOC chain generation: ${e.message}", e)
                 }
             }
         }
     }
+
+    private fun ByteArray.toHexString(): String =
+        joinToString("") { "%02x".format(it) }
 
     /**
      * Decode X.509 certificate from Base64 string

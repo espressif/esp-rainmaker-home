@@ -8,15 +8,20 @@ import type {
   ClusterParamOption,
   ClusterParamResolver,
 } from "@espressif/rainmaker-matter-sdk";
-import { MATTER_PARAM_VALUE_UNKNOWN } from "@espressif/rainmaker-matter-sdk";
-import { MATTER_PARAM_COMMAND_IDLE } from "../matterParamConstants";
+import { MATTER_PARAM_VALUE_UNKNOWN, MATTER_PARAM_COMMAND_IDLE } from "../matterParamConstants";
 import {
   brightnessPercentToMatterLevel,
   hueDegreesToMatterHue,
   matterHueToHueDegrees,
   matterLevelToBrightnessPercent,
+  matterSaturationToSaturationPercent,
   moveToHueCommandFields,
   moveToLevelCommandFields,
+  moveToSaturationCommandFields,
+  moveToColorTemperatureCommandFields,
+  kelvinToMatterMireds,
+  matterMiredsToKelvin,
+  saturationPercentToMatterSaturation,
 } from "./matterInvokePayload";
 
 /** Maps a Matter raw enum/mode value to a UI value and label. */
@@ -407,6 +412,50 @@ export function createHueInvokeResolver(): ClusterParamResolver {
         return null;
       }
       const matterDataValue = moveToHueCommandFields(hueDegreesToMatterHue(deg));
+      return matterDataValue as unknown as number;
+    },
+  };
+}
+
+/** Resolver for Color Control invoke (MoveToSaturation) from UI saturation %. */
+export function createSaturationInvokeResolver(): ClusterParamResolver {
+  return {
+    decodeOptions(): ClusterParamOption[] {
+      return [];
+    },
+    decodeValue(rawValue): string {
+      return String(matterSaturationToSaturationPercent(Number(rawValue)));
+    },
+    encodeValue(uiValue): number | null {
+      const pct = Number(uiValue);
+      if (!Number.isFinite(pct)) {
+        return null;
+      }
+      const matterDataValue = moveToSaturationCommandFields(
+        saturationPercentToMatterSaturation(pct),
+      );
+      return matterDataValue as unknown as number;
+    },
+  };
+}
+
+/** Resolver for Color Control invoke (MoveToColorTemperature) from UI Kelvin. */
+export function createColorTemperatureInvokeResolver(): ClusterParamResolver {
+  return {
+    decodeOptions(): ClusterParamOption[] {
+      return [];
+    },
+    decodeValue(rawValue): string {
+      return String(matterMiredsToKelvin(Number(rawValue)));
+    },
+    encodeValue(uiValue): number | null {
+      const kelvin = Number(uiValue);
+      if (!Number.isFinite(kelvin) || kelvin <= 0) {
+        return null;
+      }
+      const matterDataValue = moveToColorTemperatureCommandFields(
+        kelvinToMatterMireds(kelvin),
+      );
       return matterDataValue as unknown as number;
     },
   };

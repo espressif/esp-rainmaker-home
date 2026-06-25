@@ -21,6 +21,7 @@ import {
 } from "@shared/utils/constants";
 import { safeTransform } from "@sdk-adaptors/shared/utils/safeTransform";
 import { syncCdfDeviceDisplayName } from "@sdk-adaptors/shared/utils/common";
+import { tryFactoryResetBeforeDelete } from "@sdk-adaptors/shared/utils/factoryReset";
 import { projectRegisteredTransportsOntoRawNode } from "@sdk-adaptors/shared/utils/projectRegisteredTransports";
 import { transformToESPCDFDevice } from "./transformToESPCDFDevice";
 import { transformToESPCDFService } from "./transformToESPCDFService";
@@ -168,6 +169,9 @@ export function transformToESPCDFNode(
             return node.setMultipleParams(params);
         },
         delete: async () => {
+            // Tell the firmware to forget its provisioning before unassociating
+            // from the cloud, so the device can be re-onboarded. Best-effort.
+            await tryFactoryResetBeforeDelete(node.nodeConfig?.services);
             return node.delete();
         },
         setTimeZone: async (timeZone: string) => {

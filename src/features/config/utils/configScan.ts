@@ -6,8 +6,10 @@
 
 import Joi from "joi";
 import type { ScannedConfigPayload } from "@config/runtime.config";
+import type { SDKIdentifier } from "@config/sdk.config";
 import {
   ESPRMNG_BASE_SDK_ID,
+  ESPRMNGMatter_BASE_SDK_ID,
   SUPPORTED_SDK_IDENTIFIERS,
 } from "@config/sdk.config";
 import { CONFIG_FETCH_TIMEOUT_MS } from "@shared/utils/constants";
@@ -49,11 +51,19 @@ const CONFIG_SCHEMA = Joi.object({
     .valid(...SUPPORTED_SDK_IDENTIFIERS)
     .required(),
   config: Joi.when("sdk", {
-    is: ESPRMNG_BASE_SDK_ID,
+    is: Joi.valid(ESPRMNG_BASE_SDK_ID, ESPRMNGMatter_BASE_SDK_ID),
     then: ESPRMNG_BASE_CONFIG_SCHEMA,
     otherwise: ESPRM_BASE_CONFIG_SCHEMA,
   }),
 }).unknown(false);
+
+/**
+ * Matter-capable app: scanned `rmng-base-sdk` → `rmng-matter-sdk` (mirrors using
+ * rainmaker-matter-sdk when the deployment supports Matter).
+ */
+function normalizeScannedActiveSdk(sdk: SDKIdentifier): SDKIdentifier {
+  return sdk === ESPRMNG_BASE_SDK_ID ? ESPRMNGMatter_BASE_SDK_ID : sdk;
+}
 
 /** Parses scanned value as JSON. Returns null if not valid JSON. */
 function tryParseJson(value: string): unknown | null {
@@ -113,7 +123,11 @@ export function validateConfig(
     throw new Error(`Invalid config format: ${messages}`);
   }
 
-  return value as ScannedConfigPayload;
+  const validated = value as ScannedConfigPayload;
+  return {
+    ...validated,
+    sdk: normalizeScannedActiveSdk(validated.sdk),
+  };
 }
 
 /**

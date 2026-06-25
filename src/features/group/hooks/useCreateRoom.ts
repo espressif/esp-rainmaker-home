@@ -23,11 +23,12 @@ import {
   isGroupSharingInviteAllowed,
   normalizeGroupSharingInviteForApi,
 } from "@features/group/utils/settingsHelpers";
-import { getNodeDiff } from "@features/group/utils/createRoomHelpers";
+import { getNodeDiff, mapNodeToDisplay } from "@features/group/utils/createRoomHelpers";
 import { useCDF } from "@shared/hooks/useCDF";
 import { fetchNodesIfEmpty } from "@store";
 import type { Node } from "@src/types/global";
 import { getFeatures } from "@config/features.config";
+import { filterNodesForUserDeviceLists } from "@shared/utils/rmngMatterDeviceClassification";
 
 export interface UseCreateRoomOptions {
   homeId: string | undefined;
@@ -99,14 +100,6 @@ export interface UseCreateRoomResult {
 
 const norm = (s?: string) => (s || "").trim().toLowerCase();
 
-function mapNodeToDisplay(node: any): Node {
-  return {
-    id: node.id,
-    name: node.devices?.map((d: any) => d.displayName).join(", ") ?? "",
-    node,
-  };
-}
-
 /**
  * Hook that encapsulates Create Room business logic and state.
  */
@@ -175,10 +168,12 @@ export function useCreateRoom(
 
   const nodes = useMemo(
     () =>
-      store?.nodeStore?.nodesList.filter((node) =>
-        home?.nodeIds?.includes(node.id)
-      ) ?? [],
-    [store?.nodeStore?.nodesList, home?.nodeIds]
+      filterNodesForUserDeviceLists(
+        store?.nodeStore?.nodesList.filter((node) =>
+          home?.nodeIds?.includes(node.id),
+        ) ?? [],
+      ),
+    [store?.nodeStore?.nodesList, home?.nodeIds],
   );
 
   const selectedNodes: Node[] = useMemo(

@@ -15,7 +15,12 @@ import {
   ESPLocalDiscoveryAdapterInterface,
   DiscoveryParamsInterface,
 } from "@store";
-import { DeviceEventEmitter, NativeModules, Platform } from "react-native";
+import {
+  DeviceEventEmitter,
+  NativeEventEmitter,
+  NativeModules,
+  Platform,
+} from "react-native";
 import {
   formatMatterNodeIdForChipLog,
   MATTER_DISCOVERY_VERIFY_LOG,
@@ -33,6 +38,12 @@ const MatterNativeDiscoveryModule =
   Platform.OS === "android"
     ? NativeModules.MatterDiscoveryModule
     : NativeModules.ESPDiscoveryModule;
+
+// iOS: NativeEventEmitter(ESPDiscoveryModule); Android uses DeviceEventEmitter.
+const discoveryEventEmitter =
+  Platform.OS === "ios" && NativeModules.ESPDiscoveryModule
+    ? new NativeEventEmitter(NativeModules.ESPDiscoveryModule)
+    : DeviceEventEmitter;
 
 /**
  * Params from the Matter SDK use operational service type + `local.` domain.
@@ -166,12 +177,25 @@ export const matterLocalDiscoveryAdapter: ESPLocalDiscoveryAdapterInterface & {
       const expectedServiceType = String(nativeParams.serviceType);
       const shouldStartNativeBrowse = acquireServiceType(expectedServiceType);
 
-      const discoveryUpdateListener = DeviceEventEmitter.addListener(
+      const discoveryUpdateListener = discoveryEventEmitter.addListener(
         DISCOVERY_UPDATE_EVENT,
         (data: Record<string, unknown>) => {
           const incoming =
             typeof data?.serviceType === "string" ? data.serviceType : undefined;
-          if (!shouldForwardDiscoveryEvent(incoming, expectedServiceType)) {
+          const forwarded = shouldForwardDiscoveryEvent(incoming, expectedServiceType);
+          // Probe: log EVERY native mDNS event BEFORE the service-type filter.
+          // If nothing resolves on WLAN this reveals whether native emits any
+          // _matter._tcp event at all (device not advertising / not on-LAN) vs
+          // emits events that get filtered out (serviceType mismatch).
+          console.log("[MatterProbe][discovery] native event", {
+            serviceType: incoming,
+            expected: expectedServiceType,
+            forwarded,
+            matterNodeId: data?.matterNodeId,
+            host: data?.host,
+            port: data?.port,
+          });
+          if (!forwarded) {
             return;
           }
           console.log("[matterLocalDiscoveryAdapter] discoveryUpdateListener:", data);
@@ -264,12 +288,19 @@ export const matterLocalDiscoveryAdapter: ESPLocalDiscoveryAdapterInterface & {
     const nativeParams = resolvedMatterDiscoveryParams(params);
     const expectedServiceType = String(nativeParams.serviceType);
 
-    const discoveryLostListener = DeviceEventEmitter.addListener(
+    const discoveryLostListener = discoveryEventEmitter.addListener(
       DISCOVERY_LOST_EVENT,
       (data: Record<string, unknown>) => {
         const incoming =
           typeof data?.serviceType === "string" ? data.serviceType : undefined;
-        if (!shouldForwardDiscoveryEvent(incoming, expectedServiceType)) {
+        const forwarded = shouldForwardDiscoveryEvent(incoming, expectedServiceType);
+        console.log("[MatterProbe][discovery] native LOST event", {
+          serviceType: incoming,
+          expected: expectedServiceType,
+          forwarded,
+          matterNodeId: data?.matterNodeId,
+        });
+        if (!forwarded) {
           return;
         }
         callback(data);

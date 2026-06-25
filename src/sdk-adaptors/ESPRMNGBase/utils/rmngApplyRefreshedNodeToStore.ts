@@ -7,6 +7,7 @@
 import { runInAction } from "mobx";
 import { ESPCDF, ESPCDFGroup, ESPCDFNode, ESPCDFNodeTransport } from "@store";
 import { mergeLocalTransportFromNodeMap } from "@shared/utils/mergeNodeListLocalTransport";
+import { kickMatterLocalDiscoveryAfterNodesInStore } from "@shared/utils/matterDiscoveryGroupCallbacks";
 
 function syncGroupNodeDetails(
     groups: ESPCDFGroup[] | undefined,
@@ -90,4 +91,5 @@ export function applyRefreshedCdfNodeToStore(cdfNode: ESPCDFNode): void {
         const stored = nodeStore.addNode(merged);
         syncGroupNodeDetails(root?.groupStore?.groupsList, stored.id, stored);
     });
+    kickMatterLocalDiscoveryAfterNodesInStore();
 }

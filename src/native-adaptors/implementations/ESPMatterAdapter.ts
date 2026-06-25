@@ -22,6 +22,8 @@ import {
   MATTER_EVENT_COMMISSIONING_CONFIRMATION_RESPONSE,
   MATTER_EVENT_COMMISSIONING_COMPLETE,
   MATTER_EVENT_COMMISSIONING_ERROR,
+  MATTER_EVENT_RMNG_ATTESTATION_CHALLENGE,
+  MATTER_EVENT_RMNG_MATTER_ATTESTATION_DATA,
   HEADLESS_HANDLED_TYPES,
 } from "@shared/utils/constants";
 
@@ -92,6 +94,7 @@ export const matterCommissioningAdaptor: ESPMatterCommissioningAdaptorInterface 
 
     const isIOS = Platform.OS === "ios";
     let eventListener: any = null;
+    let isRmngSession = false;
 
     const eventEmitter = new NativeEventEmitter(ESPMatterModule as any);
 
@@ -146,15 +149,61 @@ export const matterCommissioningAdaptor: ESPMatterCommissioningAdaptorInterface 
             };
             break;
 
-          case MATTER_EVENT_COMMISSIONING_CONFIRMATION_RESPONSE:
-          case MATTER_EVENT_COMMISSIONING_COMPLETE:
-          case MATTER_EVENT_COMMISSIONING_ERROR:
-            // UI handles these directly
-            return;
+          case MATTER_EVENT_RMNG_ATTESTATION_CHALLENGE: {
+            if (!isIOS) return;
+            isRmngSession = true;
 
-          default:
-            normalizedEvent = event;
+            const challengeBody =
+              event.requestBody && typeof event.requestBody === "object"
+                ? event.requestBody
+                : event;
+            normalizedEvent = {
+              eventType: MATTER_EVENT_RMNG_ATTESTATION_CHALLENGE,
+              requestData: {
+                attestationChallenge: challengeBody.attestationChallenge ?? "",
+              },
+            };
             break;
+          }
+
+          case MATTER_EVENT_RMNG_MATTER_ATTESTATION_DATA: {
+            if (!isIOS) return;
+            isRmngSession = true;
+
+            const attestationBody =
+              event.requestBody && typeof event.requestBody === "object"
+                ? event.requestBody
+                : event;
+            normalizedEvent = {
+              eventType: MATTER_EVENT_RMNG_MATTER_ATTESTATION_DATA,
+              requestData: {
+                requestId: attestationBody.requestId ?? "",
+                nocsrElements: attestationBody.nocsrElements ?? "",
+                attestationSignature: attestationBody.attestationSignature ?? "",
+                ...(attestationBody.attestationChallenge
+                  ? { attestationChallenge: attestationBody.attestationChallenge }
+                  : {}),
+              },
+            };
+            break;
+          }
+
+          case MATTER_EVENT_COMMISSIONING_COMPLETE:
+            if (!isIOS || !isRmngSession) return;
+
+            normalizedEvent = {
+              eventType: MATTER_EVENT_COMMISSIONING_COMPLETE,
+              requestData:
+                event.requestBody && typeof event.requestBody === "object"
+                  ? event.requestBody
+                  : event,
+            };
+            break;
+
+          case MATTER_EVENT_COMMISSIONING_CONFIRMATION_RESPONSE:
+          case MATTER_EVENT_COMMISSIONING_ERROR:
+          default:
+            return;
         }
 
         if (normalizedEvent) {
@@ -165,7 +214,7 @@ export const matterCommissioningAdaptor: ESPMatterCommissioningAdaptorInterface 
 
     await (ESPMatterModule as any).startEcosystemCommissioning(
       onboardingPayload,
-      fabric
+      fabric as ESPRMFabric
     );
 
     return () => {

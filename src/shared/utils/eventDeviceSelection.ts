@@ -4,6 +4,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import type { ESPCDFNode } from "@store";
+import { isRmngMatterAutomationDeviceNode } from "./rmngMatterDeviceClassification";
+
 /**
  * Sorts items by connectivity: connected first, then disconnected.
  * Pure; returns a new array without mutating the input.
@@ -20,4 +23,9 @@ export function sortByConnectivity<T>(
     const bOnline = getIsConnected(b);
     return aOnline === bOnline ? 0 : bOnline ? 1 : -1;
   });
+}
+
+/** RainMaker automation cannot use RMNG+Matter nodes as event/action triggers. */
+export function isAutomationMatterIneligibleNode(node: ESPCDFNode): boolean {
+  return isRmngMatterAutomationDeviceNode(node);
 }
