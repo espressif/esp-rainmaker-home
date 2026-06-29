@@ -105,3 +105,7 @@ export const MATTER_DEVICE_TYPE_TEMPERATURE_SENSOR = toMatterDeviceType(
 export const MATTER_DEVICE_TYPE_HUMIDITY_SENSOR = toMatterDeviceType(
   MATTER_DEVICE_TYPE_ID_HUMIDITY_SENSOR,
 );
+
+
+export const MATTER_CTL_SETUP_SERVICE_TYPE = "esp.service.matter-controller-setup";
+export const MATTER_CTL_SETUP_PARAM_RMAKER_GROUP_ID = "esp.param.rmaker-group-id";
