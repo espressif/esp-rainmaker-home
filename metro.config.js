@@ -11,31 +11,39 @@ const config = getDefaultConfig(__dirname);
 // (Node build pulls `url` and other stdlib). Required for Expo SDK ≤ 53.
 config.resolver.unstable_enablePackageExports = true;
 
-// AWS SDK v3 (used by @aws-sdk/client-kinesis-video*): the CJS build
-// unconditionally requires `@smithy/node-http-handler` (which imports
-// `node:https`/`node:http2`) and the full credential-provider chain (which
-// imports `node:fs`, `node:crypto`, `node:child_process`, etc.). The app
-// passes in-memory AWS credentials directly, so the credential-provider paths
-// never execute — the `node:*` requires just need to resolve at bundle time.
-const smithyNodeHttpHandlerShim = path.resolve(
-  __dirname,
-  'src/shared/utils/shims/smithy-node-http-handler.js',
-);
-const nodeBuiltinShim = path.resolve(
-  __dirname,
-  'src/shared/utils/shims/node-builtin.js',
-);
+// AWS SDK clients (@aws-sdk/client-*) have no "exports" field, so Metro picks
+// their CJS `main` (dist-cjs) build, which hard-codes NodeHttpHandler and pulls
+// Node-only `node:https`/`node:http2` — breaking the release bundle. Force their
+// ESM (dist-es) entry instead: it honors each package's `react-native` field,
+// remapping runtimeConfig -> runtimeConfig.native (RN-safe FetchHttpHandler).
+const awsEsmEntryCache = new Map();
+const resolveAwsEsmEntry = (moduleName) => {
+  if (awsEsmEntryCache.has(moduleName)) {
+    return awsEsmEntryCache.get(moduleName);
+  }
+  let entry = null;
+  if (/^@aws-sdk\/client-[^/]+$/.test(moduleName)) {
+    try {
+      entry = require.resolve(`${moduleName}/dist-es/index.js`);
+    } catch {
+      entry = null; // package has no ESM build; leave default resolution
+    }
+  }
+  awsEsmEntryCache.set(moduleName, entry);
+  return entry;
+};
+
 const defaultResolveRequest = config.resolver.resolveRequest;
 config.resolver.resolveRequest = (context, moduleName, platform) => {
-  if (moduleName === '@smithy/node-http-handler') {
-    return { type: 'sourceFile', filePath: smithyNodeHttpHandlerShim };
+  const esmEntry = resolveAwsEsmEntry(moduleName);
+  if (esmEntry) {
+    return { type: 'sourceFile', filePath: esmEntry };
   }
-  if (moduleName.startsWith('node:')) {
-    return { type: 'sourceFile', filePath: nodeBuiltinShim };
-  }
-  return defaultResolveRequest
-    ? defaultResolveRequest(context, moduleName, platform)
-    : context.resolveRequest(context, moduleName, platform);
+  return (defaultResolveRequest ?? context.resolveRequest)(
+    context,
+    moduleName,
+    platform,
+  );
 };
 
 module.exports = config;
