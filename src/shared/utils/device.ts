@@ -6,12 +6,17 @@
 
 import { ESPRM_NAME_PARAM_TYPE, MATTER_LOCAL_TRANSPORT_KEY } from "./constants";
 import {
+  isOperationalMatterLocalTransport,
+  parseBridgedChildParentNodeId,
+} from "./matterLocalReachability";
+import {
   getProvisionBleIconName,
   isAIAgentFromAdvertisement,
   parseBleManufacturerAdvertisement,
 } from "./bleAdvertisement";
 import { DEVICE_TYPE_LIST } from "@/config/devices.config";
 import {
+  ESPCDF,
   ESPCDFDevice,
   ESPCDFDeviceParam,
   ESPCDFNode,
@@ -429,54 +434,58 @@ const getQRScanErrorType = (
 };
 
 /**
- * Resolves transport map for reachability checks.
- * @param cdfNode - CDF node (prefer live `nodeStore` entry when available).
- * @param registeredTransports - Optional subscription-store transports for MobX tracking.
- * @returns Transports used to detect LAN availability.
- */
-function resolveNodeTransportsForReachability(
-  cdfNode: ESPCDFNode,
-  registeredTransports?: NodeRegisteredTransports | null,
-): NodeRegisteredTransports | undefined {
-  return registeredTransports ?? cdfNode.availableTransports;
-}
-
-/**
  * Whether the node has an active LAN transport (RainMaker local or Matter operational).
- * Prefer `registeredTransports` from `subscriptionStore` so MobX tracks discovery add/remove.
- * @param cdfNode - Node used for fallback `availableTransports`.
- * @param registeredTransports - Optional subscription-store transports for this node id.
- * @returns True when local or Matter operational transport is registered.
+ * Bridged children need child shadow online plus parent operational `matter_local`.
  */
 const isDeviceLocallyAvailable = (
   cdfNode: ESPCDFNode,
   registeredTransports?: NodeRegisteredTransports | null,
+  parentRegisteredTransports?: NodeRegisteredTransports | null,
 ): boolean => {
-  const transportSource = resolveNodeTransportsForReachability(
-    cdfNode,
-    registeredTransports,
-  );
   const RMLocalTransport = ESPCDFNodeTransport.LOCAL;
   const MatterLocalTransport = MATTER_LOCAL_TRANSPORT_KEY;
+  const parentNodeId = parseBridgedChildParentNodeId(cdfNode.id);
+
+  if (parentNodeId) {
+    if (!cdfNode.connectivityStatus?.isConnected) {
+      return Boolean(registeredTransports?.[RMLocalTransport]);
+    }
+    const parentTransports =
+      parentRegisteredTransports ??
+      ESPCDF.instance?.subscriptionStore?.registeredTransports?.[parentNodeId];
+    return Boolean(
+      registeredTransports?.[RMLocalTransport] ||
+        isOperationalMatterLocalTransport(
+          parentTransports?.[MatterLocalTransport],
+        ),
+    );
+  }
+
   return Boolean(
-    transportSource?.[RMLocalTransport] ||
-      transportSource?.[MatterLocalTransport],
+    registeredTransports?.[RMLocalTransport] ||
+      isOperationalMatterLocalTransport(
+        registeredTransports?.[MatterLocalTransport],
+      ),
   );
 };
 
 /**
  * Whether the device is reachable for control UI: cloud online or locally discovered.
- * Prefer `registeredTransports` from `subscriptionStore` so MobX tracks discovery add/remove.
- * @param cdfNode - Node used for cloud `connectivityStatus` (live nodeStore entry when available).
- * @param registeredTransports - Optional subscription-store transports for this node id.
- * @returns True when cloud-connected or LAN transport is active.
  */
 const isDeviceConnected = (
   cdfNode: ESPCDFNode,
   registeredTransports?: NodeRegisteredTransports | null,
+  parentRegisteredTransports?: NodeRegisteredTransports | null,
 ): boolean => {
   const isCloudConnected = cdfNode.connectivityStatus?.isConnected || false;
-  return isCloudConnected || isDeviceLocallyAvailable(cdfNode, registeredTransports);
+  return (
+    isCloudConnected ||
+    isDeviceLocallyAvailable(
+      cdfNode,
+      registeredTransports,
+      parentRegisteredTransports,
+    )
+  );
 };
 
 // Export constants and utility functions

@@ -41,8 +41,7 @@ import ESPMatterModule from "@native-adaptors/interfaces/ESPMatterInterface";
 import {
   convertHomeToMatterFabric,
   isFabricReady,
-  isNocRequired,
-  issueNoc,
+  prepareFabric,
   syncStore,
 } from "@features/matter/utils/matterCommissioningHelpers";
 import {
@@ -227,19 +226,17 @@ export function useCommissioning({
       setPhase(MATTER_COMMISSIONING_PHASE_PREPARING);
       setStatusMessage(t("device.matter.commissioning.statusPreparingFabric"));
 
-      await fabric.getFabricDetails();
+      await prepareFabric(fabric, espCDFUser, commissioningErrors, {
+        onIssuingCertificate: () =>
+          setStatusMessage(
+            t("device.matter.commissioning.statusIssuingCertificate"),
+          ),
+      });
       preparedFabricRef.current = fabric;
 
       setStatusMessage(
         t("device.matter.commissioning.statusStartingCommissioning"),
       );
-
-      if (await isNocRequired(fabric, espCDFUser)) {
-        setStatusMessage(
-          t("device.matter.commissioning.statusIssuingCertificate"),
-        );
-        await issueNoc(fabric, espCDFUser, commissioningErrors);
-      }
 
       setPhase(MATTER_COMMISSIONING_PHASE_COMMISSIONING);
 

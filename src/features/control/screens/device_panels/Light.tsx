@@ -5,7 +5,7 @@
  */
 
 
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -20,6 +20,7 @@ import { tokens } from "@shared/theme/tokens";
 
 // Hooks
 import { useToast } from "@shared/hooks/useToast";
+import { useDeviceConnected } from "@shared/hooks/useDeviceConnected";
 import { useTranslation } from "react-i18next";
 
 // Utils
@@ -38,6 +39,11 @@ import {
 } from "@shared/components/ParamControls";
 import { ParamControlWrap } from "@shared/components";
 import { DevicePanelNoParamsEmptyState } from "@features/control/components";
+import { useMatterDeviceStateSync } from "@shared/hooks/useMatterDeviceStateSync";
+import {
+  readMatterNodeIdFromCdfNode,
+  resolveMatterEndpointsForDevice,
+} from "@shared/utils/matterDeviceStateEvents";
 
 // Types
 import { ControlPanelProps, Tab } from "@src/types/global";
@@ -121,7 +127,21 @@ const Light: React.FC<ControlPanelProps> = ({ node, device }) => {
   };
 
   // Computed Values
-  const isConnected = node.connectivityStatus?.isConnected || false;
+  const isConnected = useDeviceConnected(node);
+
+  const matterNodeId = useMemo(() => readMatterNodeIdFromCdfNode(node), [node]);
+  const matterEndpoints = useMemo(
+    () => resolveMatterEndpointsForDevice(device),
+    [device],
+  );
+  useMatterDeviceStateSync(matterNodeId, matterEndpoints, {
+    power: powerParam,
+    brightness: brightnessParam,
+    hue: hueParam,
+    saturation: saturationParam,
+    temperature: temperatureParam,
+    cct: cctParam,
+  });
 
   const defaultTab = (): Tab => {
     if (!supportsColor) return WHITE_TAB;
@@ -181,9 +201,7 @@ const Light: React.FC<ControlPanelProps> = ({ node, device }) => {
       return;
     }
     try {
-      await node.setMultipleParams({
-        [device.name]: { [lightModeParam.name]: nextVal },
-      });
+      await lightModeParam.setValue(nextVal);
       lightModeParam.value = nextVal;
     } catch (e) {
       console.error("[Light] setLightModeForTab failed:", e);

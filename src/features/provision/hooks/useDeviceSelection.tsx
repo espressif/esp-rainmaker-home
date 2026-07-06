@@ -22,7 +22,7 @@ import {
   ESPRM_SCENES_SERVICE,
   ESPRM_SCHEDULES_SERVICE,
 } from "@shared/utils/constants";
-import { ESPRMNGBaseAdaptorIdentifier } from "@config/sdk.identifiers";
+import { isRmngStackSdkId } from "@config/sdk.identifiers";
 
 export type DeviceServiceType =
   | typeof ESPRM_SCENES_SERVICE
@@ -48,7 +48,7 @@ export const useDeviceSelection = (
   const activeAdaptorIdentifier = store.getActiveAdaptorIdentifier();
   const allowOfflineForSchedule =
     identifier === "schedule" &&
-    activeAdaptorIdentifier === ESPRMNGBaseAdaptorIdentifier;
+    isRmngStackSdkId(activeAdaptorIdentifier);
   const serviceType =
     identifier === "scene" ? ESPRM_SCENES_SERVICE : ESPRM_SCHEDULES_SERVICE;
   const paramsRoute =

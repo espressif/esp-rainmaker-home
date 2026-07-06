@@ -250,13 +250,7 @@ const AiAgent: React.FC<ControlPanelProps> = ({ node, device }) => {
         );
 
         // Update the refresh-token parameter to trigger refresh
-        await node?.setMultipleParams({
-          [agentAuthService.name]: [
-            {
-              [refreshTokenParam.name]: refreshToken,
-            },
-          ],
-        });
+        await refreshTokenParam.setValue(refreshToken);
       } else if (userAuthService) {
         await setUserAuthForNode(node);
       } else {

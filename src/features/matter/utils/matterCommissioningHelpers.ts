@@ -201,6 +201,62 @@ export async function issueNoc(
  * await fabric.startCommissioning(qrData, onProgress);
  * ```
  */
+function mergeFabricSessionDetails(
+  fabric: ESPCDFGroup,
+  details: ESPCDFMatterFabricDetails,
+): ESPCDFMatterFabricDetails {
+  const cached = fabric.fabricDetails;
+  return {
+    ...details,
+    rootCa: details.rootCa || cached?.rootCa || "",
+    matterUserId: details.matterUserId || cached?.matterUserId || "",
+    ipk: details.ipk || cached?.ipk,
+    groupCatIdOperate: details.groupCatIdOperate || cached?.groupCatIdOperate,
+    groupCatIdAdmin: details.groupCatIdAdmin || cached?.groupCatIdAdmin,
+    userCatId: details.userCatId || cached?.userCatId,
+  };
+}
+
+/** Hydrates native {@link FabricSessionManager} when user NOC already exists in KeyStore. */
+export async function hydrateNativeFabricSessionIfNeeded(
+  fabric: ESPCDFGroup,
+  user: ESPCDFUser,
+): Promise<void> {
+  const fabricId = fabric.fabricId ?? "";
+  if (!fabricId) {
+    return;
+  }
+
+  if (await isNocRequired(fabric, user)) {
+    return;
+  }
+
+  const details = mergeFabricSessionDetails(
+    fabric,
+    fabric.fabricDetails ?? (await fabric.getFabricDetails()),
+  );
+
+  if (!details.rootCa || !details.ipk) {
+    throw new Error(MATTER_FABRIC_BOOTSTRAP_ERROR_MISSING_FABRIC_CREDENTIALS);
+  }
+
+  console.log(
+    `${MATTER_DISCOVERY_VERIFY_LOG} hydrateNativeFabricSession fabricId=${fabricId} groupId=${fabric.id} hasMatterUserId=${Boolean(details.matterUserId)}`,
+  );
+
+  await ESPMatterUtilityAdapter.syncFabricSession({
+    groupId: fabric.id,
+    fabricId,
+    name: fabric.name,
+    rootCa: details.rootCa,
+    matterUserId: details.matterUserId ?? "",
+    ipk: details.ipk,
+    groupCatIdOperate: details.groupCatIdOperate,
+    groupCatIdAdmin: details.groupCatIdAdmin,
+    userCatId: details.userCatId,
+  });
+}
+
 export async function prepareFabric(
   fabric: ESPCDFGroup,
   user: ESPCDFUser,
@@ -211,6 +267,8 @@ export async function prepareFabric(
   if (await isNocRequired(fabric, user)) {
     progress?.onIssuingCertificate?.();
     await issueNoc(fabric, user, messages);
+  } else {
+    await hydrateNativeFabricSessionIfNeeded(fabric, user);
   }
   return details;
 }
@@ -244,8 +302,6 @@ export async function bootstrapMatterFabricForOperationalDiscovery(
     return;
   }
 
-  const details = await home.getFabricDetails();
-
   if (await isNocRequired(home, user)) {
     console.log(
       `${MATTER_DISCOVERY_VERIFY_LOG} fabric bootstrap: issuing user NOC for fabricId=${fabricId}`,
@@ -257,20 +313,7 @@ export async function bootstrapMatterFabricForOperationalDiscovery(
     return;
   }
 
-  console.log(
-    `${MATTER_DISCOVERY_VERIFY_LOG} fabric bootstrap: syncFabricSession fabricId=${fabricId} groupId=${home.id}`,
-  );
-  await ESPMatterUtilityAdapter.syncFabricSession({
-    groupId: home.id,
-    fabricId,
-    name: home.name,
-    rootCa: details.rootCa ?? "",
-    matterUserId: details.matterUserId ?? "",
-    ipk: details.ipk,
-    groupCatIdOperate: details.groupCatIdOperate,
-    groupCatIdAdmin: details.groupCatIdAdmin,
-    userCatId: details.userCatId,
-  });
+  await hydrateNativeFabricSessionIfNeeded(home, user);
 }
 
 /**

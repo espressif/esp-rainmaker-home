@@ -25,23 +25,29 @@ import { ESPMQTTAdapter } from "@native-adaptors/implementations/ESPMQTTAdapter"
 import { ESPRMBaseConfig } from "@espressif/rainmaker-base-sdk";
 import type { ESPRMMatterBaseConfig } from "@espressif/rainmaker-matter-sdk";
 import type { ESPRMNGBaseConfig } from "@espressif/rmng-base-sdk";
+import type { ESPRMNGMatterBaseConfig } from "@espressif/rmng-matter-sdk";
 import { matterClusterConfig } from "@sdk-adaptors/ESPRMMatterBase/cluster.config";
 import {
   DEFAULT_ACTIVE_SDK_ID,
   ESPRM_BASE_SDK_ID,
   ESPRMMatter_BASE_SDK_ID,
   ESPRMNG_BASE_SDK_ID,
+  ESPRMNGMatter_BASE_SDK_ID,
   type SDKIdentifier,
+  isRmngStackSdkId,
 } from "./sdk.identifiers";
 
 export {
   DEFAULT_ACTIVE_SDK_ID,
   ESPRM_BASE_SDK_ID,
   ESPRMNG_BASE_SDK_ID,
+  ESPRMNGMatter_BASE_SDK_ID,
+  ESPRMNGMatterBaseAdaptorIdentifier,
   ESPRMMatterBaseAdaptorIdentifier,
   ESPRMBaseAdaptorIdentifier,
   ESPRMNGBaseAdaptorIdentifier,
   SUPPORTED_SDK_IDENTIFIERS,
+  isRmngStackSdkId,
   type SDKIdentifier,
 } from "./sdk.identifiers";
 
@@ -97,11 +103,11 @@ const rmngCompatibleProvisionAdapter = {
 };
 
 export function getRMNGSDKConfig(): ESPRMNGBaseConfig {
-  const override = (
-    runtimeConfigManager.activeSdk === ESPRMNG_BASE_SDK_ID
+  const activeSdk = runtimeConfigManager.activeSdk;
+  const override =
+    activeSdk != null && isRmngStackSdkId(activeSdk)
       ? (runtimeConfigManager.config as ESPRMNGRuntimeConfig | null)
-      : null
-  );
+      : null;
 
   return {
     baseUrl:
@@ -168,6 +174,22 @@ export function getMatterSDKConfig(): ESPRMMatterBaseConfig {
   };
 }
 
+export function getRMNGMatterSDKConfig(): ESPRMNGMatterBaseConfig & {
+  matterLocalDiscoveryAdapter: typeof matterLocalDiscoveryAdapter;
+  clusterConfig: typeof matterClusterConfig;
+} {
+  return {
+    ...getRMNGSDKConfig(),
+    matterCommissioningAdaptor: matterCommissioningAdaptor as unknown as ESPRMNGMatterBaseConfig["matterCommissioningAdaptor"],
+    matterControlAdapter: ESPMatterControlAdapter as unknown as ESPRMNGMatterBaseConfig["matterControlAdapter"],
+    matterSubscriptionAdapter:
+      ESPMatterSubscriptionAdapter as unknown as ESPRMNGMatterBaseConfig["matterSubscriptionAdapter"],
+    matterLocalDiscoveryAdapter,
+    clusterConfig: matterClusterConfig,
+    matterVendorId: matterSdk.vendorId ?? "0x131B",
+  };
+}
+
 
 // ─── SDK Feature Map (Level 2) ────────────────────────────────────────────────
 //
@@ -196,6 +218,17 @@ export const SDK_FEATURE_MAP: Record<
     authAllowedUsernameTypes: ["email", "phone"],
     groupSharingAllowedTypes: ["userCode"],
     onNetworkProvisioning: false,
+    matterCommissioning: true,
+  },
+  [ESPRMNGMatter_BASE_SDK_ID]: {
+    scenes: false, schedules: true, automations: true, localControl: true,
+    notifications: true, groupSharing: true, subGroupSharing: true, transferGroupSharing: false, ota: false,
+    controlGroups: true,
+    aiAgent: false, thirdPartyAuth: false, voiceAssistants: false,
+    authAllowedUsernameTypes: ["email", "phone"],
+    groupSharingAllowedTypes: ["userCode"],
+    onNetworkProvisioning: false,
+    matterCommissioning: true,
   },
   [ESPRMMatter_BASE_SDK_ID]: {
     scenes: true, schedules: true, automations: true, localControl: true,

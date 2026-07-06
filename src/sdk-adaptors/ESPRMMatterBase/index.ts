@@ -14,7 +14,6 @@ import {
 } from "@store";
 import {
     ESPRMMatterBase,
-    ESPRMMatterDeviceParam,
     type ESPRMMatterBaseConfig,
     ESPRMAuth,
     ESPRMBaseConfig,
@@ -26,7 +25,8 @@ import {
 import { transformToESPCDFUser } from "./transformers";
 import { ESPRMMatterBaseAdaptorIdentifier } from "./constants";
 import { getActiveMatterFabricId } from "@native-adaptors/implementations/ESPMatterUtilityAdapter";
-import { isCrossClusterInvokeMarker } from "./utils/common";
+import { installCrossClusterInvokePatch } from "./installCrossClusterInvokePatch";
+import { getResolvedActiveSdk, isRmngStackSdkId } from "@config/sdk.config";
 
 export { ESPRMMatterBaseAdaptorIdentifier };
 export type {
@@ -51,61 +51,6 @@ export type {
  * Idempotent — guarded by a module-local flag so re-initialization (hot
  * reload, multi-config) doesn't stack patches.
  */
-let crossClusterPatchInstalled = false;
-function installCrossClusterInvokePatch(): void {
-    if (crossClusterPatchInstalled) return;
-    const proto = (ESPRMMatterDeviceParam as unknown as {
-        prototype: {
-            setValue: (value: unknown) => Promise<unknown>;
-            resolver?: { encodeValue?: (value: unknown, rawModes?: Record<string, number>) => unknown };
-        };
-    }).prototype;
-    const originalSetValue = proto.setValue;
-    proto.setValue = async function (value: unknown): Promise<unknown> {
-        const self = this as unknown as {
-            resolver?: { encodeValue?: (value: unknown, rawModes?: Record<string, number>) => unknown };
-            rawModes?: Record<string, number>;
-            nodeRef: { deref: () => { matterNodeId?: string } | undefined };
-            endpointId?: number;
-            value: unknown;
-        };
-        const encoded = self.resolver?.encodeValue?.(value, self.rawModes);
-        if (isCrossClusterInvokeMarker(encoded)) {
-            const node = self.nodeRef.deref();
-            const matterNodeId = node?.matterNodeId;
-            if (!matterNodeId) {
-                throw new Error(
-                    "Cross-cluster invoke skipped: matterNodeId unavailable on node ref.",
-                );
-            }
-            const adapter = ESPRMMatterBase.ESPMatterControlAdapter;
-            const result = await adapter.invoke(
-                matterNodeId,
-                self.endpointId ?? 0,
-                encoded.clusterId,
-                encoded.commandId,
-                encoded.payload,
-            );
-            if (!result.success) {
-                throw new Error(
-                    result.error ?? "Matter cross-cluster invoke failed",
-                );
-            }
-            // Optimistic write so the host param's MobX consumers see the
-            // action token; the next subscription frame on the host
-            // cluster's read attribute will overwrite with the decoded
-            // device state.
-            self.value = value;
-            return {
-                status: "success",
-                description: `Matter cross-cluster invoke (cluster=0x${encoded.clusterId.toString(16)} cmd=0x${encoded.commandId.toString(16)})`,
-            };
-        }
-        return originalSetValue.call(this, value);
-    };
-    crossClusterPatchInstalled = true;
-}
-
 export class ESPRMMatterBaseSDKAdaptor {
     config: ESPRMMatterBaseConfig;
     _identifier: string = ESPRMMatterBaseAdaptorIdentifier;
@@ -150,7 +95,15 @@ export class ESPRMMatterBaseSDKAdaptor {
         // Best-effort: a registration failure should not block SDK init —
         // we still want commissioning / control paths to work, just without
         // matter-channel subscriptions until the next login.
-        if (config.matterSubscriptionAdapter) {
+        //
+        // In an RMNG build this RM Matter adaptor is still constructed (for
+        // potential SDK switching) but is NOT the active stack. It shares the
+        // SAME native Matter adapters as the RMNG stack, so initializing the RM
+        // Matter subscription here co-initializes the shared native Matter layer
+        // and re-orders the global channel list — churn that destabilizes the
+        // RMNG stack's operational discovery. Skip it unless RM is active.
+        const isRmngActive = isRmngStackSdkId(getResolvedActiveSdk());
+        if (config.matterSubscriptionAdapter && !isRmngActive) {
             try {
                 await ESPRMMatterBase.initializeMatterSubscription();
 

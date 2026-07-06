@@ -26,13 +26,18 @@ import type {
     ESPCDFPropertyChangeEvent,
 } from "@store";
 import { syncCdfDeviceDisplayName } from "@sdk-adaptors/shared/utils/common";
+import { tryFactoryResetBeforeDelete } from "@sdk-adaptors/shared/utils/factoryReset";
 import { projectRegisteredTransportsOntoRawNode } from "@sdk-adaptors/shared/utils/projectRegisteredTransports";
 import { ESPRMNGBaseAdaptorIdentifier } from "@config/sdk.identifiers";
 import {
     ESPRM_NAME_PARAM_TYPE,
     HEADLESS_ERROR_UNKNOWN,
 } from "@shared/utils/constants";
-import { mapShadowDocumentToNodeUpdateEvents, normalizeRmngSdkResponseToCdf } from "../utils/common";
+import {
+    EVENT_NODE_CONNECTED,
+    EVENT_NODE_DISCONNECTED,
+} from "@store";
+import { mapShadowDocumentToNodeUpdateEvents, emitShadowConnectivityEvents, normalizeRmngSdkResponseToCdf } from "../utils/common";
 import { mapNodeUpdateDataToEvent } from "@shared/utils/subscriptionHelper";
 import { safeTransform } from "@sdk-adaptors/shared/utils/safeTransform";
 import { refreshRmngNodeIfShadowNcfgVersionChanged } from "../utils/rmngNcfgVersionShadowRefresh";
@@ -40,6 +45,9 @@ import { runNcfgShadowHandlerCoalesced } from "../utils/rmngNcfgShadowCoalesce";
 import { transformToESPCDFDevice } from "./transformToESPCDFDevice";
 import { transformToESPCDFService } from "./transformToESPCDFService";
 import { ianaTzToEspPosixTz } from "@shared/utils/timezone";
+
+/** @see TransformRmngNodeOptions in ESPRMNGMatterBase/buildRmngMatterCdfNode */
+export type TransformRmngNodeOptions = unknown;
 
 const MQTT_TRANSPORT_KEY = "mqtt";
 
@@ -124,7 +132,10 @@ const createPropertyChangeSyncCallback = (
  * @param node - Raw RMNG SDK node.
  * @returns Transformed CDF node.
  */
-export function transformToESPCDFNode(node: ESPRMNGNode): ESPCDFNode {
+/** Pure RMNG node → CDF transform (no Matter imports or routing). */
+export function transformToESPCDFNodeBase(
+    node: ESPRMNGNode,
+): ESPCDFNode {
     const nodeId = node.nodeId;
     const operations: ESPCDFNodeOperation = {
         setMultipleParams: async (_params: Record<string, any>) => {
@@ -132,6 +143,9 @@ export function transformToESPCDFNode(node: ESPRMNGNode): ESPCDFNode {
             return normalizeRmngSdkResponseToCdf(res, "Parameters updated successfully");
         },
         delete: async (): Promise<ESPCDFAPIResponse> => {
+            // Tell the firmware to forget its provisioning before unassociating
+            // from the cloud, so the device can be re-onboarded. Best-effort.
+            await tryFactoryResetBeforeDelete(node.services);
             const res = await node.delete();
             return normalizeRmngSdkResponseToCdf(res, "Node deleted successfully");
         },
@@ -183,6 +197,8 @@ export function transformToESPCDFNode(node: ESPRMNGNode): ESPCDFNode {
 
         if (isShadowDoc) {
             void (async () => {
+                emitShadowConnectivityEvents(node.nodeId, shadow, listen);
+
                 const isPrimary = await runNcfgShadowHandlerCoalesced(update.nodeId, async () => {
                     try {
                         await refreshRmngNodeIfShadowNcfgVersionChanged(update.nodeId, shadow);
@@ -197,6 +213,12 @@ export function transformToESPCDFNode(node: ESPRMNGNode): ESPCDFNode {
 
                 const events = mapShadowDocumentToNodeUpdateEvents(update.nodeId, shadow);
                 for (const ev of events) {
+                    if (
+                        ev.event_type === EVENT_NODE_CONNECTED ||
+                        ev.event_type === EVENT_NODE_DISCONNECTED
+                    ) {
+                        continue;
+                    }
                     listen(ev);
                 }
             })();
@@ -270,7 +292,7 @@ export function transformToESPCDFNode(node: ESPRMNGNode): ESPCDFNode {
         metadata: {},
         operations: operations,
         isPrimaryUser: true, // TODO: Remove this once we have a proper way to determine if the node is primary user
-        transportOrder: [MQTT_TRANSPORT_KEY],
+        transportOrder: [ESPTransportMode.local, MQTT_TRANSPORT_KEY],
         availableTransports: {
             [MQTT_TRANSPORT_KEY]: { type: MQTT_TRANSPORT_KEY, metadata: {} },
         },
@@ -294,6 +316,14 @@ export function transformToESPCDFNode(node: ESPRMNGNode): ESPCDFNode {
     return cdfNode;
 }
 
+/** Pure RMNG node transform — used by base adaptor and Matter gate fallback. */
+export function transformToESPCDFNode(
+    node: ESPRMNGNode,
+    _options?: TransformRmngNodeOptions,
+): ESPCDFNode {
+    return transformToESPCDFNodeBase(node);
+}
+
 /**
  * Transforms a batch of RMNG SDK nodes to CDF nodes.
  * Invalid nodes are skipped and reported as partial failures.
@@ -304,13 +334,14 @@ export function transformToESPCDFNode(node: ESPRMNGNode): ESPCDFNode {
 export function transformToESPCDFNodes(
     nodes: ESPRMNGNode[],
     context: string,
+    options?: TransformRmngNodeOptions,
 ): ESPCDFNode[] {
     const failures: { nodeId: string; index: number; reason: string }[] = [];
 
     const transformedNodes = safeTransform<ESPRMNGNode, ESPCDFNode>(
         nodes,
         context,
-        (n) => transformToESPCDFNode(n),
+        (n) => transformToESPCDFNode(n, options),
         ({ index, context: ctx, error }) => {
             const message = error instanceof Error ? error.message : HEADLESS_ERROR_UNKNOWN;
             failures.push({

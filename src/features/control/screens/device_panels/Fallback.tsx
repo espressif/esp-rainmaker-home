@@ -27,12 +27,15 @@ import { ParamControlWrap } from "@shared/components";
 // Utils
 import { useCDF } from "@shared/hooks/useCDF";
 import { isDeviceConnected } from "@shared/utils/device";
+import { resolveParamControl } from "@shared/utils/deviceParams";
+import { parseBridgedChildParentNodeId } from "@shared/utils/matterLocalReachability";
 import { testProps } from "@shared/utils/testProps";
 
 // Types
 import { DeviceFallbackProps } from "@src/types/global";
 import { ESPRM_PARAM_WRITE_PROPERTY } from "@shared/utils/constants";
 import {
+  filterUnsupportedMatterColorParams,
   isParamDisabledBySibling,
   shouldHideParamRow,
 } from "@shared/utils/paramUtils";
@@ -63,9 +66,18 @@ const DeviceFallback = observer(
     const storeNode = store.nodeStore.nodesByIDMap[node.id] ?? node;
     const registeredTransports =
       store.subscriptionStore.registeredTransports[node.id];
+    const bridgeParentNodeId = parseBridgedChildParentNodeId(storeNode.id);
+    const bridgeParentTransports = bridgeParentNodeId
+      ? store.subscriptionStore.registeredTransports[bridgeParentNodeId]
+      : undefined;
     const deviceConnected = useMemo(
-      () => isDeviceConnected(storeNode, registeredTransports),
-      [storeNode, registeredTransports],
+      () =>
+        isDeviceConnected(
+          storeNode,
+          registeredTransports,
+          bridgeParentTransports,
+        ),
+      [storeNode, registeredTransports, bridgeParentTransports],
     );
 
     const _paramsMap = PARAM_CONTROLS.reduce(
@@ -83,7 +95,10 @@ const DeviceFallback = observer(
 
     // 1. Device Data
     const device: ESPCDFDevice = deviceProp;
-    const params = device?.params || [];
+    const params = filterUnsupportedMatterColorParams(
+      storeNode,
+      device?.params || [],
+    );
 
     // Handler to open chart for time series params
     const handleOpenChart = (param: ESPCDFDeviceParam) => {
@@ -126,22 +141,21 @@ const DeviceFallback = observer(
         {...testProps("scroll_fallback")}
       >
         {params.map((param) => {
-          // Check for control using type
-          let control = param.type ? _paramsMap[param.type] : null;
-
-          // If no control found via type, try uiType as fallback
-          if (!control && param.uiType) {
-            control = _paramsMap[param.uiType];
-          }
+          // Resolve via the shared resolver so uiType/type precedence (incl.
+          // preferring a semantic type control over a generic esp.ui.text /
+          // esp.ui.slider hint)
+          const control = resolveParamControl(param, _paramsMap);
 
           // Return null only if neither uiType nor type has a valid control
-          if (!control) return null;
+          if (!control || !control.control) return null;
+          const ControlComponent = control.control;
 
           if (shouldHideParamRow(param)) {
             return null;
           }
 
-          const canWrite = param.properties?.includes(ESPRM_PARAM_WRITE_PROPERTY) ?? false;
+          const canWrite =
+            param.properties?.includes(ESPRM_PARAM_WRITE_PROPERTY) ?? false;
           // Cross-param gating (e.g. RVC `Go Home` is inert while
           // `Run Mode` is `idle`). The rule lives in cluster meta —
           // `PARAM_BOUNDS_DISABLED_WHEN_SIBLING_VALUE` — and is evaluated
@@ -171,7 +185,7 @@ const DeviceFallback = observer(
                 backgroundColor: tokens.colors.white,
               }}
             >
-              <control.control compact />
+              <ControlComponent compact />
             </ParamControlWrap>
           );
         })}

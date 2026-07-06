@@ -11,7 +11,19 @@ import {
   ESPRM_POWER_PARAM_TYPE,
   ESPRM_UI_HIDDEN_PARAM_TYPE,
   ESPRM_UI_SLIDER_PARAM_TYPE,
+  ESPRM_UI_TEXT_PARAM_TYPE,
 } from "@shared/utils/constants";
+
+/**
+ * UI types that are pure presentation hints. When a param also carries a semantic `type` with a dedicated control,
+ * that type-based control is more specific — e.g. an esp.param.temperature` param
+ * tagged `ui_type: esp.ui.text` should render as the Temperature readout (with time-series chart entry)
+ * rather than an editable text field.
+ */
+const GENERIC_UI_PARAM_TYPES = new Set<string>([
+  ESPRM_UI_TEXT_PARAM_TYPE,
+  ESPRM_UI_SLIDER_PARAM_TYPE,
+]);
 /** SDK / Matter device may expose `primaryParam` (e.g. OnOff) on the device or `_raw`. */
 type DevicePrimaryParamRef = {
   primaryParam?: { type?: string };
@@ -117,17 +129,23 @@ export const resolveParamControl = (
   }
 
   let control = paramsMap[lookupKey];
-  if (!control) {
-    return null;
-  }
 
-  // Special handling for slider parameters that may have a specific type-based control
+  // A generic uiType (text/slider) is only a presentation hint. When the param
+  // also carries a semantic `type` backed by a dedicated control, prefer the
+  // type-based control so read-only telemetry (e.g. `esp.param.temperature`
+  // tagged `esp.ui.text`) renders its proper readout — including the
+  // time-series chart entry — instead of a generic editable field.
   if (
-    param.uiType === ESPRM_UI_SLIDER_PARAM_TYPE &&
+    param.uiType &&
+    GENERIC_UI_PARAM_TYPES.has(param.uiType) &&
     param.type &&
     paramsMap[param.type] !== undefined
   ) {
     control = paramsMap[param.type];
+  }
+
+  if (!control) {
+    return null;
   }
 
   return control;

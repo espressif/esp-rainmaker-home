@@ -45,6 +45,25 @@ const cdfUserRetrySubscribeRegistry: WeakMap<
   MatterSubscribeRetryFn
 > = new WeakMap();
 
+const pendingMatterSubscribeRetries = new WeakMap<
+  ESPCDFUser,
+  { nodeId: string; options?: MatterSubscribeRetryOptions }[]
+>();
+
+/** Queues a de-duped Matter subscribe retry for a node, flushed later per user. */
+export function queuePendingMatterSubscribeRetry(
+  user: ESPCDFUser,
+  nodeId: string,
+  options?: MatterSubscribeRetryOptions,
+): void {
+  const pending = pendingMatterSubscribeRetries.get(user) ?? [];
+  if (!pending.some((entry) => entry.nodeId === nodeId)) {
+    pending.push({ nodeId, options });
+    pendingMatterSubscribeRetries.set(user, pending);
+    console.log("[matterSubscribeRetry] queued pending subscribe", nodeId);
+  }
+}
+
 /**
  * Registers a retry helper for the given user. Called by the CDF user
  * adaptor immediately after the user instance is constructed, so the helper
@@ -85,6 +104,26 @@ export async function retrySubscribeForNodeId(
 ): Promise<void> {
   if (!user) return;
   const retry = cdfUserRetrySubscribeRegistry.get(user);
-  if (!retry) return;
+  if (!retry) {
+    queuePendingMatterSubscribeRetry(user, nodeId, options);
+    return;
+  }
   await retry(nodeId, options);
+}
+
+/** Replays matter subscribe retries that were queued before the handler existed. */
+export async function flushPendingMatterSubscribeRetries(
+  user: ESPCDFUser | null | undefined,
+): Promise<void> {
+  if (!user) return;
+  const pending = pendingMatterSubscribeRetries.get(user);
+  if (!pending?.length) return;
+  pendingMatterSubscribeRetries.delete(user);
+  console.log(
+    "[matterSubscribeRetry] flushing pending subscribe retries:",
+    pending.map((entry) => entry.nodeId),
+  );
+  for (const { nodeId, options } of pending) {
+    await retrySubscribeForNodeId(user, nodeId, options);
+  }
 }

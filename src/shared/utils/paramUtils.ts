@@ -8,9 +8,15 @@ import { PARAM_CONTROLS } from "@/config/params.config";
 import type { ESPCDFDeviceParam } from "@store";
 import type { DeviceParamGroup } from "@src/types/global";
 import {
+  ESPRM_CCT_PARAM_TYPE,
+  ESPRM_HUE_PARAM_TYPE,
   ESPRM_NAME_PARAM_TYPE,
   ESPRM_POWER_PARAM_TYPE,
+  ESPRM_SATURATION_PARAM_TYPE,
+  ESPRM_UI_CCT_SLIDER_PARAM_TYPE,
   ESPRM_UI_HIDDEN_PARAM_TYPE,
+  ESPRM_UI_HUE_CIRCLE_PARAM_TYPE,
+  ESPRM_UI_HUE_SLIDER_PARAM_TYPE,
   ESPRM_UI_PUSH_BUTTON_PARAM_TYPE,
   ESPRM_UI_TOGGLE_PARAM_TYPE,
   PARAM_CONTROL_INVOKE_VALUE,
@@ -445,4 +451,148 @@ export function shouldPersistWriteWithoutLocalUpdate(
 export function isUnknownParamValue(value: unknown): boolean {
   const raw = value == null ? "" : String(value);
   return raw === PARAM_VALUE_UNKNOWN || raw.length === 0;
+}
+
+/** Cluster id key for Color Control, as it appears in endpoint metadata. */
+const MATTER_COLOR_CONTROL_CLUSTER_KEYS = ["0x300", "0x0300"] as const;
+
+/** Backing Color Control (0x300) attribute id for each color param. */
+const MATTER_COLOR_ATTRIBUTE_CURRENT_HUE = 0x0;
+const MATTER_COLOR_ATTRIBUTE_CURRENT_SATURATION = 0x1;
+const MATTER_COLOR_ATTRIBUTE_COLOR_TEMPERATURE_MIREDS = 0x7;
+
+/** Reads Color Control (0x300) attribute ids from persisted `matter_data.endpoints`. */
+function readColorAttributesFromMatterDataEndpoints(
+  endpoints: Record<string, unknown>,
+): Set<number> {
+  const attributes = new Set<number>();
+  for (const epData of Object.values(endpoints)) {
+    if (!epData || typeof epData !== "object") continue;
+    const epRecord = epData as Record<string, unknown>;
+    const clusters =
+      (epRecord.clusters as Record<string, unknown> | undefined) ??
+      (epRecord.c as Record<string, unknown> | undefined);
+    if (!clusters || typeof clusters !== "object") continue;
+
+    const servers =
+      (clusters.servers as Record<string, unknown> | undefined) ??
+      (clusters.s as Record<string, unknown> | undefined) ??
+      clusters;
+    if (!servers || typeof servers !== "object") continue;
+
+    for (const key of MATTER_COLOR_CONTROL_CLUSTER_KEYS) {
+      const colorCluster = servers[key];
+      if (!colorCluster || typeof colorCluster !== "object") continue;
+      const attrSection =
+        (colorCluster as { attributes?: unknown; a?: unknown }).attributes ??
+        (colorCluster as { attributes?: unknown; a?: unknown }).a;
+      if (Array.isArray(attrSection)) {
+        for (const raw of attrSection) {
+          const id = typeof raw === "number" ? raw : Number.parseInt(String(raw), 16);
+          if (Number.isFinite(id)) attributes.add(id);
+        }
+      } else if (attrSection && typeof attrSection === "object") {
+        for (const attrKey of Object.keys(attrSection as Record<string, unknown>)) {
+          const id = Number.parseInt(attrKey, 16);
+          if (Number.isFinite(id)) attributes.add(id);
+        }
+      }
+    }
+  }
+  return attributes;
+}
+
+function collectColorAttributesFromEspEndpoints(
+  endpoints: Record<string, unknown>,
+): Set<number> {
+  const attributes = new Set<number>();
+  for (const endpoint of Object.values(endpoints)) {
+    const clusters = (endpoint as { clusters?: Record<string, unknown> })?.clusters;
+    if (!clusters || typeof clusters !== "object") continue;
+    const servers = ((clusters as { servers?: Record<string, unknown> }).servers ??
+      clusters) as Record<string, unknown>;
+
+    let colorCluster: unknown;
+    for (const key of MATTER_COLOR_CONTROL_CLUSTER_KEYS) {
+      if (servers[key]) {
+        colorCluster = servers[key];
+        break;
+      }
+    }
+    const attrList = (colorCluster as { attributes?: unknown })?.attributes;
+    if (Array.isArray(attrList)) {
+      for (const raw of attrList) {
+        const id = typeof raw === "number" ? raw : Number.parseInt(String(raw), 16);
+        if (Number.isFinite(id)) attributes.add(id);
+      }
+    }
+  }
+  return attributes;
+}
+
+/** Reads the set of Color Control (0x300) attribute ids the node advertises, unioned across endpoints, or `null` when none are advertised. */
+function readAdvertisedMatterColorAttributes(
+  node: { metadata?: unknown } | null | undefined,
+): Set<number> | null {
+  const metadata = node?.metadata;
+  if (!metadata || typeof metadata !== "object") return null;
+  const meta = metadata as Record<string, unknown>;
+
+  const matterData = meta.matter_data as { endpoints?: Record<string, unknown> } | undefined;
+  if (matterData?.endpoints && typeof matterData.endpoints === "object") {
+    const fromPersisted = readColorAttributesFromMatterDataEndpoints(matterData.endpoints);
+    if (fromPersisted.size > 0) return fromPersisted;
+  }
+
+  const matter = (meta.Matter ?? meta.matter) as { endpoints?: Record<string, unknown> } | undefined;
+  const endpoints = matter?.endpoints;
+  if (!endpoints || typeof endpoints !== "object") return null;
+
+  const attributes = collectColorAttributesFromEspEndpoints(endpoints);
+  return attributes.size > 0 ? attributes : null;
+}
+
+/** Maps a color param to its backing Color Control (0x300) attribute id, or `null` for non-color params. */
+function matterColorParamBackingAttribute(
+  param: ESPCDFDeviceParam,
+): number | null {
+  const uiType = param.uiType ?? "";
+  const type = param.type ?? "";
+  const name = String(param.name ?? "").trim().toLowerCase();
+
+  if (
+    uiType === ESPRM_UI_HUE_SLIDER_PARAM_TYPE ||
+    uiType === ESPRM_UI_HUE_CIRCLE_PARAM_TYPE ||
+    type === ESPRM_HUE_PARAM_TYPE ||
+    name === "hue"
+  ) {
+    return MATTER_COLOR_ATTRIBUTE_CURRENT_HUE;
+  }
+  if (type === ESPRM_SATURATION_PARAM_TYPE || name === "saturation") {
+    return MATTER_COLOR_ATTRIBUTE_CURRENT_SATURATION;
+  }
+  if (
+    uiType === ESPRM_UI_CCT_SLIDER_PARAM_TYPE ||
+    type === ESPRM_CCT_PARAM_TYPE ||
+    name === "cct" ||
+    name === "colortemperature"
+  ) {
+    return MATTER_COLOR_ATTRIBUTE_COLOR_TEMPERATURE_MIREDS;
+  }
+  return null;
+}
+
+/** Drops Matter color params (Hue / Saturation / CCT) the device cannot actually back. */
+export function filterUnsupportedMatterColorParams<T extends ESPCDFDeviceParam>(
+  node: { metadata?: unknown } | null | undefined,
+  params: T[],
+): T[] {
+  if (!params || params.length === 0) return params;
+  const advertised = readAdvertisedMatterColorAttributes(node);
+  if (!advertised) return params;
+  return params.filter((param) => {
+    const backingAttribute = matterColorParamBackingAttribute(param);
+    if (backingAttribute === null) return true;
+    return advertised.has(backingAttribute);
+  });
 }

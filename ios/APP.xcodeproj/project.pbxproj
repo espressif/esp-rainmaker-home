@@ -19,6 +19,9 @@
 		8728E48F2E99195700DF9B82 /* RequestHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8728E48C2E99195700DF9B82 /* RequestHandler.swift */; };
 		8728E4922E9919D700DF9B82 /* ESPMatterExtensionEcoInfo.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8728E4902E9919D700DF9B82 /* ESPMatterExtensionEcoInfo.swift */; };
 		8728E4932E9919D700DF9B82 /* ESPMatterExtLocalStorage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8728E4912E9919D700DF9B82 /* ESPMatterExtLocalStorage.swift */; };
+		8790E65F2FF7C7AC0020344B /* Matter.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 8790E65E2FF7C7AC0020344B /* Matter.framework */; };
+		8790E6612FF7C82C0020344B /* Matter.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 8790E6602FF7C80F0020344B /* Matter.framework */; };
+		8790E6622FF7C82C0020344B /* Matter.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 8790E6602FF7C80F0020344B /* Matter.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		B18059E884C0ABDD17F3DC3D /* ExpoModulesProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = FAC715A2D49A985799AEE119 /* ExpoModulesProvider.swift */; };
 		BB2F792D24A3F905000567C9 /* Expo.plist in Resources */ = {isa = PBXBuildFile; fileRef = BB2F792C24A3F905000567C9 /* Expo.plist */; };
 		DA803ADE4C6C4736BAE299F2 /* noop-file.swift in Sources */ = {isa = PBXBuildFile; fileRef = E4690621EE5B4198A07FB6D0 /* noop-file.swift */; };
@@ -47,6 +50,7 @@
 		F865357F2F8302A4004B8717 /* ESPMQTTModule.m in Sources */ = {isa = PBXBuildFile; fileRef = F865357D2F8302A4004B8717 /* ESPMQTTModule.m */; };
 		F86535802F8302A4004B8717 /* ESPMQTTModule.swift in Sources */ = {isa = PBXBuildFile; fileRef = F865357E2F8302A4004B8717 /* ESPMQTTModule.swift */; };
 		F8925F852FCFBD3800842C14 /* ESPMatterControl.swift in Sources */ = {isa = PBXBuildFile; fileRef = F8925F842FCFBD3800842C14 /* ESPMatterControl.swift */; };
+		F8925F872FCFBD3800842C15 /* MatterDataValueCodec.swift in Sources */ = {isa = PBXBuildFile; fileRef = F8925F862FCFBD3800842C15 /* MatterDataValueCodec.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -71,6 +75,17 @@
 			name = "Embed Foundation Extensions";
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		8790E6632FF7C82C0020344B /* Embed Frameworks */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 10;
+			files = (
+				8790E6622FF7C82C0020344B /* Matter.framework in Embed Frameworks */,
+			);
+			name = "Embed Frameworks";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
@@ -91,6 +106,8 @@
 		8728E48C2E99195700DF9B82 /* RequestHandler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RequestHandler.swift; sourceTree = "<group>"; };
 		8728E4902E9919D700DF9B82 /* ESPMatterExtensionEcoInfo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ESPMatterExtensionEcoInfo.swift; sourceTree = "<group>"; };
 		8728E4912E9919D700DF9B82 /* ESPMatterExtLocalStorage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ESPMatterExtLocalStorage.swift; sourceTree = "<group>"; };
+		8790E65E2FF7C7AC0020344B /* Matter.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Matter.framework; path = System/Library/Frameworks/Matter.framework; sourceTree = SDKROOT; };
+		8790E6602FF7C80F0020344B /* Matter.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; path = Matter.framework; sourceTree = "<group>"; };
 		94D7943BDE76E78EC62286AA /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xml; name = PrivacyInfo.xcprivacy; path = APP/PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		A5F1B4F2E6D1CB5980F02DB0 /* libPods-APP.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = "libPods-APP.a"; sourceTree = BUILT_PRODUCTS_DIR; };
 		AA286B85B6C04FC6940260E9 /* SplashScreen.storyboard */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = file.storyboard; name = SplashScreen.storyboard; path = APP/SplashScreen.storyboard; sourceTree = "<group>"; };
@@ -126,6 +143,7 @@
 		F865357D2F8302A4004B8717 /* ESPMQTTModule.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = ESPMQTTModule.m; sourceTree = "<group>"; };
 		F865357E2F8302A4004B8717 /* ESPMQTTModule.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ESPMQTTModule.swift; sourceTree = "<group>"; };
 		F8925F842FCFBD3800842C14 /* ESPMatterControl.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ESPMatterControl.swift; sourceTree = "<group>"; };
+		F8925F862FCFBD3800842C15 /* MatterDataValueCodec.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MatterDataValueCodec.swift; sourceTree = "<group>"; };
 		FAC715A2D49A985799AEE119 /* ExpoModulesProvider.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ExpoModulesProvider.swift; path = "Pods/Target Support Files/Pods-APP/ExpoModulesProvider.swift"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -135,6 +153,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				2E0B74F9F6B5921493359E6A /* libPods-APP.a in Frameworks */,
+				8790E6612FF7C82C0020344B /* Matter.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -142,6 +161,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				8790E65F2FF7C7AC0020344B /* Matter.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -178,6 +198,7 @@
 		2D16E6871FA4F8E400B85C8A /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
+				8790E65E2FF7C7AC0020344B /* Matter.framework */,
 				ED297162215061F000B7C4FE /* JavaScriptCore.framework */,
 				A5F1B4F2E6D1CB5980F02DB0 /* libPods-APP.a */,
 			);
@@ -203,6 +224,7 @@
 		83CBB9F61A601CBA00E9B192 = {
 			isa = PBXGroup;
 			children = (
+				8790E6602FF7C80F0020344B /* Matter.framework */,
 				F122E49F2F2C8FFC00DD5981 /* APP.xcconfig */,
 				F122E4A02F2C8FFC00DD5981 /* APP.debug.xcconfig */,
 				F122E4A12F2C8FFC00DD5981 /* APP.release.xcconfig */,
@@ -342,6 +364,7 @@
 				F1C602792E30C241003DA0C5 /* ESPMatterModule.swift */,
 				F1C6027C2E30C242003DA0C6 /* MTRCSRKeys.m */,
 				F1C6027D2E30C242003DA0C6 /* MTRCSRKeys.h */,
+				F8925F862FCFBD3800842C15 /* MatterDataValueCodec.swift */,
 			);
 			path = Matter;
 			sourceTree = "<group>";
@@ -371,6 +394,7 @@
 				8728E4712E98D74800DF9B82 /* Embed Foundation Extensions */,
 				09A71DDAD0B1A6289EEC7C6F /* [CP] Copy Pods Resources */,
 				6053E0C3D17B99277FE2C892 /* [CP] Embed Pods Frameworks */,
+				8790E6632FF7C82C0020344B /* Embed Frameworks */,
 			);
 			buildRules = (
 			);
@@ -484,9 +508,13 @@
 			inputFileListPaths = (
 				"${PODS_ROOT}/Target Support Files/Pods-APP/Pods-APP-resources-${CONFIGURATION}-input-files.xcfilelist",
 			);
+			inputPaths = (
+			);
 			name = "[CP] Copy Pods Resources";
 			outputFileListPaths = (
 				"${PODS_ROOT}/Target Support Files/Pods-APP/Pods-APP-resources-${CONFIGURATION}-output-files.xcfilelist",
+			);
+			outputPaths = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
@@ -525,9 +553,13 @@
 			inputFileListPaths = (
 				"${PODS_ROOT}/Target Support Files/Pods-APP/Pods-APP-frameworks-${CONFIGURATION}-input-files.xcfilelist",
 			);
+			inputPaths = (
+			);
 			name = "[CP] Embed Pods Frameworks";
 			outputFileListPaths = (
 				"${PODS_ROOT}/Target Support Files/Pods-APP/Pods-APP-frameworks-${CONFIGURATION}-output-files.xcfilelist",
+			);
+			outputPaths = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
@@ -585,6 +617,7 @@
 				F1B602802E30C240003DA0C4 /* ESPNotificationModule.m in Sources */,
 				F1C602812E30C241003DA0C5 /* ESPMatterModule.swift in Sources */,
 				F8925F852FCFBD3800842C14 /* ESPMatterControl.swift in Sources */,
+				F8925F872FCFBD3800842C15 /* MatterDataValueCodec.swift in Sources */,
 				F1C602822E30C241003DA0C5 /* ESPMatterModule.m in Sources */,
 				F1C602832E30C242003DA0C6 /* MTRCSRKeys.m in Sources */,
 				13B07FC11A68108700A75B9A /* main.m in Sources */,
@@ -632,6 +665,10 @@
 				DEVELOPMENT_TEAM = QWXF6GB4AV;
 				ENABLE_BITCODE = NO;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				FRAMEWORK_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(PROJECT_DIR)",
+				);
 				GCC_PREPROCESSOR_DEFINITIONS = (
 					"$(inherited)",
 					"FB_SONARKIT_ENABLED=1",
@@ -674,6 +711,10 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = QWXF6GB4AV;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				FRAMEWORK_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(PROJECT_DIR)",
+				);
 				INFOPLIST_FILE = APP/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "$(APP_DISPLAY_NAME)";
 				IPHONEOS_DEPLOYMENT_TARGET = 16.6;
@@ -756,10 +797,7 @@
 				ONLY_ACTIVE_ARCH = YES;
 				OTHER_CFLAGS = "$(inherited)";
 				OTHER_CPLUSPLUSFLAGS = "$(inherited)";
-				OTHER_LDFLAGS = (
-					"$(inherited)",
-					" ",
-				);
+				OTHER_LDFLAGS = "$(inherited)  ";
 				REACT_NATIVE_PATH = "${PODS_ROOT}/../../node_modules/react-native";
 				SDKROOT = iphoneos;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) DEBUG";
@@ -817,10 +855,7 @@
 				MTL_ENABLE_DEBUG_INFO = NO;
 				OTHER_CFLAGS = "$(inherited)";
 				OTHER_CPLUSPLUSFLAGS = "$(inherited)";
-				OTHER_LDFLAGS = (
-					"$(inherited)",
-					" ",
-				);
+				OTHER_LDFLAGS = "$(inherited)  ";
 				REACT_NATIVE_PATH = "${PODS_ROOT}/../../node_modules/react-native";
 				SDKROOT = iphoneos;
 				USE_HERMES = true;
