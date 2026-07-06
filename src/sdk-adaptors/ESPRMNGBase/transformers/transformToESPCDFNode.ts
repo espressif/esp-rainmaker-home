@@ -13,10 +13,12 @@ import {
     ESPCDFNodeTransport,
 } from "@store";
 import {
+    ESPRMNGBase,
     ESPRMNGDevice,
     ESPRMNGNode,
     ESPRMNGService,
     ESPTransportMode,
+    type ESPNodeUpdateData,
 } from "@espressif/rmng-base-sdk";
 import type {
     ESPCDFNodeOperation,
@@ -25,13 +27,13 @@ import type {
 } from "@store";
 import { syncCdfDeviceDisplayName } from "@sdk-adaptors/shared/utils/common";
 import { projectRegisteredTransportsOntoRawNode } from "@sdk-adaptors/shared/utils/projectRegisteredTransports";
-import { EVENT_NODE_PARAMS_CHANGED } from "@store";
 import { ESPRMNGBaseAdaptorIdentifier } from "@config/sdk.identifiers";
 import {
     ESPRM_NAME_PARAM_TYPE,
     HEADLESS_ERROR_UNKNOWN,
 } from "@shared/utils/constants";
 import { mapShadowDocumentToNodeUpdateEvents, normalizeRmngSdkResponseToCdf } from "../utils/common";
+import { mapNodeUpdateDataToEvent } from "@shared/utils/subscriptionHelper";
 import { safeTransform } from "@sdk-adaptors/shared/utils/safeTransform";
 import { refreshRmngNodeIfShadowNcfgVersionChanged } from "../utils/rmngNcfgVersionShadowRefresh";
 import { runNcfgShadowHandlerCoalesced } from "../utils/rmngNcfgShadowCoalesce";
@@ -40,6 +42,17 @@ import { transformToESPCDFService } from "./transformToESPCDFService";
 import { ianaTzToEspPosixTz } from "@shared/utils/timezone";
 
 const MQTT_TRANSPORT_KEY = "mqtt";
+
+/**
+ * Ensures only one store-sink subscription exists per `nodeId`.
+ *
+ * During node re-transformation (e.g. after sync or NCFG processing), the
+ * existing subscription is replaced rather than creating an additional one.
+ * This is required because SDK subscription channels are singletons keyed by
+ * `nodeId` and outlive individual node instances, unlike the legacy
+ * `node.on("params")` emitter.
+ */
+const rmngNodeUpdateHandlers = new Map<string, (update: ESPNodeUpdateData) => void>();
 
 /**
  * Syncs CDF display names on property changes and mirrors name-param values on the raw node.
@@ -147,31 +160,42 @@ export function transformToESPCDFNode(node: ESPRMNGNode): ESPCDFNode {
         },
     };
 
-    node.on("params", (event: any) => {
+    // Receive this node's parameter updates through the SDK subscription channel
+    // (ESPRMNGSubscriptionManager → MQTT channel → orchestrator) instead of the
+    // raw `node.on("params")` event. The node already self-subscribes for its own
+    // state; this registers the CDF store sink as an additional subscriber, and
+    // the channel deduplicates the underlying MQTT subscription per shadow.
+    const handleNodeUpdate = (update: ESPNodeUpdateData) => {
         const root = ESPCDF.instance;
         const listen = root?.subscriptionStore?.nodeUpdates?.listen;
         if (!listen) return;
 
+        // MQTT updates carry the full raw shadow in `metadata.shadow`; use it for
+        // connectivity/params extraction and ncfg-version refresh, exactly as the
+        // previous `node.on("params")` path did. Channels that don't provide a raw
+        // shadow (e.g. a future Matter channel) fall back to the normalized payload.
+        const shadow = update.metadata?.shadow;
         const isShadowDoc =
-            event &&
-            typeof event === "object" &&
-            event.state?.reported !== undefined;
+            !!shadow &&
+            typeof shadow === "object" &&
+            (shadow as { state?: { reported?: unknown } }).state?.reported !==
+                undefined;
 
         if (isShadowDoc) {
             void (async () => {
-                const isPrimary = await runNcfgShadowHandlerCoalesced(node.nodeId, async () => {
+                const isPrimary = await runNcfgShadowHandlerCoalesced(update.nodeId, async () => {
                     try {
-                        await refreshRmngNodeIfShadowNcfgVersionChanged(node.nodeId, event);
+                        await refreshRmngNodeIfShadowNcfgVersionChanged(update.nodeId, shadow);
                     } catch (err) {
                         console.warn(
-                            `[ncfg_ver][app] refreshRmngNodeIfShadowNcfgVersionChanged failed nodeId=${node.nodeId}`,
+                            `[ncfg_ver][app] refreshRmngNodeIfShadowNcfgVersionChanged failed nodeId=${update.nodeId}`,
                             err,
                         );
                     }
                 });
                 if (!isPrimary) return;
 
-                const events = mapShadowDocumentToNodeUpdateEvents(node.nodeId, event);
+                const events = mapShadowDocumentToNodeUpdateEvents(update.nodeId, shadow);
                 for (const ev of events) {
                     listen(ev);
                 }
@@ -179,13 +203,28 @@ export function transformToESPCDFNode(node: ESPRMNGNode): ESPCDFNode {
             return;
         }
 
-        listen({
-            event_type: EVENT_NODE_PARAMS_CHANGED,
-            node_id: node.nodeId,
-            payload: event ?? {},
-            timestamp: Date.now(),
+        listen(mapNodeUpdateDataToEvent(update));
+    };
+
+    try {
+        const manager = ESPRMNGBase.subscriptionManager;
+        // Drop any prior store-sink subscription for this node before adding the
+        // new one, so re-transforms don't deliver to the store multiple times.
+        const previous = rmngNodeUpdateHandlers.get(node.nodeId);
+        if (previous) {
+            void manager.unsubscribeFromNode(node.nodeId, previous).catch(() => {});
+        }
+        rmngNodeUpdateHandlers.set(node.nodeId, handleNodeUpdate);
+
+        manager.subscribeToNode(node, handleNodeUpdate).catch((err) => {
+            console.warn(
+                `[rmng] subscriptionManager.subscribeToNode failed nodeId=${node.nodeId}`,
+                err,
+            );
         });
-    });
+    } catch (err) {
+        console.warn(`[rmng] subscriptionManager unavailable nodeId=${node.nodeId}`, err);
+    }
 
     const devices = safeTransform<ESPRMNGDevice, ReturnType<typeof transformToESPCDFDevice>>(
         node.devices,
