@@ -19,7 +19,13 @@ data class FabricInfo(
     val groupCatIdOperate: String?,
     val groupCatIdAdmin: String?,
     val matterUserId: String?,
-    val userCatId: String?
+    val userCatId: String?,
+    val sigv4AccessKey: String? = null,
+    val sigv4SecretKey: String? = null,
+    val sigv4SessionToken: String? = null,
+    val sigv4Expiration: String? = null,
+    val requestId: String? = null,
+    val csrNonce: String? = null
 )
 
 object FabricSessionManager {
@@ -62,6 +68,24 @@ object FabricSessionManager {
     }
 
     /**
+     * Pushes RMNG commissioning credentials from the in-memory fabric session onto the
+     * active [ChipClient]. Required because [ESPMatterCommissioningService.onCreate] can run
+     * before JS calls `initiateNodeAssociation` / [ESPMatterModule.storeFabricDetails], leaving
+     * a stale null csrNonce on the client until GPS reaches `commissionDevice`.
+     */
+    fun syncCommissioningCredentialsToChipClient() {
+        val fabric = currentFabric ?: return
+        val client = currentChipClient ?: return
+        fabric.requestId?.let { client.requestId = it }
+        fabric.csrNonce?.let { client.csrNonce = it }
+        Log.d(
+            TAG,
+            "[NONCE-TRACE] syncCommissioningCredentials: csrNonce=${fabric.csrNonce?.take(16)}..." +
+                " (len=${fabric.csrNonce?.length}), requestId=${fabric.requestId}",
+        )
+    }
+
+    /**
      * Returns an active [ChipClient] for the current fabric, creating one when fabric
      * credentials are in the session but no client has been instantiated yet (e.g. after
      * `storePrecommissionInfo` and before commissioning).
@@ -72,6 +96,7 @@ object FabricSessionManager {
     fun resolveChipClient(context: Context): ChipClient? {
         currentChipClient?.let {
             Log.v(TAG, "[MatterDiscovery] resolveChipClient: reusing cached ChipClient")
+            syncCommissioningCredentialsToChipClient()
             return it
         }
 
@@ -109,7 +134,9 @@ object FabricSessionManager {
 
         Log.i(
             TAG,
-            "[MatterDiscovery] resolveChipClient: creating ChipClient for fabricId=$fabricId groupId=$groupId",
+            "[MatterProbe][fabric] resolveChipClient: creating ChipClient fabricId=$fabricId groupId=$groupId " +
+                "userNocPresent=${!userNoc.isNullOrEmpty()} matterUserIdPresent=${!fabric.matterUserId.isNullOrEmpty()} " +
+                "(operational identity = userNoc/KeyStore chain; matterUserId is NOT required to build ChipClient)",
         )
 
         return ChipClient(
@@ -122,6 +149,8 @@ object FabricSessionManager {
             fabric.groupCatIdOperate ?: "",
             fabric.groupCatIdAdmin ?: "",
         ).also { client ->
+            fabric.requestId?.let { client.requestId = it }
+            fabric.csrNonce?.let { client.csrNonce = it }
             currentChipClient = client
             Log.d(TAG, "[MatterDiscovery] resolveChipClient: ChipClient cached for fabricId=$fabricId")
         }

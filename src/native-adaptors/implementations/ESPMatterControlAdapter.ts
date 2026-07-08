@@ -113,18 +113,6 @@ function ensureNative(): NonNullable<typeof ESPMatterModule> {
   return ESPMatterModule;
 }
 
-/**
- * Coerces a Matter SDK attribute path (`endpoint` / `clusterId` /
- * `attributeId`) into the native bridge shape. Already aligned with
- * Android's `subscribe` parameter parser; no rewriting needed beyond the
- * type cast.
- */
-function toNativeAttributePaths(
-  attributes: ESPMatterSubscribeAttribute[],
-): ESPMatterSubscribeAttribute[] {
-  return attributes;
-}
-
 const MATTER_DATA_VALUE_WIRE_TYPES: ReadonlySet<string> = new Set([
   MATTER_DATA_VALUE_TYPE_NULL,
   MATTER_DATA_VALUE_TYPE_BOOLEAN,
@@ -214,12 +202,21 @@ function normalizeWriteValue(value: unknown): Record<string, unknown> | null {
   return null;
 }
 
-const ESPMatterControlAdapter: ESPMatterControlAdapterInterface = {
+type ESPMatterControlAdapterWithTlv = ESPMatterControlAdapterInterface & {
+  encodeCommandFieldsToTlvHex(
+    commandFields: Record<string, unknown> | null,
+  ): Promise<string>;
+};
+
+const ESPMatterControlAdapter: ESPMatterControlAdapterWithTlv = {
   async init(config: ESPMatterInitConfig): Promise<ESPMatterControlResult> {
     const native = ensureNative();
     if (!native.matterControlInit) {
       return { success: true };
     }
+    // Probe: native CHIP controller (re)init. Repeated init resets operational
+    // discovery / CASE sessions, so this pinpoints churn that stalls WLAN.
+    console.log("[MatterProbe][control] init native controller");
     return native.matterControlInit(config as unknown as Record<string, unknown>);
   },
 
@@ -255,7 +252,6 @@ const ESPMatterControlAdapter: ESPMatterControlAdapterInterface = {
     if (!native.matterControlWrite) {
       return { success: false, error: "matterControlWrite not implemented natively" };
     }
-    console.log("ESPMatterControlAdapter.write", matterNodeId, endpoint, clusterId, attributeId, value);
     const wireValue = normalizeWriteValue(value);
     if (wireValue === null) {
       return {
@@ -264,7 +260,6 @@ const ESPMatterControlAdapter: ESPMatterControlAdapterInterface = {
           "write: value must be a Matter data-value object ({ type, value }) or a supported primitive (boolean, number, string, null)",
       };
     }
-    console.log("ESPMatterControlAdapter.write wireValue", wireValue);
     const result = await native.matterControlWrite(
       matterNodeId,
       endpoint,
@@ -272,7 +267,6 @@ const ESPMatterControlAdapter: ESPMatterControlAdapterInterface = {
       attributeId,
       wireValue,
     );
-    console.log("ESPMatterControlAdapter.write result", result);
     return result;
   },
 
@@ -287,7 +281,6 @@ const ESPMatterControlAdapter: ESPMatterControlAdapterInterface = {
     if (!native.matterControlInvoke) {
       return { success: false, error: "matterControlInvoke not implemented natively" };
     }
-    console.log("ESPMatterControlAdapter.invoke", matterNodeId, endpoint, clusterId, commandId, payload);
     const commandFields = fieldlessInvokeCommandFieldsForBridge(payload ?? null);
     const result = await native.matterControlInvoke(
       matterNodeId,
@@ -296,7 +289,6 @@ const ESPMatterControlAdapter: ESPMatterControlAdapterInterface = {
       commandId,
       commandFields,
     );
-    console.log("ESPMatterControlAdapter.invoke result", result);
     return result;
   },
 
@@ -325,15 +317,29 @@ const ESPMatterControlAdapter: ESPMatterControlAdapterInterface = {
 
     let nativeHandle: string | null = null;
 
+    // Probe: exact native subscribe attempt + outcome, keyed by matterNodeId.
+    console.log("[MatterProbe][control] subscribe →", {
+      matterNodeId,
+      pathCount: attributes?.length ?? 0,
+      paths: attributes,
+    });
     try {
       const result = await native.matterControlSubscribe(
         matterNodeId,
-        toNativeAttributePaths(attributes),
+        attributes,
         SUBSCRIBE_DEFAULTS.minIntervalSec,
         SUBSCRIBE_DEFAULTS.maxIntervalSec,
       );
       nativeHandle = result?.subscriptionId ?? null;
+      console.log("[MatterProbe][control] subscribe ok", {
+        matterNodeId,
+        subscriptionId: nativeHandle,
+      });
     } catch (error) {
+      console.warn("[MatterProbe][control] subscribe error", {
+        matterNodeId,
+        error: error instanceof Error ? error.message : String(error),
+      });
       listener.remove();
       listener = null;
       return {
@@ -359,6 +365,26 @@ const ESPMatterControlAdapter: ESPMatterControlAdapterInterface = {
     };
 
     return { success: true, unsubscribe };
+  },
+
+  /**
+   * Encodes Matter invoke command fields to RMNG MQTT wire form (`0x<tlv-hex>`).
+   * Pass `null` for fieldless commands (empty anonymous Structure TLV).
+   */
+  async encodeCommandFieldsToTlvHex(
+    commandFields: Record<string, unknown> | null,
+  ): Promise<string> {
+    const native = ensureNative() as {
+      matterEncodeCommandFieldsToTlvHex?: (
+        fields: Record<string, unknown> | null,
+      ) => Promise<string>;
+    };
+    if (!native.matterEncodeCommandFieldsToTlvHex) {
+      throw new Error(
+        "matterEncodeCommandFieldsToTlvHex not implemented on this platform",
+      );
+    }
+    return native.matterEncodeCommandFieldsToTlvHex(commandFields);
   },
 };
 

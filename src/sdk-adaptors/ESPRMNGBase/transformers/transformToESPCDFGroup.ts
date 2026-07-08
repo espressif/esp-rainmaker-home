@@ -21,6 +21,7 @@ import {
 } from "@shared/utils/constants";
 import { ESPCDF } from "@store";
 import { GROUP_CONTROL_PAYLOAD_PARAMS_ENVELOPE_KEY } from "@shared/utils/constants";
+import { filterNodesForUserDeviceLists } from "@shared/utils/rmngMatterDeviceClassification";
 import {
     parseGroupParamBroadcastEnvelope,
     resolveGroupParamBroadcastTypeKey,
@@ -101,7 +102,8 @@ function resolveRmngGroupUserAccessTypeForCdf(
     return GROUP_USER_ACCESS_PRIMARY;
 }
 
-export function transformToESPCDFGroup(
+/** Pure RMNG group → CDF transform (no Matter imports or routing). */
+export function transformToESPCDFGroupBase(
     group: ESPRMNGGroup,
     user: ESPRMNGUser,
     identifier: string,
@@ -121,7 +123,7 @@ export function transformToESPCDFGroup(
             }
             const subgroups = group.subgroups;
             return subgroups?.map((subgroup: ESPRMNGGroup) =>
-                transformToESPCDFGroup(subgroup, user, identifier, accessType),
+                transformToESPCDFGroupBase(subgroup, user, identifier, accessType),
             ) || [];
         },
         async createSubGroup(options: { name: string; nodeIds?: string[]; description?: string; customData?: Record<string, any>; type?: string; mutuallyExclusive?: boolean; metadata?: Record<string, any> }): Promise<ESPCDFGroup> {
@@ -133,7 +135,7 @@ export function transformToESPCDFGroup(
                 await Promise.all(options.nodeIds.map((nodeId) => subgroup.addNode(nodeId)));
             }
             subgroup.nodeIds = options.nodeIds;
-            return transformToESPCDFGroup(subgroup, user, identifier, accessType);
+            return transformToESPCDFGroupBase(subgroup, user, identifier, accessType);
         },
         async getSharingInfo(_options: { metadata?: boolean; withSubGroups?: boolean; withParentGroups?: boolean }): Promise<ESPSDKAdaptorAPIDataResponse<ESPCDFGroupSharingInfoInterface>> {
             if (isSubgroup(group)) {
@@ -391,10 +393,11 @@ export function transformToESPCDFGroup(
             isMaxScheduleReached: boolean;
         }[]> {
             try {
-                const nodes =
+                const nodes = filterNodesForUserDeviceLists(
                     espcdfGroup.nodeDetails && espcdfGroup.nodeDetails.length > 0
                         ? espcdfGroup.nodeDetails
-                        : await buildCdfNodesFromGroup(group, user, identifier);
+                        : await buildCdfNodesFromGroup(group, user, identifier),
+                );
                 const allDevices: {
                     node: ESPCDFNode;
                     device: ESPCDFDevice;
@@ -471,7 +474,7 @@ export function transformToESPCDFGroup(
         subGroups: isSubgroup(group)
             ? []
             : group.subgroups?.map((subgroup: ESPRMNGGroup) =>
-                  transformToESPCDFGroup(subgroup, user, identifier, accessType),
+                  transformToESPCDFGroupBase(subgroup, user, identifier, accessType),
               ) || [],
         operations: operations,
         _raw: group,
@@ -489,8 +492,7 @@ const isSubgroup = (
 
 
 /**
- * Walks this group’s subtree (nested subgroups): getNodes(true) per group, dedupes by node id.
- * Dedupe uses a string record so we never rely on `Set.prototype.has` (was failing at runtime on device).
+ * Walks this group's subtree (nested subgroups): getNodes per group, dedupes by node id.
  */
 async function gatherUniqueNodesFromGroupSubtree(
     group: ESPRMNGGroup,
@@ -499,7 +501,7 @@ async function gatherUniqueNodesFromGroupSubtree(
 ): Promise<void> {
     const nodes = await group.getNodes();
     for (const node of nodes) {
-        const nodeId = node.nodeId ?? (node as any).config?.node_id ?? "";
+        const nodeId = node.nodeId ?? (node as { config?: { node_id?: string } }).config?.node_id ?? "";
         if (nodeId && !seenNodeIds[nodeId]) {
             seenNodeIds[nodeId] = true;
             out.push(node);
@@ -512,10 +514,7 @@ async function gatherUniqueNodesFromGroupSubtree(
     }
 }
 
-/**
- * Builds {@link ESPCDFNode}s for this group: walks the group subtree (see gatherUniqueNodesFromGroupSubtree),
- * then maps each RMNG node with transformToESPCDFNodes.
- */
+/** Builds CDF nodes via plain {@link ESPRMNGGroup.getNodes} subtree walk. */
 async function buildCdfNodesFromGroup(
     group: ESPRMNGGroup,
     _user: ESPRMNGUser,
@@ -525,6 +524,16 @@ async function buildCdfNodesFromGroup(
     const nodes: ESPRMNGNode[] = [];
     await gatherUniqueNodesFromGroupSubtree(group, seenNodeIds, nodes);
     return transformToESPCDFNodes(nodes, "group.buildCdfNodesFromGroup");
+}
+
+/** Pure RMNG group transform — used by {@link ESPRMNGBaseSDKAdaptor} paths. */
+export function transformToESPCDFGroup(
+    group: ESPRMNGGroup,
+    user: ESPRMNGUser,
+    identifier: string,
+    inheritedUserAccess?: string,
+): ESPCDFGroup {
+    return transformToESPCDFGroupBase(group, user, identifier, inheritedUserAccess);
 }
 
 async function resolveAutomationTriggerDetails(

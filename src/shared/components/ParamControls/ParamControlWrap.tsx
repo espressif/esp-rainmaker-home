@@ -195,11 +195,17 @@ const ParamControlWrap = observer(
               label: displayLabel,
               value: state.value,
               onValueChange: handleValueChange,
+              // time_series readouts stay pressable (even when read-only) so
+              // the chart entry works. Writable params follow the passed
+              // `disabled` (e.g. disconnected). Any other read-only param is a
+              // pure display, so force it disabled — this hides the edit
+              // affordance and guarantees a read-only param never offers a
+              // write path.
               disabled: isTimeSeriesParam
                 ? disabled
                 : isWritable
                   ? disabled
-                  : false,
+                  : true,
               meta: {
                 ...getParamBounds(param),
                 dataType: param.dataType,

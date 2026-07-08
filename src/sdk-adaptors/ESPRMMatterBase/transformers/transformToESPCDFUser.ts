@@ -16,6 +16,7 @@ import {
 import { mapNodeUpdateDataToEvent } from "@shared/utils/subscriptionHelper";
 import { registerSubscribeRetryForUser } from "@shared/utils/matterSubscribeRetry";
 import { registerAttributeReadForUser } from "@shared/utils/matterAttributeRead";
+import { isMatterNodeLocallyReachable } from "@shared/utils/matterLocalReachability";
 import {
     ESPCDFGroup,
     ESPCDFMatterPrecommissionInfo,
@@ -452,6 +453,12 @@ export function transformToESPCDFUser(esprmUser: ESPRMUser | null): ESPCDFUser {
         if (!lastSubscribeUpdateHandler) {
             console.warn(
                 `[matterTransformToESPCDFUser] attribute read skipped for node ${nodeId}: no handler registered yet`,
+            );
+            return;
+        }
+        if (!isMatterNodeLocallyReachable(nodeId)) {
+            console.warn(
+                `[matterTransformToESPCDFUser] attribute read skipped for node ${nodeId}: matter_local unavailable`,
             );
             return;
         }

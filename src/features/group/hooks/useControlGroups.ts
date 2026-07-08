@@ -8,7 +8,7 @@ import { useState, useCallback, useMemo, useRef, useEffect } from "react";
 import type { TFunction } from "i18next";
 import type { ESPCDFGroup } from "@store";
 import { GROUP_TYPE_ROOM } from "@shared/utils/constants";
-import { getNodeDiff } from "@features/group/utils/createRoomHelpers";
+import { getNodeDiff, mapNodeToDisplay } from "@features/group/utils/createRoomHelpers";
 import {
   getLockedTypeFromSelection,
   getPrimaryHomogeneousDeviceType,
@@ -142,14 +142,6 @@ export interface UseCreateGroupResult {
   handleUpdate: () => Promise<void>;
   handleDelete: () => void;
   confirmDelete: () => Promise<void>;
-}
-
-function mapNodeToDisplay(node: any): Node {
-  return {
-    id: node.id,
-    name: node.devices?.map((d: any) => d.displayName).join(", ") ?? "",
-    node,
-  };
 }
 
 /**

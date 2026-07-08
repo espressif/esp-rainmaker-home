@@ -250,6 +250,27 @@ class ESPMatterModule(reactContext: ReactApplicationContext) :
             detailsSource.optString("matterUserId") ?: detailsSource.optString("matter_user_id")
         val userCatId =
             detailsSource.optString("userCatId") ?: detailsSource.optString("user_cat_id")
+        val sigv4AccessKey = detailsSource.optString("sigv4AccessKey")
+            ?: fabricDetails.optString("sigv4AccessKey")
+        val sigv4SecretKey = detailsSource.optString("sigv4SecretKey")
+            ?: fabricDetails.optString("sigv4SecretKey")
+        val sigv4SessionToken = detailsSource.optString("sigv4SessionToken")
+            ?: fabricDetails.optString("sigv4SessionToken")
+        val sigv4Expiration = detailsSource.optString("sigv4Expiration")
+            ?: fabricDetails.optString("sigv4Expiration")
+        val requestId = fabricDetails.optString("requestId")
+            ?: detailsSource.optString("requestId")
+            ?: fabricDetails.optString("request_id")
+            ?: detailsSource.optString("request_id")
+        val csrNonce = fabricDetails.optString("csrNonce")
+            ?: detailsSource.optString("csrNonce")
+            ?: fabricDetails.optString("csr_nonce")
+            ?: detailsSource.optString("csr_nonce")
+
+        Log.d(
+            TAG,
+            "[NONCE-TRACE] storeFabricDetails: csrNonce=${csrNonce?.take(16)}... (len=${csrNonce?.length}), requestId=$requestId"
+        )
 
         val currentFabric = FabricSessionManager.getCurrentFabric()
 
@@ -266,20 +287,70 @@ class ESPMatterModule(reactContext: ReactApplicationContext) :
             } else {
                 matterUserId
             }
+
+        val preservedRootCa =
+            if (rootCa.isNullOrEmpty() && currentFabric?.rootCa?.isNotEmpty() == true) {
+                currentFabric.rootCa
+            } else {
+                rootCa
+            }
+
+        val preservedIpk =
+            if (ipk.isNullOrEmpty() && currentFabric?.ipk?.isNotEmpty() == true) {
+                currentFabric.ipk
+            } else {
+                ipk
+            }
+
+        val preservedGroupCatIdOperate =
+            if (groupCatIdOperate.isNullOrEmpty() && currentFabric?.groupCatIdOperate?.isNotEmpty() == true) {
+                currentFabric.groupCatIdOperate
+            } else {
+                groupCatIdOperate
+            }
+
+        val preservedGroupCatIdAdmin =
+            if (groupCatIdAdmin.isNullOrEmpty() && currentFabric?.groupCatIdAdmin?.isNotEmpty() == true) {
+                currentFabric.groupCatIdAdmin
+            } else {
+                groupCatIdAdmin
+            }
+
+        val preservedRequestId =
+            if (requestId.isNullOrEmpty() && currentFabric?.requestId?.isNotEmpty() == true) {
+                currentFabric.requestId
+            } else {
+                requestId
+            }
+
+        val preservedCsrNonce =
+            if (csrNonce.isNullOrEmpty() && currentFabric?.csrNonce?.isNotEmpty() == true) {
+                currentFabric.csrNonce
+            } else {
+                csrNonce
+            }
+
         val fabricInfo = FabricInfo(
             groupId = groupId,
             fabricId = fabricId,
             name = name,
-            rootCa = rootCa,
-            ipk = ipk,
+            rootCa = preservedRootCa,
+            ipk = preservedIpk,
             userNoc = preservedUserNoc,
-            groupCatIdOperate = groupCatIdOperate,
-            groupCatIdAdmin = groupCatIdAdmin,
+            groupCatIdOperate = preservedGroupCatIdOperate,
+            groupCatIdAdmin = preservedGroupCatIdAdmin,
             matterUserId = preservedMatterUserId,
-            userCatId = userCatId
+            userCatId = userCatId,
+            sigv4AccessKey = sigv4AccessKey,
+            sigv4SecretKey = sigv4SecretKey,
+            sigv4SessionToken = sigv4SessionToken,
+            sigv4Expiration = sigv4Expiration,
+            requestId = preservedRequestId,
+            csrNonce = preservedCsrNonce
         )
 
         FabricSessionManager.setCurrentFabric(fabricInfo)
+        FabricSessionManager.syncCommissioningCredentialsToChipClient()
     }
 
     private fun startGooglePlayServicesCommissioning(onboardingPayload: String, promise: Promise) {
@@ -553,9 +624,27 @@ class ESPMatterModule(reactContext: ReactApplicationContext) :
             val success = resultData.optBoolean("success", false)
 
             when (taskType) {
-                // ISSUE_NOC: Only error cases reach here. Success path uses postMessage flow.
                 "ISSUE_NOC" -> {
-                    if (!success) {
+                    if (success) {
+                        val noc = resultData.optString("noc", "")
+                        val taskMatterNodeId = resultData.optString("matterNodeId", "")
+                        val taskRequestId = resultData.optString("requestId", "")
+                        val rmngNodeId = resultData.optString("rmngNodeId", "")
+                        Log.d(
+                            TAG,
+                            "NOC received from headless task, forwarding to ChipClient (rmngNodeId=$rmngNodeId)"
+                        )
+
+                        val chipClient = FabricSessionManager.getCurrentChipClient()
+                        if (chipClient != null) {
+                            if (rmngNodeId.isNotEmpty()) {
+                                chipClient.rmNodeId = rmngNodeId
+                            }
+                            chipClient.receiveNOCFromTask(taskRequestId, noc, taskMatterNodeId)
+                        } else {
+                            Log.e(TAG, "No active ChipClient to receive NOC from headless task")
+                        }
+                    } else {
                         val error = resultData.optString("error", "Unknown error")
                         Log.e(TAG, "NOC issuance failed: $error, commissioning may timeout")
                     }
@@ -565,14 +654,29 @@ class ESPMatterModule(reactContext: ReactApplicationContext) :
                     if (success) {
                         val requestId = resultData.optString("requestId", "")
                         val nodeId = resultData.optString("nodeId", "")
+                        val confirmNodeId = resultData.optString("confirmNodeId", "")
                         val responseObj = resultData.optJSONObject("response")
-                        val isRainmakerNode = responseObj?.optBoolean("isRainmakerNode", false) ?: false
-                        val rainmakerNodeId = responseObj?.optString("rainmakerNodeId", "") ?: ""
-                        val matterNodeId = responseObj?.optString("matterNodeId", "") ?: ""
 
                         val chipClient = FabricSessionManager.getCurrentChipClient()
+                        if (confirmNodeId.isNotEmpty() && chipClient != null && chipClient.rmNodeId.isNullOrEmpty()) {
+                            chipClient.rmNodeId = confirmNodeId
+                        }
                         val deviceName = chipClient?.lastCommissionedDeviceName
                             ?: AppConstants.DEFAULT_MATTER_DEVICE_NAME
+
+                        val responseMatterNodeId = responseObj?.optString("matterNodeId", "") ?: ""
+                        val responseRainmakerNodeId = responseObj?.optString("rainmakerNodeId", "") ?: ""
+                        val storedMatterNodeId = chipClient?.matterNodeId ?: ""
+                        val storedRmNodeId = chipClient?.rmNodeId ?: ""
+                        val matterNodeId = responseMatterNodeId.ifEmpty { storedMatterNodeId }
+                        val rainmakerNodeId = responseRainmakerNodeId.ifEmpty { storedRmNodeId }
+                        val isRainmakerNode = responseObj?.optBoolean("isRainmakerNode", false)
+                            ?: rainmakerNodeId.isNotEmpty()
+
+                        Log.d(
+                            TAG,
+                            "CONFIRM_COMMISSION success — matterNodeId=$matterNodeId, rmNodeId=$rainmakerNodeId, confirmNodeId=$confirmNodeId"
+                        )
 
                         val params = Arguments.createMap().apply {
                             putString(AppConstants.KEY_EVENT_TYPE, AppConstants.EVENT_COMMISSIONING_COMPLETE)
@@ -688,5 +792,10 @@ class ESPMatterModule(reactContext: ReactApplicationContext) :
     @ReactMethod
     fun matterControlUnsubscribe(handle: String, promise: Promise) {
         controlAdapter.unsubscribe(handle, promise)
+    }
+
+    @ReactMethod
+    fun matterEncodeCommandFieldsToTlvHex(commandFields: ReadableMap?, promise: Promise) {
+        controlAdapter.encodeCommandFieldsToTlvHex(commandFields, promise)
     }
 }

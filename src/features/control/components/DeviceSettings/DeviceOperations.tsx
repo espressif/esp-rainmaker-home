@@ -16,7 +16,8 @@ import { globalStyles } from "@shared/theme/globalStyleSheet";
 // Utils
 import {
   getNodeSystemConfig,
-  SYSTEM_PARAM_TYPES,
+  getSystemOperation,
+  SYSTEM_OPERATION,
 } from "@features/group/utils/system";
 
 // Hooks
@@ -45,7 +46,7 @@ interface DeviceOperationsProps {
  * Features:
  * - Shows operations in fixed order: Reboot, Wi-Fi Reset, Factory Reset
  * - Confirmation dialogs for destructive operations
- * - Updates device via setMultipleParams API
+ * - Updates device via setValue API
  * - Loading state during operations
  * @param props - Component properties for operations management
  */
@@ -80,15 +81,15 @@ const DeviceOperations: React.FC<DeviceOperationsProps> = ({
       return [];
     }
     const order = [
-      SYSTEM_PARAM_TYPES.REBOOT,
-      SYSTEM_PARAM_TYPES.WIFI_RESET,
-      SYSTEM_PARAM_TYPES.FACTORY_RESET,
+      SYSTEM_OPERATION.REBOOT,
+      SYSTEM_OPERATION.NETWORK_RESET,
+      SYSTEM_OPERATION.FACTORY_RESET,
     ];
 
     return [...availableParams].sort((a, b) => {
-      const indexA = order.indexOf(a.type as (typeof order)[number]);
-      const indexB = order.indexOf(b.type as (typeof order)[number]);
-      /* If type not found in order, put it at the end */
+      const indexA = order.indexOf(getSystemOperation(a) as (typeof order)[number]);
+      const indexB = order.indexOf(getSystemOperation(b) as (typeof order)[number]);
+      /* If operation not found in order, put it at the end */
       if (indexA === -1) return 1;
       if (indexB === -1) return -1;
       return indexA - indexB;
@@ -113,23 +114,23 @@ const DeviceOperations: React.FC<DeviceOperationsProps> = ({
     setIsOperating(true);
 
     try {
-      await node.setMultipleParams({
-        [systemService.name]: [
-          {
-            [param.name]: true,
-          },
-        ],
-      });
-
-      // Show success toast for all operations
-      toast.showSuccess(
-        t("device.settings.systemOperationSuccess", { operation: param.name }),
-      );
-
-      // For factory reset, delete the node and navigate to home
-      if (param.type === SYSTEM_PARAM_TYPES.FACTORY_RESET) {
+      // For Factory reset the operation is delegated to
+      // delete operation; each sdk-adaptor implements the backend-specific steps.
+      if (getSystemOperation(param) === SYSTEM_OPERATION.FACTORY_RESET) {
         await node.delete();
+        toast.showSuccess(
+          t("device.settings.systemOperationSuccess", {
+            operation: param.name,
+          }),
+        );
         router.dismissTo("/(group)/Home");
+      } else {
+        await param.setValue(true);
+        toast.showSuccess(
+          t("device.settings.systemOperationSuccess", {
+            operation: param.name,
+          }),
+        );
       }
     } catch (error) {
       console.error("Error executing system operation:", error);
@@ -146,12 +147,12 @@ const DeviceOperations: React.FC<DeviceOperationsProps> = ({
    * Gets the display label for a system parameter
    */
   const getParamLabel = (param: ESPCDFServiceParam): string => {
-    switch (param.type) {
-      case SYSTEM_PARAM_TYPES.REBOOT:
+    switch (getSystemOperation(param)) {
+      case SYSTEM_OPERATION.REBOOT:
         return t("device.settings.reboot");
-      case SYSTEM_PARAM_TYPES.FACTORY_RESET:
+      case SYSTEM_OPERATION.FACTORY_RESET:
         return t("device.settings.factoryReset");
-      case SYSTEM_PARAM_TYPES.WIFI_RESET:
+      case SYSTEM_OPERATION.NETWORK_RESET:
         return t("device.settings.wifiReset");
       default:
         return param.name;
@@ -162,12 +163,12 @@ const DeviceOperations: React.FC<DeviceOperationsProps> = ({
    * Gets the confirmation message for a system parameter
    */
   const getConfirmMessage = (param: ESPCDFServiceParam): string => {
-    switch (param.type) {
-      case SYSTEM_PARAM_TYPES.REBOOT:
+    switch (getSystemOperation(param)) {
+      case SYSTEM_OPERATION.REBOOT:
         return t("device.settings.rebootConfirm");
-      case SYSTEM_PARAM_TYPES.FACTORY_RESET:
+      case SYSTEM_OPERATION.FACTORY_RESET:
         return t("device.settings.factoryResetConfirmWithRemoval");
-      case SYSTEM_PARAM_TYPES.WIFI_RESET:
+      case SYSTEM_OPERATION.NETWORK_RESET:
         return t("device.settings.wifiResetConfirm");
       default:
         return t("device.settings.systemOperationConfirm", {
@@ -180,9 +181,10 @@ const DeviceOperations: React.FC<DeviceOperationsProps> = ({
    * Determines if an operation is destructive (uses red button)
    */
   const isDestructiveOperation = (param: ESPCDFServiceParam): boolean => {
+    const operation = getSystemOperation(param);
     return (
-      param.type === SYSTEM_PARAM_TYPES.FACTORY_RESET ||
-      param.type === SYSTEM_PARAM_TYPES.WIFI_RESET
+      operation === SYSTEM_OPERATION.FACTORY_RESET ||
+      operation === SYSTEM_OPERATION.NETWORK_RESET
     );
   };
 

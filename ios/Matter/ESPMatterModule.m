@@ -82,4 +82,8 @@ RCT_EXTERN_METHOD(matterControlUnsubscribe:(NSString *)subscriptionId
                   resolver:(RCTPromiseResolveBlock)resolve
                   rejecter:(RCTPromiseRejectBlock)reject)
 
+RCT_EXTERN_METHOD(matterEncodeCommandFieldsToTlvHex:(NSDictionary *)commandFields
+                  resolver:(RCTPromiseResolveBlock)resolve
+                  rejecter:(RCTPromiseRejectBlock)reject)
+
 @end

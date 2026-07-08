@@ -30,6 +30,12 @@ class ESPMatterUtilityModule (reactContext: ReactApplicationContext) :
 
     companion object {
         private const val TAG = "ESPMatterUtilityModule"
+        private const val PREFS_NAME = "esp_matter_fabric_prefs"
+        private fun matterUserIdPrefKey(fabricId: String) = "matterUserId_$fabricId"
+    }
+
+    private val fabricPrefs by lazy {
+        reactApplicationContext.getSharedPreferences(PREFS_NAME, android.content.Context.MODE_PRIVATE)
     }
 
     /**
@@ -139,6 +145,10 @@ class ESPMatterUtilityModule (reactContext: ReactApplicationContext) :
                 ),
             )
 
+            matterUserId?.let { id ->
+                fabricPrefs.edit().putString(matterUserIdPrefKey(fabricId!!), id).apply()
+            }
+
             val storeResult = Arguments.createMap().apply {
                 putBoolean(AppConstants.KEY_SUCCESS, true)
                 putString(AppConstants.KEY_MESSAGE, AppConstants.MESSAGE_PRECOMMISSION_STORED)
@@ -185,19 +195,28 @@ class ESPMatterUtilityModule (reactContext: ReactApplicationContext) :
         val rootCa = params.getStringOrNull(AppConstants.KEY_ROOT_CA_CAMEL)
         val ipk = params.getStringOrNull(AppConstants.KEY_IPK_CAMEL)
         val matterUserId = params.getStringOrNull(AppConstants.KEY_MATTER_USER_ID)
+            ?: fabricPrefs.getString(matterUserIdPrefKey(fabricId ?: ""), null)
         val groupCatIdOperate = params.getStringOrNull(AppConstants.KEY_GROUP_CAT_ID_OPERATE)
         val groupCatIdAdmin = params.getStringOrNull(AppConstants.KEY_GROUP_CAT_ID_ADMIN)
         val userCatId = params.getStringOrNull(AppConstants.KEY_USER_CAT_ID)
 
         try {
             if (groupId.isNullOrEmpty() || fabricId.isNullOrEmpty() ||
-                rootCa.isNullOrEmpty() || matterUserId.isNullOrEmpty() || ipk.isNullOrEmpty()
+                rootCa.isNullOrEmpty() || ipk.isNullOrEmpty()
             ) {
                 promise.reject(
                     "INVALID_PARAMS",
-                    "groupId, fabricId, rootCa, ipk, and matterUserId are required for syncFabricSession",
+                    "groupId, fabricId, rootCa, and ipk are required for syncFabricSession",
                 )
                 return
+            }
+
+            val resolvedMatterUserId = matterUserId?.takeIf { it.isNotEmpty() } ?: ""
+            if (resolvedMatterUserId.isEmpty()) {
+                Log.w(
+                    TAG,
+                    "[MatterDiscovery] syncFabricSession: matterUserId missing for fabricId=$fabricId; continuing with KeyStore NOC",
+                )
             }
 
             val keyStore = KeyStore.getInstance(AppConstants.KEYSTORE_ANDROID)
@@ -241,7 +260,7 @@ class ESPMatterUtilityModule (reactContext: ReactApplicationContext) :
                     userNoc = userNocPem,
                     groupCatIdOperate = groupCatIdOperate,
                     groupCatIdAdmin = groupCatIdAdmin,
-                    matterUserId = matterUserId,
+                    matterUserId = resolvedMatterUserId,
                     userCatId = userCatId,
                 ),
             )

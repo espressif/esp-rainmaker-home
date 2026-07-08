@@ -47,6 +47,15 @@ class MatterHeadlessTaskService : HeadlessJsTaskService() {
                 taskData.putString(AppConstants.KEY_FABRIC_ID_CAMEL, extras.getString(AppConstants.KEY_FABRIC_ID_CAMEL))
                 taskData.putString(AppConstants.KEY_GROUP_ID_CAMEL, extras.getString(AppConstants.KEY_GROUP_ID_CAMEL))
                 taskData.putString(AppConstants.KEY_REQUEST_ID_CAMEL, extras.getString(AppConstants.KEY_REQUEST_ID_CAMEL))
+                extras.getString(AppConstants.KEY_NOCSR_ELEMENTS)?.let {
+                    taskData.putString(AppConstants.KEY_NOCSR_ELEMENTS, it)
+                }
+                extras.getString(AppConstants.KEY_ATTESTATION_SIGNATURE)?.let {
+                    taskData.putString(AppConstants.KEY_ATTESTATION_SIGNATURE, it)
+                }
+                extras.getString(AppConstants.KEY_ATTESTATION_CHALLENGE)?.let {
+                    taskData.putString(AppConstants.KEY_ATTESTATION_CHALLENGE, it)
+                }
             }
 
             AppConstants.TASK_CONFIRM_COMMISSION -> {
@@ -55,7 +64,6 @@ class MatterHeadlessTaskService : HeadlessJsTaskService() {
                 taskData.putString(AppConstants.KEY_GROUP_ID_CAMEL, extras.getString(AppConstants.KEY_GROUP_ID_CAMEL))
                 taskData.putString(AppConstants.KEY_REQUEST_ID_CAMEL, extras.getString(AppConstants.KEY_REQUEST_ID_CAMEL))
                 taskData.putString(AppConstants.KEY_METADATA, extras.getString(AppConstants.KEY_METADATA))
-                // Challenge values passed separately as fallback in case metadata parsing fails
                 taskData.putString(
                     AppConstants.KEY_CHALLENGE_CAMEL,
                     extras.getString(AppConstants.KEY_CHALLENGE_CAMEL)
@@ -71,6 +79,12 @@ class MatterHeadlessTaskService : HeadlessJsTaskService() {
                 return null
             }
         }
+
+        // Forward SigV4 credentials from foreground to HeadlessJS for both task types
+        taskData.putString(AppConstants.KEY_SIGV4_ACCESS_KEY, extras.getString(AppConstants.KEY_SIGV4_ACCESS_KEY))
+        taskData.putString(AppConstants.KEY_SIGV4_SECRET_KEY, extras.getString(AppConstants.KEY_SIGV4_SECRET_KEY))
+        taskData.putString(AppConstants.KEY_SIGV4_SESSION_TOKEN, extras.getString(AppConstants.KEY_SIGV4_SESSION_TOKEN))
+        taskData.putString(AppConstants.KEY_SIGV4_EXPIRATION, extras.getString(AppConstants.KEY_SIGV4_EXPIRATION))
 
         return HeadlessJsTaskConfig(
             resolvedTaskName,
@@ -91,4 +105,3 @@ class MatterHeadlessTaskService : HeadlessJsTaskService() {
         stopSelf()
     }
 }
-

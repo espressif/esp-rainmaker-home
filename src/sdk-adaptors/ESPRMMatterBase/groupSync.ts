@@ -226,7 +226,10 @@ async function fetchNodesForGroup(group: ESPCDFGroup): Promise<ESPCDFNode[]> {
   if (!raw) return [];
 
   const nodes = group.isMatter
-    ? await (raw as ESPRMFabric).getNodesWithDetails()
+    ? await (raw instanceof ESPRMFabric
+        ? raw
+        : new ESPRMFabric(raw as ESPRMGroup)
+      ).getNodesWithDetails()
     : await (raw as ESPRMGroup & {
         getNodesWithDetails?: () => Promise<unknown[]>;
       }).getNodesWithDetails?.() ?? [];

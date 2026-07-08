@@ -4,11 +4,11 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { ESPNodeUpdateData, ESPRMNode } from "@espressif/rainmaker-base-sdk";
+import { ESPNodeUpdateData } from "@espressif/rainmaker-base-sdk";
 import {
     getClusterRegistryEntry,
-    MATTER_PARAM_VALUE_UNKNOWN,
 } from "@espressif/rainmaker-matter-sdk";
+import { MATTER_PARAM_VALUE_UNKNOWN } from "../matterParamConstants";
 import {
     coerceParamValueToBoolean,
     isBooleanControlParamByLabels,
@@ -50,9 +50,18 @@ import {
  *          or `undefined` when no matter param matches (let the caller
  *          forward the original payload unchanged or drop it).
  */
+type MatterRoutingNode = {
+    id?: string;
+    nodeId?: string;
+    nodeConfig?: {
+        devices?: { name?: string; params?: MatterDeviceParamLike[] }[];
+    };
+    devices?: { name?: string; params?: MatterDeviceParamLike[] }[];
+};
+
 export function rewriteMatterShadowPayload(
     update: ESPNodeUpdateData,
-    sdkNodes: ESPRMNode[],
+    sdkNodes: MatterRoutingNode[],
 ): Record<string, Record<string, unknown>> | undefined {
     const meta = update.metadata as
         | {
@@ -71,7 +80,9 @@ export function rewriteMatterShadowPayload(
     }
     const { clusterId, endpointId, attributeId } = meta;
 
-    const node = sdkNodes.find((n) => n.id === update.nodeId);
+    const node = sdkNodes.find(
+        (n) => (n.id ?? n.nodeId) === update.nodeId,
+    );
     if (!node) return undefined;
 
     // Recover the raw matter value. The matter SDK's default-branch payload
@@ -83,19 +94,8 @@ export function rewriteMatterShadowPayload(
         attributeId,
     );
 
-    // Walk nodeConfig.devices to find the param matching the metadata
-    // triplet. We accept both `ESPRMMatterDeviceParam` (with `clusterId` /
-    // `endpointId` / `matterAttributeId`) and lower-cased aliases other
-    // transforms might produce, to stay robust against minor SDK shape
-    // drift.
-    const devices = (node as unknown as {
-        nodeConfig?: {
-            devices?: {
-                name?: string;
-                params?: MatterDeviceParamLike[];
-            }[];
-        };
-    }).nodeConfig?.devices;
+    // Walk nodeConfig.devices (Rainmaker) or top-level devices (RMNG Matter payload).
+    const devices = collectMatterRoutingDevices(node);
     if (!devices) return undefined;
 
     for (const device of devices) {
@@ -203,6 +203,7 @@ interface MatterDeviceParamLike {
     endpointId?: number;
     matterAttributeId?: number;
     rawModes?: Record<string, number>;
+    _raw?: { cluster?: number; attribute?: number; endpointId?: number };
     resolver?: {
         decodeValue?: (
             rawValue: unknown,
@@ -211,16 +212,29 @@ interface MatterDeviceParamLike {
     };
 }
 
+function collectMatterRoutingDevices(
+    node: MatterRoutingNode,
+): { name?: string; params?: MatterDeviceParamLike[] }[] | undefined {
+    const fromNodeConfig = node.nodeConfig?.devices;
+
+    if (fromNodeConfig?.length) return fromNodeConfig;
+
+    return node.devices?.length ? node.devices : undefined;
+}
+
 function isMatterParamMatch(
     param: MatterDeviceParamLike,
     endpointId: number,
     clusterId: number,
     attributeId: number,
 ): boolean {
+    const paramEndpoint = param.endpointId ?? param._raw?.endpointId ?? endpointId;
+    const paramCluster = param.clusterId ?? param._raw?.cluster;
+    const paramAttribute = param.matterAttributeId ?? param._raw?.attribute;
     return (
-        param.endpointId === endpointId &&
-        param.clusterId === clusterId &&
-        param.matterAttributeId === attributeId
+        paramEndpoint === endpointId &&
+        paramCluster === clusterId &&
+        paramAttribute === attributeId
     );
 }
 

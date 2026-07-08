@@ -6,6 +6,9 @@
 
 import type { ParamControlBoardActionSpec } from "@shared/utils/paramUtils";
 
+/** Placeholder value for Matter cluster params with unknown live state. */
+export const MATTER_PARAM_VALUE_UNKNOWN = "unknown";
+
 /** Idle UI value for write-only Matter command params. */
 export const MATTER_PARAM_COMMAND_IDLE = "idle";
 
@@ -14,6 +17,8 @@ export const MATTER_LEVEL_CMD_MOVE_TO_LEVEL_WITH_ON_OFF = 0x04;
 
 /** Color Control cluster (0x0300) command ids. */
 export const MATTER_COLOR_CMD_MOVE_TO_HUE = 0x00;
+export const MATTER_COLOR_CMD_MOVE_TO_SATURATION = 0x03;
+export const MATTER_COLOR_CMD_MOVE_TO_COLOR_TEMPERATURE = 0x0a;
 
 /** RVC Operational Error semantic value when no error is active. */
 export const RVC_OPERATIONAL_ERROR_NO_ERROR = "no_error";

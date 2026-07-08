@@ -33,6 +33,29 @@ declare const global: typeof globalThis & {
 // global.TextDecoder = TextDecoder;
 global.Buffer = Buffer;
 
+// AWS SDK v3 (Cognito login, Kinesis Video camera, etc.) runs through its
+// fetch-based HTTP handler in React Native. That handler collects response
+// bodies via `Blob.arrayBuffer()`, which React Native's Blob does not implement
+// — so response deserialization fails with "TypeError: undefined is not a
+// function" even on HTTP 200. Polyfill it using FileReader (readAsArrayBuffer),
+// which RN does support.
+{
+  const BlobCtor = (global as any).Blob;
+  if (
+    typeof BlobCtor === 'function' &&
+    typeof BlobCtor.prototype.arrayBuffer !== 'function'
+  ) {
+    BlobCtor.prototype.arrayBuffer = function arrayBuffer(): Promise<ArrayBuffer> {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as ArrayBuffer);
+        reader.onerror = () => reject(reader.error);
+        reader.readAsArrayBuffer(this as unknown as Blob);
+      });
+    };
+  }
+}
+
 // quick-base64's JS atob/btoa depend on JSI globals installed by QuickBase64.install().
 // If the native module is missing (e.g. Expo Go) or install() was skipped, assigning them
 // breaks JWT decode and anything else that uses global.atob.

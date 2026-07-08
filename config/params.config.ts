@@ -51,6 +51,7 @@ import {
   ESPRM_UI_HIDDEN_PARAM_TYPE,
   ESPRM_UI_HUE_CIRCLE_PARAM_TYPE,
   ESPRM_UI_HUE_SLIDER_PARAM_TYPE,
+  ESPRM_UI_CCT_SLIDER_PARAM_TYPE,
   ESPRM_UI_PUSH_BUTTON_PARAM_TYPE,
   ESPRM_UI_SLIDER_PARAM_TYPE,
   ESPRM_UI_TEXT_PARAM_TYPE,
@@ -98,7 +99,13 @@ export const PARAM_CONTROLS = [
   },
   {
     name: "CCT",
-    types: [ESPRM_CCT_PARAM_TYPE, MATTER_SERVER_PARAM_TYPE_COLOR_CONTROL],
+    // uiType disambiguates CCT vs Hue on shared Color Control cluster; keep
+    // MATTER_SERVER_PARAM_TYPE_COLOR_CONTROL for legacy RainMaker Matter nodes.
+    types: [
+      ESPRM_CCT_PARAM_TYPE,
+      ESPRM_UI_CCT_SLIDER_PARAM_TYPE,
+      MATTER_SERVER_PARAM_TYPE_COLOR_CONTROL,
+    ],
     control: ColorTemperatureSlider,
     dataTypes: DATA_TYPE_INT,
     paramType: ESPRM_CCT_PARAM_TYPE,

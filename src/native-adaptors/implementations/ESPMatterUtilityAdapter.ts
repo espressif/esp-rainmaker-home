@@ -109,6 +109,22 @@ export const ESPMatterUtilityAdapter = {
         ? NativeModules.ESPMatterModule.syncFabricSession
         : undefined;
 
+    // Probe: exactly what the native fabric session is hydrated with. An empty
+    // matterUserId or missing rootCa/ipk means the controller has no operational
+    // identity → CASE cannot establish and operational discovery/subscribe fails
+    // (CHIP 0x32) even when the device is reachable. Pinpoints hasMatterUserId=false.
+    console.log("[MatterProbe][fabric] syncFabricSession →", {
+      groupId: params.groupId,
+      fabricId: params.fabricId,
+      hasRootCa: !!params.rootCa,
+      rootCaLen: params.rootCa?.length ?? 0,
+      hasIpk: !!params.ipk,
+      matterUserId: params.matterUserId,
+      matterUserIdLen: params.matterUserId?.length ?? 0,
+      groupCatIdOperate: params.groupCatIdOperate,
+      groupCatIdAdmin: params.groupCatIdAdmin,
+      userCatId: params.userCatId,
+    });
     try {
       if (typeof ESPMatterUtilityModule?.syncFabricSession === "function") {
         await ESPMatterUtilityModule.syncFabricSession(params);
@@ -118,6 +134,9 @@ export const ESPMatterUtilityAdapter = {
         throw new Error("Native module method syncFabricSession not available");
       }
       activeMatterFabricId = params.fabricId || null;
+      console.log("[MatterProbe][fabric] syncFabricSession ok", {
+        fabricId: params.fabricId,
+      });
     } catch (error) {
       console.error(
         "[ESPMatterUtilityAdapter] Error syncing fabric session:",

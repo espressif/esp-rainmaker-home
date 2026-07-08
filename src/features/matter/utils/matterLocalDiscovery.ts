@@ -6,7 +6,7 @@
 
 import { reaction, type IReactionDisposer } from "mobx";
 import {
-  type ESPCDF,
+  ESPCDF,
   type ESPCDFGroup,
   type ESPCDFTransportConfig,
   ESPCDFNode,
@@ -16,20 +16,41 @@ import {
   MATTER_LOCAL_DISCOVERY_EVENT,
   MATTER_LOCAL_DISCOVERY_LOST_EVENT,
   MATTER_LOCAL_TRANSPORT_KEY,
+  DISCOVERY_UPDATE_EVENT,
+  DISCOVERY_LOST_EVENT,
+  MDNS_SERVICE_TYPE_MATTER_OPERATIONAL,
+  MDNS_DOMAIN_LOCAL,
 } from "@shared/utils/constants";
 import { syncMatterDiscoveryTargetNodeIds } from "@native-adaptors/implementations/matterDiscoveryTargets";
 import {
   syncMatterNodeIdMappings,
+  setMatterNodeReachability,
   type MatterEndpointSummary,
 } from "@native-adaptors/implementations/ESPMatterSubscriptionAdapter";
 import { bootstrapMatterFabricForOperationalDiscovery } from "@features/matter/utils/matterCommissioningHelpers";
 import { retrySubscribeForNodeId } from "@shared/utils/matterSubscribeRetry";
+import { getMatterLocalDiscoveryRmngHooks } from "@shared/utils/matterLocalDiscoveryRmngHooks";
 import {
   describeChipOperationalLookup,
   formatMatterNodeIdForChipLog,
   MATTER_DISCOVERY_VERIFY_LOG,
   normalizeMatterNodeIdHex,
 } from "@shared/utils/matterNodeIdHex";
+import { readMatterNodeIdFromCdfNode } from "@shared/utils/matterDeviceStateEvents";
+import { registerMatterDiscoveryOnNodesAddedKick } from "@shared/utils/matterDiscoveryGroupCallbacks";
+import {
+  DeviceEventEmitter,
+  NativeEventEmitter,
+  NativeModules,
+  Platform,
+  type EmitterSubscription,
+} from "react-native";
+
+// iOS: NativeEventEmitter(ESPDiscoveryModule); Android uses DeviceEventEmitter.
+const matterDiscoveryEventEmitter =
+  Platform.OS === "ios" && NativeModules.ESPDiscoveryModule
+    ? new NativeEventEmitter(NativeModules.ESPDiscoveryModule)
+    : DeviceEventEmitter;
 interface MatterDiscoveryEventPayload {
   nodeId?: string;
   matterNodeId?: string;
@@ -42,8 +63,35 @@ interface MatterDiscoveryEventPayload {
 
 // ─── Pure helpers (no controller state) ─────────────────────────────────────
 
+/** CDF metadata flags set at build time in ESPRMNGMatterBase — prefer registered RMNG hook. */
+function shouldSkipMatterSubscriptionForDiscovery(node: ESPCDFNode): boolean {
+  const fromHook =
+    getMatterLocalDiscoveryRmngHooks()?.shouldSkipMatterSubscriptionForCdfNode;
+  if (fromHook) return fromHook(node);
+
+  const meta = node.metadata as
+    | { isBridgeParent?: boolean; isBridgedRmngMatterChild?: boolean }
+    | undefined;
+  return meta?.isBridgeParent === true || meta?.isBridgedRmngMatterChild === true;
+}
+
+function isBridgeParentCdfNodeForDiscovery(node: ESPCDFNode): boolean {
+  const meta = node.metadata as { isBridgeParent?: boolean } | undefined;
+  return meta?.isBridgeParent === true;
+}
+
+/** Bridged children share the parent's operational Matter id — keep the parent owner. */
+function shouldReplaceMatterNodeMapOwner(
+  existingNode: ESPCDFNode | undefined,
+  candidateNode: ESPCDFNode,
+): boolean {
+  if (!existingNode) return true;
+  if (isBridgeParentCdfNodeForDiscovery(existingNode)) return false;
+  if (isBridgeParentCdfNodeForDiscovery(candidateNode)) return true;
+  return true;
+}
+
 /**
- * Returns the normalized matterNodeId key from a payload.
  *
  * Returns `null` when the payload's `matterNodeId` is not a valid 16-hex
  * Matter operational node id, which guards against the matter SDK adapter
@@ -73,18 +121,6 @@ function collectMatterHomeNodes(
     byId.set(node.id, node);
   }
   return Array.from(byId.values());
-}
-
-/** Reads `matterNodeId` from a CDF node (direct field or `_raw` SDK node). */
-function readMatterNodeIdFromCdfNode(node: ESPCDFNode): string | undefined {
-  const direct = (node as { matterNodeId?: string }).matterNodeId;
-  if (typeof direct === "string" && direct.trim().length > 0) {
-    return direct;
-  }
-  const raw = node._raw as
-    | { matterNodeId?: string; matter_node_id?: string }
-    | undefined;
-  return raw?.matterNodeId ?? raw?.matter_node_id;
 }
 
 /** Returns whether a CDF node represents a Matter device. */
@@ -176,6 +212,11 @@ function createMatterLocalDiscoveryController(
 ): MatterLocalDiscoveryController {
   let matterNodeToNodeIdMap = new Map<string, string>();
   let matterDiscoverySubscribed = false;
+  /**
+   * Direct native DiscoveryUpdate/Lost listeners (belt-and-suspenders for the
+   * SDK discovery subscribe, which sometimes never starts its adapter).
+   */
+  let nativeDiscoveryListeners: EmitterSubscription[] | null = null;
   let lastSyncedHomeId: string | null = null;
   let lastSyncedTargets: string[] = [];
   let homeNodeSetReaction: IReactionDisposer | null = null;
@@ -192,13 +233,10 @@ function createMatterLocalDiscoveryController(
   const pendingByMatterNodeId = new Map<string, MatterDiscoveryEventPayload>();
 
   /**
-   * Last `(homeId, sorted nodeId↔matterNodeId pair list)` snapshot the
-   * heavy-rebuild path saw. Used to short-circuit
-   * {@link rebuildMatterNodeIdMap} when the home node set hasn't changed —
-   * discovery handlers re-call rebuild defensively on every event, but the
-   * underlying CDF node list rarely changes between events. Avoids re-walking
-   * `nodeDetails`, re-logging every node, and re-syncing the same target
-   * list to the native bridge on every tap-induced subscribe frame.
+   * Last `(homeId, sorted matterNodeId↔cdfNodeId map)` snapshot the heavy-rebuild
+   * path saw. Keyed from {@link rebuildMatterNodeIdMap}'s operational `nextMap`
+   * (includes bridge parent) — not subscription pairs alone (bridge nodes are
+   * skipped from subscribe sync).
    */
   let lastRebuildSignature: string | null = null;
 
@@ -221,7 +259,10 @@ function createMatterLocalDiscoveryController(
       return;
     }
 
-    if (lastSyncedHomeId === homeId && arraysEqualOrdered(lastSyncedTargets, targets)) {
+    if (
+      lastSyncedHomeId === homeId &&
+      arraysEqualOrdered(lastSyncedTargets, targets)
+    ) {
       return;
     }
 
@@ -233,9 +274,9 @@ function createMatterLocalDiscoveryController(
   /**
    * Builds the `matterNodeId → cdfNodeId` map for the active Matter home and
    * mirrors it into the native subscription adapter. Skipped when the
-   * `(homeId, sorted pairs)` signature matches the last rebuild — discovery
-   * handlers are expected to call this on every event for correctness, the
-   * signature gate makes the repeated call cheap.
+   * `(homeId, operational nextMap)` signature matches the last rebuild —
+   * discovery handlers are expected to call this on every event for correctness,
+   * the signature gate makes the repeated call cheap.
    */
   function rebuildMatterNodeIdMap(): void {
     const home = store.getCurrentHome() as ESPCDFGroup | null;
@@ -255,6 +296,7 @@ function createMatterLocalDiscoveryController(
     }
 
     const homeNodes = collectMatterHomeNodes(store, home);
+    const homeNodesById = new Map(homeNodes.map((n) => [n.id, n]));
     const nextMap = new Map<string, string>();
     const subscriptionPairs: {
       nodeId: string;
@@ -274,18 +316,29 @@ function createMatterLocalDiscoveryController(
         );
         continue;
       }
-      nextMap.set(normalized, node.id);
-      // The matter SDK's `ESPRMMatterNode.endpoints` (built via
-      // `buildMatterEndpoints` from `metadata.Matter.endpoints`) already
-      // matches `MatterEndpointSummary` for the two fields we use; drop
-      // endpoint 0 (root admin clusters) and any endpoints that advertise
-      // no server clusters since we'd have nothing to subscribe to.
-      const rawEndpoints = (node._raw as {
-        endpoints?: readonly MatterEndpointSummary[];
-      })?.endpoints;
+      const existingOwnerId = nextMap.get(normalized);
+      if (
+        shouldReplaceMatterNodeMapOwner(
+          existingOwnerId ? homeNodesById.get(existingOwnerId) : undefined,
+          node,
+        )
+      ) {
+        nextMap.set(normalized, node.id);
+      }
+
+      if (shouldSkipMatterSubscriptionForDiscovery(node)) {
+        continue;
+      }
+
+      const rawEndpoints = (
+        node._raw as {
+          endpoints?: readonly MatterEndpointSummary[];
+        }
+      )?.endpoints;
       const matterEndpoints = rawEndpoints?.filter(
         (ep) => ep.endpointId !== 0 && ep.serverClusters.length > 0,
       );
+
       subscriptionPairs.push({
         nodeId: node.id,
         matterNodeId: normalized,
@@ -296,10 +349,12 @@ function createMatterLocalDiscoveryController(
       });
     }
 
-    // Signature short-circuit: when the (home, pair-set) hasn't changed, the
-    // underlying CDF mirror is the same node-set we've already synced.
-    const signature = `${home.id}|${subscriptionPairs
-      .map((p) => `${p.nodeId}:${p.matterNodeId}`)
+    // Signature short-circuit: when the operational discovery map (native
+    // browse targets) hasn't changed, skip re-sync. Must use nextMap — bridge
+    // parent/child nodes are excluded from subscriptionPairs but still need
+    // native target sync after commission or pull-to-refresh.
+    const signature = `${home.id}|${Array.from(nextMap.entries())
+      .map(([matterNodeId, cdfNodeId]) => `${matterNodeId}:${cdfNodeId}`)
       .sort()
       .join(",")}`;
     if (signature === lastRebuildSignature) {
@@ -439,8 +494,26 @@ function createMatterLocalDiscoveryController(
     transportDetails: ESPCDFTransportConfig,
     operation: "add" | "remove",
   ): void {
+    const transportMeta = transportDetails.metadata as
+      | { matterNodeId?: string }
+      | undefined;
+    const matterNodeId =
+      typeof transportMeta?.matterNodeId === "string"
+        ? normalizeMatterNodeIdHex(transportMeta.matterNodeId)
+        : undefined;
+
+    if (matterNodeId) {
+      setMatterNodeReachability(matterNodeId, operation === "add");
+    }
+
     handleNodeTransportUpdate(store, nodeId, transportDetails, operation);
-    if (operation === "remove") return;
+    if (operation === "remove") {
+      getMatterLocalDiscoveryRmngHooks()?.onMatterLocalTransportRemoved?.(
+        store,
+        nodeId,
+      );
+      return;
+    }
 
     if (!store.nodeStore.getNodeById(nodeId)) {
       console.warn(
@@ -469,14 +542,35 @@ function createMatterLocalDiscoveryController(
         );
       },
     );
+
+    getMatterLocalDiscoveryRmngHooks()?.onMatterLocalTransportAdded?.(
+      store,
+      nodeId,
+      transportDetails,
+    );
+
+    const cdfNode = store.nodeStore.getNodeById(nodeId);
+    const meta = cdfNode?.metadata as
+      | { isRmngPureMatterOfflineStub?: boolean }
+      | undefined;
+    if (cdfNode && meta?.isRmngPureMatterOfflineStub) {
+      console.log(
+        `${MATTER_DISCOVERY_VERIFY_LOG} pure-Matter offline stub refresh: nodeId=${nodeId}`,
+      );
+      getMatterLocalDiscoveryRmngHooks()?.onPureMatterStubReachable?.(
+        store,
+        nodeId,
+        cdfNode,
+      );
+    }
   }
 
   function onMatterDiscovered(event: unknown): void {
     rebuildMatterNodeIdMap();
 
-    const payload = (event && typeof event === "object" ? event : null) as
-      | MatterDiscoveryEventPayload
-      | null;
+    const payload = (
+      event && typeof event === "object" ? event : null
+    ) as MatterDiscoveryEventPayload | null;
     const transportDetails = payload
       ? toMatterLocalTransportConfig(payload)
       : null;
@@ -510,9 +604,9 @@ function createMatterLocalDiscoveryController(
   function onMatterDiscoveryLost(event: unknown): void {
     rebuildMatterNodeIdMap();
 
-    const payload = (event && typeof event === "object" ? event : null) as
-      | MatterDiscoveryEventPayload
-      | null;
+    const payload = (
+      event && typeof event === "object" ? event : null
+    ) as MatterDiscoveryEventPayload | null;
     if (!payload) return;
 
     const pendingKey = payloadMatterNodeIdKey(payload);
@@ -530,6 +624,11 @@ function createMatterLocalDiscoveryController(
       return;
     }
 
+    const lostMatterNodeId = payloadMatterNodeIdKey(payload);
+    if (lostMatterNodeId) {
+      setMatterNodeReachability(lostMatterNodeId, false);
+    }
+
     applyMatterLocalTransport(
       nodeId,
       {
@@ -544,6 +643,37 @@ function createMatterLocalDiscoveryController(
     );
   }
 
+  function handleNativeMatterDiscoveryUpdate(raw: unknown): void {
+    const data = (raw && typeof raw === "object" ? raw : {}) as Record<
+      string,
+      unknown
+    >;
+    const matterNodeId =
+      typeof data.matterNodeId === "string" ? data.matterNodeId : undefined;
+    if (!matterNodeId) return;
+    onMatterDiscovered({
+      matterNodeId,
+      host: typeof data.host === "string" ? data.host : undefined,
+      port: typeof data.port === "number" ? data.port : undefined,
+      fabricId: typeof data.fabricId === "string" ? data.fabricId : undefined,
+      compressedFabricId:
+        typeof data.compressedFabricId === "string"
+          ? data.compressedFabricId
+          : undefined,
+    });
+  }
+
+  function handleNativeMatterDiscoveryLost(raw: unknown): void {
+    const data = (raw && typeof raw === "object" ? raw : {}) as Record<
+      string,
+      unknown
+    >;
+    const matterNodeId =
+      typeof data.matterNodeId === "string" ? data.matterNodeId : undefined;
+    if (!matterNodeId) return;
+    onMatterDiscoveryLost({ matterNodeId });
+  }
+
   // ─── Lifecycle ─────────────────────────────────────────────────────────
 
   async function ensureMatterDiscoveryReady(): Promise<void> {
@@ -551,6 +681,59 @@ function createMatterLocalDiscoveryController(
     const home = store.getCurrentHome() as ESPCDFGroup | null;
     if (!home?.isMatter) return;
 
+    // Start Matter browse before fabric bootstrap; on iOS bootstrap rebuilds MTRDeviceController and must not block `_matter._tcp` browse.
+    const espCDFUser = store.userStore.user;
+    if (espCDFUser && !matterDiscoverySubscribed) {
+      if (!nativeDiscoveryListeners) {
+        nativeDiscoveryListeners = [
+          matterDiscoveryEventEmitter.addListener(
+            DISCOVERY_UPDATE_EVENT,
+            handleNativeMatterDiscoveryUpdate,
+          ),
+          matterDiscoveryEventEmitter.addListener(
+            DISCOVERY_LOST_EVENT,
+            handleNativeMatterDiscoveryLost,
+          ),
+        ];
+      }
+
+      // iOS: RMNG never starts `_matter._tcp` browse — kick ESPDiscoveryModule directly (Android already does via CHIP/RMNG path).
+      if (Platform.OS === "ios") {
+        const espDiscoveryModule = NativeModules.ESPDiscoveryModule as
+          | { startDiscovery?: (params: Record<string, string>) => void }
+          | undefined;
+        if (espDiscoveryModule?.startDiscovery) {
+          console.log(
+            `${MATTER_DISCOVERY_VERIFY_LOG} iOS direct matter browse → ESPDiscoveryModule.startDiscovery:`,
+            { serviceType: MDNS_SERVICE_TYPE_MATTER_OPERATIONAL, domain: MDNS_DOMAIN_LOCAL },
+          );
+          espDiscoveryModule.startDiscovery({
+            serviceType: MDNS_SERVICE_TYPE_MATTER_OPERATIONAL,
+            domain: MDNS_DOMAIN_LOCAL,
+          });
+        }
+      }
+
+      try {
+        await espCDFUser.subscribeToEvent(
+          MATTER_LOCAL_DISCOVERY_EVENT,
+          onMatterDiscovered,
+        );
+        await espCDFUser.subscribeToEvent(
+          MATTER_LOCAL_DISCOVERY_LOST_EVENT,
+          onMatterDiscoveryLost,
+        );
+        matterDiscoverySubscribed = true;
+      } catch (error: unknown) {
+        // Leave matterDiscoverySubscribed false so the next start() retries.
+        console.warn(
+          `${MATTER_DISCOVERY_VERIFY_LOG} matter discovery subscribe failed (will retry on next start):`,
+          error,
+        );
+      }
+    }
+
+    // Fabric bootstrap (CASE session) runs after browse; slow on iOS and must not gate `_matter._tcp` start.
     try {
       await bootstrapMatterFabricForOperationalDiscovery(store);
     } catch (error: unknown) {
@@ -563,19 +746,6 @@ function createMatterLocalDiscoveryController(
     // Second rebuild picks up any home node hydration that completed during
     // fabric bootstrap (no-op when signature matches).
     rebuildMatterNodeIdMap();
-
-    const espCDFUser = store.userStore.user;
-    if (!espCDFUser || matterDiscoverySubscribed) return;
-
-    matterDiscoverySubscribed = true;
-    void espCDFUser.subscribeToEvent(
-      MATTER_LOCAL_DISCOVERY_EVENT,
-      onMatterDiscovered,
-    );
-    void espCDFUser.subscribeToEvent(
-      MATTER_LOCAL_DISCOVERY_LOST_EVENT,
-      onMatterDiscoveryLost,
-    );
 
     // Bridge post-commission / late-sync flows: when a new node is added to
     // the CDF nodeStore (e.g. the freshly commissioned matter node lands
@@ -626,6 +796,10 @@ function createMatterLocalDiscoveryController(
           onMatterDiscoveryLost,
         );
       }
+      if (nativeDiscoveryListeners) {
+        nativeDiscoveryListeners.forEach((sub) => sub.remove());
+        nativeDiscoveryListeners = null;
+      }
       if (homeNodeSetReaction) {
         homeNodeSetReaction();
         homeNodeSetReaction = null;
@@ -663,5 +837,11 @@ const startMatterLocalDiscovery = (store: ESPCDF): void => {
   }
   controllerSingleton.start();
 };
+
+registerMatterDiscoveryOnNodesAddedKick(() => {
+  if (ESPCDF.instance) {
+    startMatterLocalDiscovery(ESPCDF.instance);
+  }
+});
 
 export { startMatterLocalDiscovery };

@@ -7,12 +7,17 @@
 import { ESPCDF, AdaptorRegistry, initCDF, ESPSDKAdaptor } from "@store";
 import { ESPRMBaseSDKAdaptor, ESPRMBaseAdaptorIdentifier } from '@sdk-adaptors/ESPRMBase';
 import { ESPRMNGBaseSDKAdaptor, ESPRMNGBaseAdaptorIdentifier } from '@sdk-adaptors/ESPRMNGBase';
+import {
+  ESPRMNGMatterBaseSDKAdaptor,
+  ESPRMNGMatterBaseAdaptorIdentifier,
+} from '@sdk-adaptors/ESPRMNGMatterBase';
 import { ESPRMMatterBaseSDKAdaptor, ESPRMMatterBaseAdaptorIdentifier } from '@sdk-adaptors/ESPRMMatterBase';
 import { runtimeConfigManager } from '@config/runtime.config';
 import {
     getResolvedActiveSdk,
     getRMSDKConfig,
     getRMNGSDKConfig,
+    getRMNGMatterSDKConfig,
     getMatterSDKConfig,
   } from '@config/sdk.config';
 /**
@@ -23,6 +28,7 @@ export const ADAPTOR_IDENTIFIERS = {
     ESPRM_BASE: ESPRMBaseAdaptorIdentifier,
     ESPRM_MATTER_BASE: ESPRMMatterBaseAdaptorIdentifier,
     ESPRMNG_BASE: ESPRMNGBaseAdaptorIdentifier,
+    ESPRMNG_MATTER_BASE: ESPRMNGMatterBaseAdaptorIdentifier,
 } as const;
 
 /**
@@ -35,6 +41,7 @@ class AdaptorFactory {
             new ESPRMBaseSDKAdaptor(getRMSDKConfig()),
             new ESPRMMatterBaseSDKAdaptor(getMatterSDKConfig()),
             new ESPRMNGBaseSDKAdaptor(getRMNGSDKConfig()),
+            new ESPRMNGMatterBaseSDKAdaptor(getRMNGMatterSDKConfig()),
         ];
     }
 }
@@ -85,7 +92,14 @@ class CDFBootstrap {
 
             adaptors.forEach(adaptor => {
                 this.safeExecute(
-                    () => this.sdkRegistry.register(adaptor),
+                    () => {
+                        const registered =
+                            this.sdkRegistry.getRegisteredAdaptorIdentifiers();
+                        if (registered.includes(adaptor._identifier)) {
+                            return;
+                        }
+                        this.sdkRegistry.register(adaptor);
+                    },
                     '[CDFBootstrap] Failed to register adaptor:'
                 );
             });

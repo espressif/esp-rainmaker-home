@@ -15,6 +15,7 @@ import {
 
 // Third Party Imports
 import { useTranslation } from "react-i18next";
+import { observer } from "mobx-react-lite";
 import { Swipeable } from "react-native-gesture-handler";
 import { Edit2, Trash2 } from "lucide-react-native";
 
@@ -32,7 +33,8 @@ import { tokens } from "@shared/theme/tokens";
 import { testProps } from "@shared/utils/testProps";
 import { ESPCDFDevice, ESPCDFGroup, ESPCDFNode } from "@store";
 // Types
-interface ExtendedESPRMDevice extends ESPCDFDevice {
+interface RoomDeviceEntry {
+  device: ESPCDFDevice;
   node: ESPCDFNode;
 }
 
@@ -62,7 +64,7 @@ interface RoomCardProps {
  * - Press interaction for room management
  * - Optional swipe actions for edit and delete (disabled by default)
  */
-const RoomCard: React.FC<RoomCardProps> = React.memo(
+const RoomCard: React.FC<RoomCardProps> = observer(
   ({
     room,
     onPressRoom,
@@ -80,24 +82,15 @@ const RoomCard: React.FC<RoomCardProps> = React.memo(
     const [isLoading, setIsLoading] = useState(false);
     const [showDeleteDialog, setShowDeleteDialog] = useState(false);
 
-    const devices = useMemo(() => {
+    const devices = useMemo((): RoomDeviceEntry[] => {
       const nodes =
         store?.nodeStore?.nodesList?.filter((node) =>
           room.nodeIds?.includes(node.id),
         ) || [];
 
-      if (nodes) {
-        const roomDevices = nodes.reduce((acc, node) => {
-          const nodeDevices = node?.devices || [];
-          const devicesWithNode = nodeDevices.map((device) => ({
-            ...device,
-            node: node,
-          })) as ExtendedESPRMDevice[];
-          return [...acc, ...devicesWithNode];
-        }, [] as ExtendedESPRMDevice[]);
-        return roomDevices;
-      }
-      return [];
+      return nodes.flatMap((node) =>
+        (node.devices ?? []).map((device) => ({ device, node })),
+      );
     }, [room.nodeIds, store?.nodeStore?.nodesList]);
 
     const handlePress = () => {
@@ -230,11 +223,11 @@ const RoomCard: React.FC<RoomCardProps> = React.memo(
 
         {devices?.length > 0 && (
           <View style={styles.devicesList}>
-            {devices.map((device, index) => (
+            {devices.map(({ device, node }, index) => (
               <DeviceCard
-                key={`${device.node.id}-${device.name}-${index}`}
+                key={`${node.id}-${device.name}-${index}`}
                 device={device}
-                node={device.node}
+                node={node}
                 compact={true}
               />
             ))}
@@ -274,18 +267,6 @@ const RoomCard: React.FC<RoomCardProps> = React.memo(
           />
         )}
       </>
-    );
-  },
-  (prevProps, nextProps) => {
-    // Custom comparison function to prevent unnecessary re-renders
-    return (
-      prevProps.room.id === nextProps.room.id &&
-      prevProps.room.name === nextProps.room.name &&
-      prevProps.room.nodeIds?.length === nextProps.room.nodeIds?.length &&
-      prevProps.enableSwipeActions === nextProps.enableSwipeActions &&
-      prevProps.onPressRoom === nextProps.onPressRoom &&
-      prevProps.onEditRoom === nextProps.onEditRoom &&
-      prevProps.onDeleteRoom === nextProps.onDeleteRoom
     );
   },
 );

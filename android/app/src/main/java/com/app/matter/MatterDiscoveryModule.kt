@@ -28,11 +28,16 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.cancel
-import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
+import kotlinx.coroutines.withTimeoutOrNull
 
 /**
  * Matter operational local discovery backed by CHIP — not RainMaker mDNS.
@@ -137,7 +142,18 @@ class MatterDiscoveryModule(reactContext: ReactApplicationContext) :
         logTargetVerificationHints("setTargetMatterNodeIds")
 
         if (probeAlreadyRunning) {
-            Log.d(TAG, "$LOG_PREFIX setTargetMatterNodeIds: probe loop already active — targets updated in-place")
+            val newlyAdded = targetMatterNodeIds.filter { it !in previousTargets }
+            if (newlyAdded.isNotEmpty()) {
+                Log.i(
+                    TAG,
+                    "$LOG_PREFIX setTargetMatterNodeIds: immediately probing ${newlyAdded.size} " +
+                        "newly-added node(s) in parallel (not waiting for the in-flight cycle): " +
+                        formatNodeIdList(newlyAdded),
+                )
+                scope.launch { probeNewlyAddedNodes(newlyAdded) }
+            } else {
+                Log.d(TAG, "$LOG_PREFIX setTargetMatterNodeIds: probe loop already active — targets updated in-place")
+            }
             return
         }
         if (targetMatterNodeIds.isNotEmpty()) {
@@ -223,12 +239,24 @@ class MatterDiscoveryModule(reactContext: ReactApplicationContext) :
         var unreachable = 0
         var lost = 0
 
-        for (matterNodeIdHex in targetMatterNodeIds) {
-            if (currentCoroutineContext()[Job]?.isActive != true) {
-                Log.d(TAG, "$LOG_PREFIX pollCycle #$cycle: coroutine cancelled mid-cycle")
-                break
-            }
-            when (val outcome = probeNode(chipClient, matterNodeIdHex, cycle)) {
+        // Probe every node CONCURRENTLY (bounded). Each probeNode emits its own
+        // DiscoveryUpdate the instant it resolves, so a reachable node's status
+        // reaches the store/UI immediately and is NEVER held back by an
+        // unreachable node's connect timeout running in parallel. awaitAll only
+        // gates when THIS cycle's summary is tallied / the next cycle starts —
+        // not when a reachable node becomes visible.
+        val probeSemaphore = Semaphore(AppConstants.MATTER_DISCOVERY_MAX_CONCURRENT_PROBES)
+        val outcomes = coroutineScope {
+            targetMatterNodeIds.map { matterNodeIdHex ->
+                async {
+                    if (!isActive) ProbeOutcome.INVALID_NODE_ID
+                    else probeSemaphore.withPermit { probeNode(chipClient, matterNodeIdHex, cycle) }
+                }
+            }.awaitAll()
+        }
+
+        for (outcome in outcomes) {
+            when (outcome) {
                 ProbeOutcome.NEWLY_DISCOVERED -> newlyDiscovered++
                 ProbeOutcome.STILL_REACHABLE -> stillReachable++
                 ProbeOutcome.UNREACHABLE -> unreachable++
@@ -244,6 +272,32 @@ class MatterDiscoveryModule(reactContext: ReactApplicationContext) :
                 "stillReachable=$stillReachable unreachable=$unreachable lost=$lost " +
                 "reachableSet=${formatNodeIdList(reachableNodeIds.toList())}",
         )
+    }
+
+    /**
+     * Probes just-added node ids immediately, in parallel, without waiting for the
+     * current poll cycle (which may be blocked on an unreachable node). A reachable
+     * node emits its DiscoveryUpdate right away, so a freshly commissioned / newly
+     * appeared device becomes reachable on WLAN in ~1s instead of after the in-flight
+     * cycle finishes and the next cycle's turn comes around.
+     */
+    private suspend fun probeNewlyAddedNodes(nodeIds: List<String>) {
+        val chipClient =
+            FabricSessionManager.resolveChipClient(reactApplicationContext.applicationContext)
+        if (chipClient == null) {
+            Log.w(
+                TAG,
+                "$LOG_PREFIX probeNewlyAddedNodes: ChipClient unavailable — nodes will be picked up next cycle",
+            )
+            return
+        }
+        val cycle = pollCycleCounter.get()
+        val semaphore = Semaphore(AppConstants.MATTER_DISCOVERY_MAX_CONCURRENT_PROBES)
+        coroutineScope {
+            nodeIds.map { id ->
+                async { semaphore.withPermit { probeNode(chipClient, id, cycle) } }
+            }.awaitAll()
+        }
     }
 
     private fun stopProbingLoop() {
@@ -287,7 +341,34 @@ class MatterDiscoveryModule(reactContext: ReactApplicationContext) :
         )
 
         return try {
-            val devicePointer = chipClient.awaitGetConnectedDevicePointer(deviceId)
+            // Cap the CHIP resolve/CASE so an unreachable node fails fast instead
+            // of blocking on CHIP's ~40s AddressResolve default. Runs in parallel
+            // with other nodes' probes, so it never delays a reachable node.
+            val devicePointer = withTimeoutOrNull(
+                AppConstants.MATTER_DISCOVERY_CONNECT_TIMEOUT_MS,
+            ) {
+                chipClient.awaitGetConnectedDevicePointer(deviceId)
+            }
+            if (devicePointer == null) {
+                val elapsedMs = System.currentTimeMillis() - probeStartMs
+                Log.w(
+                    TAG,
+                    "[MatterProbe] $LOG_PREFIX pollCycle #$cycle probe TIMED OUT " +
+                        "(cap ${AppConstants.MATTER_DISCOVERY_CONNECT_TIMEOUT_MS}ms): " +
+                        "matterNodeId=$matterNodeIdHex deviceId=$deviceId elapsedMs=$elapsedMs",
+                )
+                if (wasReachable && reachableNodeIds.remove(matterNodeIdHex)) {
+                    lastKnownHostByNodeId.remove(matterNodeIdHex)
+                    lastKnownPortByNodeId.remove(matterNodeIdHex)
+                    Log.i(
+                        TAG,
+                        "$LOG_PREFIX pollCycle #$cycle LOST: matterNodeId=$matterNodeIdHex (connect timed out)",
+                    )
+                    emitDiscoveryLost(matterNodeIdHex)
+                    return ProbeOutcome.LOST
+                }
+                return ProbeOutcome.UNREACHABLE
+            }
             val connectElapsedMs = System.currentTimeMillis() - probeStartMs
 
             val location = chipClient.getNetworkLocationForNode(deviceId)
@@ -370,10 +451,14 @@ class MatterDiscoveryModule(reactContext: ReactApplicationContext) :
             }
         } catch (e: Exception) {
             val elapsedMs = System.currentTimeMillis() - probeStartMs
-            Log.d(
+            // Elevated to WARN + [MatterProbe] tag: this is where operational
+            // discovery / CASE fails (e.g. CHIP 0x32 AddressResolve Timeout =
+            // device not resolved on mDNS). Must be visible at non-debug level.
+            Log.w(
                 TAG,
-                "$LOG_PREFIX pollCycle #$cycle probe failed: matterNodeId=$matterNodeIdHex " +
-                    "deviceId=$deviceId elapsedMs=$elapsedMs error=${e.javaClass.simpleName}: ${e.message}",
+                "[MatterProbe] $LOG_PREFIX pollCycle #$cycle probe FAILED (operational resolve/CASE): " +
+                    "matterNodeId=$matterNodeIdHex deviceId=$deviceId elapsedMs=$elapsedMs " +
+                    "error=${e.javaClass.simpleName}: ${e.message}",
             )
             if (wasReachable && reachableNodeIds.remove(matterNodeIdHex)) {
                 lastKnownHostByNodeId.remove(matterNodeIdHex)
@@ -478,6 +563,11 @@ class MatterDiscoveryModule(reactContext: ReactApplicationContext) :
     }
 
     private fun emitDiscoveryLost(matterNodeIdHex: String) {
+        lastKnownHostByNodeId.remove(matterNodeIdHex)
+        lastKnownPortByNodeId.remove(matterNodeIdHex)
+        reachableNodeIds.remove(matterNodeIdHex)
+        FabricSessionManager.clearCurrentChipClient()
+
         val fabric = FabricSessionManager.getCurrentFabric()
         val paddedNodeId = matterNodeIdHex.padStart(16, '0').takeLast(16)
         val host = lastKnownHostByNodeId[matterNodeIdHex]

@@ -127,6 +127,13 @@ extension ESPMatterModule {
                    onFailure: { code, message, err in reject(code, message, err) })
   }
 
+  @objc func matterEncodeCommandFieldsToTlvHex(_ commandFields: NSDictionary?,
+                                               resolver resolve: @escaping RCTPromiseResolveBlock,
+                                               rejecter reject: @escaping RCTPromiseRejectBlock) {
+    let hex = MatterDataValueCodec.encodeCommandFieldsToTlvHex(commandFields)
+    resolve(hex)
+  }
+
   // MARK: - Subscribe / Unsubscribe
 
   @objc func matterControlSubscribe(_ matterNodeId: String,

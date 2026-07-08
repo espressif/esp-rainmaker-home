@@ -12,7 +12,8 @@ import type {
 } from "@store";
 import { applyProvisionNodeTimezoneWithRetries } from "@shared/utils/timezone";
 import { pollUntilReady } from "@shared/utils/common";
-import { ProvisionType } from "@espressif/rainmaker-base-sdk";
+import { ESPRMNGUser, ProvisionType } from "@espressif/rmng-base-sdk";
+import { resolveSdkGroupIdForNodeId } from "./resolveSdkGroupForNodeId";
 
 /**
  * Add device provision flow: provision device, set timezone (for CHAL_RESP),
@@ -49,9 +50,14 @@ export async function addDeviceProvision(
     );
   };
 
-  const provisionType = await provisioningDevice.checkChallengeResponseSupport()
-    ? ProvisionType.CHAL_RESP
-    : ProvisionType.MQTT;
+  const supportsChalResp =
+    await provisioningDevice.checkChallengeResponseSupport();
+  if (!supportsChalResp) {
+    throw new Error(
+      `${LOG_PREFIX} RMNG provisioning requires challenge-response support on the device`,
+    );
+  }
+  const provisionType = ProvisionType.CHAL_RESP;
 
   try {
     await provisioningDevice.operations.provision(
@@ -78,6 +84,26 @@ export async function addDeviceProvision(
   const nodeId = nodeIdRef.current;
   if (!nodeId) {
     return null;
+  }
+
+  let targetGroupId = groupId;
+  try {
+    const sdkUser = user._raw as ESPRMNGUser;
+    const freshGroups = await sdkUser.getGroups();
+    const membershipGroupId = resolveSdkGroupIdForNodeId(freshGroups, nodeId);
+    if (membershipGroupId) {
+      if (membershipGroupId !== groupId) {
+        console.log(
+          `${LOG_PREFIX} Node ${nodeId} cloud membership is ${membershipGroupId} (UI home was ${groupId})`,
+        );
+      }
+      targetGroupId = membershipGroupId;
+    }
+  } catch (error) {
+    console.warn(
+      `${LOG_PREFIX} Could not resolve cloud group for ${nodeId}; using UI home ${groupId}`,
+      error instanceof Error ? error.message : error,
+    );
   }
 
   let node: ESPCDFNode;
@@ -133,7 +159,7 @@ export async function addDeviceProvision(
     console.error(`${LOG_PREFIX} Timezone setup failed (non-blocking):`, tzError);
   }
 
-  callbacks.addNodesToGroup(groupId, [node]);
+  callbacks.addNodesToGroup(targetGroupId, [node]);
   return node;
 }
 

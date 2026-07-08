@@ -5,7 +5,7 @@
  */
 
 
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import {
   View,
   StyleSheet,
@@ -19,7 +19,9 @@ import { tokens } from "@shared/theme/tokens";
 
 // Hooks
 import { useToast } from "@shared/hooks/useToast";
+import { useDeviceConnected } from "@shared/hooks/useDeviceConnected";
 import { useTranslation } from "react-i18next";
+import { useCDF } from "@shared/hooks/useCDF";
 
 // State Management
 import { observer } from "mobx-react-lite";
@@ -28,6 +30,9 @@ import { observer } from "mobx-react-lite";
 import { PowerButton } from "@shared/components/ParamControls";
 import { ParamControlWrap } from "@shared/components";
 import { DevicePanelNoParamsEmptyState } from "@features/control/components";
+import { useMatterDeviceStateSync } from "@shared/hooks/useMatterDeviceStateSync";
+import { readMatterNodeIdFromCdfNode } from "@shared/utils/matterDeviceStateEvents";
+import { resolveMatterEndpointFromDevice } from "@shared/utils/matterEndpoint";
 
 // Utils
 import { testProps } from "@shared/utils/testProps";
@@ -56,20 +61,35 @@ const Switch: React.FC<ControlPanelProps> = ({ node, device }) => {
   // Hooks
   const toast = useToast();
   const { t } = useTranslation();
+  const { store } = useCDF();
+
+  const storeNode = store.nodeStore.nodesByIDMap[node.id] ?? node;
+  const storeDevice =
+    storeNode.devices?.find((d) => d.name === device.name) ?? device;
 
   // State
   const [refreshing, setRefreshing] = useState(false);
   const [scrollEnabled, setScrollEnabled] = useState(true);
 
   // Computed Values
-  const isConnected = node.connectivityStatus?.isConnected || false;
+  const isConnected = useDeviceConnected(storeNode);
 
   // Device Parameters - Look for power/toggle parameters
-  const powerParam = device?.params?.find(
+  const powerParam = storeDevice?.params?.find(
     (param) =>
       param.type === ESPRM_POWER_PARAM_TYPE ||
       param.type === ESPRM_UI_TOGGLE_PARAM_TYPE,
   );
+
+  const matterNodeId = useMemo(
+    () => readMatterNodeIdFromCdfNode(storeNode),
+    [storeNode],
+  );
+  const matterEndpoint = useMemo(
+    () => resolveMatterEndpointFromDevice(storeDevice, powerParam?.name ?? "Power"),
+    [storeDevice, powerParam?.name],
+  );
+  useMatterDeviceStateSync(matterNodeId, [matterEndpoint], { power: powerParam });
 
   // Get current power state
   const isPowerOn = Boolean(powerParam?.value);
@@ -78,9 +98,9 @@ const Switch: React.FC<ControlPanelProps> = ({ node, device }) => {
   const handleRefresh = async () => {
     setRefreshing(true);
     try {
-      const params = await device?.getParams();
-      if (device && params) {
-        device.params = params;
+      const params = await storeDevice?.getParams();
+      if (storeDevice && params) {
+        storeDevice.params = params;
       }
     } catch (error) {
       console.error("Error refreshing device state:", error);
@@ -93,7 +113,7 @@ const Switch: React.FC<ControlPanelProps> = ({ node, device }) => {
     }
   };
 
-  if (device?.params?.length === 0) {
+  if (storeDevice?.params?.length === 0) {
     return <DevicePanelNoParamsEmptyState />;
   }
 

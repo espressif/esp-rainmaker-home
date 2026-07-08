@@ -19,8 +19,12 @@ import {
   type ESPRMMatterBaseConfig,
 } from "@espressif/rainmaker-matter-sdk";
 import { resolveMatterFabricByGroupId } from "@sdk-adaptors/ESPRMMatterBase/resolveMatterFabricByGroupId";
-import { getMatterSDKConfig } from "@config/sdk.config";
+import { getMatterSDKConfig, getResolvedActiveSdk, isRmngStackSdkId } from "@config/sdk.config";
 import { runtimeConfigManager } from "@config/runtime.config";
+import {
+  rmngMatterConfirmCommissionTask,
+  rmngMatterIssueNocTask,
+} from "./matterCommissioningTask.rmng";
 import {
   NODE_TYPE,
   MATTER_METADATA_KEY,
@@ -66,10 +70,17 @@ const initializeSDK = async () => {
  */
 interface IssueNocTaskData {
   nodeId: string;
-  csr: string;
+  csr?: string;
   fabricId: string;
   groupId: string;
   requestId: string;
+  nocsrElements?: string;
+  attestationChallenge?: string;
+  attestationSignature?: string;
+  sigv4AccessKey?: string;
+  sigv4SecretKey?: string;
+  sigv4SessionToken?: string;
+  sigv4Expiration?: string;
 }
 
 /**
@@ -83,10 +94,23 @@ interface ConfirmCommissionTaskData {
   metadata: string;
   challenge?: string;
   challengeResponse?: string;
+  sigv4AccessKey?: string;
+  sigv4SecretKey?: string;
+  sigv4SessionToken?: string;
+  sigv4Expiration?: string;
+}
+
+async function isRmngMatterCommissioningActive(): Promise<boolean> {
+  await runtimeConfigManager.loadFromStorage();
+  return isRmngStackSdkId(getResolvedActiveSdk());
 }
 
 /** Issues Node Operational Certificate via backend API. Triggered when CSR is received from device. */
 export const MatterIssueNocTask = async (taskData: IssueNocTaskData) => {
+  if (await isRmngMatterCommissioningActive()) {
+    return rmngMatterIssueNocTask(taskData);
+  }
+
   try {
     await initializeSDK();
 
@@ -147,6 +171,10 @@ export const MatterIssueNocTask = async (taskData: IssueNocTaskData) => {
 export const MatterConfirmCommissionTask = async (
   taskData: ConfirmCommissionTaskData
 ) => {
+  if (await isRmngMatterCommissioningActive()) {
+    return rmngMatterConfirmCommissionTask(taskData);
+  }
+
   try {
     await initializeSDK();
 

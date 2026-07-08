@@ -365,6 +365,16 @@ const ESPMatterSubscriptionAdapter: ESPMatterAdapter = {
     const paths = resolveAttributePaths(nodeId) as unknown as Parameters<
       typeof ESPMatterControlAdapter.subscribe
     >[1];
+    // Probe: which attribute set this node subscribes to. `usingFallback: true`
+    // means no endpoint metadata was registered, so it fell back to the
+    // endpoint-1 Light-only set (wrong for RVC/sensors/multi-endpoint nodes).
+    console.log("[MatterProbe][sub] subscribeToDevice", {
+      rmNodeId: nodeId,
+      matterNodeId,
+      pathCount: Array.isArray(paths) ? paths.length : 0,
+      usingFallback:
+        (matterEndpointsByRmNodeId.get(nodeId)?.length ?? 0) === 0,
+    });
     const reportCallback = (report: {
       endpoint: number;
       clusterId: number;

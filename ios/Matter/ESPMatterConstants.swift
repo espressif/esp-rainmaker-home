@@ -77,6 +77,8 @@ struct ESPMatterConstants {
     static let commissioningError = "COMMISSIONING_ERROR"
     static let nodeNocRequest = "NODE_NOC_REQUEST"
     static let commissioningConfirmationRequest = "COMMISSIONING_CONFIRMATION_REQUEST"
+    static let rmngAttestationChallenge = "RMNG_ATTESTATION_CHALLENGE"
+    static let rmngMatterAttestationData = "RMNG_MATTER_ATTESTATION_DATA"
     
     // MARK: - Dictionary Keys
     static let groupId = "groupId"
@@ -103,6 +105,8 @@ struct ESPMatterConstants {
     static let rainmakerNodeId = "rainmakerNodeId"
     static let fabricDetails = "fabricDetails"
     static let rootCa = "rootCa"
+    static let prefixCATId = "FFFFFFFD"
+    static let groupCatIdAdmin = "group_cat_id_admin"
     static let ipk = "ipk"
     static let userNOC = "userNOC"
     static let userNoc = "userNoc"
@@ -120,6 +124,10 @@ struct ESPMatterConstants {
     static let challenge = "challenge"
     static let challengeResponse = "challengeResponse"
     static let metadata = "metadata"
+    static let csrNonce = "csrNonce"
+    static let attestationChallenge = "attestationChallenge"
+    static let attestationSignature = "attestationSignature"
+    static let nocsrElements = "nocsrElements"
     
     // MARK: - Error Codes
     static let invalidParams = "INVALID_PARAMS"
@@ -219,6 +227,15 @@ extension String {
         }
         if self == ESPMatterConstants.tempMeasurementCluster {
             return 1026
+        }
+        return nil
+    }
+
+    var hexToDecimal: UInt64? {
+        let scanner = Scanner(string: self)
+        var value: UInt64 = 0
+        if scanner.scanHexInt64(&value) {
+            return value
         }
         return nil
     }

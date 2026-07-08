@@ -208,6 +208,25 @@ export function mapShadowDocumentToNodeUpdateEvents(
   return out;
 }
 
+/**
+ * Applies shadow `state.reported.online` to the CDF store immediately.
+ * Must not be gated by ncfg shadow coalescing — waiters would otherwise drop
+ * CONNECTED/DISCONNECTED while matter_local is removed after a Wi-Fi change.
+ */
+export function emitShadowConnectivityEvents(
+  nodeId: string,
+  shadow: unknown,
+  listen: (ev: ESPCDFNodeUpdateEvent) => void,
+): void {
+  for (const ev of mapShadowDocumentToNodeUpdateEvents(nodeId, shadow)) {
+    if (
+      ev.event_type === EVENT_NODE_CONNECTED ||
+      ev.event_type === EVENT_NODE_DISCONNECTED
+    ) {
+      listen(ev);
+    }
+  }
+}
 
 /** Thrown shape consumed by auth hooks (e.g. useSignup) via `err.description`. */
 export type SignupPasswordPolicyError = {

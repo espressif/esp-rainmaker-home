@@ -28,6 +28,7 @@ import {
     GROUP_USER_ACCESS_PRIMARY,
     GROUP_USER_ACCESS_SECONDARY,
 } from "@shared/utils/constants";
+import { filterNodesForUserDeviceLists } from "@shared/utils/rmngMatterDeviceClassification";
 
 export function transformToESPCDFGroup(
     group: ESPRMGroup,
@@ -99,7 +100,7 @@ export function transformToESPCDFGroup(
         }[]> {
             try {
                 // Use nodeDetails from ESPCDFGroup instance to get latest data
-                const nodeDetails = espcdfGroup.nodeDetails || [];
+                const nodeDetails = filterNodesForUserDeviceLists(espcdfGroup.nodeDetails || []);
 
                 // Nodes that expose the scenes service
                 const nodesWithScenesService = nodeDetails.filter((node: ESPCDFNode) =>
@@ -147,7 +148,7 @@ export function transformToESPCDFGroup(
         }[]> {
             try {
                 // Use nodeDetails from ESPCDFGroup instance to get latest data
-                const nodeDetails = espcdfGroup.nodeDetails || [];
+                const nodeDetails = filterNodesForUserDeviceLists(espcdfGroup.nodeDetails || []);
 
                 // Nodes that expose the schedules service
                 const nodesWithSchedulesService = nodeDetails.filter((node: ESPCDFNode) =>

@@ -45,8 +45,6 @@ import {
 // Constants
 import {
   SUCESS,
-  ESPRM_SYSTEM_SERVICE,
-  ESPRM_FACTORY_RESET_PARAM_TYPE,
   ESPRM_NAME_PARAM_TYPE,
   MATTER_METADATA_KEY,
   MATTER_METADATA_DEVICE_NAME_KEY,
@@ -251,24 +249,8 @@ const Settings = observer(() => {
   const confirmRemoveDevice = async () => {
     setIsRemovingDevice(true);
     try {
-      const factoryReset = node?.services?.find(
-        (service) => service.type === ESPRM_SYSTEM_SERVICE,
-      );
-
-      const factoryResetParam = factoryReset?.params?.find(
-        (param) => param.type === ESPRM_FACTORY_RESET_PARAM_TYPE,
-      );
-
-      if (factoryReset && factoryResetParam) {
-        await node?.setMultipleParams({
-          [factoryReset.name]: [
-            {
-              [factoryResetParam.name]: true,
-            },
-          ],
-        });
-      }
-
+      // Removal (factory reset + cloud unassociation) is delegated to
+      // delete operation; each sdk-adaptor implements the backend-specific steps.
       const result = await node?.delete();
       const deleteOk =
         result?.status === SUCESS ||

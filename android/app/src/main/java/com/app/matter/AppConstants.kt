@@ -116,6 +116,13 @@ object AppConstants {
     const val KEY_CHALLENGE_RESPONSE_CAMEL = "challengeResponse"
     const val KEY_REQ_ID = "req_id"
     const val KEY_METADATA = "metadata"
+    const val KEY_NOCSR_ELEMENTS = "nocsrElements"
+    const val KEY_ATTESTATION_SIGNATURE = "attestationSignature"
+    const val KEY_ATTESTATION_CHALLENGE = "attestationChallenge"
+    const val KEY_SIGV4_ACCESS_KEY = "sigv4AccessKey"
+    const val KEY_SIGV4_SECRET_KEY = "sigv4SecretKey"
+    const val KEY_SIGV4_SESSION_TOKEN = "sigv4SessionToken"
+    const val KEY_SIGV4_EXPIRATION = "sigv4Expiration"
     /** Native to React Native event payload key for the RainMaker flag. */
     const val KEY_IS_RAINMAKER_NODE_CAMEL = "isRainmakerNode"
     /** Cloud Matter metadata flag key, aligned with reference Android/iOS apps. */
@@ -194,6 +201,14 @@ object AppConstants {
      * without network I/O — follow with a liveness read before reporting reachable.
      */
     const val MATTER_DISCOVERY_CACHED_SESSION_ELAPSED_MS = 200L
+    /**
+     * Per-node cap on CHIP `getConnectedDevicePointer` (operational resolve + CASE).
+     * CHIP's internal AddressResolve default is ~40s; an unreachable node must fail
+     * fast so it never delays reachable nodes or the poll cadence.
+     */
+    const val MATTER_DISCOVERY_CONNECT_TIMEOUT_MS = 10_000L
+    /** Max concurrent per-node probes per cycle (bounds in-flight CASE sessions). */
+    const val MATTER_DISCOVERY_MAX_CONCURRENT_PROBES = 5
     // Matter commissioning back-end identifiers (must match values accepted by
     // build.gradle's MATTER_COMMISSIONING_METHOD validation).
     const val COMMISSIONING_METHOD_GOOGLE_PLAY_SERVICES = "GooglePlayServices"

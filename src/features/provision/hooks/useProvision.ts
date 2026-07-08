@@ -237,13 +237,7 @@ export const useProvision = (): UseProvisionReturn => {
 
       if (!refreshToken) return;
 
-      await node?.setMultipleParams({
-        [agentAuthService.name]: [
-          {
-            [refreshTokenParam.name]: refreshToken,
-          },
-        ],
-      });
+      await refreshTokenParam.setValue(refreshToken);
     } catch (error) {
       console.error("Error setting refresh token for provisioned node:", error);
     }

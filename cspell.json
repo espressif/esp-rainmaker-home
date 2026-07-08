@@ -135,6 +135,9 @@
     "plogin",
     "rescan",
     "fheight",
+    "MIREDS",
+    "mireds",
+    "preseed",
     "ai",
     "oauth"
   ],

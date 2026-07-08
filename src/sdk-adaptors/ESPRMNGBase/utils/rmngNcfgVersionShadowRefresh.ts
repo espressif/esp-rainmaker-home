@@ -10,7 +10,11 @@ import {
     applyShadowReportedNcfgVersion,
     ESPRMNGNode,
 } from "@espressif/rmng-base-sdk";
-import { ESPRMNGBaseAdaptorIdentifier } from "@config/sdk.identifiers";
+import { getRmngStackAuthorizationUser } from "@sdk-adaptors/shared/rmngAuthUser";
+import {
+    defaultMergeRmngShadowParams,
+    getRmngNcfgRefreshHooks,
+} from "@sdk-adaptors/shared/rmngNcfgRefreshHooks";
 import { applyRefreshedCdfNodeToStore } from "./rmngApplyRefreshedNodeToStore";
 import { EspLocalDiscoveryAdapter } from "@native-adaptors/implementations/ESPDiscoveryAdapter";
 import {
@@ -35,6 +39,22 @@ function extractFromShadow(shadow: unknown): {
     };
 }
 
+function mergeShadowParamsForRefresh(
+    oldRaw: ESPRMNGNode | undefined,
+    shadowParams: Record<string, unknown> | undefined,
+): Record<string, unknown> | undefined {
+    if (!shadowParams && !oldRaw?.params) {
+        return undefined;
+    }
+    const baseParams = (oldRaw?.params ?? {}) as Record<string, unknown>;
+    if (!shadowParams) {
+        return baseParams;
+    }
+    const hooks = getRmngNcfgRefreshHooks();
+    const merge = hooks?.mergeShadowParams ?? defaultMergeRmngShadowParams;
+    return merge(baseParams, shadowParams);
+}
+
 /**
  * Fetches fresh node config via getNodeDetails and replaces in store.
  * Uses addNode (via applyRefreshedCdfNodeToStore) which properly re-attaches
@@ -49,17 +69,24 @@ async function performNodeConfigRefresh(
     shadowParams: Record<string, unknown> | undefined,
     isOnline: boolean,
 ): Promise<void> {
+    const hooks = getRmngNcfgRefreshHooks();
+    hooks?.onRefreshStart?.(nodeId);
+
     const root = ESPCDF.instance;
     const storeNode = root?.nodeStore?.getNodeById?.(nodeId);
 
-    const user = root?.userStore?.getAuthorizationEntityForAdaptor(ESPRMNGBaseAdaptorIdentifier);
+    const user = getRmngStackAuthorizationUser(root);
     if (!user) {
         return;
     }
 
-    // Capture old connectivity status to preserve if shadow doesn't specify
     const oldRaw = storeNode?._raw as ESPRMNGNode | undefined;
     const oldConnectivityStatus = oldRaw?.connectivityStatus;
+    const mergedShadowParams = mergeShadowParamsForRefresh(oldRaw, shadowParams);
+
+    if (mergedShadowParams && Object.keys(mergedShadowParams).length > 0) {
+        hooks?.onShadowParamsMerged?.(nodeId, mergedShadowParams);
+    }
 
     if (oldRaw && typeof oldRaw.cleanup === "function") {
         try {
@@ -69,6 +96,13 @@ async function performNodeConfigRefresh(
         }
     }
 
+    const refreshCtx = {
+        nodeId,
+        shadowParams,
+        oldRaw,
+        mergedShadowParams,
+    };
+
     try {
         const cdfNode = await user.getNodeDetails(nodeId);
         applyRefreshedCdfNodeToStore(cdfNode);
@@ -76,18 +110,12 @@ async function performNodeConfigRefresh(
         const newStoreNode = root?.nodeStore?.getNodeById?.(nodeId);
         const newRaw = newStoreNode?._raw as ESPRMNGNode | undefined;
 
-        // Set connectivity status: we received an MQTT update so device is online.
-        // If shadow explicitly had online status, use it; otherwise use preserved old status
-        // or default to true (we got an MQTT update = device must be connected).
         const newConnectivityStatus = {
             isConnected: isOnline || oldConnectivityStatus?.isConnected || true,
             lastConnectionTimestamp:
                 oldConnectivityStatus?.lastConnectionTimestamp ?? Date.now(),
         };
 
-        // Update BOTH the SDK node (_raw) AND the CDF store node's connectivityStatus
-        // The CDF node has its own copy that the UI reads.
-        // Wrap in runInAction for MobX reactivity.
         runInAction(() => {
             if (newStoreNode) {
                 newStoreNode.connectivityStatus = newConnectivityStatus;
@@ -95,14 +123,12 @@ async function performNodeConfigRefresh(
             if (newRaw) {
                 newRaw.connectivityStatus = newConnectivityStatus;
 
-                // Apply params from shadow if available
-                if (shadowParams) {
-                    newRaw.params = shadowParams;
+                if (mergedShadowParams) {
+                    newRaw.params = mergedShadowParams;
                 }
             }
         });
 
-        // Restart local discovery to pick up mDNS after device comes online
         try {
             await EspLocalDiscoveryAdapter.stopDiscovery();
             await EspLocalDiscoveryAdapter.startDiscovery(() => {}, {
@@ -112,6 +138,12 @@ async function performNodeConfigRefresh(
         } catch {
             // Local discovery restart failure is non-critical
         }
+
+        const refreshedNode = root?.nodeStore?.getNodeById?.(nodeId);
+        await hooks?.onRefreshComplete?.({
+            ...refreshCtx,
+            refreshedNode,
+        });
     } catch {
         // getNodeDetails failure is handled by not updating the store
     }

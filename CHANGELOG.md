@@ -5,6 +5,24 @@ All notable changes to the ESP RainMaker Home app will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.2.1]
+
+### Added
+
+- [RMNG+Matter] Support for hybrid RMNG + Matter nodes, including pure Matter devices and bridged Matter child devices, exposed through a unified node model
+- [RMNG+Matter] Local-first control over Matter/LAN with automatic MQTT fallback across pure RMNG, pure Matter, hybrid, and bridged node types
+ 
+### Enhanced
+
+- [RMNG] Adopted the latest RMNG and Matter SDK APIs across provisioning, discovery, commissioning, and device control flows
+- [RMNG] Node parameter updates now flow through the SDK subscription channel, replacing the per-node event emitter and providing a unified event stream across all node types
+- [RMNG] Unified system operations and delegated device removal to SDK adapters, allowing platform-specific implementations to own the deletion workflow
+
+### Fixed
+
+- [RMNG] Bridged Matter child devices now inherit the reachability state of their parent bridge and no longer produce duplicate shadow state updates
+- [Matter] Matter subscriptions now stay stable across RMNG session changes, commissioning, and device state transitions
+
 ## [5.2.0]
  
 ### Added
