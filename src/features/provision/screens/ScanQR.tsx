@@ -16,7 +16,6 @@ import {
   Dimensions,
   Vibration,
   ActivityIndicator,
-  Image,
 } from "react-native";
 // Expo Imports
 import { CameraView, useCameraPermissions } from "expo-camera";
@@ -48,6 +47,10 @@ import {
 import { testProps } from "@shared/utils/testProps";
 import { useToast } from "@shared/hooks/useToast";
 import { parseRMakerCapabilities } from "@features/provision/utils/rmakerCapabilities";
+import {
+  connectWithTimeout,
+  isConnectTimeout,
+} from "@features/provision/utils/scanBLEHelper";
 import { getMissingPermission, getQRScanErrorType } from "@shared/utils/device";
 
 // Constants
@@ -346,7 +349,8 @@ const ScanQR = () => {
   const [isProcessing, setIsProcessing] = useState(false);
   const [showScanAgain, setShowScanAgain] = useState(false);
   const [isCameraActive, setIsCameraActive] = useState(true);
-  const [previewImageUri, setPreviewImageUri] = useState<string | null>(null);
+  const [isCameraReady, setIsCameraReady] = useState(false);
+  const [cameraKey, setCameraKey] = useState(0);
   const cameraRef = useRef<CameraView>(null);
 
   const user = store?.userStore?.user;
@@ -358,52 +362,50 @@ const ScanQR = () => {
   };
 
   /**
-   * Capture preview image before closing camera
+   * Unmounts `CameraView` to release the native preview (expo-camera recommended teardown).
+   * expo-camera exposes `onCameraReady` on start only — no awaitable release callback.
    */
-  const capturePreviewImage = useCallback(async () => {
-    try {
-      const camera = cameraRef.current;
-      if (camera && isCameraActive) {
-        const photo = await camera.takePictureAsync({
-          quality: 0.5, // Lower quality for faster capture
-          skipProcessing: true, // Skip processing for faster capture
-          shutterSound: false, // Keep preview capture silent
-        });
-        if (photo?.uri) {
-          setPreviewImageUri(photo.uri);
-        }
-      }
-    } catch (error) {
-      console.error("[QR Scan] Error capturing preview image:", error);
-      // If capture fails, just continue without preview image
-    }
-  }, [isCameraActive]);
+  const deactivateCamera = useCallback(() => {
+    setIsCameraActive(false);
+    setIsCameraReady(false);
+  }, []);
 
   /**
-   * Close camera with preview image capture
+   * Clears scan locks that block `onBarcodeScanned` and the Scan Again control.
+   * Does not disconnect the provisioned device in the store.
    */
-  const closeCamera = useCallback(async () => {
-    // Capture preview image before closing
-    await capturePreviewImage();
-    // Small delay to ensure image is captured before closing
-    setTimeout(() => {
-      setIsCameraActive(false);
-    }, 100);
-  }, [capturePreviewImage]);
-
-  /**
-   * Reset the scanning state and UI
-   */
-  const resetScanState = () => {
+  const clearScanLocks = useCallback(() => {
     setIsProcessing(false);
     setScanned(false);
     scannedRef.current = false;
-    // Show scan again button after reset
-    setShowScanAgain(true);
-    // Clear preview image and re-enable camera
-    setPreviewImageUri(null);
+  }, []);
+
+  /**
+   * Remounts the camera preview so barcode detection can resume after a reset.
+   */
+  const remountCamera = useCallback(() => {
     setIsCameraActive(true);
-  };
+    setIsCameraReady(false);
+    setCameraKey((key) => key + 1);
+  }, []);
+
+  /**
+   * Re-enables live scanning when the screen regains focus after navigation away.
+   */
+  const prepareScannerOnFocus = useCallback(() => {
+    clearScanLocks();
+    setShowScanAgain(false);
+    remountCamera();
+  }, [clearScanLocks, remountCamera]);
+
+  /**
+   * Reset the scanning state and UI after errors or when prompting rescan.
+   */
+  const resetScanState = useCallback(() => {
+    clearScanLocks();
+    setShowScanAgain(true);
+    remountCamera();
+  }, [clearScanLocks, remountCamera]);
 
   /**
    * Handle scan again - reset state and disconnect device if connected
@@ -476,16 +478,17 @@ const ScanQR = () => {
       try {
         const popSet = await espDevice.setProofOfPossession(pop);
         if (!popSet) {
+          resetScanState();
           return toast.showError(t("device.scan.qr.invalidQRCode"));
         }
       } catch (error: any) {
         console.error("[QR Provisioning] POP set error:", error?.message);
+        resetScanState();
         return toast.showError(t("device.scan.qr.invalidQRCode"));
       }
     } else if (rmakerCaps.requiresPop && !pop) {
       // If POP is required but not provided in QR code, navigate to POP screen
-      // Close camera with preview before navigation
-      await closeCamera();
+      deactivateCamera();
       router.push({
         pathname: "/(provision)/POP",
         params: {
@@ -500,6 +503,7 @@ const ScanQR = () => {
     try {
       const isSessionInitialized = await espDevice.initializeSession();
       if (!isSessionInitialized) {
+        resetScanState();
         return toast.showError(t("device.scan.qr.sessionInitFailed"));
       }
     } catch (error: any) {
@@ -510,8 +514,7 @@ const ScanQR = () => {
     // If device supports claiming, navigate to Claiming screen
     // This is determined by rmaker.cap array containing "claim" or "camera_claim"
     if (rmakerCaps.hasClaim) {
-      // Close camera with preview before navigation
-      await closeCamera();
+      deactivateCamera();
       router.push({
         pathname: "/(provision)/Claiming",
         params: {
@@ -521,8 +524,7 @@ const ScanQR = () => {
       return;
     }
 
-    // Close camera with preview before navigation to WiFi screen
-    await closeCamera();
+    deactivateCamera();
     navigateToWifi();
   };
 
@@ -615,16 +617,13 @@ const ScanQR = () => {
    */
   const handleMatterCommissioning = async (qrData: string) => {
     try {
-      setIsProcessing(true);
-
       // Check if user is authenticated
       if (!user) {
         toast.showError(t("device.scan.qr.matterAuthRequired"));
         return resetScanState();
       }
 
-      // Close camera with preview before navigation
-      await closeCamera();
+      deactivateCamera();
       router.push({
         pathname: "/(matter)/Commissioning",
         params: {
@@ -643,24 +642,27 @@ const ScanQR = () => {
     }
   };
 
-  const handleRMNodeTranformt = (qrData: any) => {
+  const handleRMNodeTranformt = (qrData: string) => {
     const firstColon = qrData.indexOf(":");
     const type = firstColon >= 0 ? qrData.slice(0, firstColon).trim() : "";
     const payload =
       firstColon >= 0 ? qrData.slice(firstColon + 1).trim() : qrData.trim();
 
-    if (payload.includes("|")) {
-      const [name, pop, transport] = payload
-        .split("|")
-        .map((part: string) => part.trim());
-      return {
-        type,
-        name,
-        pop,
-        transport:
-          RM_QR_TRANSPORT_MAP[transport as keyof typeof RM_QR_TRANSPORT_MAP],
-      };
+    if (!payload.includes("|")) {
+      return null;
     }
+
+    const [name, pop, transport] = payload
+      .split("|")
+      .map((part: string) => part.trim());
+
+    return {
+      type,
+      name,
+      pop,
+      transport:
+        RM_QR_TRANSPORT_MAP[transport as keyof typeof RM_QR_TRANSPORT_MAP],
+    };
   };
 
   /**
@@ -698,13 +700,14 @@ const ScanQR = () => {
     );
 
     if (!cdfDevice?.name) {
+      resetScanState();
       return toast.showError(t("device.scan.qr.failedToInitializeDevice"));
     }
 
-    // Connect device
-    const connected = await cdfDevice.connect();
+    const connected = await connectWithTimeout(cdfDevice);
 
     if (!connected) {
+      resetScanState();
       return toast.showError(t("device.scan.qr.unableToConnectToDevice"));
     }
 
@@ -733,23 +736,21 @@ const ScanQR = () => {
     // Check if it's a Matter QR code
     if (result.data.startsWith(MATTER_QR_CODE_PREFIX)) {
       setIsProcessing(true);
-      // Close camera with preview when processing
-      await closeCamera();
+      deactivateCamera();
       Vibration.vibrate(200);
 
-      // Process Matter QR code with delay for better UX
-      setTimeout(async () => {
-        try {
-          await handleMatterCommissioning(result.data);
-        } catch {
-          toast.showError(t("device.scan.qr.matterCommissioningFailed"));
-        } finally {
-          resetScanState();
-        }
-      }, 1000);
+      try {
+        await handleMatterCommissioning(result.data);
+      } catch {
+        toast.showError(t("device.scan.qr.matterCommissioningFailed"));
+        resetScanState();
+      }
       return;
     } else if (result.data.startsWith(RM_QR_CODE_PREFIX)) {
       qrData = handleRMNodeTranformt(result.data);
+      if (!qrData?.name || !qrData?.transport) {
+        return handleInvalidQRCode();
+      }
     } else {
       // Parse and validate ESP provisioning QR data
       try {
@@ -760,23 +761,25 @@ const ScanQR = () => {
       }
     }
 
-    // Start processing
     setIsProcessing(true);
-    // Close camera with preview when processing
-    await closeCamera();
+    deactivateCamera();
     Vibration.vibrate(200);
-    // Process with delay for better UX
-    setTimeout(async () => {
-      try {
-        await handleDeviceProvision(qrData);
-      } catch (error: any) {
-        console.error("[QR Scan] Provisioning error:", error);
-        const errorMessage = error?.message || "Unknown error";
 
-        // Use utility function to handle error
-        handleQRScanError(errorMessage, t, toast, resetScanState);
+    try {
+      await handleDeviceProvision(qrData);
+    } catch (error: unknown) {
+      console.error("[QR Scan] Provisioning error:", error);
+      const errorMessage =
+        error instanceof Error ? error.message : "Unknown error";
+
+      if (isConnectTimeout(error)) {
+        toast.showError(t("device.scan.qr.unableToConnectToDevice"));
+        resetScanState();
+        return;
       }
-    }, 1000);
+
+      handleQRScanError(errorMessage, t, toast, resetScanState);
+    }
   };
 
   // Re-check Bluetooth state periodically when it's disabled
@@ -790,30 +793,13 @@ const ScanQR = () => {
   // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional hook deps
   }, [bluetoothEnabled, isCheckingBluetooth]);
 
-  // Reset scan state and disconnect device when screen comes into focus
-  // Close camera when screen loses focus (navigating away)
+  // Fresh scanner on focus; release camera on blur (keeps store connectedDevice intact)
   useFocusEffect(
     useCallback(() => {
-      // When screen comes into focus, reset and enable camera
-      handleScanAgain();
-
-      // Cleanup: Close camera with preview when screen loses focus (navigating away)
-      return () => {
-        // Close camera with preview when navigating away from this screen
-        closeCamera().catch(console.error);
-      };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional hook deps
-    }, []),
+      prepareScannerOnFocus();
+      return () => deactivateCamera();
+    }, [prepareScannerOnFocus, deactivateCamera]),
   );
-
-  // Additional cleanup on component unmount
-  useEffect(() => {
-    return () => {
-      // Ensure camera is closed when component unmounts
-      closeCamera().catch(console.error);
-    };
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional hook deps
-  }, []);
 
   return (
     <ScreenWrapper
@@ -857,26 +843,27 @@ const ScanQR = () => {
             <BluetoothDisabledScreen />
           ) : (
             <View style={globalStyles.scannerContainer}>
-              {/* Show preview image as background when camera is closed */}
-              {!isCameraActive && previewImageUri && (
-                <Image
-                  source={{ uri: previewImageUri }}
-                  style={[globalStyles.scanner, { position: "absolute" }]}
-                  resizeMode="cover"
-                />
-              )}
-              {/* Show camera when active */}
-              {isCameraActive && (
+              <View
+                style={[globalStyles.scanner, styles.cameraPlaceholder]}
+                {...testProps("view_camera_placeholder")}
+              />
+              {isCameraActive ? (
                 <CameraView
+                  key={cameraKey}
                   ref={cameraRef}
-                  style={globalStyles.scanner}
+                  style={[globalStyles.scanner, styles.cameraLayer]}
                   facing={cameraType}
                   barcodeScannerSettings={{
                     barcodeTypes: ["qr"],
                   }}
-                  onBarcodeScanned={handleScannedQRCode}
+                  onCameraReady={() => setIsCameraReady(true)}
+                  onBarcodeScanned={
+                    isCameraReady && !isProcessing
+                      ? handleScannedQRCode
+                      : undefined
+                  }
                 />
-              )}
+              ) : null}
               <ScannerOverlay isProcessing={isProcessing} scanned={scanned} />
 
               <View
@@ -949,6 +936,16 @@ const styles = StyleSheet.create({
   buttonDisabled: {
     opacity: 0.5,
   },
+  cameraPlaceholder: {
+    backgroundColor: tokens.colors.black,
+  },
+  cameraLayer: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+  },
   scannerFrame: {
     width: SCANNER_WIDTH,
     height: SCANNER_WIDTH,
@@ -1003,22 +1000,6 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.5,
     shadowRadius: 5,
     elevation: 3,
-  },
-  processingOverlay: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: "rgba(0,0,0,0.7)",
-    justifyContent: "center",
-    alignItems: "center",
-    zIndex: 100,
-  },
-  processingText: {
-    marginTop: tokens.spacing._10,
-    color: tokens.colors.white,
-    fontSize: 16,
   },
 });
 

@@ -16,7 +16,7 @@ import { useDevicePermissions } from "./useDevicePermissions";
 import { parseRMakerCapabilities } from "@features/provision/utils/rmakerCapabilities";
 import { getAgentTermsAccepted } from "@features/agent/utils/storage";
 import ESPAppUtilityAdapter from "@native-adaptors/implementations/ESPAppUtilityAdapter";
-import { getBleScanErrorTypeHelper } from "@features/provision/utils/scanBLEHelper";
+import { getScanErrorType } from "@features/provision/utils/scanBLEHelper";
 import { isAIAgentFromAdvertisement } from "@shared/utils/device";
 import { DEVICE_TYPE_LIST } from "@/config/devices.config";
 
@@ -114,7 +114,7 @@ export const useScanBLE = (): UseScanBLEReturn => {
    */
   const handleBleScanError = useCallback(
     (errorMessage: string, errorCode?: string) => {
-      const errorType = getBleScanErrorTypeHelper(errorMessage, errorCode);
+      const errorType = getScanErrorType(errorMessage, errorCode);
 
       switch (errorType) {
         case "permission": {
