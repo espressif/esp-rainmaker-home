@@ -1,0 +1,110 @@
+# SPDX-FileCopyrightText: 2026 Espressif Systems (Shanghai) CO LTD
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+"""
+End-to-end BDD test for the automation flow: create event+action, verify
+listed, raise the trigger event on the device over serial, confirm the action
+ran via the device serial log, then disable and delete.
+
+Shared steps (launch, login, home, device reserve/prepare/report/verify) live
+in test/conftest.py.
+"""
+import logging
+
+import pytest
+from pytest_bdd import scenarios, then, when, parsers
+
+logger = logging.getLogger(__name__)
+pytestmark = [pytest.mark.regression, pytest.mark.automation]
+
+scenarios("automation.feature")
+
+AUTOMATION_SUCCESS_TOAST = "Automation created successfully"
+
+
+@when("user opens the automation tab")
+def open_automation_tab(helper):
+    helper.automations.open_automation_tab()
+
+
+@then("user should be on automations screen")
+def should_be_on_automations_screen(helper):
+    assert helper.automations.check_screen_displayed(timeout=10), "Should be on automations screen"
+
+
+@when("user removes any existing automations")
+def remove_existing_automations(helper):
+    helper.automations.delete_all_automations()
+
+
+@when("user taps add automation")
+def tap_add_automation(helper):
+    helper.automations.tap_add_automation()
+
+
+@when(parsers.parse('user names the automation "{name}"'))
+def name_the_automation(helper, name):
+    helper.automations.enter_automation_name(name)
+
+
+@then("user should be on create automation screen")
+def should_be_on_create_automation_screen(helper):
+    assert helper.automations.is_create_automation_screen_displayed(timeout=10), "Should be on create automation screen"
+
+
+@when("user taps add event")
+def tap_add_event(helper):
+    helper.automations.click("add_event_button", timeout=10)
+
+
+@when(parsers.parse('user selects the "{name}" event device'))
+def select_event_device(helper, name):
+    helper.automations.select_event_device_by_name(name)
+
+
+@when(parsers.parse('user sets event "{param}" to "{value}"'))
+def set_event_param(helper, hardware_session, param, value):
+    hardware_session.setdefault("set_values", {})[param] = helper.automations.select_event_param(param, value)
+
+
+@when("user taps add action")
+def tap_add_action(helper):
+    helper.automations.click("add_action_button", timeout=10)
+
+
+@when(parsers.parse('user selects the "{name}" action device'))
+def select_action_device(helper, name):
+    helper.automations.select_action_device_by_name(name)
+
+
+@when(parsers.parse('user sets action "{param}" to "{value}"'))
+def set_action_param(helper, hardware_session, param, value):
+    hardware_session.setdefault("set_values", {})[param] = helper.automations.select_action_param(param, value)
+
+
+@when("user creates the automation")
+def create_the_automation(helper):
+    helper.automations.create_automation()
+
+
+@then("user should see automation created successfully toast")
+def should_see_automation_created_toast(helper):
+    title = helper.automations.get_success_toast(timeout=10)
+    assert title == AUTOMATION_SUCCESS_TOAST, f"Unexpected automation toast: {title}"
+
+
+@then(parsers.parse('automation "{name}" should be visible'))
+def automation_should_be_visible(helper, name):
+    assert helper.automations.is_automation_visible(name, timeout=10, attempts=3), f"Automation '{name}' should be visible"
+
+
+@then(parsers.parse('automation "{name}" should not be visible'))
+def automation_should_not_be_visible(helper, name):
+    assert not helper.automations.is_automation_visible(name, timeout=5), f"Automation '{name}' should have been deleted"
+
+
+@when(parsers.parse('user disables automation "{name}"'))
+def disable_automation(helper, name):
+    helper.automations.toggle_automation(name, toggle="off")

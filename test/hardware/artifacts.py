@@ -65,6 +65,14 @@ class TestArtifactDir:
         """Android logcat path for this test."""
         return self.root / "android_logcat.log"
 
+    def ios_syslog_log(self) -> Path:
+        """iOS device syslog path for this test."""
+        return self.root / "ios_syslog.log"
+
+    def ios_crash_log(self) -> Path:
+        """Aggregated iOS app crash reports (.ips) path for this test."""
+        return self.root / "ios_crash.log"
+
     def copy_file(self, source: Optional[str], destination: Path) -> Optional[Path]:
         """Copy an external log file into the test artifact directory."""
         if not source:

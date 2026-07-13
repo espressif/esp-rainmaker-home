@@ -108,12 +108,16 @@ def hard_reset_device(hardware_session, resource_manager):
     resource_manager.flasher.hard_reset(resource)
 
 
-@when(parsers.parse('the device is flashed with "{product}", "{transport}" transport'))
-def flash_device(request, hardware_session, resource_manager, hardware_config, product, transport):
-    """Validate firmware metadata and flash the device per scenario requirements."""
+def _flash_device(request, hardware_session, resource_manager, product, transport, chal_resp):
+    """Validate firmware metadata and flash the device per scenario requirements.
+
+    @param chal_resp - require (True) / forbid (False) / ignore (None) the
+        local-control challenge-response firmware build. on-network discovery
+        needs True; it's otherwise indistinguishable from the plain BLE build.
+    """
     requirement = hardware_session["requirement"]
     assert requirement, "Device requirement missing from feature background"
-    requirement = replace(requirement, product=product, prov_mode=transport)
+    requirement = replace(requirement, product=product, prov_mode=transport, chal_resp=chal_resp)
     hardware_session["requirement"] = requirement
 
     metadata = resource_manager.firmware.load_metadata(requirement)
@@ -138,6 +142,18 @@ def flash_device(request, hardware_session, resource_manager, hardware_config, p
         f"No UART output on {resource.port} after flash"
     )
     request.node._chip_serial_log_path = str(log_path)
+
+
+@when(parsers.parse('the device is flashed with "{product}", "{transport}" transport'))
+def flash_device(request, hardware_session, resource_manager, product, transport):
+    """Flash the plain scenario firmware (no challenge-response constraint)."""
+    _flash_device(request, hardware_session, resource_manager, product, transport, chal_resp=None)
+
+
+@when(parsers.parse('the device is flashed with "{product}", "{transport}" transport with challenge-response'))
+def flash_device_chal_resp(request, hardware_session, resource_manager, product, transport):
+    """Flash the local-control challenge-response firmware (on-network discovery)."""
+    _flash_device(request, hardware_session, resource_manager, product, transport, chal_resp=True)
 
 
 @when(parsers.parse('user taps "{button_name}"'))
@@ -202,6 +218,9 @@ def enter_device_pop(helper, hardware_session):
 
 @then("user should be on add device selection screen")
 def should_be_on_add_device_selection_screen(helper):
+    if not helper.add_device.check_screen_displayed(timeout=5):
+        helper.permissions.handle_all_permissions(action="allow", timeout=3)
+        helper.add_device.open_from_home()
     assert helper.add_device.check_screen_displayed(), "Should be on add device selection screen"
 
 

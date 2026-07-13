@@ -6,11 +6,13 @@
 """
 Test report generator for creating professional HTML reports
 """
+import os
 import json
 import shutil
 import socket
 import yaml
 import logging
+import re
 from pathlib import Path
 from datetime import datetime
 from typing import Dict, List, Optional, Any
@@ -31,6 +33,7 @@ def _primary_ip() -> str:
     finally:
         s.close()
 from collections import defaultdict
+from utils.common_utils import safe_test_name
 
 try:
     from jinja2 import Environment, FileSystemLoader
@@ -51,25 +54,46 @@ class TestSuite:
         self.fail_count = 0
         self.retry_count = 0
         self.abort_count = 0
+        self.skip_count = 0
+        self.total_duration = 0.0
         self.log_url: Optional[str] = None
         self.appium_log_url: Optional[str] = None
         self.status = "completed"
         self.tests: List[Dict] = []
-    
+
     @property
     def total_count(self) -> int:
         return self.pass_count + self.fail_count + self.retry_count + self.abort_count
-    
+
     @property
     def pass_percentage(self) -> float:
+        graded = self.total_count - self.skip_count
+        if graded <= 0:
+            return 0.0
+        effective_pass = self.pass_count + self.retry_count
+        return round((effective_pass / graded) * 100, 1)
+
+    @property
+    def pass_width(self) -> float:
         if self.total_count == 0:
             return 0.0
-        # Pass-on-retry counts as pass for percentage
-        effective_pass = self.pass_count + self.retry_count
-        return round((effective_pass / self.total_count) * 100, 1)
-    
-    def add_test_result(self, outcome: str, retry: bool = False):
+        return round(((self.pass_count + self.retry_count) / self.total_count) * 100, 1)
+
+    @property
+    def fail_width(self) -> float:
+        if self.total_count == 0:
+            return 0.0
+        return round((self.fail_count / self.total_count) * 100, 1)
+
+    @property
+    def skip_width(self) -> float:
+        if self.total_count == 0:
+            return 0.0
+        return round((self.abort_count / self.total_count) * 100, 1)
+
+    def add_test_result(self, outcome: str, retry: bool = False, duration: float = 0.0):
         """Add a test result"""
+        self.total_duration += duration or 0.0
         if outcome == "passed":
             if retry:
                 self.retry_count += 1
@@ -77,7 +101,10 @@ class TestSuite:
                 self.pass_count += 1
         elif outcome == "failed":
             self.fail_count += 1
-        elif outcome == "skipped" or outcome == "error":
+        elif outcome == "skipped":
+            self.skip_count += 1
+            self.abort_count += 1
+        elif outcome == "error":
             self.abort_count += 1
 
 
@@ -106,6 +133,7 @@ class ReportGenerator:
             loader=FileSystemLoader(str(self.template_dir)),
             autoescape=True
         )
+        self.jinja_env.filters['fmt_dur'] = self._fmt_duration
         
         # Verify template exists
         template_path = self.template_dir / "report_template.html"
@@ -126,35 +154,46 @@ class ReportGenerator:
             logger.error(f"Error loading config: {e}")
             return {}
     
-    def _parse_test_name(self, test_name: str) -> tuple:
+    @staticmethod
+    def _fmt_duration(seconds) -> str:
+        """Human-friendly duration: '45s', '2m 30s', '1h 05m'."""
+        try:
+            total = int(round(float(seconds or 0)))
+        except (TypeError, ValueError):
+            total = 0
+        if total < 60:
+            return f"{total}s"
+        minutes, secs = divmod(total, 60)
+        if minutes < 60:
+            return f"{minutes}m {secs:02d}s"
+        hours, minutes = divmod(minutes, 60)
+        return f"{hours}h {minutes:02d}m"
+
+    @staticmethod
+    def _prettify(raw: str) -> str:
+        """'02_provisioning' -> 'Provisioning': strip a leading NN_ index, title-case."""
+        name = re.sub(r"^\d+[_-]", "", (raw or "").strip())
+        return name.replace('_', ' ').title() or "Tests"
+
+    def _extract_category_suite(self, test_nodeid: str) -> tuple:
         """
-        Parse test name to extract category and suite name
-        Format: category.suite_name or just suite_name
+        Derive (category, suite) from the test path.
+
+        tests/02_provisioning/03_softap/test_softap.py::test_x
+          -> ('Provisioning', 'Softap')
+        Falls back to the file stem / 'Tests' for flat layouts.
         """
-        parts = test_name.split('.')
-        if len(parts) >= 2:
-            category = parts[0].replace('_', ' ').title()
-            suite_name = '.'.join(parts[1:])
-        else:
-            category = "Other Tests"
-            suite_name = test_name
-        
-        return category, suite_name
-    
-    def _extract_suite_from_test(self, test_nodeid: str) -> str:
-        """Extract suite name from test nodeid"""
-        # Remove file path and test function name
-        # Example: tests/login/test_login.py::test_login -> login
-        parts = test_nodeid.split('::')
-        if len(parts) > 0:
-            file_part = parts[0]
-            # Extract directory name or file name without extension
-            if '/' in file_part:
-                dir_name = file_part.split('/')[-2] if '/' in file_part else file_part
-            else:
-                dir_name = Path(file_part).stem
-            return dir_name
-        return "unknown"
+        file_part = test_nodeid.split('::')[0]
+        segments = [s for s in file_part.split('/') if s]
+        if segments and segments[0] == 'tests':
+            segments = segments[1:]
+        if segments and segments[-1].endswith('.py'):
+            segments = segments[:-1]
+        if len(segments) >= 2:
+            return self._prettify(segments[-2]), self._prettify(segments[-1])
+        if len(segments) == 1:
+            return self._prettify(segments[0]), self._prettify(segments[0])
+        return "Tests", Path(file_part).stem
     
     def _categorize_tests(self, test_results: List[Dict]) -> Dict[str, List[TestSuite]]:
         """Categorize tests into suites and categories"""
@@ -176,9 +215,8 @@ class ReportGenerator:
                 continue
             seen_tests.add(nodeid)
             
-            # Extract suite name
-            suite_name = self._extract_suite_from_test(nodeid)
-            category, _ = self._parse_test_name(suite_name)
+            # Derive category + suite from the test path
+            category, suite_name = self._extract_category_suite(nodeid)
             
             # Create or get suite
             suite_key = f"{category}::{suite_name}"
@@ -189,10 +227,37 @@ class ReportGenerator:
                 suite_id += 1
             
             suite = suites_dict[suite_key]
-            suite.add_test_result(outcome, retry)
+            suite.add_test_result(outcome, retry, test.get('duration', 0) or 0)
             suite.tests.append(test)
         
         return dict(categories)
+
+    def _load_test_history(self) -> Dict:
+        """Load persisted per-test run history (nodeid -> list of run records)."""
+        try:
+            reports_dir = os.path.expanduser(self.config.get('local_hosting', {}).get('reports_dir', 'reports/html'))
+            p = Path(reports_dir).parent / 'test_history.json'
+            if p.exists():
+                return json.loads(p.read_text())
+        except Exception as e:
+            logger.warning("Could not load test history: %s", e)
+        return {}
+
+    @staticmethod
+    def _attach_history(test: Dict, history: List, platform: str = "") -> None:
+        entries = history.get(test.get('nodeid', ''), [])
+        if platform:
+            entries = [e for e in entries if (e.get('platform') or '') == platform]
+        test['history_runs'] = list(reversed(entries))[:5]
+        # Releases: release-branch/tag runs only (branch normalized for origin/); a non-release run never appears, empty if none.
+        def _is_release(branch: str) -> bool:
+            name = str(branch or '').strip()
+            for prefix in ('remotes/', 'origin/'):
+                if name.startswith(prefix):
+                    name = name[len(prefix):]
+            return name.startswith('release/') or re.match(r'^v?\d+\.\d+', name) is not None
+        releases = [e for e in reversed(entries) if _is_release(e.get('branch'))]
+        test['history_releases'] = releases[:5]
     
     def _calculate_summary_stats(self, test_results: List[Dict]) -> Dict[str, Any]:
         """Calculate summary statistics"""
@@ -200,11 +265,12 @@ class ReportGenerator:
         total_fail = 0
         total_retry = 0
         total_abort = 0
-        
+        total_skip = 0
+
         for test in test_results:
             outcome = test.get('outcome', 'unknown')
             retry = test.get('retry', False)
-            
+
             if outcome == "passed":
                 if retry:
                     total_retry += 1
@@ -213,16 +279,17 @@ class ReportGenerator:
             elif outcome == "failed":
                 total_fail += 1
             elif outcome == "skipped":
-                # Count skipped tests as abort
+                total_skip += 1
                 total_abort += 1
             else:
                 # error, xfailed, etc.
                 total_abort += 1
-        
+
         total_tests = total_pass + total_fail + total_retry + total_abort
-        # Pass-on-retry counts as pass for percentage
+        # Pass-on-retry counts as pass;
         effective_pass = total_pass + total_retry
-        pass_percentage = round((effective_pass / total_tests * 100), 1) if total_tests > 0 else 0
+        graded = total_tests - total_skip
+        pass_percentage = round((effective_pass / graded * 100), 1) if graded > 0 else 0
         
         return {
             'total_pass': total_pass,
@@ -251,7 +318,13 @@ class ReportGenerator:
                         execution_time: str = None,
                         appium_log_url: str = None,
                         hardware_info_by_test: Optional[Dict[str, Dict[str, str]]] = None,
-                        app_version: str = "") -> str:
+                        app_version: str = "",
+                        git_info: Optional[dict] = None,
+                        download_url: str = None,
+                        jira_base: str = None,
+                        jira_project: str = None,
+                        jira_project_id: str = None,
+                        jira_issuetype_id: str = None) -> str:
         """
         Generate HTML report from test results
         
@@ -287,6 +360,16 @@ class ReportGenerator:
                 for test in test_results:
                     if not test.get("hardware_info"):
                         test["hardware_info"] = hardware_info_by_test.get(test.get("nodeid", ""), {})
+
+            history = self._load_test_history()
+            # Per-test artifact zip is built on demand by the host
+            run_zip_base = download_url[:-4] if download_url and download_url.endswith(".zip") else None
+            for test in test_results:
+                self._attach_history(test, history, chipset)
+                if run_zip_base and test.get("outcome") == "failed":
+                    node_last = ((test.get("nodeid", "").split("::")[-1]) or "test").split("[")[0]
+                    safe = safe_test_name(node_last)
+                    test.setdefault("artifacts", {})["test_zip_url"] = f"{run_zip_base}/test/{safe}.zip"
 
             stats = self._calculate_summary_stats(test_results)
             # Categorize tests
@@ -339,16 +422,29 @@ class ReportGenerator:
             None,
         )
         
+        # Per-category (section) duration totals for the summary table.
+        category_durations = {
+            category: sum(s.total_duration for s in suites)
+            for category, suites in categories.items()
+        }
+
         # Prepare template data
         now = datetime.now()
         template_data = {
             'report_title': self.config.get('report', {}).get('title', 'Test Report'),
             'app_version': app_version,
+            'branch': (git_info or {}).get('branch', ''),
+            'mr_iid': (git_info or {}).get('mr_iid', ''),
+            'mr_title': (git_info or {}).get('mr_title', ''),
             'created_time': now.strftime("%d-%m-%Y %H:%M:%S"),
             'test_lab': test_lab,
             'platform': chipset,
             'execution_time': execution_time or self._calculate_execution_time(test_results),
-            'download_url': None,  # Can be added later
+            'download_url': download_url,
+            'jira_base': jira_base,
+            'jira_project': jira_project,
+            'jira_project_id': jira_project_id,
+            'jira_issuetype_id': jira_issuetype_id,
             'total_pass': stats['total_pass'],
             'total_fail': stats['total_fail'],
             'total_retry': stats['total_retry'],
@@ -356,6 +452,7 @@ class ReportGenerator:
             'total_tests': stats['total_tests'],
             'pass_percentage': stats['pass_percentage'],
             'test_categories': categories,
+            'category_durations': category_durations,
             'appium_log_url': resolved_appium_log_url,
         }
         

@@ -23,6 +23,7 @@ import {
 } from "./lib/types";
 import { paramControlStyles as styles } from "./lib/styles";
 import { useDragBubble } from "./lib/useDragBubble";
+import { testProps } from "@shared/utils/testProps";
 
 /**
  * ColorTemperatureSlider
@@ -147,7 +148,7 @@ const ColorTemperatureSlider = observer(
             </View>
           )}
 
-          <View style={styles.sliderContainer}>
+          <View style={styles.sliderContainer} {...testProps(`slider_${label}`)}>
             <Slider
               value={sliderValue}
               min={min}

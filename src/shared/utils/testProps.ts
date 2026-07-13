@@ -29,3 +29,10 @@ export const testProps = (id: string): Record<string, string> => {
     nativeID: id
   };
 };
+
+export const stateTestProps = (
+  base: string,
+  on: boolean,
+  onSuffix = "on",
+  offSuffix = "off"
+): Record<string, string> => testProps(`${base}_${on ? onSuffix : offSuffix}`);

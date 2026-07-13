@@ -37,6 +37,8 @@ import base64
 import io
 import json
 import os
+import re
+import shutil
 import sys
 import tarfile
 import time
@@ -54,7 +56,67 @@ JENKINS_USER = os.environ.get("JENKINS_USER", "")
 JENKINS_API_TOKEN = os.environ.get("JENKINS_API_TOKEN", "")
 JENKINS_TRIGGER_TOKEN = os.environ.get("JENKINS_TRIGGER_TOKEN", "")
 
-FIRMWARES_DIR = Path(__file__).resolve().parents[1] / "firmwares"
+_FIRMWARE_ROOT = os.environ.get("FIRMWARE_ROOT", "firmwares")
+FIRMWARES_DIR = Path(_FIRMWARE_ROOT) if os.path.isabs(_FIRMWARE_ROOT) else Path(__file__).resolve().parents[1] / _FIRMWARE_ROOT
+
+# Matter test image: auto-updated launchpad artifact, no Jenkins involved.
+MATTER_FW_URL = os.environ.get(
+    "MATTER_FW_URL",
+    "https://espressif.github.io/esp-matter/esp32c3_wifi_matter_light.bin",
+)
+
+
+def download_matter_image(url: str = MATTER_FW_URL, dest_dir: Path = None) -> Path:
+    """Fetch the auto-updated esp-matter merged image into <firmwares>/matter/; skip when upstream is unchanged (ETag/Last-Modified) and fall back to the cached copy when offline."""
+    dest_dir = dest_dir or FIRMWARES_DIR / "matter"
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    dest = dest_dir / url.rsplit("/", 1)[-1]
+    meta = dest.with_suffix(dest.suffix + ".httpmeta")
+
+    request = urllib.request.Request(url)
+    if dest.exists() and meta.exists():
+        try:
+            cached = json.loads(meta.read_text())
+            if cached.get("etag"):
+                request.add_header("If-None-Match", cached["etag"])
+            if cached.get("last_modified"):
+                request.add_header("If-Modified-Since", cached["last_modified"])
+        except Exception:
+            pass
+    try:
+        with urllib.request.urlopen(request, timeout=120) as response:
+            data = response.read()
+            if not data or len(data) < 0x10000:
+                raise RuntimeError(f"Downloaded image suspiciously small ({len(data)} bytes)")
+            dest.write_bytes(data)
+            meta.write_text(json.dumps({
+                "etag": response.headers.get("ETag"),
+                "last_modified": response.headers.get("Last-Modified"),
+                "url": url,
+            }))
+            print(f"  downloaded {dest.name} ({len(data)} bytes)")
+    except urllib.error.HTTPError as error:
+        if error.code == 304 and dest.exists():
+            print(f"  upstream unchanged (304); reusing {dest.name}")
+        else:
+            raise
+    except Exception as error:
+        if dest.exists():
+            print(f"  matter image download failed ({error}); reusing cached {dest.name}")
+        else:
+            raise
+    return dest
+
+
+def prune_superseded(keep: set) -> None:
+    """Remove esp_rainmaker_firmware_* bundles whose build number is not in keep, so exactly one (newest) bundle per variant remains."""
+    pattern = re.compile(r"^esp_rainmaker_firmware_.+_(\d+)(\.tar\.gz|\.tgz|\.zip)?$")
+    for item in FIRMWARES_DIR.iterdir():
+        match = pattern.match(item.name)
+        if not match or int(match.group(1)) in keep:
+            continue
+        print(f"  pruning superseded {item.name}")
+        shutil.rmtree(item) if item.is_dir() else item.unlink()
 
 def _local_ctrl(security: int) -> str:
     return (
@@ -291,6 +353,7 @@ def main() -> int:
 
     FIRMWARES_DIR.mkdir(parents=True, exist_ok=True)
     failures = []
+    keep = set()
     for entry in FIRMWARE_MATRIX:
         if args.only and entry["name"] != args.only:
             continue
@@ -310,9 +373,21 @@ def main() -> int:
                 wait_for_build(number)
             for bundle in download_artifacts(number, FIRMWARES_DIR):
                 print(f"  -> {bundle}")
+            keep.add(number)
         except Exception as error:
             print(f"  FAILED: {error}")
             failures.append(entry["name"])
+
+    # Prune only after a full, successful sweep: with --only/--skip-existing the
+    # unresolved variants' bundles would look superseded and get deleted.
+    if keep and not failures and not args.only and not args.skip_existing:
+        prune_superseded(keep)
+
+    print("\n=== matter image ===")
+    try:
+        download_matter_image()
+    except Exception as error:
+        print(f"  matter image refresh FAILED (the matter fixture retries at test time): {error}")
 
     if failures:
         print(f"\nFailed variants: {failures}")

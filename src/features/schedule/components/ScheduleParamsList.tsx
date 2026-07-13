@@ -30,8 +30,9 @@ export const ScheduleParamsList = ({
   onParamSelect,
 }: ScheduleParamsListProps) => {
   return (
-    <View style={{ flex: 1 }}>
+    <View {...testProps("view_schedule_params_list")} style={{ flex: 1 }}>
       <FlatList
+        {...testProps("list_schedule_params")}
         data={params}
         style={{ flex: 1 }}
         renderItem={({ item }) => (

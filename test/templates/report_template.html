@@ -226,7 +226,11 @@
         .progress-fill.fail {
             background: #dc3545;
         }
-        
+
+        .progress-fill.skip {
+            background: #9aa0a6;
+        }
+
         .progress-bar {
             overflow: hidden;
         }
@@ -313,10 +317,89 @@
         }
         
         .test-log-section h4 {
-            margin: 0 0 10px 0;
+            margin: 0;
             color: #667eea;
             font-size: 14px;
         }
+
+        .test-log-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 16px;
+            margin-bottom: 10px;
+            flex-wrap: wrap;
+        }
+
+        .run-history {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+            gap: 4px;
+        }
+
+        .spark-row {
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            gap: 5px;
+            white-space: nowrap;
+        }
+
+        .spark-row .spark-label {
+            font-size: 11px;
+            font-weight: 600;
+            color: #6b7280;
+            text-transform: uppercase;
+            letter-spacing: .04em;
+            margin-right: 4px;
+            min-width: 78px;
+            text-align: right;
+        }
+
+        .spark {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 11px;
+            font-weight: 700;
+            color: #fff;
+            cursor: help;
+            box-shadow: 0 1px 2px rgba(0,0,0,.18);
+        }
+
+        .spark.pass { background: #22a45d; }
+        .spark.fail { background: #e5484d; }
+        .spark.skip { background: #9aa0a6; }
+        .spark.empty { background: #e5e7eb; box-shadow: none; }
+        .spark.current { outline: 2px solid #1f6feb; outline-offset: 2px; }
+
+        .action-row {
+            display: flex;
+            gap: 8px;
+            margin: 8px 0 4px 0;
+            flex-wrap: wrap;
+        }
+
+        .btn-action {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            padding: 5px 12px;
+            border-radius: 6px;
+            font-size: 12px;
+            font-weight: 600;
+            text-decoration: none;
+            border: 1px solid transparent;
+            transition: filter .15s ease;
+        }
+
+        .btn-action:hover { filter: brightness(0.94); text-decoration: none; }
+        .btn-jira { background: #0052cc; color: #fff; }
+        .btn-download { background: #fff; color: #0052cc; border-color: #0052cc; }
 
         .test-detail-panel {
             display: flex;
@@ -442,13 +525,25 @@
                     <label>Platform</label>
                     <value>{{ platform }}</value>
                 </div>
+                {% if branch %}
+                <div class="info-item">
+                    <label>Branch</label>
+                    <value>{{ branch }}</value>
+                </div>
+                {% endif %}
+                {% if mr_iid %}
+                <div class="info-item">
+                    <label>Merge Request</label>
+                    <value>!{{ mr_iid }}{% if mr_title %} &middot; {{ mr_title }}{% endif %}</value>
+                </div>
+                {% endif %}
                 <div class="info-item">
                     <label>Execution Time</label>
                     <value>{{ execution_time }}</value>
                 </div>
             </div>
             {% if download_url %}
-            <a href="{{ download_url }}" class="download-link">Download Build Artifacts</a>
+            <a href="{{ download_url }}" class="download-link" download title="Download all artifacts for this run (zip)">⬇ Download Run Artifacts</a>
             {% endif %}
         </div>
 
@@ -495,6 +590,7 @@
                         <th>ID</th>
                         <th>Suite Name</th>
                         <th>Pass %</th>
+                        <th>Duration</th>
                         <th>Pass</th>
                         <th>Fail</th>
                         <th>Log</th>
@@ -505,7 +601,7 @@
                     {% for category, suites in test_categories.items() %}
                     {% if suites %}
                     <tr>
-                        <td colspan="7" class="category-header">{{ category }}</td>
+                        <td colspan="8" class="category-header">{{ category }}<span style="float: right; font-weight: 500;">&#9201; {{ category_durations[category]|fmt_dur }}</span></td>
                     </tr>
                     {% for suite in suites %}
                     <tr>
@@ -515,13 +611,16 @@
                         </td>
                         <td>
                             <div class="progress-bar">
-                                <div class="progress-fill pass" 
-                                     style="width: {{ suite.pass_percentage }}%"></div>
-                                <div class="progress-fill fail" 
-                                     style="width: {{ 100 - suite.pass_percentage }}%"></div>
+                                <div class="progress-fill pass"
+                                     style="width: {{ suite.pass_width }}%"></div>
+                                <div class="progress-fill fail"
+                                     style="width: {{ suite.fail_width }}%"></div>
+                                <div class="progress-fill skip"
+                                     style="width: {{ suite.skip_width }}%"></div>
                             </div>
-                            <span style="margin-left: 10px; clear: both; display: block;">{{ suite.pass_percentage }}%</span>
+                            <span style="margin-left: 10px; clear: both; display: block;">{{ suite.pass_percentage }}%{% if suite.skip_count %} &middot; {{ suite.skip_count }} skipped{% endif %}</span>
                         </td>
+                        <td>{{ suite.total_duration|fmt_dur }}</td>
                         <td>
                             {% if suite.pass_count > 0 %}
                             <a href="#" class="count-link pass" title="Show passed tests only" onclick="showTestDetails('suite-{{ suite.id }}', 'passed'); return false;">{{ suite.pass_count }}</a>
@@ -548,23 +647,63 @@
                         </td>
                     </tr>
                     <tr id="suite-{{ suite.id }}" class="test-details-row">
-                        <td colspan="7" class="test-details-cell">
+                        <td colspan="8" class="test-details-cell">
                             <div class="test-details-content">
                                 {% for test in suite.tests %}
                                 <div class="test-log-section" data-outcome="{{ test.outcome }}">
-                                    <h4>Test: {{ test.nodeid.split('::')[-1] }}</h4>
+                                    <div class="test-log-header">
+                                        <h4>Test: {{ test.nodeid.split('::')[-1] }}</h4>
+                                        <div class="run-history">
+                                            <div class="spark-row">
+                                                <span class="spark-label">Last 5 runs</span>
+                                                {% for _ in range(5 - test.history_runs|length) %}<span class="spark empty">·</span>{% endfor %}
+                                                {% for h in test.history_runs|reverse %}{% set sc = 'pass' if h.outcome == 'passed' else ('skip' if h.outcome == 'skipped' else 'fail') %}<span class="spark {{ sc }}{{ ' current' if loop.last }}" title="{{ h.ts }} | v{{ h.version }} | {{ h.outcome }}{{ ' (latest)' if loop.last }}">{{ '✓' if h.outcome == 'passed' else ('–' if h.outcome == 'skipped' else '✗') }}</span>{% endfor %}
+                                            </div>
+                                            <div class="spark-row">
+                                                <span class="spark-label">Last 5 releases</span>
+                                                {% for _ in range(5 - test.history_releases|length) %}<span class="spark empty">·</span>{% endfor %}
+                                                {% for h in test.history_releases|reverse %}{% set sc = 'pass' if h.outcome == 'passed' else ('skip' if h.outcome == 'skipped' else 'fail') %}<span class="spark {{ sc }}" title="v{{ h.version }} | {{ h.outcome }}">{{ '✓' if h.outcome == 'passed' else ('–' if h.outcome == 'skipped' else '✗') }}</span>{% endfor %}
+                                            </div>
+                                        </div>
+                                    </div>
                                     <div class="test-detail-panel">
                                         <div class="test-detail-main">
                                     <div><strong>Status:</strong> {{ test.outcome|upper }}</div>
                                     <div><strong>Duration:</strong> {{ "%.2f"|format(test.duration) }}s</div>
+                                    {% if test.outcome == 'failed' %}
+                                    {% set jira_summary = '[Automation] ' ~ test.nodeid.split('::')[-1] ~ ' FAILED' %}
+                                    {% set jira_env = (platform or '') ~ ' | App v' ~ (app_version or '') %}
+                                    {% set jira_desc = 'Test: ' ~ test.nodeid ~ '\nStatus: FAILED\nEnvironment: ' ~ jira_env ~ '\nArtifacts (zip): ' ~ (test.artifacts.test_zip_url or '-') ~ '\nVideo: ' ~ (test.artifacts.video_url or '-') %}
+                                    <div class="action-row">
+                                        {% if jira_base and jira_project_id and jira_issuetype_id %}
+                                        <a class="btn-action btn-jira" target="_blank" href="{{ jira_base }}/secure/CreateIssueDetails!init.jspa?pid={{ jira_project_id }}&issuetype={{ jira_issuetype_id }}&summary={{ jira_summary|urlencode }}&description={{ jira_desc|urlencode }}&labels=automation_caught_issue&environment={{ jira_env|urlencode }}" title="Raise a pre-filled bug in {{ jira_project }} (label: automation_caught_issue)">🐞 File a Jira</a>
+                                        {% else %}
+                                        <a class="btn-action btn-jira" href="mailto:?subject={{ jira_summary|urlencode }}&body={{ jira_desc|urlencode }}" title="No Jira configured (set JIRA_BASE_URL + JIRA_PROJECT_KEY) — opens a pre-filled e-mail">🐞 File a Jira</a>
+                                        {% endif %}
+                                        {% if test.artifacts.test_zip_url %}
+                                        <a class="btn-action btn-download" href="{{ test.artifacts.test_zip_url }}" download title="Download this test's artifacts (zip, built on click)">⬇ Download artifacts</a>
+                                        {% endif %}
+                                    </div>
+                                    {% endif %}
                                     {% if test.artifacts.video_url %}
                                     <div><strong>Video:</strong> <a href="{{ test.artifacts.video_url }}" target="_blank" class="log-link">View Recording</a></div>
                                     {% endif %}
                                     {% if test.artifacts.screenshot_url %}
                                     <div><strong>Screenshot:</strong> <a href="{{ test.artifacts.screenshot_url }}" target="_blank" class="log-link">View Screenshot</a></div>
                                     {% endif %}
-                                    {% if test.artifacts.adb_logs_url %}
-                                    <div><strong>ADB Logs:</strong> <a href="{{ test.artifacts.adb_logs_url }}" target="_blank" class="log-link">View ADB Logs</a></div>
+                                    {% if platform and 'ios' in platform|lower %}
+                                    {% set device_log_url = test.artifacts.ios_syslog_url or test.artifacts.adb_logs_url or test.artifacts.log_url %}
+                                    {% if device_log_url %}
+                                    <div><strong>Device Log (iOS):</strong> <a href="{{ device_log_url }}" target="_blank" class="log-link">View iOS app syslog</a></div>
+                                    {% endif %}
+                                    {% else %}
+                                    {% set device_log_url = test.artifacts.adb_logs_url or test.artifacts.log_url %}
+                                    {% if device_log_url %}
+                                    <div><strong>Device Log (logcat):</strong> <a href="{{ device_log_url }}" target="_blank" class="log-link">View ADB logcat</a></div>
+                                    {% endif %}
+                                    {% endif %}
+                                    {% if test.artifacts.crash_url %}
+                                    <div><strong>Crash Log (iOS):</strong> <a href="{{ test.artifacts.crash_url }}" target="_blank" class="log-link">View crash report</a></div>
                                     {% endif %}
                                     {% if test.artifacts.page_source_url %}
                                     <div><strong>Page Source:</strong> <a href="{{ test.artifacts.page_source_url }}" target="_blank" class="log-link">View Page Source</a></div>
@@ -572,9 +711,8 @@
                                     {% if test.artifacts.serial_log_url %}
                                     <div><strong>Chip Serial Log:</strong> <a href="{{ test.artifacts.serial_log_url }}" target="_blank" class="log-link">{{ test.artifacts.chip_serial_log_name or 'View UART Log' }}</a></div>
                                     {% endif %}
-                                    {# Only show log_url if adb_logs_url is not present to avoid duplicates #}
-                                    {% if test.artifacts.log_url and not test.artifacts.adb_logs_url %}
-                                    <div><strong>Log:</strong> <a href="{{ test.artifacts.log_url }}" target="_blank" class="log-link">View Log</a></div>
+                                    {% if test.artifacts.cloud_api_log_url %}
+                                    <div><strong>Cloud API Log:</strong> <a href="{{ test.artifacts.cloud_api_log_url }}" target="_blank" class="log-link">View Cloud Calls</a></div>
                                     {% endif %}
                                         </div>
                                         {% set hw_list = [test.hardware_info] if test.hardware_info is mapping else test.hardware_info %}

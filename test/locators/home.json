@@ -52,5 +52,22 @@
   "device_names_text": {
     "by": "id",
     "value": "text_device_name"
+  },
+  "card_power_switch": {
+    "by": "id",
+    "value": "switch_device_power"
+  },
+  "device_card": {
+    "by": "id",
+    "value": "device_card_home"
+  },
+  "local_control_badge": {
+    "by": "id",
+    "value": "text_local_control_device_card",
+    "text": "Available on WLAN"
+  },
+  "button_migration_prompt_understood": {
+    "by": "id",
+    "value": "button_migration_prompt_understood"
   }
 }

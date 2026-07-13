@@ -1,0 +1,71 @@
+{
+  "title": {
+    "by": "id",
+    "value": "title",
+    "text": "Schedules"
+  },
+  "schedule_tab": {
+    "by": "id",
+    "value": "button_tab_schedules"
+  },
+  "add_schedule_button": {
+    "by": "id",
+    "value": "button_add_schedules"
+  },
+  "edit_schedules_button": {
+    "by": "id",
+    "value": "button_edit_schedules"
+  },
+  "refresh_schedules_button": {
+    "by": "id",
+    "value": "button_refresh_schedules"
+  },
+  "schedule_delete_item": {
+    "by": "id",
+    "value": "button_delete_schedule"
+  },
+  "name_input": {
+    "by": "id",
+    "value": "input_name"
+  },
+  "name_confirm_button": {
+    "by": "id",
+    "value": "button_confirm_dialog"
+  },
+  "schedule_time_button": {
+    "by": "id",
+    "value": "button_schedule_time"
+  },
+  "time_picker_done_button": {
+    "by": "id",
+    "value": "button_done_time_picker"
+  },
+  "schedule_day_button": {
+    "by": "id",
+    "value": "button_schedule_day"
+  },
+  "add_action_button": {
+    "by": "id",
+    "value": "button_add_schedule_action"
+  },
+  "device_item": {
+    "by": "id",
+    "value": "schedule_device_selection_item"
+  },
+  "device_selection_done_button": {
+    "by": "id",
+    "value": "button_done_schedule_selection"
+  },
+  "param_config_save_button": {
+    "by": "id",
+    "value": "button_save_schedule_device_params_selection"
+  },
+  "save_params_button": {
+    "by": "id",
+    "value": "button_done_schedule_params"
+  },
+  "save_schedule_button": {
+    "by": "id",
+    "value": "button_save_schedule"
+  }
+}

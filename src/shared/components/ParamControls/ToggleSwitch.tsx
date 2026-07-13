@@ -12,6 +12,7 @@ import { Switch } from "tamagui";
 
 // Styles
 import { paramControlStyles as styles } from "./lib/styles";
+import { testProps } from "@shared/utils/testProps";
 
 // Types
 import { ParamControlChildProps } from "./lib/types";
@@ -58,17 +59,20 @@ const ToggleSwitch = observer(
               numberOfLines={1}>{label}</Text>
           </View>
 
-          <Switch
-            checked={isChecked}
-            onCheckedChange={handleValueChange}
-            disabled={disabled}
-            style={styles.toggleSwitch}
-            size="$2.5"
-          >
-            <Switch.Thumb
-              style={isChecked ? styles.toggleThumbActive : styles.toggleThumb}
-            />
-          </Switch>
+          <View {...testProps(`toggle_${label}_${isChecked ? "on" : "off"}`)}>
+            <Switch
+              {...testProps(`switch_${label}`)}
+              checked={isChecked}
+              onCheckedChange={handleValueChange}
+              disabled={disabled}
+              style={styles.toggleSwitch}
+              size="$2.5"
+            >
+              <Switch.Thumb
+                style={isChecked ? styles.toggleThumbActive : styles.toggleThumb}
+              />
+            </Switch>
+          </View>
         </View>
       </View>
     );

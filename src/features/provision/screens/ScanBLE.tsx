@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { Text, ScrollView } from "react-native";
+import { Text, ScrollView, TouchableOpacity, StyleSheet } from "react-native";
 import { useTranslation } from "react-i18next";
 import { tokens } from "@shared/theme/tokens";
 import { globalStyles } from "@shared/theme/globalStyleSheet";
@@ -14,7 +14,7 @@ import { useScanBLE } from "@features/provision/hooks";
 import { getMissingPermission, getProvisionBleIconName } from "@shared/utils/device";
 
 // Icons
-import { Bluetooth } from "lucide-react-native";
+import { Bluetooth, RotateCcw } from "lucide-react-native";
 
 // Components
 import { Header, ScreenWrapper, ContentWrapper } from "@shared/components";
@@ -157,6 +157,15 @@ const ScanBLE = () => {
                       })
                 }
                 style={globalStyles.shadowElevationForLightTheme}
+                leftSlot={
+                  <TouchableOpacity
+                    {...testProps("button_rescan_ble")}
+                    onPress={handleScanAgain}
+                    style={styles.rescanButton}
+                  >
+                    <RotateCcw size={20} color={tokens.colors.primary} />
+                  </TouchableOpacity>
+                }
                 qaId="devices_found_scan_ble"
               >
                 <ScrollView
@@ -217,5 +226,13 @@ const ScanBLE = () => {
     </>
   );
 };
+
+const styles = StyleSheet.create({
+  rescanButton: {
+    padding: 4,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+});
 
 export default ScanBLE;

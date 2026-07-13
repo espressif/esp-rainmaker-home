@@ -8,6 +8,7 @@ import React, { useRef, useState, useEffect } from "react";
 import { View, Text, ScrollView, Pressable, Modal } from "react-native";
 import { useDebounce } from "@shared/hooks/useDebounce";
 import { globalStyles } from "@shared/theme/globalStyleSheet";
+import { testProps } from "@shared/utils/testProps";
 import { useTranslation } from "react-i18next";
 import {
   TimePickerProps,
@@ -97,11 +98,12 @@ const TimePicker: React.FC<TimePickerProps> = ({
       return;
     }
 
-    const index = calculateSelectedIndex(y, ITEM_HEIGHT);
-    if (index >= 0 && index < items.length) {
-      setter(items[index]);
-      debouncedScrollTo(index, scrollRef);
-    }
+    const index = Math.min(
+      Math.max(0, calculateSelectedIndex(y, ITEM_HEIGHT)),
+      items.length - 1,
+    );
+    setter(items[index]);
+    debouncedScrollTo(index, scrollRef);
   };
 
   const handleDone = () => {
@@ -126,16 +128,22 @@ const TimePicker: React.FC<TimePickerProps> = ({
     }
   };
 
-  const renderScrollItems = ({
-    items,
-    selected,
-    paddingZero = false,
-    scrollRef,
-    setter,
-  }: TimePickerScrollProps) => {
+  const renderScrollItems = (
+    {
+      items,
+      selected,
+      paddingZero = false,
+      scrollRef,
+      setter,
+    }: TimePickerScrollProps,
+    col = "value",
+  ) => {
     return items.map((item) => (
       <Pressable
         key={item}
+        {...testProps(
+          `time_${col}_${item}${item === selected ? "_selected" : ""}`,
+        )}
         style={[globalStyles.timePickerScrollItem, { height: ITEM_HEIGHT }]}
         onPress={() => handleItemPress(item, items, setter, scrollRef)}
       >
@@ -159,15 +167,15 @@ const TimePicker: React.FC<TimePickerProps> = ({
       animationType="slide"
       onRequestClose={onClose}
     >
-      <View style={globalStyles.timePickerModal}>
-        <View style={globalStyles.timePickerContainer}>
+      <View {...testProps("overlay_time_picker")} style={globalStyles.timePickerModal}>
+        <View {...testProps("content_time_picker")} style={globalStyles.timePickerContainer}>
           <View style={globalStyles.timePickerHeader}>
             <Pressable onPress={onClose}>
               <Text style={globalStyles.textSecondary}>
                 {t("layout.shared.cancel")}
               </Text>
             </Pressable>
-            <Pressable onPress={handleDone}>
+            <Pressable {...testProps("button_done_time_picker")} onPress={handleDone}>
               <Text style={globalStyles.textPrimary}>
                 {t("layout.shared.done")}
               </Text>
@@ -207,7 +215,7 @@ const TimePicker: React.FC<TimePickerProps> = ({
                 selected: selectedHour,
                 scrollRef: hourScrollRef,
                 setter: setSelectedHour,
-              })}
+              }, "hour")}
             </ScrollView>
 
             <Text style={globalStyles.timePickerSeparator}>:</Text>
@@ -237,7 +245,7 @@ const TimePicker: React.FC<TimePickerProps> = ({
                 paddingZero: true,
                 scrollRef: minuteScrollRef,
                 setter: setSelectedMinute,
-              })}
+              }, "minute")}
             </ScrollView>
 
             {/* Period Scroll */}
@@ -264,7 +272,7 @@ const TimePicker: React.FC<TimePickerProps> = ({
                 selected: selectedPeriod,
                 scrollRef: periodScrollRef,
                 setter: setSelectedPeriod,
-              })}
+              }, "period")}
             </ScrollView>
           </View>
 

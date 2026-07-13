@@ -1,0 +1,71 @@
+{
+  "title": {
+    "by": "id",
+    "value": "title",
+    "text": "Scenes"
+  },
+  "scene_tab": {
+    "by": "id",
+    "value": "button_tab_scenes"
+  },
+  "add_scene_button": {
+    "by": "id",
+    "value": "button_add_scenes"
+  },
+  "edit_scenes_button": {
+    "by": "id",
+    "value": "button_edit_scenes"
+  },
+  "refresh_scenes_button": {
+    "by": "id",
+    "value": "button_refresh_scenes"
+  },
+  "scene_delete_item": {
+    "by": "id",
+    "value": "button_delete_scene_item"
+  },
+  "name_input": {
+    "by": "id",
+    "value": "input_name"
+  },
+  "name_confirm_button": {
+    "by": "id",
+    "value": "button_confirm_dialog"
+  },
+  "add_action_button": {
+    "by": "id",
+    "value": "button_add_action"
+  },
+  "device_selection_header": {
+    "by": "id",
+    "value": "header_scene_device_selection"
+  },
+  "device_item": {
+    "by": "id",
+    "value": "scene_device_selection_item"
+  },
+  "device_selection_done_button": {
+    "by": "id",
+    "value": "button_done_scene_selection"
+  },
+  "param_value_save_button": {
+    "by": "id",
+    "value": "text_save_device_params_selection"
+  },
+  "action_done_button": {
+    "by": "id",
+    "value": "text_done_device_params_selection"
+  },
+  "save_scene_button": {
+    "by": "id",
+    "value": "button_save_scene"
+  },
+  "activate_scene_option": {
+    "by": "id",
+    "value": "button_activate_scene_menu"
+  },
+  "scene_card": {
+    "by": "id",
+    "value": "view_scene_card_content"
+  }
+}

@@ -58,8 +58,16 @@ export const EventDeviceParamSelectionParamSheet: React.FC<
       animationType="slide"
       onRequestClose={onClose}
     >
-      <Pressable style={styles.modalContainer} onPress={onClose}>
-        <Pressable style={styles.content} onPress={(e) => e.stopPropagation()}>
+      <Pressable
+        {...testProps("modal_event_device_param_selection")}
+        style={styles.modalContainer}
+        onPress={onClose}
+      >
+        <Pressable
+          {...testProps("content_event_device_param_selection")}
+          style={styles.content}
+          onPress={(e) => e.stopPropagation()}
+        >
           <View style={styles.handle} />
 
           <View

@@ -21,7 +21,10 @@ class AddDevice(BasePage):
     def open_from_home(self):
         """Tap Add Device on the home screen."""
         home_page = self.get_other_page_helper("home")
-        if not home_page.check_screen_displayed(timeout=1):
+        perms = self.get_other_page_helper("permissions")
+        if perms.any_system_alert_present(timeout=1):
+            perms.handle_all_permissions(action="allow", timeout=3)
+        if not home_page.check_screen_displayed(timeout=5):
             raise Exception("Home screen is not displayed")
         home_page.open_add_device()
         return self

@@ -75,7 +75,7 @@ class Permissions(BasePage):
                     time.sleep(0.3)
         return self._visible_by_key('android_permission_dialog', timeout)
 
-    def handle_all_permissions(self, action='allow', timeout=5):
+    def handle_all_permissions(self, action='allow', timeout=5, accept_join=False):
         """
         Clear every system permission dialog currently shown (location,
         Bluetooth, local network, notifications, camera). Fast no-op when none
@@ -87,7 +87,7 @@ class Permissions(BasePage):
         while time.time() < deadline:
             if not self.any_system_alert_present():
                 break
-            if self._handle_permission(action, 2):
+            if self._handle_permission(action, 2, accept_join=accept_join):
                 handled.append('system_alert')
             elif self._handle_generic_permission_dialog(action):
                 handled.append('generic')
@@ -98,16 +98,34 @@ class Permissions(BasePage):
             logger.info("Permissions handled: %s", handled)
         return handled
 
-    def _handle_permission(self, action, timeout):
+    def drain_system_alerts(self, action='allow', overall_timeout=15, quiet_rounds=2, accept_join=False):
+        """Proactively clear all queued system permission dialogs up front and return the count cleared."""
+        deadline = time.time() + overall_timeout
+        quiet = 0
+        cleared = 0
+        while time.time() < deadline and quiet < quiet_rounds:
+            if self.any_system_alert_present(timeout=1):
+                if self._handle_permission(action, 2, accept_join=accept_join):
+                    cleared += 1
+                quiet = 0
+                time.sleep(0.8)
+            else:
+                quiet += 1
+                time.sleep(0.6)
+        if cleared:
+            logger.info("Drained %d system alert(s) up front", cleared)
+        return cleared
+
+    def _handle_permission(self, action, timeout, accept_join=False):
         try:
             if self.platform == 'ios':
-                return self._handle_ios_permission(action, timeout)
+                return self._handle_ios_permission(action, timeout, accept_join=accept_join)
             return self._handle_android_permission(action, timeout)
         except Exception as error:
             logger.error("Error handling permission: %s", error)
             return False
 
-    def _handle_ios_permission(self, action, timeout):
+    def _handle_ios_permission(self, action, timeout, accept_join=False):
         # WDA's native alert API is the most reliable.
         try:
             if action == "deny":
@@ -118,6 +136,16 @@ class Permissions(BasePage):
                 buttons = self.driver.execute_script("mobile: alert", {"action": "getButtons"}) or []
             except Exception:
                 buttons = []
+            # "Join Wi-Fi Network": accept only for SoftAP provisioning (accept_join); else cancel (Join strands the phone).
+            if any("join" in str(b).lower() for b in buttons):
+                if accept_join:
+                    join_btn = next((str(b) for b in buttons if "join" in str(b).lower()), "Join")
+                    self.driver.execute_script("mobile: alert", {"action": "accept", "buttonLabel": join_btn})
+                    logger.info("iOS 'Join Wi-Fi Network' prompt ACCEPTED for provisioning (buttons: %s)", buttons)
+                    return True
+                self.driver.execute_script("mobile: alert", {"action": "dismiss", "buttonLabel": "Cancel"})
+                logger.info("iOS 'Join Wi-Fi Network' prompt cancelled (buttons: %s)", buttons)
+                return True
             preferred = ("Allow While Using App", "While Using App", "Allow Once", "Allow", "OK")
             choice = next((b for p in preferred for b in buttons if b == p), None)
             if choice:
@@ -153,8 +181,7 @@ class Permissions(BasePage):
         elif action == 'while_using':
             key_order = [brand_allow, 'while_using_button', 'allow_button', 'generic_allow']
         else:
-            # 'allow': location/one-time dialogs have no plain "Allow", only
-            # "While using the app" — fall back to the foreground-only button.
+            # 'allow': location/one-time dialogs have no plain "Allow"; fall back to the foreground-only button.
             key_order = [brand_allow, 'allow_button', 'while_using_button', 'generic_allow']
 
         for key in [k for k in key_order if k]:

@@ -36,7 +36,7 @@ import { Clock, Trash2 } from "lucide-react-native";
 import { useTranslation } from "react-i18next";
 
 // Utils
-import { testProps } from "@shared/utils/testProps";
+import { testProps, stateTestProps } from "@shared/utils/testProps";
 
 /**
  * ScheduleCard Component
@@ -80,13 +80,17 @@ const ScheduleCard = ({
 
   return (
     <TouchableOpacity
-      {...(qaId ? testProps(qaId) : {})}
+      {...(qaId ? testProps(`${qaId}_${name}`) : {})}
       style={[globalStyles.scheduleCard]}
       onPress={onPress}
       disabled={isEditing}
     >
       <View style={globalStyles.scheduleHeader}>
-        <Text style={globalStyles.scheduleTitle} numberOfLines={1}>
+        <Text
+          {...testProps("text_schedule_name")}
+          style={globalStyles.scheduleTitle}
+          numberOfLines={1}
+        >
           {name}
         </Text>
         <View style={globalStyles.scheduleTimeContainer}>
@@ -104,6 +108,7 @@ const ScheduleCard = ({
             style={[globalStyles.switch]}
           >
             <Switch.Thumb
+              {...stateTestProps("schedule_card", enabled, "enabled", "disabled")}
               animation="quicker"
               style={
                 enabled

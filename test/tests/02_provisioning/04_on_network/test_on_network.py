@@ -155,7 +155,13 @@ def device_online_on_network(hardware_session, resource_manager, request, hardwa
     # The app's PoP screen for the local-control session needs the node's
     # local-control POP (security_1), not the BLE provisioning PoP. Capture it
     # from serial so POP screen submits the right code.
-    pop = _local_ctrl_pop(log_path)
+    pop = ""
+    pop_deadline = time.time() + 30
+    while time.time() < pop_deadline:
+        pop = _local_ctrl_pop(log_path)
+        if pop:
+            break
+        time.sleep(2)
     if pop:
         info = dict(hardware_session.get("prov_info") or {})
         info["pop"] = pop

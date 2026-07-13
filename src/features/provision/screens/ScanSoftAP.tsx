@@ -43,6 +43,9 @@ import {
 } from "@shared/components";
 import ActionButton from "@shared/components/Form/ActionButton";
 
+// Provision components
+import { NoDevicesFound } from "@features/provision/components";
+
 // Utils
 import { testProps } from "@shared/utils/testProps";
 import { deviceImages } from "@shared/utils/device";
@@ -243,35 +246,6 @@ const PermissionScreen = ({
         )}
       </View>
     </View>
-  );
-};
-
-/**
- * NoDevicesFound
- *
- * Displays a message when no SoftAP devices are found with option to scan again
- * @param props - onScanAgain handler
- * @returns Empty-state panel with title and circular rescan button
- */
-const NoDevicesFound = ({ onScanAgain }: { onScanAgain: () => void }) => {
-  const { t } = useTranslation();
-  return (
-    <ContentWrapper
-      title={t("device.scan.softAP.noDevicesFound")}
-      style={globalStyles.shadowElevationForLightTheme}
-      leftSlot={
-        <TouchableOpacity
-          {...testProps("button_rescan_scan_soft_ap")}
-          onPress={onScanAgain}
-          style={styles.rescanButton}
-        >
-          <RotateCcw size={20} color={tokens.colors.primary} />
-        </TouchableOpacity>
-      }
-      qaId="no_devices_found_scan_soft_ap"
-    >
-      <View style={styles.emptyContainer} />
-    </ContentWrapper>
   );
 };
 
@@ -752,6 +726,15 @@ const AndroidScanSoftAP = () => {
                       })
                 }
                 style={globalStyles.shadowElevationForLightTheme}
+                leftSlot={
+                  <TouchableOpacity
+                    {...testProps("button_rescan_soft_ap")}
+                    onPress={handleSoftAPDeviceScan}
+                    style={styles.rescanButton}
+                  >
+                    <RotateCcw size={20} color={tokens.colors.primary} />
+                  </TouchableOpacity>
+                }
                 qaId="devices_found_scan_soft_ap"
               >
                 <ScrollView
@@ -770,7 +753,12 @@ const AndroidScanSoftAP = () => {
                 </ScrollView>
               </ContentWrapper>
             ) : (
-              <NoDevicesFound onScanAgain={handleSoftAPDeviceScan} />
+              <NoDevicesFound
+                onScanAgain={handleSoftAPDeviceScan}
+                title={t("device.scan.softAP.noDevicesFound")}
+                message={t("device.scan.softAP.noDevicesMessage")}
+                style={globalStyles.shadowElevationForLightTheme}
+              />
             )}
           </>
         )}
@@ -834,16 +822,13 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginRight: tokens.spacing._10,
   },
+  buttonIcon: {
+    marginRight: tokens.spacing._10,
+  },
   rescanButton: {
     padding: 4,
     justifyContent: "center",
     alignItems: "center",
-  },
-  emptyContainer: {
-    height: 60,
-  },
-  buttonIcon: {
-    marginRight: tokens.spacing._10,
   },
 });
 

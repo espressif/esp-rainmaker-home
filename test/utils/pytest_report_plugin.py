@@ -12,12 +12,41 @@ import logging
 import re
 import socket
 import time
+import fcntl
+import tempfile
 import yaml
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Dict, List, Optional
 from datetime import datetime
 
-from utils.common_utils import read_app_version, resolve_single_artifact
+from utils.common_utils import read_app_version, read_device_app_version, resolve_single_artifact, git_ref_info
+
+
+@contextmanager
+def _reports_lock(lock_dir=None):
+    """Cross-process exclusive lock for shared reports/ files; pass the protected file's dir so runs from different cwds share one lock inode."""
+    lock_path = (Path(lock_dir) if lock_dir else Path('reports')) / '.reports.lock'
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(lock_path, 'w') as handle:
+        fcntl.flock(handle, fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(handle, fcntl.LOCK_UN)
+
+
+def _atomic_write_text(path: Path, text: str) -> None:
+    """Write via temp file + os.replace so a concurrent reader never sees a torn file."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(dir=str(path.parent), suffix='.tmp')
+    try:
+        with os.fdopen(fd, 'w') as handle:
+            handle.write(text)
+        os.replace(tmp, path)
+    except BaseException:
+        Path(tmp).unlink(missing_ok=True)
+        raise
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +77,7 @@ class PytestReportPlugin:
         self.tracked_tests: set = set()  # Track which tests we've already recorded to avoid duplicates
         self.device_model: str = None
         self.session = None  # Store session for marker access
+        self._app_version_value: Optional[str] = None  # cached device app version
         
         if not UTILITIES_AVAILABLE:
             logger.warning("Required utilities not available - report generation disabled")
@@ -251,6 +281,7 @@ class PytestReportPlugin:
                     ('adb_logs_url', 'adb_logs', 'log', 'log_organized_path'),
                     ('page_source_url', 'page_source', 'page_source', 'page_source_organized_path'),
                     ('serial_log_url', 'serial_log', 'serial_log', 'serial_log_organized_path'),
+                    ('cloud_api_log_url', 'cloud_api_log', 'cloud_api_log', 'cloud_api_log_organized_path'),
                 ]
                 for url_key, path_key, artifact_type, organized_key in artifact_specs:
                     url = self._resolve_artifact_url(
@@ -355,41 +386,39 @@ class PytestReportPlugin:
 
                 # "Android, SM-S711B" style label for the report header
                 platform_label = self._platform_label()
-                app_version = read_app_version()
+                app_version = self._app_version()
 
 
-                # Try to get Appium log URL if not already captured
+                # Refresh the served Appium log at session end;
                 appium_log_url = getattr(self, 'appium_log_url', None)
-                if not appium_log_url:
-                    try:
-                        from conftest import grid_manager
-                        if grid_manager and hasattr(grid_manager, 'servers'):
-                            # Try to get log file from any available server
-                            for server_key, server_info in grid_manager.servers.items():
-                                if 'log_file' in server_info:
-                                    log_file_path = server_info['log_file']
-                                    if log_file_path and os.path.exists(log_file_path):
-                                        if self.artifact_host:
-                                            # Try to get URL (will organize if needed)
-                                            appium_log_url = self.artifact_host.get_artifact_url(log_file_path)
-                                            if not appium_log_url:
-                                                # Try organizing explicitly
-                                                try:
-                                                    organized = self.artifact_host.organize_artifact(
-                                                        log_file_path, 'log', run_id=self.run_id
-                                                    )
-                                                    if organized and organized.get('url'):
-                                                        appium_log_url = organized.get('url')
-                                                except Exception as e:
-                                                    logger.debug(f"Failed to organize Appium log: {e}")
-                                            
-                                            if appium_log_url:
-                                                self.appium_log_url = appium_log_url
-                                                logger.info(f"Appium log URL captured at session finish: {appium_log_url}")
-                                                break
-                    except Exception as e:
-                        logger.debug(f"Could not get Appium log URL at session finish: {e}")
+                try:
+                    from utils.grid_manager import AppiumGridManager
+                    grid = AppiumGridManager.active_instance
+                    if grid and hasattr(grid, 'servers') and self.artifact_host:
+                        for server_key, server_info in grid.servers.items():
+                            log_file_path = server_info.get('log_file')
+                            if log_file_path and os.path.exists(log_file_path):
+                                try:
+                                    if self.run_id:
+                                        self.artifact_host.current_run_id = self.run_id
+                                    organized = self.artifact_host.organize_artifact(
+                                        log_file_path, 'log', run_id=self.run_id
+                                    )
+                                    if organized and organized.get('url'):
+                                        appium_log_url = organized.get('url')
+                                        self.appium_log_url = appium_log_url
+                                        logger.info(f"Appium log refreshed at session finish: {appium_log_url}")
+                                        break
+                                except Exception as e:
+                                    logger.debug(f"Failed to refresh Appium log: {e}")
+                except Exception as e:
+                    logger.debug(f"Could not refresh Appium log at session finish: {e}")
                 
+                self._update_test_history()
+                git_info = git_ref_info()
+                download_url = None
+                if self.artifact_host and getattr(self.artifact_host, "base_url", None) and self.run_id:
+                    download_url = f"{self.artifact_host.base_url}/artifacts/{self.run_id}.zip"
                 report_path = self.report_generator.generate_report(
                     test_results=self.test_results,
                     run_id=self.run_id,
@@ -399,6 +428,12 @@ class PytestReportPlugin:
                     appium_log_url=appium_log_url,
                     hardware_info_by_test=hardware_info_by_test,
                     app_version=app_version,
+                    git_info=git_info,
+                    download_url=download_url,
+                    jira_base=(os.getenv("JIRA_BASE_URL") or "").rstrip("/") or None,
+                    jira_project=os.getenv("JIRA_PROJECT_KEY") or None,
+                    jira_project_id=os.getenv("JIRA_PROJECT_ID") or None,
+                    jira_issuetype_id=os.getenv("JIRA_ISSUETYPE_ID") or None,
                 )
                 
                 if report_path:
@@ -448,6 +483,62 @@ class PytestReportPlugin:
             return f"{platform}, {model}"
         return model or platform or "Mobile Devices"
 
+    def _app_version(self) -> str:
+        """The app version actually installed on the device under test (adb / ideviceinstaller),
+        falling back to the repo version if the device can't be queried. Cached per run."""
+        if self._app_version_value is not None:
+            return self._app_version_value
+        version = ""
+        model = self.device_model or ""
+        try:
+            with open("config/mobiles.yaml") as f:
+                mobiles = yaml.safe_load(f) or {}
+            dev = (mobiles.get("mobiles", {}).get(model) or {})
+            platform = str(dev.get("platform", "")).lower()
+            udid = dev.get("udid")
+            with open("config/app.yaml") as f:
+                app_cfg = (yaml.safe_load(f) or {}).get("rainmaker-home", {})
+            if platform == "android":
+                android_path = app_cfg.get("android_path")
+                adb_path = app_cfg.get("adb_path") or (
+                    f"{android_path.rstrip('/')}/platform-tools/adb" if android_path else "adb"
+                )
+                version = read_device_app_version("android", app_cfg.get("package"), udid=udid, adb_path=adb_path)
+            elif platform == "ios":
+                version = read_device_app_version("ios", app_cfg.get("bundle_id"), udid=udid)
+        except Exception as error:
+            logger.warning("Device app version lookup failed: %s", error)
+        self._app_version_value = version or read_app_version()
+        if version:
+            logger.info("App version under test (from device): %s", self._app_version_value)
+        else:
+            logger.info("App version under test (repo fallback): %s", self._app_version_value)
+        return self._app_version_value
+
+    def _update_test_history(self, max_per_test: int = 20):
+        """Append this run's per-test outcomes to the shared test_history.json (trimmed)."""
+        try:
+            reports_dir = os.path.expanduser(self.config.get('local_hosting', {}).get('reports_dir', 'reports/html'))
+            hist_path = Path(reports_dir).parent / 'test_history.json'
+            ts = datetime.now().strftime("%d-%m-%Y %H:%M")
+            version = self._app_version()
+            branch = (git_ref_info() or {}).get("branch", "")
+            platform = self._platform_label()
+            with _reports_lock(hist_path.parent):
+                history = json.loads(hist_path.read_text()) if hist_path.exists() else {}
+                for t in self.test_results:
+                    nid = t.get('nodeid', '')
+                    if not nid:
+                        continue
+                    history.setdefault(nid, []).append(
+                        {"ts": ts, "outcome": t.get('outcome', 'unknown'), "version": version,
+                         "branch": branch, "platform": platform, "run_id": self.run_id}
+                    )
+                    history[nid] = history[nid][-max_per_test:]
+                _atomic_write_text(hist_path, json.dumps(history, indent=2))
+        except Exception as e:
+            logger.warning("Could not update test history: %s", e)
+
     def _write_run_summary(self, report_path: str, report_url: str = None):
         """
         Persist run summary JSON for CI post-steps (e.g. scripts/notify_mr.py).
@@ -455,17 +546,23 @@ class PytestReportPlugin:
         Written to reports/last_run_summary.json relative to test/.
         """
         try:
-            # Bucket each test exactly once so the totals always sum to total_tests.
-            total_pass = sum(1 for t in self.test_results if t['outcome'] == 'passed')
+            total_pass = sum(1 for t in self.test_results if t['outcome'] == 'passed' and not t.get('retry'))
             total_fail = sum(1 for t in self.test_results if t['outcome'] == 'failed')
+            total_retry = sum(1 for t in self.test_results if t.get('retry', False))
             total_skip = sum(1 for t in self.test_results if t['outcome'] == 'skipped')
             total_tests = len(self.test_results)
-            total_abort = total_tests - total_pass - total_fail - total_skip
-            graded = total_pass + total_fail + total_abort
-            pass_pct = (total_pass / graded * 100) if graded else 0
-            if total_fail == 0 and total_abort == 0:
+            total_abort = total_tests - total_pass - total_fail - total_retry - total_skip
+            effective_pass = total_pass + total_retry
+            graded = total_tests - total_skip
+            pass_pct = (effective_pass / graded * 100) if graded > 0 else 0
+            min_pass = self.config.get('report', {}).get('min_pass_percentage', 80)
+            if graded == 0:
+                run_status = 'NO TESTS RUN'
+            elif effective_pass == 0 and total_fail == 0:
+                run_status = 'ABORTED'
+            elif total_fail == 0 and total_abort == 0:
                 run_status = 'ALL PASSED'
-            elif pass_pct >= 70:
+            elif pass_pct >= min_pass:
                 run_status = 'MOSTLY PASSED'
             else:
                 run_status = 'FAILED'
@@ -477,14 +574,14 @@ class PytestReportPlugin:
                 'total_tests': total_tests,
                 'total_pass': total_pass,
                 'total_fail': total_fail,
+                'total_retry': total_retry,
                 'total_skip': total_skip,
                 'total_abort': total_abort,
                 'pass_percentage': round(pass_pct, 1),
                 'status': run_status,
             }
-            out_dir = Path('reports')
-            out_dir.mkdir(parents=True, exist_ok=True)
-            (out_dir / 'last_run_summary.json').write_text(json.dumps(summary, indent=2))
+            with _reports_lock():
+                _atomic_write_text(Path('reports') / 'last_run_summary.json', json.dumps(summary, indent=2))
             logger.info("Run summary written: reports/last_run_summary.json")
         except Exception as e:
             logger.warning(f"Could not write run summary: {e}")
@@ -575,11 +672,14 @@ class PytestReportPlugin:
         }
 
         # Determine status for subject (effective_pass = pass + pass-on-retry)
-        if graded > 0 and effective_pass == 0 and total_fail == 0:
+        min_pass = self.config.get('report', {}).get('min_pass_percentage', 80)
+        if graded == 0:
+            status = "NO TESTS RUN"
+        elif effective_pass == 0 and total_fail == 0:
             status = "ABORTED"
         elif total_fail == 0 and total_abort == 0:
             status = "ALL PASSED"
-        elif pass_percentage >= 70:
+        elif pass_percentage >= min_pass:
             status = "MOSTLY PASSED"
         else:
             status = "FAILED"
@@ -589,7 +689,7 @@ class PytestReportPlugin:
         subject_template = email_config.get('subject_template', 'Test Report - {date} - {status}')
         date_str = datetime.now().strftime("%d-%m-%Y")
         subject = subject_template.format(date=date_str, status=status)
-        app_version = read_app_version()
+        app_version = self._app_version()
         if app_version:
             subject = f"{subject} - v{app_version}"
 
@@ -604,7 +704,8 @@ class PytestReportPlugin:
             summary_stats=summary_stats,
             attach_report=attach_report,
             attach_screenshot=attach_screenshot,
-            app_version=app_version
+            app_version=app_version,
+            git_info=git_ref_info(),
         )
         
         if success:

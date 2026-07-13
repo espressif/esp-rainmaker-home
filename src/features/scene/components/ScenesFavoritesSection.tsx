@@ -80,7 +80,7 @@ export const ScenesFavoritesSection = ({
                 onDelete={() => onSceneAction(scene.id, "delete")}
                 deleteLoading={sceneLoadingStates[scene.id] === "delete"}
                 isEditing={isEditing}
-                qaId={`scene_favorite_${scene.id}`}
+                qaId="card_scene_favorite"
               />
             ))}
           </ScrollView>

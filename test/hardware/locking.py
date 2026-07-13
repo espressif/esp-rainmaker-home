@@ -57,10 +57,9 @@ CREATE INDEX IF NOT EXISTS idx_resources_owner_pid
 class SqliteResourceStore:
     """Thread-safe SQLite store for ESP resource state and locks."""
 
-    def __init__(self, db_path: Path, stale_lock_seconds: int = 3600):
+    def __init__(self, db_path: Path):
         self.db_path = Path(db_path)
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
-        self.stale_lock_seconds = stale_lock_seconds
         self._thread_lock = threading.RLock()
         self._init_db()
 
@@ -147,7 +146,7 @@ class SqliteResourceStore:
             connection.commit()
 
     def release_stale_locks(self) -> int:
-        """Reclaim locks from dead processes or expired leases."""
+        """Reclaim locks whose owner process is gone."""
         now = time.time()
         reclaimed = 0
         with self._thread_lock, self._connect() as connection:
@@ -159,25 +158,25 @@ class SqliteResourceStore:
                 """
             ).fetchall()
             for row in rows:
-                expired = row["lock_expires_at"] and row["lock_expires_at"] < now
-                pid_dead = row["owner_pid"] is not None and not _pid_alive(row["owner_pid"])
-                if expired or pid_dead:
-                    connection.execute(
-                        """
-                        UPDATE resources
-                        SET status = ?, owner_pid = NULL, owner_job_id = NULL, owner_test = NULL,
-                            lock_acquired_at = NULL, lock_expires_at = NULL
-                        WHERE mac_address = ?
-                        """,
-                        (ResourceStatus.AVAILABLE.value, row["mac_address"]),
-                    )
-                    self._record_event(
-                        connection,
-                        row["mac_address"],
-                        "stale_lock_reclaimed",
-                        f"pid_dead={pid_dead}, expired={expired}",
-                    )
-                    reclaimed += 1
+                if _pid_alive(row["owner_pid"]):
+                    continue
+                expired = bool(row["lock_expires_at"]) and row["lock_expires_at"] < now
+                connection.execute(
+                    """
+                    UPDATE resources
+                    SET status = ?, owner_pid = NULL, owner_job_id = NULL, owner_test = NULL,
+                        lock_acquired_at = NULL, lock_expires_at = NULL
+                    WHERE mac_address = ?
+                    """,
+                    (ResourceStatus.AVAILABLE.value, row["mac_address"]),
+                )
+                self._record_event(
+                    connection,
+                    row["mac_address"],
+                    "stale_lock_reclaimed",
+                    f"pid_dead=True, expired={expired}",
+                )
+                reclaimed += 1
             connection.commit()
         if reclaimed:
             logger.info("Reclaimed %s stale hardware lock(s)", reclaimed)
@@ -205,12 +204,17 @@ class SqliteResourceStore:
                 """,
                 (chip_type, ResourceStatus.AVAILABLE.value),
             ).fetchall()
-            # Skip any device whose serial port has vanished (unplugged or USB
-            # re-enumeration left a stale row); mark it offline so it isn't handed
-            # out again, and fall through to the next available device.
+            # Skip vanished ports and ports/MACs excluded via $ESP_EXCLUDE_PORTS / $ESP_EXCLUDE_MACS.
+            excluded_ports = [t.strip().lower() for t in (os.getenv("ESP_EXCLUDE_PORTS") or "").split(",") if t.strip()]
+            excluded_macs = [m.strip().upper() for m in (os.getenv("ESP_EXCLUDE_MACS") or "").split(",") if m.strip()]
             row = None
             for candidate in candidates:
-                if candidate["port"] and os.path.exists(candidate["port"]):
+                port = candidate["port"] or ""
+                if excluded_ports and any(token in port.lower() for token in excluded_ports):
+                    continue
+                if excluded_macs and (candidate["mac_address"] or "").upper() in excluded_macs:
+                    continue
+                if port and os.path.exists(port):
                     row = candidate
                     break
                 connection.execute(
@@ -246,6 +250,69 @@ class SqliteResourceStore:
             self._record_event(connection, row["mac_address"], "reserved", owner_test)
             connection.commit()
             return dict(row)
+
+    def try_reserve_mac(
+        self,
+        mac_address: str,
+        owner_pid: int,
+        owner_job_id: str,
+        owner_test: str,
+        lease_seconds: int,
+    ) -> Optional[Dict[str, Any]]:
+        """Atomically reserve one SPECIFIC device by MAC (e.g. the Matter chip), ignoring the type-pool $ESP_EXCLUDE_* so it stays reservable."""
+        self.release_stale_locks()
+        mac_up = (mac_address or "").upper()
+        now = time.time()
+        expires_at = now + lease_seconds
+        with self._thread_lock, self._connect() as connection:
+            row = connection.execute(
+                "SELECT * FROM resources WHERE upper(mac_address) = ? AND status = ?",
+                (mac_up, ResourceStatus.AVAILABLE.value),
+            ).fetchone()
+            if row is None:
+                connection.commit()
+                return None
+            port = row["port"] or ""
+            if not (port and os.path.exists(port)):
+                connection.execute(
+                    "UPDATE resources SET status = ? WHERE mac_address = ?",
+                    (ResourceStatus.OFFLINE.value, row["mac_address"]),
+                )
+                self._record_event(connection, row["mac_address"], "offline_port_missing", port)
+                connection.commit()
+                return None
+            updated = connection.execute(
+                """
+                UPDATE resources
+                SET status = ?, owner_pid = ?, owner_job_id = ?, owner_test = ?,
+                    lock_acquired_at = ?, lock_expires_at = ?
+                WHERE mac_address = ? AND status = ?
+                """,
+                (
+                    ResourceStatus.RESERVED.value,
+                    owner_pid,
+                    owner_job_id,
+                    owner_test,
+                    now,
+                    expires_at,
+                    row["mac_address"],
+                    ResourceStatus.AVAILABLE.value,
+                ),
+            )
+            if updated.rowcount != 1:
+                return None
+            self._record_event(connection, row["mac_address"], "reserved_mac", owner_test)
+            connection.commit()
+            return dict(row)
+
+    def active_reserved_ports(self) -> list:
+        """Ports held by a LIVE reservation — discovery must not probe these (esptool chip-id resets the board mid-use)."""
+        with self._thread_lock, self._connect() as connection:
+            rows = connection.execute(
+                "SELECT port, owner_pid FROM resources WHERE status = ? AND owner_pid IS NOT NULL",
+                (ResourceStatus.RESERVED.value,),
+            ).fetchall()
+        return [row["port"] for row in rows if row["port"] and row["owner_pid"] and _pid_alive(row["owner_pid"])]
 
     def update_status(self, mac_address: str, status: ResourceStatus, error: str = "") -> None:
         """Update lifecycle status for a resource."""
@@ -283,8 +350,6 @@ def _pid_alive(pid: int) -> bool:
     if pid <= 0:
         return False
     try:
-        import os
-
         os.kill(pid, 0)
         return True
     except OSError:

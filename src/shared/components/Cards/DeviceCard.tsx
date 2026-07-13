@@ -57,7 +57,7 @@ import { tokens } from "@shared/theme/tokens";
 // Icons
 import { Lock } from "lucide-react-native";
 
-import { testProps } from "@shared/utils/testProps";
+import { testProps, stateTestProps } from "@shared/utils/testProps";
 import {
   ESPCDFDevice,
   ESPCDFDeviceParam,
@@ -242,6 +242,7 @@ const DeviceCard: React.FC<DeviceCardProps> = ({
             onCheckedChange={handleDevicePowerControl}
           >
             <Switch.Thumb
+              {...stateTestProps("card_power_state", isPowerOn)}
               animation="quicker"
               style={
                 isPowerOn
@@ -304,6 +305,7 @@ const DeviceCard: React.FC<DeviceCardProps> = ({
             onCheckedChange={handleDevicePowerControl}
           >
             <Switch.Thumb
+              {...stateTestProps("card_power_state", isPowerOn)}
               animation="quicker"
               style={
                 isPowerOn

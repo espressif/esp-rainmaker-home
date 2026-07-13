@@ -143,7 +143,7 @@ export function useResetPassword() {
         verificationCode: code,
       });
       if (res) {
-        toast.showSuccess(t("auth.forgotPassword.resetSuccess"));
+        toast.showSuccess(t("auth.forgotPassword.resetSuccess"), undefined, { duration: 4000 });
         const { router } = await import("expo-router");
         router.dismissTo({
           pathname: "/(auth)/Login",

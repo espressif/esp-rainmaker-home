@@ -3,6 +3,7 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 
+import re
 import time
 import logging
 from pathlib import Path
@@ -106,7 +107,10 @@ class BasePage:
             locator_value = value
         
         try:
-            return WebDriverWait(self.driver, timeout, poll_frequency=poll).until(
+            return WebDriverWait(
+                self.driver, timeout, poll_frequency=poll,
+                ignored_exceptions=(StaleElementReferenceException,),
+            ).until(
                 EC.element_to_be_clickable((by, locator_value))
             )
         except TimeoutException:
@@ -114,24 +118,44 @@ class BasePage:
 
     def click(self, locator_name_or_type, value=None, timeout=None, poll=0.5):
         """Click element with wait"""
-        element = self.find_clickable(locator_name_or_type, value, timeout, poll=poll)
-        element.click()
-        return element
+        last_err = None
+        for attempt in range(3):
+            try:
+                element = self.find_clickable(locator_name_or_type, value, timeout, poll=poll)
+                element.click()
+                return element
+            except Exception as e:
+                if _is_stale_reference_error(e) and attempt < 2:
+                    last_err = e
+                    time.sleep(0.5)
+                    continue
+                raise
+        raise last_err
 
     def send_keys(self, locator_name_or_type, value_or_text, text=None, clear_first=False, timeout=None, poll=0.5):
         """Send keys to element"""
-        if text is None:
-            # Using JSON locator name
-            element = self.find_clickable(locator_name_or_type, None, timeout, poll=poll)
-            text = value_or_text
-        else:
-            # Traditional usage
-            element = self.find_clickable(locator_name_or_type, value_or_text, timeout, poll=poll)
-        
-        if clear_first:
-            element.clear()
-        element.send_keys(text)
-        return element
+        last_err = None
+        for attempt in range(3):
+            try:
+                if text is None:
+                    # Using JSON locator name
+                    element = self.find_clickable(locator_name_or_type, None, timeout, poll=poll)
+                    the_text = value_or_text
+                else:
+                    # Traditional usage
+                    element = self.find_clickable(locator_name_or_type, value_or_text, timeout, poll=poll)
+                    the_text = text
+                if clear_first:
+                    element.clear()
+                element.send_keys(the_text)
+                return element
+            except Exception as e:
+                if _is_stale_reference_error(e) and attempt < 2:
+                    last_err = e
+                    time.sleep(0.5)
+                    continue
+                raise
+        raise last_err
 
 
     def clear(self, locator_name_or_type, value=None, timeout=None, poll=0.5):
@@ -353,6 +377,254 @@ class BasePage:
         else:
             return False
             
+    def is_id_visible(self, value, timeout=3):
+        """Quick visibility check for a raw resource-id / accessibility-id (shorthand for is_visible('id', ...))."""
+        return self.is_visible("id", value, timeout=timeout)
+
+    def set_param_toggle(self, label, target_on, timeout=10):
+        """Set a boolean param control (Power, etc.) to target_on using its state-encoding id."""
+        on_id = f"toggle_{label}_on"
+        off_id = f"toggle_{label}_off"
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            if self.is_id_visible(on_id, 1):
+                current, present = True, on_id
+            elif self.is_id_visible(off_id, 1):
+                current, present = False, off_id
+            else:
+                time.sleep(0.5)
+                continue
+            if current == bool(target_on):
+                return self
+            self.click("id", present, timeout=5)
+            time.sleep(0.8)
+        raise RuntimeError(f"Could not set toggle '{label}' to {target_on}")
+
+    def set_modal_param_value(self, label, value):
+        """Set a param control and return the value applied: boolean via toggle, else numeric via slider."""
+        token = str(value).strip().lower()
+        if token in ("on", "off", "true", "false", "1", "0"):
+            on = token in ("on", "true", "1")
+            self.set_param_toggle(label, on)
+            return on
+        self.set_param_slider(label, int(value), max_v=self._param_slider_max(label))
+        return self.read_slider_value(label)
+
+    def _param_slider_max(self, label):
+        """Upper bound of a slider param control (Hue spans 0-360; most others 0-100)."""
+        return 360 if label == "Hue" else 100
+
+    def read_slider_value(self, label, timeout=5):
+        """Read the numeric value shown next to a slider param control, or None if absent."""
+        deadline = time.time() + timeout
+        while True:
+            for el in self.find_all("id", value=f"slider_{label}_value"):
+                try:
+                    txt = el.text or ""
+                except Exception:
+                    continue
+                match = re.search(r"-?\d+", txt)
+                if match:
+                    return int(match.group())
+            if time.time() >= deadline:
+                return None
+            time.sleep(0.5)
+
+    def set_param_slider(self, label, target, min_v=0, max_v=100, tol=2, tries=5):
+        """Drag a slider param control to target value; verify via readback, retry if off."""
+        for _ in range(tries):
+            try:
+                current = self.read_slider_value(label)
+            except Exception:
+                current = None
+            if current is not None and abs(current - target) <= tol:
+                return self
+            container = self.find_visible("id", value=f"slider_{label}", timeout=5)
+            if not container:
+                raise RuntimeError(f"Slider '{label}' not found")
+            rect = container.rect
+            span = max(1, (max_v - min_v))
+            tfrac = min(1.0, max(0.0, (target - min_v) / span))
+            cfrac = 0.0 if current is None else min(1.0, max(0.0, (current - min_v) / span))
+            pad = rect["width"] * 0.04
+            lo, hi = rect["x"] + pad, rect["x"] + rect["width"] - pad
+            ty = int(rect["y"] + rect["height"] / 2)
+            sx = int(min(max(rect["x"] + cfrac * rect["width"], lo), hi))
+            tx = int(min(max(rect["x"] + tfrac * rect["width"], lo), hi))
+            self._drag(sx, ty, tx, ty)
+            time.sleep(0.6)
+        return self
+
+    def _drag(self, x1, y1, x2, y2):
+        """W3C touch drag from (x1,y1) to (x2,y2); cross-platform."""
+        from selenium.webdriver.common.actions.action_builder import ActionBuilder
+        from selenium.webdriver.common.actions.pointer_input import PointerInput
+        from selenium.webdriver.common.actions import interaction
+
+        pointer = PointerInput(interaction.POINTER_TOUCH, "touch")
+        ab = ActionBuilder(self.driver, mouse=pointer)
+        ab.pointer_action.move_to_location(x1, y1)
+        ab.pointer_action.pointer_down()
+        ab.pointer_action.pause(0.15)
+        ab.pointer_action.move_to_location(x2, y2)
+        ab.pointer_action.pause(0.15)
+        ab.pointer_action.pointer_up()
+        ab.perform()
+
+    def get_success_toast(self, timeout=10):
+        """Return the success toast title (shared by scene/schedule/automation flows)."""
+        title, _ = self.get_toast_title_and_message(timeout=timeout, require_message=False)
+        return title
+
+    def delete_all_via_card_menu(self, card_locator, delete_option_id, refresh_button=None,
+                                 dismiss_id=None, max_rounds=10):
+        """Delete every list card via its menu (tap card -> menu -> delete), re-tapping if a tap missed the menu."""
+        for round_index in range(max_rounds):
+            if refresh_button:
+                self.refresh_list(refresh_button)
+            cards = self.find_all(card_locator)
+            if not cards:
+                if round_index == 0:
+                    time.sleep(3)
+                    cards = self.find_all(card_locator)
+                if not cards:
+                    break
+            try:
+                cards[0].click()
+            except Exception:
+                continue
+            if self.is_id_visible(delete_option_id, 5):
+                try:
+                    self.click("id", delete_option_id, timeout=4)
+                    time.sleep(1.5)
+                    continue
+                except Exception:
+                    pass
+            if dismiss_id:
+                try:
+                    self.click(dismiss_id, timeout=2)
+                except Exception:
+                    pass
+            time.sleep(0.5)
+        return self
+
+    def is_named_item_visible(self, name_id, refresh_button=None, timeout=8, attempts=1):
+        """True if a per-name list card is visible; attempts>1 (refresh between tries) is for presence checks only."""
+        for attempt in range(attempts):
+            if self.is_id_visible(name_id, timeout):
+                return True
+            if refresh_button and attempt < attempts - 1:
+                self.refresh_list(refresh_button)
+        return False
+
+    def refresh_list(self, refresh_button, settle=2):
+        """Pull fresh cloud state into a list via its refresh control (best-effort)."""
+        try:
+            self.click(refresh_button, timeout=3)
+            time.sleep(settle)
+        except Exception:
+            pass
+        return self
+
+    def _is_editing(self, edit_text_locator):
+        """True when an Edit/Done list toggle currently reads 'Done'."""
+        try:
+            return (self.get_text("id", edit_text_locator, timeout=2) or "").strip().lower() == "done"
+        except Exception:
+            return False
+
+    def set_editing(self, edit_text_locator, edit_button, editing):
+        """Enter or leave list edit mode from the toggle's current state, not a blind tap."""
+        if self._is_editing(edit_text_locator) != editing and self.is_visible(edit_button, timeout=3):
+            self.click(edit_button, timeout=10)
+            time.sleep(0.6)
+        return self
+
+    def delete_all_in_edit_mode(self, edit_button, delete_item, edit_text_locator,
+                                refresh_button=None, max_rounds=4, max_items=30):
+        """Delete every list row via edit-mode trash buttons, retrying until the list is clean."""
+        for _ in range(max_rounds):
+            if refresh_button:
+                self.refresh_list(refresh_button)
+            if not self.is_visible(edit_button, timeout=4):
+                return self
+            self.set_editing(edit_text_locator, edit_button, True)
+            self.is_visible(delete_item, timeout=6)
+            logger.info("delete_all '%s': editing=%s, items=%d", delete_item,
+                        self._is_editing(edit_text_locator), len(self.find_all(delete_item) or []))
+            for _ in range(max_items):
+                try:
+                    items = self.find_all(delete_item)
+                except Exception:
+                    time.sleep(0.5)
+                    continue
+                if not items:
+                    break
+                try:
+                    items[0].click()
+                except Exception:
+                    pass
+                time.sleep(1.2)
+            self.set_editing(edit_text_locator, edit_button, False)
+        return self
+
+    def _element_label(self, element):
+        """Best-effort visible text/label of an element, including descendant text (list rows expose the name on a child)."""
+        for attr in (None, "name", "label", "content-desc"):
+            try:
+                value = element.text if attr is None else element.get_attribute(attr)
+                if value:
+                    return value
+            except Exception:
+                continue
+        try:
+            parts = []
+            for kid in element.find_elements("xpath", ".//*"):
+                text = ""
+                try:
+                    text = kid.text or kid.get_attribute("content-desc") or kid.get_attribute("name") or ""
+                except Exception:
+                    text = ""
+                if text:
+                    parts.append(text)
+            return " ".join(parts)
+        except Exception:
+            return ""
+
+    def select_named_device(self, name, timeout=15):
+        """Select a device on any device-selection screen by its name-specific id; clicks the visible label (the row's tap target may not register as 'clickable', and the list can load asynchronously)."""
+        element = self.find_visible("id", value=f"text_{name}_device_name", timeout=timeout)
+        if not element:
+            raise RuntimeError(f"Device '{name}' not found on the device-selection screen")
+        element.click()
+        return self
+
+    def select_list_item(self, items_locator, name=None, timeout=10):
+        """Click a list row matching `name`; click the sole row if there is only one."""
+        self.is_visible(items_locator, timeout=timeout)
+        rows = self.find_all(items_locator)
+        if not rows:
+            raise RuntimeError(f"No '{items_locator}' rows available to select")
+        if name:
+            for row in rows:
+                if name.lower() in self._element_label(row).lower():
+                    row.click()
+                    return self
+            raise RuntimeError(f"No '{items_locator}' row matched '{name}' among {len(rows)} rows")
+        rows[0].click()
+        return self
+
+    def read_power_state(self, timeout=5):
+        """Return 'on'/'off' from the device-control power button, or None if not found."""
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            if self.is_id_visible("power_state_on", 1):
+                return "on"
+            if self.is_id_visible("power_state_off", 1):
+                return "off"
+            time.sleep(0.5)
+        return None
+
     def hide_keyboard_if_visible(self):
         """Hide keyboard if visible; return True only when keyboard is gone (or was never shown)."""
         try:
@@ -360,24 +632,6 @@ class BasePage:
                 return True
 
             if self.platform == "ios":
-                for key in ["Done", "Return", "Go"]:
-                    try:
-                        self.driver.hide_keyboard(strategy="pressKey", key=key)
-                    except Exception:
-                        continue
-                    if not self._is_keyboard_shown():
-                        logger.info("iOS keyboard hidden via pressKey key=%s", key)
-                        return True
-
-                for strategy in ("tapOutside", "pressKey"):
-                    try:
-                        self.driver.hide_keyboard(strategy=strategy)
-                    except Exception:
-                        continue
-                    if not self._is_keyboard_shown():
-                        logger.info("iOS keyboard hidden via strategy=%s", strategy)
-                        return True
-
                 try:
                     size = self.driver.get_window_size()
                     x, y = size["width"] // 2, int(size["height"] * 0.25)
@@ -387,6 +641,15 @@ class BasePage:
                         return True
                 except Exception:
                     pass
+
+                for key in ["Done", "Return"]:
+                    try:
+                        self.driver.hide_keyboard(strategy="pressKey", key=key)
+                    except Exception:
+                        continue
+                    if not self._is_keyboard_shown():
+                        logger.info("iOS keyboard hidden via pressKey key=%s", key)
+                        return True
 
             elif self.platform == "android":
                 try:
@@ -447,7 +710,7 @@ class BasePage:
 class PageHelperManager:
     """
     Manages page helper instances and their dependencies
-    
+
     - Example: page.provisioning -> looks for utils.page_helpers.provisioning.Provisioning class
     """
     
@@ -467,7 +730,7 @@ class PageHelperManager:
     def __getattr__(self, name):
         """
         Dynamic page helper access - converts page name to class and returns instance
-        
+
         How it works:
         1. page.provisioning -> name = 'provisioning'
         2. Converts to class name: 'Provisioning'
@@ -476,11 +739,19 @@ class PageHelperManager:
         """
         # Convert snake_case to PascalCase for class names
         class_name = ''.join(word.capitalize() for word in name.split('_'))
-        
-        # Try to import the page class dynamically
+
+        import importlib.util
+        module_path = f'utils.page_helpers.{name}'
         try:
-            module = __import__(f'utils.page_helpers.{name}', fromlist=[class_name])
-            page_class = getattr(module, class_name)
-            return self.get_page_helper(page_class)
-        except (ImportError, AttributeError):
+            spec = importlib.util.find_spec(module_path)
+        except (ImportError, ValueError):
+            spec = None
+        if spec is None:
             raise AttributeError(f"Page helper '{name}' not found. Make sure utils/page_helpers/{name}.py exists with class {class_name}")
+        # Module exists: let a genuine import error inside it propagate (don't mask it as 'not found').
+        module = importlib.import_module(module_path)
+        try:
+            page_class = getattr(module, class_name)
+        except AttributeError:
+            raise AttributeError(f"Page helper module '{name}' found but class '{class_name}' is missing")
+        return self.get_page_helper(page_class)

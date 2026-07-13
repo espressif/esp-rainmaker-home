@@ -30,6 +30,7 @@ import {
   interpolateData,
   getInterpolationInterval,
 } from "@features/control/utils/timeSeriesHelper";
+import { canonicalizeIana } from "@shared/utils/timezone";
 import {
   ESPRM_PARAM_SIMPLE_TIME_SERIES_PROPERTY,
   TIME_SERIES_PERIOD_1D,
@@ -107,7 +108,7 @@ export const useTimeSeriesData = (
           descOrder: false,
           isSimpleTimeSeries,
           aggregationInterval: aggregationInterval,
-          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+          timezone: canonicalizeIana(Intl.DateTimeFormat().resolvedOptions().timeZone),
         });
 
         let response: ESPCDFSimpleTSDataResponse | undefined = isSimpleTimeSeries

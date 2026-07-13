@@ -68,7 +68,7 @@ const SceneItem: React.FC<SceneCardProps> = ({
   const { t } = useTranslation();
   return (
     <Pressable
-      {...(qaId ? testProps(qaId) : {})}
+      {...(qaId ? testProps(`${qaId}_${name}`) : {})}
       style={[
         globalStyles.sceneCard,
         index % (sceneCardDimensions?.cardsPerRow ?? 1) !== 0 &&
@@ -78,6 +78,7 @@ const SceneItem: React.FC<SceneCardProps> = ({
           height: sceneCardDimensions?.height || 120,
         },
       ]}
+      disabled={isEditing}
       onPress={onPress}
     >
       <View style={globalStyles.sceneCardHeader}>
@@ -113,7 +114,7 @@ const SceneItem: React.FC<SceneCardProps> = ({
       </View>
       <View {...testProps("view_scene_card_content")} style={globalStyles.sceneCardContent}>
         <Text
-          {...testProps(`text_${name}_scene_name`)}
+          {...testProps("text_scene_name")}
           style={[globalStyles.sceneCardName, { color: tokens.colors.black }]}
           numberOfLines={2}
         >

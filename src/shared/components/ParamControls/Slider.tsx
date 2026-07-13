@@ -18,6 +18,7 @@ import {
 import { paramControlStyles as styles } from "./lib/styles";
 import { useDragBubble } from "./lib/useDragBubble";
 import { tokens } from "@shared/theme/tokens";
+import { testProps } from "@shared/utils/testProps";
 
 /**
  * SliderControl
@@ -76,7 +77,7 @@ const SliderControl = observer(
             >
               {label}
             </Text>
-            <Text style={styles.compactValue}>{value}</Text>
+            <Text {...testProps(`slider_${label}_value`)} style={styles.compactValue}>{value}</Text>
           </View>
         ) : (
           <>
@@ -111,7 +112,7 @@ const SliderControl = observer(
             </View>
           )}
 
-          <View style={styles.sliderContainer}>
+          <View style={styles.sliderContainer} {...testProps(`slider_${label}`)}>
             <Slider
               value={[value]}
               min={min}
@@ -155,6 +156,7 @@ const SliderControl = observer(
         {!compact && (
           <View style={styles.thumbValueContainer}>
             <Text
+              {...testProps(`slider_${label}_value`)}
               style={[
                 styles.thumbValueText,
                 {

@@ -49,6 +49,7 @@ export const EventDeviceSelectionDeviceItem: React.FC<
       ]}
     >
       <DeviceAction
+        qaId="event_device_selection_item"
         device={device.device.type ?? ""}
         displayDeviceName={device.device.displayName ?? ""}
         actions={{}}

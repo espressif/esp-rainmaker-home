@@ -3,9 +3,7 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 
-"""
-Home Page Helper
-"""
+"""Home Page Helper."""
 import logging
 import time
 
@@ -56,14 +54,74 @@ class Home(BasePage):
             raise Exception("Add device entry point not found on home screen")
         return self
 
-    def is_device_visible(self, device_name: str, timeout=10):
-        """
-        Check whether a provisioned device name is visible on the home screen.
+    def open_device(self, device_name: str, timeout=10):
+        """Open a provisioned device's control screen by its display name."""
+        end_time = time.monotonic() + timeout
+        while time.monotonic() < end_time:
+            for label in self.find_all("device_names_text"):
+                try:
+                    if (label.text or "").strip() == device_name and label.is_displayed():
+                        label.click()
+                        return self
+                except Exception:
+                    continue
+            time.sleep(0.5)
+        raise RuntimeError(f"Device '{device_name}' not found on home screen")
 
-        @param device_name - Expected device display name
-        @param timeout - Seconds to poll for the device card
-        @returns True when the device name is visible
-        """
+    def acknowledge_migration_dialog(self):
+        """Acknowledge the migration prompt if it is shown."""
+        try:
+            if self.is_visible("button_migration_prompt_understood", timeout=0.5):
+                self.click("button_migration_prompt_understood", timeout=3)
+                logger.info("Acknowledged migration prompt")
+                time.sleep(1)
+                return True
+        except Exception:
+            pass
+        return False
+
+    def wait_home_after_login(self, timeout=20):
+        """Wait for home after login, clearing the one-time migration prompt and any system alerts that overlay it."""
+        perms = self.get_other_page_helper('permissions')
+        end = time.monotonic() + timeout
+        while time.monotonic() < end:
+            if perms.any_system_alert_present(timeout=1):
+                perms.handle_all_permissions(action="allow", timeout=2)
+            self.acknowledge_migration_dialog()
+            if self.check_screen_displayed(timeout=2):
+                return True
+            time.sleep(1)
+        return False
+
+    def go_home(self):
+        """Return to the home screen, stepping out of nested screens via the header back button (iOS has no hardware back) until the footer Home tab is reachable."""
+        for _ in range(6):
+            if self.is_id_visible("button_tab_home", 2):
+                self.click("id", "button_tab_home", timeout=5)
+                time.sleep(1)
+                return self
+            if self.is_id_visible("button_back", 2):
+                self.click("id", "button_back", timeout=3)
+            else:
+                try:
+                    self.driver.back()
+                except Exception:
+                    pass
+            time.sleep(0.6)
+        return self
+
+    def _refresh_home_device_list(self):
+        """Force the home device list to re-fetch by switching to another tab and back."""
+        try:
+            if self.is_id_visible("button_tab_user", 2):
+                self.click("id", "button_tab_user", timeout=5)
+                time.sleep(1.5)
+        except Exception:
+            pass
+        self.go_home()
+
+    def is_device_visible(self, device_name: str, timeout=10):
+        """Check whether a provisioned device name is visible on the home screen (polling up to timeout)."""
         logger.info("Checking device visibility on home: %s", device_name)
         end_time = time.monotonic() + timeout
 
@@ -80,3 +138,82 @@ class Home(BasePage):
             timeout,
         )
         return False
+
+    def _card_power_switch(self, device_name, timeout=10):
+        """The power switch inside the card holding `device_name`, scoping child lookups to the matching card."""
+        name_by = self.get_element_locator("device_names_text")
+        switch_by = self.get_element_locator("card_power_switch")
+        end_time = time.monotonic() + timeout
+        while time.monotonic() < end_time:
+            for card in self.find_all("device_card"):
+                try:
+                    label = card.find_element(*name_by)
+                    if (label.text or "").strip() != device_name:
+                        continue
+                    return card.find_element(*switch_by)
+                except Exception:
+                    continue
+            time.sleep(0.5)
+        raise RuntimeError(f"Power switch for '{device_name}' not found on home screen")
+
+    def read_card_power(self, device_name, timeout=10):
+        """Return 'on'/'off' from the device's home-card power switch."""
+        from appium.webdriver.common.appiumby import AppiumBy
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            try:
+                switch = self._card_power_switch(device_name, timeout=2)
+            except Exception:
+                time.sleep(0.5)
+                continue
+            if switch.find_elements(AppiumBy.ID, "card_power_state_on"):
+                return "on"
+            if switch.find_elements(AppiumBy.ID, "card_power_state_off"):
+                return "off"
+            time.sleep(0.5)
+        return None
+
+    def set_card_power(self, device_name, target_on, timeout=15):
+        """Set the device's home-card power switch to target_on, verified via readback plus a persistence re-check."""
+        want = "on" if target_on else "off"
+        logger.info("Setting home-card power of '%s' to %s", device_name, want)
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            if self.read_card_power(device_name, timeout=5) == want:
+                time.sleep(4)
+                settled = self.read_card_power(device_name, timeout=5)
+                if settled == want:
+                    return self
+                raise RuntimeError(
+                    f"Home-card power of '{device_name}' flipped to {want} but reverted to {settled} "
+                    "— app dropped the param write (optimistic UI, no delivery)")
+            self._card_power_switch(device_name, timeout=5).click()
+            time.sleep(1)
+        raise RuntimeError(f"Could not set home-card power of '{device_name}' to {want}")
+
+    def is_local_control_badge_visible(self, timeout=10):
+        """Whether any home card shows the 'Available on WLAN' local-control badge."""
+        return self.is_visible("local_control_badge", timeout=timeout)
+
+    def ensure_device_name(self, target, aliases=()):
+        """Make sure a device named `target` is on the home screen; if it's listed under a known alias (e.g. left by provisioning or a prior name), rename it to `target` via the device settings screen. Re-enters home first so a just-applied cloud rename has refreshed into the list."""
+        for attempt in range(3):
+            self.go_home()
+            if self.is_device_visible(target, timeout=10):
+                return self
+            for alias in aliases:
+                if not self.is_device_visible(alias, timeout=3):
+                    continue
+                logger.info("Renaming device '%s' -> '%s'", alias, target)
+                self.open_device(alias)
+                self.click("id", "button_more", timeout=10)
+                self.click("id", "button_edit_device_name", timeout=10)
+                self.send_keys("id", "input_device_name", target, clear_first=True, timeout=10)
+                self.hide_keyboard_if_visible()
+                time.sleep(2)
+                self.go_home()
+                if self.is_device_visible(target, timeout=15):
+                    return self
+            logger.info("Device '%s' not visible yet (attempt %s/3); refreshing home list", target, attempt + 1)
+            self._refresh_home_device_list()
+        raise RuntimeError(f"Device '{target}' not on the home screen (aliases tried: {list(aliases)})")

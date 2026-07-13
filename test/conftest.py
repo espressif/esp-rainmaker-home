@@ -3,9 +3,7 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 
-"""
-Main conftest.py with Appium 2 standalone server support
-"""
+"""Main conftest.py with Appium 2 standalone server support."""
 import pytest
 from pytest_bdd import when, given, then, parsers
 import yaml
@@ -13,14 +11,13 @@ import sys
 import logging
 import atexit
 import os
+import re
 import subprocess
 from pathlib import Path
 from typing import Optional
-# Logging is captured by pytest itself (see pytest.ini: log_level / log_format).
-# We deliberately do NOT add a root StreamHandler here — it would also emit every
-# record to stderr, which pytest captures separately, duplicating each log line
-# (in a second format) in the per-test report logs.
+# Logging is captured by pytest itself; no root StreamHandler here (would duplicate every log line).
 logger = logging.getLogger(__name__)
+e2e_log = logging.getLogger("e2e")
 
 # Appium imports
 from appium import webdriver
@@ -101,8 +98,7 @@ def api_user_factory(pytestconfig):
     def create_users(count: int = 1, user_password: Optional[str] = None):
         nonlocal users
         logger.info("Creating %s registered user(s) via API for %s/%s", count, deployment, model)
-        # Create via API first (slow network), then persist under the lock so the
-        # brief read-modify-write doesn't block concurrent runs the whole time.
+        # Create via API first (slow), then persist under the lock to minimize concurrent-run blocking.
         created = [helper.create_and_confirm_user(user_password or password) for _ in range(count)]
         users = mutate_registered_users(deployment, model, lambda existing: existing + created)
         logger.info("Saved %s registered users for %s/%s", len(users), deployment, model)
@@ -156,6 +152,27 @@ def registered_user_password_resolver(pytestconfig):
     return resolve
 
 
+@pytest.fixture(scope="session")
+def oauth_user_resolver():
+    """Resolve a third-party provider name ('google'/'apple') to its account from the environment."""
+    def resolve(provider: str, platform: str = None) -> dict:
+        prefix = provider.upper()
+        suffix = f"_{platform.upper()}" if platform else ""
+        # Platform-specific account is all-or-nothing; else fall back to the shared account.
+        base = suffix if (suffix and os.environ.get(f"{prefix}_OAUTH_EMAIL{suffix}")) else ""
+        account = {
+            "email": os.environ.get(f"{prefix}_OAUTH_EMAIL{base}"),
+            "password": os.environ.get(f"{prefix}_OAUTH_PASSWORD{base}"),
+            "totp_secret": os.environ.get(f"{prefix}_OAUTH_TOTP_SECRET{base}"),
+        }
+        if not account["email"] or not account["password"]:
+            raise KeyError(
+                f"{prefix}_OAUTH_EMAIL / {prefix}_OAUTH_PASSWORD not set; "
+                "add them to ~/.esp_test_secrets.env (loaded via scripts/setup_test_env.sh)")
+        return account
+    return resolve
+
+
 @pytest.fixture(scope="function")
 def provision_config_resolver(hardware_config):
     """Resolve provisioning tokens (ssid, ssid_password, ...) from esp_devices.yaml wifi section."""
@@ -200,8 +217,10 @@ def hardware_session(request, resource_manager, per_test_debug_dir):
     }
     yield session
 
-    # Release every chip the test acquired (fall back to the single slot).
+    # Release every chip the test acquired, except the session-held E2E chip (e2e_device_hold frees it at session end).
     resources = session.get("resources") or ([session["resource"]] if session.get("resource") else [])
+    e2e_held = session.get("e2e_held")
+    resources = [r for r in resources if r is not e2e_held]
     if any(r.qr_payload for r in resources):
         from hardware.qr import QrDisplay
 
@@ -220,20 +239,436 @@ def hardware_session(request, resource_manager, per_test_debug_dir):
     return session
 
 
+@pytest.fixture(scope="session")
+def e2e_device_hold(resource_manager):
+    """Holds the E2E chip's reservation for the whole run so it is provisioned once and reused across e2e scenarios."""
+    hold = {"resource": None, "node_id": None}
+    yield hold
+    resource = hold.get("resource")
+    if resource is not None:
+        try:
+            resource_manager.serial_logger.stop(resource)
+        except Exception:
+            pass
+        resource_manager.release(resource.mac_address)
+
+
+@pytest.fixture(scope="session")
+def login_session_state():
+    """Last successfully logged-in email, tracked across scenarios so a non-user-management test can reuse an already-logged-in session (iOS keeps the login even as the per-test driver is recreated)."""
+    return {}
+
+
 @when(parsers.parse('user login with "{email}" and "{password}"'))
 @given(parsers.parse('user login with "{email}" and "{password}"'))
 def login_with_credentials(
+    request,
     helper,
     email,
     password,
     registered_user_resolver,
     registered_user_password_resolver,
+    login_session_state,
 ):
     email = registered_user_resolver(email)
     resolved_password = registered_user_password_resolver(password)
+    logged_in = getattr(helper.login, "logged_in_on_entry", False)
+    is_user_mgmt = "01_user_management" in str(getattr(request.node, "nodeid", ""))
+    if logged_in and not is_user_mgmt and email == login_session_state.get("email"):
+        logger.info("Session already logged in as %s; reusing it (skipping re-login)", email)
+        helper.home.go_home()
+        return
+    if logged_in:
+        helper.login.logout_to_login_screen()
     helper.login.perform_login(email, resolved_password)
-    helper.login.last_login_email = email
+    login_session_state["email"] = email
 
+
+def _coerce_param_value(value):
+    """Map a feature-file param string to a python value (bool / int / str)."""
+    token = str(value).strip()
+    low = token.lower()
+    if low in ("on", "true"):
+        return True
+    if low in ("off", "false"):
+        return False
+    if token.lstrip("-").isdigit():
+        return int(token)
+    return token
+
+
+def _cloud_for_user(pytestconfig, registered_user_resolver, registered_user_password_resolver):
+    """RainMakerCloud client for the scenario's 'registered user 1' (None if uri/creds unavailable)."""
+    from utils.rainmaker_cloud import RainMakerCloud
+
+    deployment = pytestconfig.getoption("--deployment")
+    base_uri = _load_deployment_config(deployment).get(deployment, {}).get("uri")
+    if not base_uri:
+        return None
+    try:
+        email = registered_user_resolver("registered user 1")
+        password = registered_user_password_resolver("registered user 1 password")
+        return RainMakerCloud(base_uri, email, password)
+    except Exception as error:
+        logger.warning("Could not build cloud client: %s", error)
+        return None
+
+
+def _online_node_ids(cloud, chip_type):
+    """Snapshot of cloud node_ids currently online for `chip_type` silicon (empty set if cloud unavailable)."""
+    if cloud is None:
+        return set()
+    try:
+        nodes = cloud.nodes()
+    except Exception as error:
+        logger.warning("Cloud node lookup failed (%s); cannot confirm online state", error)
+        return set()
+    return {n["node_id"] for n in nodes
+            if n.get("online") and str(n.get("platform", "")).lower() == str(chip_type).lower()}
+
+
+def _read_node_id_from_serial(resource_manager, resource, timeout=20):
+    """Read the RainMaker node id via the 'get-node-id' console command WITHOUT resetting the chip (preserves live device/param state); parses 'Node ID: <id>' or the boot 'Node ID ----- <id>'."""
+    import time as _time
+    deadline = _time.time() + timeout
+    while _time.time() < deadline:
+        try:
+            resource_manager.serial_logger.send_command(resource, "get-node-id")
+        except Exception:
+            pass
+        _time.sleep(2)
+        for line in list(resource_manager.serial_logger.get_live_lines(resource) or []):
+            if "Node ID" in line:
+                parts = line.split("Node ID", 1)[1].strip(" -:\t\r\n").split()
+                if parts:
+                    return parts[0]
+    return None
+
+
+def _poll_node_online(cloud, node_id, timeout=60):
+    """Poll the cloud until node_id reports online (a chip we reset reconnects in ~15-30s)."""
+    import time as _time
+    if cloud is None or not node_id:
+        return False
+    deadline = _time.time() + timeout
+    while _time.time() < deadline:
+        try:
+            if any(n.get("node_id") == node_id and n.get("online") for n in cloud.nodes()):
+                return True
+        except Exception:
+            pass
+        _time.sleep(5)
+    return False
+
+
+def _name_e2e_node(cloud, node_id, fw_name, target_name):
+    """Rename the reused node to target_name and seed timezone (best-effort)."""
+    if cloud is None or not node_id:
+        return
+    try:
+        by_id = {n["node_id"]: n for n in cloud.nodes()}
+        if by_id.get(node_id, {}).get("name") != target_name:
+            cloud.set_name(node_id, fw_name, target_name)
+        if not by_id.get(node_id, {}).get("tz"):
+            cloud.set_tz(node_id)
+    except Exception as error:
+        logger.warning("Cloud naming/timezone setup failed (%s); will fall back to in-app rename", error)
+
+
+def _provision_reserved_chip(cloud, helper, hardware_session, resource_manager, request,
+                             provision_config_resolver, target_name, resource, chip_type):
+    """BLE-provision an already-reserved chip (flash led_light, drive the app add-device flow) and name it target_name; the chip stays held."""
+    import json as _json
+    import time as _time
+    from hardware.models import ResourceStatus
+    from hardware.requirements import HardwareRequirement
+    from hardware.qr import QrPayloadExtractor
+
+    logger.warning("No online E2E device; BLE-provisioning reserved chip %s (%s)", resource.mac_address, resource.port)
+    requirement = HardwareRequirement(chip_type=chip_type, product="led_light", prov_mode="ble", chal_resp=None)
+    hardware_session["requirement"] = requirement
+    metadata = resource_manager.firmware.load_metadata(requirement)
+    resource_manager.firmware.validate(requirement, metadata)
+    image = resource_manager.firmware.resolve_image(requirement, metadata)
+    resource_manager.serial_logger.stop(resource)
+    resource_manager.update_status(resource.mac_address, ResourceStatus.FLASHING)
+    resource_manager.flasher.hard_reset(resource)
+    resource_manager.flasher.flash(resource, image)
+    resource.build_metadata = metadata
+    log_path = hardware_session["artifact_dir"].serial_log_path(resource)
+    resource_manager.serial_logger.start(resource, log_path, wait_for_port=True, trigger_reset=True)
+    request.node._chip_serial_log_path = str(log_path)
+    resource_manager.serial_logger.wait_for_bytes(resource, min_bytes=100, timeout=20)
+
+    live_lines = resource_manager.serial_logger.get_live_lines(resource)
+    payload = QrPayloadExtractor.from_log_file(Path(resource.serial_log_path), timeout=60, poll_lines=live_lines)
+    if not payload:
+        pytest.skip(f"No QR provisioning payload from {resource.mac_address} within 60s; cannot BLE-provision the E2E device")
+    try:
+        info = _json.loads(payload)
+    except (ValueError, TypeError):
+        pytest.skip(f"Unparseable QR provisioning payload from {resource.mac_address}: {str(payload)[:120]!r}")
+    ssid = provision_config_resolver("ssid")
+    password = provision_config_resolver("ssid_password")
+
+    helper.home.go_home()
+    helper.add_device.open_from_home()
+    helper.add_device.select_bluetooth_option()
+    helper.scan_ble.select_device(info.get("name"))
+    if helper.pop.check_screen_displayed(timeout=5):
+        helper.pop.enter_pop(info.get("pop", ""))
+    helper.connect_wifi.check_screen_displayed(timeout=5)
+    helper.connect_wifi.open_join_other_network_modal()
+    helper.connect_wifi.enter_join_network_credentials(ssid, password)
+    helper.connect_wifi.connect_join_network()
+    helper.provision.assert_all_steps_successful(timeout=90)
+    reached_home = False
+    for _ in range(10):
+        if helper.home.check_screen_displayed(timeout=2):
+            reached_home = True
+            break
+        try:
+            if helper.name_device.check_screen_displayed(timeout=1, quiet=True):
+                helper.name_device.rename_device(target_name)
+                helper.name_device.tap_continue()
+            elif helper.add_to_room.check_screen_displayed(timeout=1, quiet=True):
+                helper.add_to_room.skip()
+            elif helper.guide.check_screen_displayed(timeout=1, quiet=True):
+                helper.guide.tap_continue()
+            elif helper.provision.check_screen_displayed(timeout=1, quiet=True):
+                helper.provision.tap_continue()
+            else:
+                _time.sleep(1)
+        except Exception as error:
+            e2e_log.info("Post-provision navigation retry (%s): %s", type(error).__name__, error)
+            _time.sleep(1)
+    if not reached_home:
+        raise AssertionError("Provisioned device did not return to the home screen after naming/room setup")
+
+
+@given(parsers.parse('a reserved online "{device_name}" device'))
+def reserve_online_device(request, helper, hardware_session, resource_manager, hardware_config,
+                          pytestconfig, registered_user_resolver, registered_user_password_resolver,
+                          provision_config_resolver, e2e_device_hold, device_name):
+    """Reserve an E2E chip BY TYPE once and reuse the session-held chip across every e2e scenario (never re-provisioned or stolen mid-run)."""
+    from utils.device_serial import DeviceSerial
+    from hardware import BuildMetadata, record_hardware_report
+    from hardware.exceptions import HardwareUnavailableException
+
+    chip_type = str(hardware_config.raw.get("e2e_chip_type", "esp32c3")).lower()
+    fw_name = str(hardware_config.raw.get("e2e_fw_name", "Light"))
+    cloud = _cloud_for_user(pytestconfig, registered_user_resolver, registered_user_password_resolver)
+
+    chosen = e2e_device_hold.get("resource")
+    chosen_node = e2e_device_hold.get("node_id")
+    if chosen is None:
+        online_ids = _online_node_ids(cloud, chip_type)
+        logger.info("E2E reserve-by-type '%s'; online %s node(s): %s", chip_type, chip_type, online_ids or "none")
+        held = []
+        for _ in range(4):
+            try:
+                resource = resource_manager.acquire(chip_type, timeout=8, test_name=hardware_session.get("test_name"))
+            except HardwareUnavailableException:
+                break
+            hardware_session.setdefault("resources", []).append(resource)
+            log_path = hardware_session["artifact_dir"].serial_log_path(resource)
+            # Do NOT reset: a reboot would wipe the online device's live param state and break E2E continuity.
+            resource_manager.serial_logger.start(resource, log_path, wait_for_port=True, trigger_reset=False)
+            node_id = _read_node_id_from_serial(resource_manager, resource, timeout=20)
+            if node_id and node_id in online_ids:
+                chosen, chosen_node = resource, node_id
+                request.node._chip_serial_log_path = str(log_path)
+                break
+            logger.info("Chip %s (node %s) is not the online E2E device; holding as provision candidate",
+                        resource.mac_address, node_id)
+            resource_manager.serial_logger.stop(resource)
+            held.append((resource, node_id))
+
+        if chosen is not None:
+            logger.info("Reusing online E2E chip %s (node %s) on %s", chosen.mac_address, chosen_node, chosen.port)
+        else:
+            assert held, f"No available {chip_type} chip to serve the E2E device"
+            chosen, chosen_node = held.pop(0)
+            _provision_reserved_chip(cloud, helper, hardware_session, resource_manager, request,
+                                     provision_config_resolver, device_name, chosen, chip_type)
+            if not chosen_node:
+                chosen_node = _read_node_id_from_serial(resource_manager, chosen, timeout=15)
+
+        for resource, _ in held:
+            resource_manager.serial_logger.stop(resource)
+            resource_manager.release(resource.mac_address)
+            if resource in hardware_session.get("resources", []):
+                hardware_session["resources"].remove(resource)
+
+        e2e_device_hold["resource"] = chosen
+        e2e_device_hold["node_id"] = chosen_node
+    else:
+        logger.info("Reusing session-held E2E chip %s (node %s) on %s", chosen.mac_address, chosen_node, chosen.port)
+
+    _poll_node_online(cloud, chosen_node, timeout=60)
+    _name_e2e_node(cloud, chosen_node, fw_name, device_name)
+
+    # Per-scenario bindings; the chip is held by e2e_device_hold (session), not released between scenarios.
+    hardware_session["resource"] = chosen
+    hardware_session["e2e_held"] = chosen
+    metadata = BuildMetadata(chip=chip_type, product="RainMaker", firmware_type="Reserved (E2E)")
+    chosen.build_metadata = metadata
+    hardware_session["build_metadata"] = metadata
+    record_hardware_report(request, chosen, metadata)
+    hardware_session["device_serial"] = DeviceSerial(resource_manager, chosen, fw_name)
+    if getattr(chosen, "serial_log_path", None):
+        request.node._chip_serial_log_path = str(chosen.serial_log_path)
+
+    # Baseline snapshot: the reused/provisioned node's cloud param values before the action.
+    sel_node = {}
+    if cloud is not None and chosen_node:
+        try:
+            sel_node = next((n for n in cloud.nodes() if n.get("node_id") == chosen_node), {})
+        except Exception:
+            sel_node = {}
+    hardware_session["baseline_params"] = (sel_node.get("params") or {}).get(fw_name, {})
+    hardware_session["node_id"] = chosen_node or sel_node.get("node_id")
+    hardware_session["fw_name"] = fw_name
+    aliases = [a for a in (sel_node.get("name"),) if a and a != device_name]
+    helper.home.ensure_device_name(device_name, aliases)
+
+
+@when(parsers.parse('the device is prepared with "{param}" set to "{value}"'))
+def prepare_device_param(hardware_session, param, value):
+    """Seed a baseline param on the device over serial so a later change is observable."""
+    ds = hardware_session["device_serial"]
+    ds.set_param(param, _coerce_param_value(value))
+
+
+@when(parsers.parse('the device reports "{param}" as "{value}"'))
+def device_reports_param(hardware_session, param, value):
+    """Change a param on the device itself (reported to cloud) — automation triggers and fw-initiated sync checks."""
+    ds = hardware_session["device_serial"]
+    hardware_session["serial_since"] = ds.marker()
+    hardware_session.get("set_values", {}).pop(param, None)
+    ds.set_param(param, _coerce_param_value(value))
+
+
+@when(parsers.parse('the cloud sets "{param}" to "{value}" for "{device}"'))
+def cloud_sets_param(pytestconfig, registered_user_resolver, registered_user_password_resolver,
+                     hardware_session, param, value, device):
+    """Write a param from the cloud side so delivery to the device (serial) and app can be verified."""
+    cloud = _cloud_for_user(pytestconfig, registered_user_resolver, registered_user_password_resolver)
+    assert cloud is not None, "Cloud client unavailable; cannot set cloud params"
+    node_id = hardware_session.get("node_id")
+    fw_name = hardware_session.get("fw_name", "Light")
+    assert node_id, "No reserved node id recorded; was the device reserved?"
+    hardware_session["serial_since"] = hardware_session["device_serial"].marker()
+    hardware_session.get("set_values", {}).pop(param, None)
+    cloud.set_param(node_id, {fw_name: {param: _coerce_param_value(value)}})
+    e2e_log.info("Cloud set %s=%s for %s (%s)", param, value, device, node_id)
+
+
+def _serial_since(hardware_session):
+    """Serial-log index scoping verification to output after the trigger (set once per scenario)."""
+    since = hardware_session.get("serial_since")
+    if since is None:
+        since = hardware_session["device_serial"].marker()
+        hardware_session["serial_since"] = since
+    return since
+
+
+def _expected_value(hardware_session, param, value):
+    """The value to verify: the slider's actually-applied readback if captured, else the nominal."""
+    return hardware_session.get("set_values", {}).get(param, _coerce_param_value(value))
+
+
+_TOL = 3  # slider read/apply tolerance
+
+
+@then(parsers.re(r'the device log should show (?P<pairs>.+?)(?: within "(?P<seconds>\d+)" seconds)?$'))
+def verify_device_log_params(hardware_session, pairs, seconds):
+    """Verify one or more params from the device's serial log in a single pass."""
+    checks = re.findall(r'"([^"]+)"\s+set to\s+"([^"]+)"', pairs)
+    assert checks, f"No param checks parsed from: {pairs!r}"
+    ds = hardware_session["device_serial"]
+    since = _serial_since(hardware_session)
+    timeout = int(seconds) if seconds else 30
+    failures = []
+    for param, value in [c for c in checks if c[1] != "unchanged"]:
+        expected = _expected_value(hardware_session, param, value)
+        if not ds.wait_for_param(param, expected, timeout=timeout, since=since):
+            failures.append(f"{param} set to {value}")
+    for param, _ in [c for c in checks if c[1] == "unchanged"]:
+        if ds.param_written_since(param, since=since):
+            failures.append(f"{param} was written (expected unchanged)")
+    assert not failures, "Device serial did not confirm: " + "; ".join(failures)
+
+
+@then(parsers.re(r'the cloud should show (?P<pairs>.+?) for "(?P<device>[^"]+)"$'))
+def verify_cloud_params(pytestconfig, registered_user_resolver, registered_user_password_resolver,
+                        hardware_session, pairs, device):
+    """Verify the cloud's reported param state for the reserved node matches expectations (poll generously)."""
+    import time as _time
+    checks = re.findall(r'"([^"]+)"\s+as\s+"([^"]+)"', pairs)
+    assert checks, f"No param checks parsed from: {pairs!r}"
+    cloud = _cloud_for_user(pytestconfig, registered_user_resolver, registered_user_password_resolver)
+    assert cloud is not None, "Cloud client unavailable; cannot verify cloud params"
+    node_id = hardware_session.get("node_id")
+    fw_name = hardware_session.get("fw_name", "Light")
+    assert node_id, "No reserved node id recorded; was the device reserved?"
+    mismatches, reported = [], {}
+    deadline = _time.time() + 90
+    while _time.time() < deadline:
+        node = next((n for n in cloud.nodes() if n.get("node_id") == node_id), {})
+        reported = (node.get("params") or {}).get(fw_name, {})
+        mismatches = []
+        for param, value in checks:
+            expected = _expected_value(hardware_session, param, value)
+            actual = reported.get(param)
+            if isinstance(expected, bool):
+                ok = bool(actual) == expected
+            else:
+                ok = actual is not None and abs(int(actual) - int(expected)) <= _TOL
+            if not ok:
+                mismatches.append(f"{param}={actual} (expected {value})")
+        if not mismatches:
+            e2e_log.info("Cloud validation OK for %s: %s", device, checks)
+            return
+        _time.sleep(3)
+    assert not mismatches, f"Cloud mismatches for {device}: " + "; ".join(mismatches)
+
+
+@then(parsers.re(r'the app should show (?P<pairs>.+?) for "(?P<device>[^"]+)"'))
+def verify_app_reflects_params(helper, hardware_session, pairs, device):
+    """Confirm the app's device screen reflects the params — one screen open, reading"""
+    import time as _time
+    checks = re.findall(r'"([^"]+)"\s+as\s+"([^"]+)"', pairs)
+    assert checks, f"No param checks parsed from: {pairs!r}"
+    baseline = hardware_session.get("baseline_params") or {}
+    helper.home.go_home()
+    helper.home.open_device(device)
+    helper.control.dismiss_join_wifi_dialog()
+    mismatches = []
+    for param, value in checks:
+        if value == "unchanged":
+            expected = baseline.get(param)
+            if expected is None:
+                e2e_log.info("App validation: no baseline for '%s'; skipping unchanged check", param)
+                continue
+        else:
+            expected = _expected_value(hardware_session, param, value)
+        is_bool = isinstance(expected, bool)
+        want = ("on" if expected else "off") if is_bool else int(expected)
+        actual = None
+        deadline = _time.time() + 20
+        while _time.time() < deadline:
+            helper.control.dismiss_join_wifi_dialog()
+            actual = helper.home.read_power_state(timeout=2) if is_bool else helper.home.read_slider_value(param, timeout=2)
+            if (is_bool and actual == want) or (not is_bool and actual is not None and abs(actual - want) <= _TOL):
+                break
+            _time.sleep(1)
+        ok = (actual == want) if is_bool else (actual is not None and abs(actual - want) <= _TOL)
+        e2e_log.info("App validation: %s=%s (want %s) -> %s", param, actual, want, "OK" if ok else "MISMATCH")
+        if not ok:
+            mismatches.append(f"{param}={actual} (expected {value})")
+    assert not mismatches, f"App mismatches for {device}: " + "; ".join(mismatches)
+    helper.home.go_home()
 
 @given("the app is launched")
 def app_launched(helper):
@@ -242,12 +677,13 @@ def app_launched(helper):
 @given("user should land on the home screen")
 @then("user should land on the home screen")
 def land_on_home_page(helper):
-    assert helper.home.check_screen_displayed(), "Should be on home screen"
+    assert helper.home.wait_home_after_login(), "Should be on home screen"
 
 @given("user should be on login screen")
-def given_login_screen(helper):
-    """Ensure app is on login screen. If user is logged in (e.g. iOS persists session), logout first."""
-    helper.login.ensure_login_screen()
+def given_login_screen(request, helper):
+    """Ensure app is on login screen; force logout for user-management flows, else defer it."""
+    is_user_mgmt = "01_user_management" in str(getattr(request.node, "nodeid", ""))
+    helper.login.ensure_login_screen(force_logout=is_user_mgmt)
 
 
 @then("user should be on login screen")
@@ -306,6 +742,7 @@ def pytest_addoption(parser):
     parser.addoption("--enable-recording", action="store_true", default=True, help="Enable automatic screen recording")
     parser.addoption("--install-app", action="store", default="y", help="Install app before tests (y/n)")
     parser.addoption("--deployment", action="store", default="production", help="Deployment name in config/deployment.yaml")
+    parser.addoption("--fresh-users", action="store_true", default=False, help="Clear persisted registered users at session start so the run creates fresh ones")
 
 
 def pytest_configure(config):
@@ -372,6 +809,17 @@ def pytest_configure(config):
                 logger.info(f"Starting Appium server for {model}")
                 grid_manager.start_server(model)
     
+    # Fresh-users: clear persisted registered users so the resolver creates new ones.
+    if config.getoption("--fresh-users", False):
+        try:
+            from utils.registered_user_resolver import mutate_registered_users
+            deployment = config.getoption("--deployment")
+            for model in [m.strip() for m in (models or "").split(",") if m.strip()]:
+                mutate_registered_users(deployment, model, lambda existing: [])
+                logger.info("Cleared registered users for %s/%s (--fresh-users)", deployment, model)
+        except Exception as e:
+            logger.warning("Failed to clear registered users (--fresh-users): %s", e)
+
     # Register cleanup
     atexit.register(cleanup_servers)
     
@@ -382,6 +830,10 @@ def pytest_configure(config):
     config.addinivalue_line("markers", "regression: mark test as regression test")
     config.addinivalue_line("markers", "user_management: mark test as user management test")
     config.addinivalue_line("markers", "provisioning: mark tests ESP provisioning test")
+    config.addinivalue_line("markers", "scene: mark test as scene E2E test")
+    config.addinivalue_line("markers", "schedule: mark test as schedule E2E test")
+    config.addinivalue_line("markers", "automation: mark test as automation E2E test")
+    config.addinivalue_line("markers", "device_control: mark test as device param control E2E test")
 
 def pytest_unconfigure(config):
     """Cleanup when pytest exits"""
@@ -407,13 +859,13 @@ def appium_grid():
 def _uninstall_android_app(adb_path: str, udid: Optional[str], package: str, model: str) -> bool:
     """
     Uninstall Android app using ADB.
-    
+
     Args:
         adb_path: Path to ADB executable
         udid: Device UDID (optional)
         package: App package name
         model: Device model name for logging
-        
+
     Returns:
         True if app was uninstalled or not found, False on error
     """
@@ -451,14 +903,14 @@ def _uninstall_android_app(adb_path: str, udid: Optional[str], package: str, mod
 def _install_android_app(adb_path: str, udid: Optional[str], apk_path: str, package: str, model: str) -> bool:
     """
     Install Android app using ADB.
-    
+
     Args:
         adb_path: Path to ADB executable
         udid: Device UDID (optional)
         apk_path: Path to APK file
         package: App package name
         model: Device model name for logging
-        
+
     Returns:
         True if installation successful, False otherwise
     """
@@ -784,7 +1236,10 @@ def per_test_debug_dir(request):
     debug_root = request.config.getoption("--debug-dir", "debug")
     artifact_dir = TestArtifactDir.for_test(request.node, debug_root=debug_root)
     request.node._test_artifact_dir = artifact_dir
+    from utils.rainmaker_cloud import set_cloud_log_path
+    set_cloud_log_path(artifact_dir.root / "cloud_api.jsonl")
     yield artifact_dir
+    set_cloud_log_path(None)
 
 
 @pytest.fixture(scope="function")
@@ -816,6 +1271,10 @@ def auto_screen_recording(request, driver, per_test_debug_dir):
     if recording_id:
         setattr(request.node, '_recording_id', recording_id)
         logger.info(f"Started automatic recording for {request.node.name} on {model}")
+
+    syslog_handle = debug_helper.start_ios_syslog(driver, per_test_debug_dir)
+    if syslog_handle:
+        setattr(request.node, '_ios_syslog', syslog_handle)
 
     yield  # Test runs here
 
@@ -902,6 +1361,18 @@ def _attach_serial_log_to_report(item, report) -> None:
     report.debug_artifacts["chip_serial_log_name"] = serial_path.name
 
 
+def _attach_cloud_api_log_to_report(item, report) -> None:
+    """The report plugin resolves the hosted URL from debug_artifacts["cloud_api_log"]."""
+    artifact_dir = getattr(item, "_test_artifact_dir", None)
+    if artifact_dir is None:
+        return
+    path = artifact_dir.root / "cloud_api.jsonl"
+    if not path.exists() or path.stat().st_size == 0:
+        return
+    report.debug_artifacts = getattr(report, "debug_artifacts", {})
+    report.debug_artifacts["cloud_api_log"] = str(path)
+
+
 # Test execution hooks with automatic debug capabilities
 @pytest.hookimpl(hookwrapper=True)
 def pytest_runtest_makereport(item, call):
@@ -934,6 +1405,10 @@ def pytest_runtest_makereport(item, call):
                 report.video_path = video_path
                 report.debug_artifacts = getattr(report, "debug_artifacts", {})
                 report.debug_artifacts["video"] = video_path
+        syslog_handle = getattr(item, '_ios_syslog', None)
+        if syslog_handle:
+            item._ios_syslog = None
+            debug_helper.stop_ios_syslog(syslog_handle)
 
     # Handle test failure - automatically capture debug artifacts
     if call.when == "call" and report.outcome == "failed" and debug_helper:
@@ -978,8 +1453,10 @@ def pytest_runtest_makereport(item, call):
                     # Store sections for later extraction
                     report._test_sections = report.sections
 
-    if call.when == "call":
+    if call.when == "call" or (call.when == "setup" and report.outcome == "failed"):
         _attach_serial_log_to_report(item, report)
+        _attach_cloud_api_log_to_report(item, report)
+    if call.when == "call":
         hardware_session = item.funcargs.get("hardware_session") if hasattr(item, "funcargs") else None
         if hardware_session and hardware_session.get("build_metadata"):
             from hardware.manager import get_hardware_report_for_session

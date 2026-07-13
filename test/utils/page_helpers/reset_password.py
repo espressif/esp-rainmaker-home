@@ -19,6 +19,6 @@ class ResetPassword(BasePage):
     def get_title_text(self):
         """Get the title text of reset password screen"""
         try:
-            return self.get_text("title_text")
+            return self.get_text("title_text", timeout=5)
         except Exception:
             return None

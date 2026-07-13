@@ -91,7 +91,18 @@ class EmailSender:
                 
                 # Wait for page to load and charts to render
                 time.sleep(3)  # Give Chart.js time to render
-                
+
+                try:
+                    total_height = driver.execute_script(
+                        "return Math.max(document.body.scrollHeight, "
+                        "document.documentElement.scrollHeight);"
+                    )
+                    if total_height and int(total_height) > 2000:
+                        driver.set_window_size(1400, min(int(total_height) + 200, 16000))
+                        time.sleep(1)
+                except Exception as e:
+                    logger.debug("Could not resize window for full-page screenshot: %s", e)
+
                 # Take screenshot of full page
                 driver.save_screenshot(screenshot_path)
                 logger.info(f"Report screenshot saved: {screenshot_path}")
@@ -106,7 +117,7 @@ class EmailSender:
     
     def _create_email_body(self, report_path: str = None, report_url: str = None,
                           summary_stats: Dict = None, screenshot_path: str = None,
-                          app_version: str = "") -> str:
+                          app_version: str = "", git_info: Dict = None) -> str:
         """Create HTML email body"""
         # App version banner — prominent, right below the heading
         app_version_html = ""
@@ -115,6 +126,21 @@ class EmailSender:
             <div style="text-align: center; margin: 6px 0 14px 0;">
                 <span style="display: inline-block; background: #667eea; color: #ffd54f; font-size: 18px; font-weight: 800; letter-spacing: 0.5px; padding: 6px 18px; border-radius: 14px;">App Version: v{app_version}</span>
             </div>
+            '''
+
+        git_info = git_info or {}
+        git_html = ""
+        if git_info.get("branch") or git_info.get("mr_iid"):
+            parts = []
+            if git_info.get("branch"):
+                parts.append(f"Branch: <strong>{git_info['branch']}</strong>")
+            if git_info.get("mr_iid"):
+                mr = f"MR !{git_info['mr_iid']}"
+                if git_info.get("mr_title"):
+                    mr += f" &middot; {git_info['mr_title']}"
+                parts.append(mr)
+            git_html = f'''
+            <div style="text-align: center; margin: 0 0 14px 0; color: #555; font-size: 14px;">{" &nbsp;|&nbsp; ".join(parts)}</div>
             '''
 
         # Report link at the top (before summary) - always show
@@ -208,6 +234,7 @@ class EmailSender:
             <div class="container">
                 <div class="content">
                     {app_version_html}
+                    {git_html}
                     {report_link_html}
                     {screenshot_html}
                     {stats_html}
@@ -222,7 +249,8 @@ class EmailSender:
     def send_report_email(self, recipients: List[str], subject: str,
                          report_path: str = None, report_url: str = None,
                          summary_stats: Dict = None, attach_report: bool = True,
-                         attach_screenshot: bool = True, app_version: str = "") -> bool:
+                         attach_screenshot: bool = True, app_version: str = "",
+                         git_info: Dict = None) -> bool:
         """
         Send test report email via SMTP
         
@@ -252,7 +280,7 @@ class EmailSender:
                 screenshot_path = self._capture_report_screenshot(report_path)
             
             # Create email body (with screenshot embedded)
-            html_body = self._create_email_body(report_path, report_url, summary_stats, screenshot_path, app_version)
+            html_body = self._create_email_body(report_path, report_url, summary_stats, screenshot_path, app_version, git_info)
             
             # Create message
             msg = MIMEMultipart('related')  # Use 'related' to support embedded images

@@ -9,6 +9,7 @@ import { useTranslation } from "react-i18next";
 import { Plus } from "lucide-react-native";
 import { tokens } from "@shared/theme/tokens";
 import { globalStyles } from "@shared/theme/globalStyleSheet";
+import { testProps } from "@shared/utils/testProps";
 import { ScheduleActionsHeaderProps } from "@src/types/global";
 
 /**
@@ -23,7 +24,11 @@ const ScheduleActionsHeader = ({ onAddPress }: ScheduleActionsHeaderProps) => {
         {t("schedule.createSchedule.scheduleActions")}
       </Text>
       <View style={styles.buttonContainer}>
-        <Pressable onPress={onAddPress} style={styles.addButton}>
+        <Pressable
+          {...testProps("button_add_schedule_action")}
+          onPress={onAddPress}
+          style={styles.addButton}
+        >
           <Plus size={20} color={tokens.colors.text_secondary} />
         </Pressable>
       </View>

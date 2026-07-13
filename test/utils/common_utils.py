@@ -87,6 +87,74 @@ def read_app_version() -> str:
     return ""
 
 
+def read_device_app_version(platform: str, identifier: str, udid: Optional[str] = None, adb_path: str = "adb") -> str:
+    """Return the app version actually installed on the connected device.
+
+    Android: `adb shell dumpsys package <package>` -> versionName.
+    iOS: `ideviceinstaller -l` -> the version quoted next to <bundle_id>.
+    Returns "" on any failure so callers can fall back to the repo version.
+    """
+    import subprocess
+
+    platform = (platform or "").lower()
+    if not identifier:
+        return ""
+    try:
+        if platform == "android":
+            cmd = [adb_path] + (["-s", udid] if udid else []) + ["shell", "dumpsys", "package", identifier]
+            out = subprocess.run(cmd, capture_output=True, text=True, timeout=15).stdout
+            match = re.search(r"versionName=(\S+)", out)
+            return match.group(1).strip() if match else ""
+        if platform == "ios":
+            # devicectl (ships with Xcode) lists "<name> <bundle_id> <version> <build>".
+            if udid:
+                out = subprocess.run(
+                    ["xcrun", "devicectl", "device", "info", "apps", "--device", udid],
+                    capture_output=True, text=True, timeout=30,
+                ).stdout
+                for line in out.splitlines():
+                    if identifier in line:
+                        after = line.split(identifier, 1)[1]
+                        match = re.search(r"(\d+\.\d+(?:\.\d+)?)", after)
+                        if match:
+                            return match.group(1)
+            out = subprocess.run(
+                ["ideviceinstaller"] + (["-u", udid] if udid else []) + ["-l"],
+                capture_output=True, text=True, timeout=25,
+            ).stdout
+            for line in out.splitlines():
+                if identifier in line:
+                    quoted = re.search(r'"([0-9][^"]*)"', line)
+                    if quoted:
+                        return quoted.group(1).strip()
+            return ""
+    except Exception as error:
+        logger.warning("Could not read device app version (%s): %s", platform, error)
+    return ""
+
+
+def git_ref_info() -> dict:
+    """Branch/MR info from CI env vars, falling back to local git branch."""
+    import subprocess
+    from pathlib import Path
+    branch = os.environ.get("CI_COMMIT_REF_NAME") or os.environ.get("GIT_BRANCH") or ""
+    info = {
+        "branch": branch,
+        "mr_iid": os.environ.get("CI_MERGE_REQUEST_IID", "").strip(),
+        "mr_title": os.environ.get("CI_MERGE_REQUEST_TITLE", "").strip(),
+    }
+    if not info["branch"]:
+        try:
+            repo_root = Path(__file__).resolve().parents[2]
+            info["branch"] = subprocess.run(
+                ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+                cwd=str(repo_root), capture_output=True, text=True, timeout=5,
+            ).stdout.strip()
+        except Exception:
+            pass
+    return info
+
+
 # --- Artifact resolution ---
 
 def resolve_single_artifact(

@@ -8,6 +8,7 @@ import { View, FlatList } from "react-native";
 import type { ESPCDFDeviceParam } from "@store";
 import { ContentWrapper } from "@shared/components";
 import { globalStyles } from "@shared/theme/globalStyleSheet";
+import { testProps } from "@shared/utils/testProps";
 import ParameterValueDisplay from "./ParameterValueDisplay";
 
 interface DeviceParamsListProps {
@@ -54,8 +55,9 @@ export default function DeviceParamsList({
   };
 
   return (
-    <View style={globalStyles.flex1}>
+    <View {...testProps("view_device_params_list")} style={globalStyles.flex1}>
       <FlatList
+        {...testProps("list_device_params")}
         data={params}
         style={globalStyles.flex1}
         renderItem={({ item }) => (

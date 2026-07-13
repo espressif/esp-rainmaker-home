@@ -105,7 +105,11 @@ export default function ParameterConfigModal({
         {...testProps("button_close_device_params")}
         onPress={handleBackdropPress}
       >
-        <Pressable style={styles.content} onPress={handleContentPress}>
+        <Pressable
+          {...testProps("content_device_params_selection")}
+          style={styles.content}
+          onPress={handleContentPress}
+        >
           <BottomSheetHandle />
 
           {/* Parameter UI */}

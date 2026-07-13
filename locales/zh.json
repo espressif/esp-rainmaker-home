@@ -642,6 +642,7 @@
         "devicesFound": "找到 {{count}} 个设备",
         "devicesFoundPlural": "找到 {{count}} 个设备",
         "noDevicesFound": "未找到设备",
+        "noDevicesMessage": "未找到 SoftAP 设备。请确保您的设备已开机，并正在广播其 Wi-Fi 网络（PROV_XXXXXX）。",
         "scanAgain": "重新扫描？",
         "deviceConnected": "设备连接成功",
         "requestingPermission": "正在检查位置权限...",

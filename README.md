@@ -451,7 +451,7 @@ The app supports **QR-code-based runtime configuration**, which lets you point t
 - Scan a configuration QR code from the `(config)/ConfigScan` screen.
 - The scanned payload is validated and persisted via `RuntimeConfigManager` (`config/runtime.config.ts`).
 - On the next app launch, persisted values override the compile-time defaults for `baseUrl`, `version`, `authUrl`, and OAuth credentials.
-- To configure a new backend, tap the app logo **10 times** on the login screen. This opens the config screen where the existing configuration can be reviewed or updated by scanning a new QR code.
+- To configure app for a new private deployment, tap the app logo **5 times** on the login screen. This opens the config screen where the existing configuration can be reviewed or updated by scanning a new QR code.
 
 ## 🔌 Native Modules & Adapters
 

@@ -1,0 +1,79 @@
+{
+  "title": {
+    "by": "id",
+    "value": "title",
+    "text": "Automations"
+  },
+  "automation_tab": {
+    "by": "id",
+    "value": "button_tab_automations"
+  },
+  "add_automation_button": {
+    "by": "id",
+    "value": "button_add_automation_header"
+  },
+  "automation_card": {
+    "by": "xpath",
+    "value": "//android.view.ViewGroup[starts-with(@resource-id, 'card_automation_')] | //XCUIElementTypeOther[starts-with(@name, 'card_automation_')]"
+  },
+  "automation_delete_option": {
+    "by": "id",
+    "value": "automation_menu_option_delete"
+  },
+  "automation_menu_backdrop": {
+    "by": "id",
+    "value": "backdrop_automation_menu"
+  },
+  "name_input": {
+    "by": "id",
+    "value": "input_name"
+  },
+  "name_confirm_button": {
+    "by": "id",
+    "value": "button_confirm_dialog"
+  },
+  "add_event_button": {
+    "by": "id",
+    "value": "button_add_event"
+  },
+  "event_device_item": {
+    "by": "id",
+    "value": "button_event_device_selection_item"
+  },
+  "event_param_save_button": {
+    "by": "id",
+    "value": "button_save_event_device_param_selection"
+  },
+  "event_done_button": {
+    "by": "id",
+    "value": "button_create_event"
+  },
+  "add_action_button": {
+    "by": "id",
+    "value": "button_add_action"
+  },
+  "action_device_item": {
+    "by": "id",
+    "value": "button_action_device_action_item"
+  },
+  "action_param_save_button": {
+    "by": "id",
+    "value": "button_save_action_device_params_selection"
+  },
+  "action_done_button": {
+    "by": "id",
+    "value": "button_create_event"
+  },
+  "action_device_done_button": {
+    "by": "id",
+    "value": "button_done_action_selection"
+  },
+  "create_automation_button": {
+    "by": "id",
+    "value": "button_create_automation"
+  },
+  "enable_disable_automation": {
+    "by": "id",
+    "value": "switch_automation_enabled"
+  }
+}

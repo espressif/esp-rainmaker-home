@@ -9,7 +9,7 @@ Feature: On network provisioning
 
   @sanity
   Scenario: Successfully add ESP32C3 device discovered on network
-    When the device is flashed with "led_light", "ble" transport
+    When the device is flashed with "led_light", "ble" transport with challenge-response
     And the device is online on the local network
     And user login with "registered user 1" and "registered user 1 password"
     Then user should land on the home screen

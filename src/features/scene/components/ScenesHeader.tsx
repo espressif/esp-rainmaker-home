@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { TouchableOpacity, Text } from "react-native";
+import { TouchableOpacity, Text, View } from "react-native";
 import { useTranslation } from "react-i18next";
 import { RefreshCw } from "lucide-react-native";
 import { Header } from "@shared/components";
@@ -36,23 +36,24 @@ export const ScenesHeader = ({
       label={t("scene.scenes.title")}
       showBack={false}
       rightSlot={
-        hasScenes ? (
-          <TouchableOpacity
-            {...testProps("button_edit_scenes")}
-            onPress={onEditToggle}
-          >
-            <Text {...testProps("text_edit_scenes")} style={styles.editButton}>
-              {isEditing ? t("scene.scenes.done") : t("scene.scenes.edit")}
-            </Text>
-          </TouchableOpacity>
-        ) : (
+        <View style={styles.rightSlot}>
+          {hasScenes ? (
+            <TouchableOpacity
+              {...testProps("button_edit_scenes")}
+              onPress={onEditToggle}
+            >
+              <Text {...testProps("text_edit_scenes")} style={styles.editButton}>
+                {isEditing ? t("scene.scenes.done") : t("scene.scenes.edit")}
+              </Text>
+            </TouchableOpacity>
+          ) : null}
           <TouchableOpacity
             {...testProps("button_refresh_scenes")}
             onPress={onRefresh}
           >
             <RefreshCw size={20} color={tokens.colors.primary} />
           </TouchableOpacity>
-        )
+        </View>
       }
     />
   );

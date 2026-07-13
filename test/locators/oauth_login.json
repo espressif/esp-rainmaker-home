@@ -1,0 +1,30 @@
+{
+  "chrome_close_button": {
+    "by": "id",
+    "value": "com.android.chrome:id/close_button"
+  },
+  "chrome_url_bar": {
+    "by": "id",
+    "value": "com.android.chrome:id/url_bar"
+  },
+  "web_edit_text": {
+    "by": "android_uiautomator",
+    "value": "new UiSelector().className(\"android.widget.EditText\")"
+  },
+  "ios_consent_continue": {
+    "by": "ios_predicate",
+    "value": "label == \"Continue\" AND type == \"XCUIElementTypeButton\""
+  },
+  "ios_consent_cancel": {
+    "by": "ios_predicate",
+    "value": "label == \"Cancel\" AND type == \"XCUIElementTypeButton\""
+  },
+  "ios_web_text_field": {
+    "by": "ios_class_chain",
+    "value": "**/XCUIElementTypeWebView/**/XCUIElementTypeTextField"
+  },
+  "ios_web_secure_field": {
+    "by": "ios_class_chain",
+    "value": "**/XCUIElementTypeWebView/**/XCUIElementTypeSecureTextField"
+  }
+}
