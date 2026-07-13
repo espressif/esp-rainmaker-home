@@ -17,6 +17,7 @@ import { mapNodeUpdateDataToEvent } from "@shared/utils/subscriptionHelper";
 import { registerSubscribeRetryForUser } from "@shared/utils/matterSubscribeRetry";
 import { registerAttributeReadForUser } from "@shared/utils/matterAttributeRead";
 import { isMatterNodeLocallyReachable } from "@shared/utils/matterLocalReachability";
+import { setMatterNodeUpdateHandler } from "../matterControllerTransportHandler";
 import {
     ESPCDFGroup,
     ESPCDFMatterPrecommissionInfo,
@@ -312,6 +313,7 @@ export function transformToESPCDFUser(esprmUser: ESPRMUser | null): ESPCDFUser {
             // initial subscribe-all so a transport added mid-flight can
             // still be retried even if the caller never re-invokes this op.
             lastSubscribeUpdateHandler = handleNodeUpdate;
+            setMatterNodeUpdateHandler(handleNodeUpdate);
             lastSubscribeSdkNodes = sdkNodes;
 
             // Re-assert that the Matter channel is registered AND in

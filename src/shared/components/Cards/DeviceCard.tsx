@@ -31,8 +31,8 @@ import { useCDF } from "@shared/hooks/useCDF";
 import {
   extractDeviceType,
   getDeviceImage,
-  isDeviceConnected,
-  isDeviceLocallyAvailable,
+  getDeviceReachability,
+  resolveDeviceCardRoutePath,
 } from "@shared/utils/device";
 import { parseBridgedChildParentNodeId } from "@shared/utils/matterLocalReachability";
 import { resolveDeviceCardPowerParam } from "@shared/utils/deviceParams";
@@ -43,6 +43,9 @@ import { coerceParamValueToBoolean } from "@shared/utils/paramUtils";
 
 // Constants
 import {
+  DEVICE_REACHABILITY_SOURCE_BRIDGE,
+  DEVICE_REACHABILITY_SOURCE_CONTROLLER,
+  DEVICE_REACHABILITY_SOURCE_LOCAL,
   POWER_PARAM_UNSUPPORTED_DEVICE_TYPES,
   ESPRM_NAME_PARAM_TYPE,
   ERROR_CODES,
@@ -55,7 +58,7 @@ import { globalStyles } from "@shared/theme/globalStyleSheet";
 import { tokens } from "@shared/theme/tokens";
 
 // Icons
-import { Lock } from "lucide-react-native";
+import { RadioTower, Share2, Wifi, WifiOff } from "lucide-react-native";
 
 import { testProps, stateTestProps } from "@shared/utils/testProps";
 import {
@@ -116,16 +119,18 @@ const DeviceCard: React.FC<DeviceCardProps> = ({
     ? store.subscriptionStore.registeredTransports[bridgeParentNodeId]
     : undefined;
 
-  const deviceConnected = isDeviceConnected(
-    storeNode,
-    registeredTransports,
-    bridgeParentTransports,
-  );
-  const availableLocally = isDeviceLocallyAvailable(
-    storeNode,
-    registeredTransports,
-    bridgeParentTransports,
-  );
+  const { reachable: deviceConnected, source: reachabilitySource } =
+    getDeviceReachability(
+      storeNode,
+      registeredTransports,
+      bridgeParentTransports,
+    );
+  const availableLocally =
+    reachabilitySource === DEVICE_REACHABILITY_SOURCE_LOCAL;
+  const availableViaBridge =
+    reachabilitySource === DEVICE_REACHABILITY_SOURCE_BRIDGE;
+  const availableViaController =
+    reachabilitySource === DEVICE_REACHABILITY_SOURCE_CONTROLLER;
 
   let cardWidth = 180;
   if (width <= 500) {
@@ -147,12 +152,13 @@ const DeviceCard: React.FC<DeviceCardProps> = ({
   }, [storeDevice]);
 
   /**
-   * Handle device control
-   * Navigates to the control screen for the device
+   * Opens Control or Settings for this device based on devices.config routing.
+   * System-only types (e.g. Matter Controller) skip Control and land on Settings.
    */
   const handleDeviceControl = () => {
+    const deviceType = extractDeviceType(device.type);
     router.push({
-      pathname: "/(control)/Control",
+      pathname: resolveDeviceCardRoutePath(deviceType),
       params: {
         id: node.id,
         device: device.name,
@@ -274,7 +280,6 @@ const DeviceCard: React.FC<DeviceCardProps> = ({
       style={[
         styles.card,
         {
-          padding: 10,
           width: cardWidth,
           opacity: !deviceConnected ? 0.7 : 1,
           backgroundColor: !deviceConnected
@@ -284,6 +289,59 @@ const DeviceCard: React.FC<DeviceCardProps> = ({
       ]}
       onPress={handleDeviceControl}
     >
+      {!deviceConnected && (
+        <View
+          {...testProps("text_offline_device_card")}
+          style={styles.reachabilityBadge}
+        >
+          <WifiOff size={11} color={tokens.colors.lightGray} />
+          <Text style={styles.reachabilityLabel}>
+            {t("layout.shared.offline")}
+          </Text>
+        </View>
+      )}
+      {deviceConnected && availableLocally && (
+        <View
+          {...testProps("icon_local_control_device_card")}
+          style={styles.reachabilityBadge}
+        >
+          <Wifi size={11} color={tokens.colors.lightGray} />
+          <Text
+            {...testProps("text_local_control_device_card")}
+            style={styles.reachabilityLabel}
+          >
+            {t("device.reachability.wlan")}
+          </Text>
+        </View>
+      )}
+      {deviceConnected && availableViaBridge && (
+        <View
+          {...testProps("icon_bridge_device_card")}
+          style={styles.reachabilityBadge}
+        >
+          <Share2 size={11} color={tokens.colors.lightGray} />
+          <Text
+            {...testProps("text_bridge_device_card")}
+            style={styles.reachabilityLabel}
+          >
+            {t("device.reachability.bridge")}
+          </Text>
+        </View>
+      )}
+      {deviceConnected && availableViaController && (
+        <View
+          {...testProps("icon_controller_device_card")}
+          style={styles.reachabilityBadge}
+        >
+          <RadioTower size={11} color={tokens.colors.lightGray} />
+          <Text
+            {...testProps("text_controller_device_card")}
+            style={styles.reachabilityLabel}
+          >
+            {t("device.reachability.controller")}
+          </Text>
+        </View>
+      )}
       <View style={styles.flexWrap}>
         <Image
           {...testProps("icon_device_card")}
@@ -323,39 +381,13 @@ const DeviceCard: React.FC<DeviceCardProps> = ({
       </View>
 
       <View style={{ width: "100%", paddingLeft: 5 }}>
-        <View>
-          <Text
-            {...testProps("text_device_name")}
-            style={styles.name}
-            numberOfLines={1}
-          >
-            {resolveCardTitle()}
-          </Text>
-        </View>
-        <View style={styles.statusContainer}>
-          {deviceConnected ? (
-            availableLocally ? (
-              <View style={styles.wlanIndicator}>
-                <Lock size={12} color={tokens.colors.primary} />
-                <Text
-                  {...testProps("text_local_control_device_card")}
-                  style={styles.wlanText}
-                >
-                  {t("device.availableOnWLAN")}
-                </Text>
-              </View>
-            ) : (
-              <Text style={styles.status}></Text>
-            )
-          ) : (
-            <Text
-              {...testProps("text_offline_device_card")}
-              style={styles.status}
-            >
-              {t("layout.shared.offline")}
-            </Text>
-          )}
-        </View>
+        <Text
+          {...testProps("text_device_name")}
+          style={styles.name}
+          numberOfLines={1}
+        >
+          {resolveCardTitle()}
+        </Text>
       </View>
     </TouchableOpacity>
   );
@@ -366,7 +398,9 @@ const styles = StyleSheet.create({
   card: {
     position: "relative",
     marginTop: 12,
-    padding: tokens.spacing._15,
+    paddingTop: tokens.spacing._10,
+    paddingHorizontal: tokens.spacing._10,
+    paddingBottom: tokens.spacing._20,
     backgroundColor: tokens.colors.white,
     textAlign: "center",
     alignItems: "center",
@@ -393,24 +427,20 @@ const styles = StyleSheet.create({
     fontFamily: tokens.fonts.medium,
     width: "100%",
   },
-  status: {
-    fontSize: tokens.fontSize.xs,
-    color: tokens.colors.gray,
-    fontFamily: tokens.fonts.regular,
-  },
-  statusContainer: {
-    flexDirection: "column",
-    alignItems: "flex-start",
-  },
-  wlanIndicator: {
+  reachabilityBadge: {
+    position: "absolute",
+    bottom: 8,
+    right: 8,
+    zIndex: 1,
     flexDirection: "row",
     alignItems: "center",
+    gap: 3,
+    opacity: 0.65,
   },
-  wlanText: {
-    fontSize: tokens.fontSize.xs,
-    color: tokens.colors.primary,
+  reachabilityLabel: {
+    fontSize: tokens.fontSize.xxs,
+    color: tokens.colors.lightGray,
     fontFamily: tokens.fonts.regular,
-    marginLeft: 4,
   },
   compactCard: {
     width: 85,

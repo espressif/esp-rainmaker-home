@@ -5,6 +5,27 @@
  */
 
 import { getRegionConfig } from "@config/region.config";
+import {
+  MATTER_DEVICE_TYPE_DOOR_LOCK,
+  MATTER_DEVICE_TYPE_HUMIDITY_SENSOR,
+  MATTER_DEVICE_TYPE_ILLUMINANCE_SENSOR,
+  MATTER_DEVICE_TYPE_OCCUPANCY_SENSOR,
+  MATTER_DEVICE_TYPE_RVC,
+  MATTER_DEVICE_TYPE_TEMPERATURE_SENSOR,
+} from "@config/matter.constants";
+
+/**
+ * `extractDeviceType` values with no meaningful power param for card UI: DeviceCard uses node
+ * connectivity (`isConnected`) for `getDeviceImage` instead of `ESPRM_POWER_PARAM_TYPE`.
+ */
+export {
+  MATTER_DEVICE_TYPE_DOOR_LOCK,
+  MATTER_DEVICE_TYPE_HUMIDITY_SENSOR,
+  MATTER_DEVICE_TYPE_ILLUMINANCE_SENSOR,
+  MATTER_DEVICE_TYPE_OCCUPANCY_SENSOR,
+  MATTER_DEVICE_TYPE_RVC,
+  MATTER_DEVICE_TYPE_TEMPERATURE_SENSOR,
+};
 
 // CONSTANTS
 export const TOAST_ANIMATION_DURATION = "200ms";
@@ -138,28 +159,6 @@ export const ESPRM_CHANNEL_PARAM_TYPE = "esp.param.channel";
 export const ESPRM_LOCAL_CONTROL_TYPE_PARAM_TYPE = "esp.param.local_control_type";
 export const ESPRM_LOCAL_CONTROL_POP_PARAM_TYPE = "esp.param.local_control_pop";
 
-import {
-  MATTER_DEVICE_TYPE_DOOR_LOCK,
-  MATTER_DEVICE_TYPE_HUMIDITY_SENSOR,
-  MATTER_DEVICE_TYPE_ILLUMINANCE_SENSOR,
-  MATTER_DEVICE_TYPE_OCCUPANCY_SENSOR,
-  MATTER_DEVICE_TYPE_RVC,
-  MATTER_DEVICE_TYPE_TEMPERATURE_SENSOR,
-} from "@config/matter.constants";
-
-/**
- * `extractDeviceType` values with no meaningful power param for card UI: DeviceCard uses node
- * connectivity (`isConnected`) for `getDeviceImage` instead of `ESPRM_POWER_PARAM_TYPE`.
- */
-export {
-  MATTER_DEVICE_TYPE_DOOR_LOCK,
-  MATTER_DEVICE_TYPE_HUMIDITY_SENSOR,
-  MATTER_DEVICE_TYPE_ILLUMINANCE_SENSOR,
-  MATTER_DEVICE_TYPE_OCCUPANCY_SENSOR,
-  MATTER_DEVICE_TYPE_RVC,
-  MATTER_DEVICE_TYPE_TEMPERATURE_SENSOR,
-};
-
 /** Param `name` values shown as live readings on the home device card. */
 export const DEVICE_CARD_SENSOR_PARAM_NAME_BATTERY = "Battery";
 export const DEVICE_CARD_SENSOR_PARAM_NAME_HUMIDITY = "Humidity";
@@ -215,6 +214,25 @@ export const ESPRM_SCHEDULES_SERVICE = "esp.service.schedule";
 export const ESPRM_LOCAL_CONTROL_SERVICE = "esp.service.local_control";
 export const ESPRM_AGENT_AUTH_SERVICE = "esp.service.agent-auth";
 export const ESPRM_RMAKER_USER_AUTH_SERVICE = "esp.service.rmaker-user-auth";
+export const ESPRM_MATTER_CONTROLLER_SERVICE = "esp.service.matter-controller";
+export const ESPRM_MATTER_CONTROLLER_SETUP_SERVICE =
+  "esp.service.matter-controller-setup";
+
+// MATTER CONTROLLER — cloud device-list update (MTCtlCMD param)
+export const MATTER_CTL_CMD_PARAM_NAME = "MTCtlCMD";
+export const MATTER_CTL_CMD_UPDATE_DEVICE_LIST = 2;
+
+// AUTH STORAGE KEYS
+export const ESPRM_REFRESH_TOKEN_STORAGE_KEY = "com.esprmbase.refreshToken";
+
+// RMAKER USER AUTH — update outcomes (UI + provisioning callers)
+export const RMAKER_USER_AUTH_UPDATE_RESULT_UPDATED = "updated";
+export const RMAKER_USER_AUTH_UPDATE_RESULT_SKIPPED_NO_SERVICE =
+  "skipped_no_service";
+export const RMAKER_USER_AUTH_UPDATE_RESULT_SKIPPED_NO_TOKEN_PARAM =
+  "skipped_no_token_param";
+export const RMAKER_USER_AUTH_UPDATE_RESULT_SKIPPED_NO_REFRESH_TOKEN =
+  "skipped_no_refresh_token";
 
 export const MDNS_SERVICE_TYPE_ESP_LOCAL_CTRL = "_esp_local_ctrl._tcp.";
 /** Service announced by unprovisioned RainMaker firmware running the on-network challenge-response flow. */
@@ -230,6 +248,14 @@ export const MATTER_LOCAL_DISCOVERY_EVENT =
   "com.espressif.event.matterLocalDiscovery";
 export const MATTER_LOCAL_DISCOVERY_LOST_EVENT =
   "com.espressif.event.matterLocalDiscoveryLost";
+export const MATTER_CONTROLLER_FOUND_EVENT =
+  "com.espressif.event.matterControllerFound";
+export const MATTER_CONTROLLER_LOST_EVENT =
+  "com.espressif.event.matterControllerLost";
+export const RMAKER_EVENT_NODE_CONNECTED = "rmaker.event.node_connected";
+export const RMAKER_EVENT_NODE_DISCONNECTED = "rmaker.event.node_disconnected";
+export const RMAKER_EVENT_NODE_PARAMS_CHANGED =
+  "rmaker.event.node_params_changed";
 
 /** React Native config key for target Matter node ids passed to CHIP discovery. */
 export const MATTER_DISCOVERY_CONFIG_KEY_NODE_IDS = "matterNodeIds";
@@ -295,6 +321,10 @@ export const QA_DEVICE_PANEL_NO_PARAMS_EMPTY_STATE =
 // LIGHT CONTROL SCREEN
 export const COLOR_TAB = "Colour";
 export const WHITE_TAB = "White";
+
+// CONTROL NAVIGATION ROUTES
+export const CONTROL_SCREEN_ROUTE = "/(control)/Control";
+export const DEVICE_SETTINGS_SCREEN_ROUTE = "/(control)/Settings";
 
 // ERROR CODES
 export const ERROR_CODES = {
@@ -410,6 +440,14 @@ export const MATTER_METADATA_ENDPOINTS_KEY = "endpoints";
  * reference the wire constant.
  */
 export const MATTER_LOCAL_TRANSPORT_KEY = "matter_local";
+export const MATTER_CONTROLLER_TRANSPORT_KEY = "matter_controller";
+
+// DEVICE REACHABILITY
+export const DEVICE_REACHABILITY_SOURCE_CLOUD = "cloud";
+export const DEVICE_REACHABILITY_SOURCE_LOCAL = "local";
+export const DEVICE_REACHABILITY_SOURCE_BRIDGE = "bridge";
+export const DEVICE_REACHABILITY_SOURCE_CONTROLLER = "controller";
+export const DEVICE_REACHABILITY_SOURCE_NONE = "none";
 
 /** Generic invoke token for one-shot command param controls. */
 export const PARAM_CONTROL_INVOKE_VALUE = "invoke";
