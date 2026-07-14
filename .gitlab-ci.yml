@@ -8,16 +8,22 @@ stages:
 variables:
   LANG: en_US.UTF-8
   LC_ALL: en_US.UTF-8
-  NVM_DIR: "$HOME/.nvm"
+
+# MR-only pipelines;
+# auto_cancel: a re-push cancels the superseded pipeline's interruptible (build/quality) jobs.
+workflow:
+  auto_cancel:
+    on_new_commit: interruptible
+  rules:
+    - if: $CI_MERGE_REQUEST_ID
 
 
 before_script:
   - export PATH="/usr/local/opt/python@3.10/libexec/bin:/usr/local/bin:/opt/homebrew/bin:$PATH"
   - export PATH="$ANDROID_HOME/platform-tools:$ANDROID_HOME/emulator:$ANDROID_HOME/tools:$ANDROID_HOME/tools/bin:$PATH"
 
-  - if ! command -v node >/dev/null 2>&1; then echo "Node not in PATH — loading NVM"; export NVM_DIR="$HOME/.nvm"; [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"; export PATH="$HOME/.nvm/versions/node/v22.21.1/bin:$PATH"; fi
-
-  - if ! command -v node >/dev/null 2>&1; then echo "Node not available — aborting"; exit 1; fi
+  - 'NVM_BIN="$(ls -d "$HOME"/.nvm/versions/node/v22*/bin 2>/dev/null | sort -V | tail -1)"; export PATH="${NVM_BIN:+${NVM_BIN}:}$PATH"'
+  - 'command -v node >/dev/null 2>&1 || { echo "Node 22 not found; run nvm install 22"; exit 1; }'
 
   - node -v
   - npm -v
@@ -36,12 +42,15 @@ before_script:
 
 code_quality:
   stage: quality
-  tags: [mac-mobile-runner]
-  rules:
-    - if: $CI_MERGE_REQUEST_ID
+  tags: [mac-mini-runner]
+  interruptible: true
+  before_script: []
   script:
-    - npm ci
-    - npm run check
+    - |
+      set -eo pipefail
+      node -v && npm -v
+      npm ci
+      npm run check
   allow_failure: false
 
 ###############################################################
@@ -51,10 +60,9 @@ code_quality:
 android_apk:
   stage: build
   tags: [mac-mobile-runner]
+  interruptible: true
   needs:
     - job: code_quality
-  rules:
-    - if: $CI_MERGE_REQUEST_ID
   script:
     - npm ci
 
@@ -99,37 +107,16 @@ android_apk:
 ios_ipa:
   stage: build
   tags: [mac-mini-runner]
+  interruptible: true
   before_script: []
   needs:
     - job: code_quality
-  rules:
-    - if: $CI_MERGE_REQUEST_ID
   script:
     - |
       set -eo pipefail
-
-      RBENV_SHIMS="${HOME}/.rbenv/shims"
-      NVM_BIN=""
-      set +e
-      NVM_BIN="$(ls -d "${HOME}"/.nvm/versions/node/v22*/bin 2>/dev/null | sort -V | tail -1)"
-      set -e
-      export PATH="${RBENV_SHIMS}${NVM_BIN:+:${NVM_BIN}}:/opt/homebrew/opt/node@22/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
-      if [ -x "${RBENV_SHIMS}/ruby" ] && command -v rbenv >/dev/null 2>&1; then
-        eval "$(rbenv init - bash)"
-      fi
-      if ! command -v node >/dev/null 2>&1 && [ -s "${HOME}/.nvm/nvm.sh" ]; then
-        . "${HOME}/.nvm/nvm.sh"
-        nvm use 22 >/dev/null 2>&1 || true
-      fi
-      echo "CI PATH=${PATH}"
-      command -v node >/dev/null || { echo "ERROR: node not found; install: nvm install 22"; exit 1; }
-      command -v npm >/dev/null  || { echo "ERROR: npm not found"; exit 1; }
-      command -v ruby >/dev/null || { echo "ERROR: ruby not found; install: rbenv install 3.3.6 && rbenv global 3.3.6"; exit 1; }
-      node -v | grep -q '^v22' || { echo "ERROR: need Node 22, got $(node -v)"; exit 1; }
-      ruby -v | grep -q '^ruby 3' || { echo "ERROR: need Ruby 3.x, got $(ruby -v)"; exit 1; }
       node -v && npm -v && xcodebuild -version && ruby -v
 
-      
+
       IOS_RUNNER_ENV="${HOME}/.esp-rainmaker-ios-fastlane.env"
       if [ -f "${IOS_RUNNER_ENV}" ]; then
         set -a
@@ -161,7 +148,7 @@ ios_ipa:
 
       echo "export NODE_BINARY=$(command -v node)" > ios/.xcode.env.local
 
-      npm ci --prefer-offline --no-audit
+      npm ci
 
       if [ -f .env.example ]; then cp .env.example .env; echo "Created .env from .env.example"; else echo ".env.example not found, skipping"; fi
 
@@ -183,11 +170,11 @@ ios_ipa:
 android_test:
   stage: test
   tags: [mac-mini-runner]
+  resource_group: android_moto
+  timeout: 2h
   needs:
     - job: android_apk
       artifacts: true
-  rules:
-    - if: $CI_MERGE_REQUEST_ID
   script:
     - set -euo pipefail
     - APK_PATH="${CI_PROJECT_DIR}/artifacts/android/app-release.apk"
@@ -204,6 +191,7 @@ android_test:
     - . .venv/bin/activate
     - python -m pip install -U pip
     - pip install -r requirements.txt
+
     # Export non-secret test defaults (CI/CD variables and .env still take precedence), then generate config
     - . scripts/setup_test_env.sh
     - python scripts/ci_setup_config.py
@@ -241,6 +229,12 @@ android_test:
         *) exit "${TEST_EXIT}" ;;
       esac
 
+  artifacts:
+    when: always
+    paths:
+      - test/reports/
+    expire_in: 1 day
+
 ###############################################################
 # IOS — Run tests on iPhone Air attached to mac-mini-runner
 ###############################################################
@@ -248,19 +242,15 @@ android_test:
 ios_test:
   stage: test
   tags: [mac-mini-runner]
+  resource_group: iphone_air
+  timeout: 2h
   before_script: []
   needs:
     - job: ios_ipa
       artifacts: true
-  rules:
-    - if: $CI_MERGE_REQUEST_ID
   script:
     - set -euo pipefail
 
-    # Node/Appium come from nvm on the mac-mini (same convention as ios_ipa)
-    - export NVM_DIR="$HOME/.nvm"
-    - '[ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"'
-    - export PATH="/opt/homebrew/bin:$PATH"
     - command -v appium >/dev/null || { echo "appium not found (npm i -g appium)"; exit 1; }
 
     - IPA_PATH=$(ls "${CI_PROJECT_DIR}"/artifacts/ios/*.ipa 2>/dev/null | head -1)
@@ -276,6 +266,7 @@ ios_test:
     - . .venv/bin/activate
     - python -m pip install -U pip
     - pip install -r requirements.txt
+
     # Export non-secret test defaults (CI/CD variables and .env still take precedence), then generate config
     - . scripts/setup_test_env.sh
     - python scripts/ci_setup_config.py
@@ -308,3 +299,9 @@ ios_test:
         "ALL PASSED"|"MOSTLY PASSED") exit 0 ;;
         *) exit "${TEST_EXIT}" ;;
       esac
+
+  artifacts:
+    when: always
+    paths:
+      - test/reports/
+    expire_in: 1 day

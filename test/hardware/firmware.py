@@ -31,6 +31,7 @@ class BuildMetadata:
     product: Optional[str] = None
     chip: Optional[str] = None
     prov_mode: Optional[str] = None
+    chal_resp: bool = False
     flash_size: Optional[str] = None
     firmware_type: Optional[str] = None
     esp_idf_commit: Optional[str] = None
@@ -132,6 +133,8 @@ class FirmwareService:
                 and metadata.prov_mode != requirement.prov_mode
             ):
                 continue
+            if requirement.chal_resp is not None and metadata.chal_resp != requirement.chal_resp:
+                continue
             return metadata
         available = ", ".join(
             f"{meta.bundle_root.name} (chip={meta.chip}, product={meta.product}, prov_mode={meta.prov_mode})"
@@ -181,11 +184,17 @@ class FirmwareService:
             elif key == "ota project version string":
                 metadata.ota_version_string = value
 
+        metadata.chal_resp = any(
+            ("CHAL_RESP" in upper or "CHALLENGE_RESPONSE" in upper) and upper.rstrip().endswith("=Y")
+            for upper in (line.upper() for line in lines)
+        )
+
         logger.info(
-            "Loaded build metadata chip=%s product=%s prov_mode=%s from %s",
+            "Loaded build metadata chip=%s product=%s prov_mode=%s chal_resp=%s from %s",
             metadata.chip,
             metadata.product,
             metadata.prov_mode,
+            metadata.chal_resp,
             path,
         )
         return metadata
@@ -215,6 +224,11 @@ class FirmwareService:
                 errors.append(
                     f"prov_mode mismatch: required {req_mode}, bundle has {metadata.prov_mode}"
                 )
+
+        if requirement.chal_resp is not None and metadata.chal_resp != requirement.chal_resp:
+            errors.append(
+                f"chal_resp mismatch: required {requirement.chal_resp}, bundle has {metadata.chal_resp}"
+            )
 
         if errors:
             raise FirmwareMismatchError("; ".join(errors))

@@ -83,10 +83,10 @@ class HardwareConfig:
 
     @property
     def lock_db_path(self) -> Path:
-        """SQLite database path for cross-process resource locking."""
+        """SQLite resource-lock db path; $ESP_LOCK_DB_PATH (one shared absolute path across parallel executors) wins over the yaml/default."""
         default = Path("hardware/.resource_locks.db")
-        configured = self.hardware.get("lock_db_path", str(default))
-        path = Path(configured)
+        configured = os.environ.get("ESP_LOCK_DB_PATH") or self.hardware.get("lock_db_path", str(default))
+        path = Path(configured).expanduser()
         if not path.is_absolute():
             path = _TEST_ROOT / path
         return path

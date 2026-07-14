@@ -87,7 +87,7 @@ export function useConfirmationCode() {
         verificationCode: code,
       });
       if (res) {
-        toast.showSuccess(t("auth.signup.registrationSuccess"));
+        toast.showSuccess(t("auth.signup.registrationSuccess"), undefined, { duration: 4000 });
         setPendingPostSignupLogin({
           username: email as string,
           password: password as string,

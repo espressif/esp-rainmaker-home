@@ -21,7 +21,7 @@ import { AutomationCardProps } from "@src/types/global";
 import { observer } from "mobx-react-lite";
 
 // Utils
-import { testProps } from "@shared/utils/testProps";
+import { testProps, stateTestProps } from "@shared/utils/testProps";
 
 /**
  * AutomationCard
@@ -190,14 +190,18 @@ const AutomationCard: React.FC<AutomationCardProps & { qaId?: string }> = ({
 
   return (
     <Pressable
-      {...(qaId ? testProps(qaId) : {})}
+      {...(qaId ? testProps(`${qaId}_${automationName}`) : {})}
       style={[styles.card, toggleLoading && styles.cardLoading]}
       onPress={onPress}
       disabled={toggleLoading}
     >
       {/* Header with name and toggle */}
       <View style={styles.header}>
-        <Text style={styles.automationName} numberOfLines={1}>
+        <Text
+          {...testProps(`text_automation_name`)}
+          style={styles.automationName}
+          numberOfLines={1}
+        >
           {automationName}
         </Text>
         <Switch
@@ -211,6 +215,7 @@ const AutomationCard: React.FC<AutomationCardProps & { qaId?: string }> = ({
           onCheckedChange={(value) => handleToggle(value)}
         >
           <Switch.Thumb
+            {...stateTestProps("automation_card", isEnabled, "enabled", "disabled")}
             animation="quicker"
             style={
               isEnabled

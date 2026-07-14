@@ -54,6 +54,7 @@ export const ScheduleParamConfigModal = ({
         onPress={onClose}
       >
         <Pressable
+          {...testProps("content_schedule_device_params_selection")}
           style={globalStyles.scheduleParamModalContent}
           onPress={(e) => e.stopPropagation()}
         >

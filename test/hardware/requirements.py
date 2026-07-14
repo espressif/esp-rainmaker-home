@@ -29,6 +29,7 @@ class HardwareRequirement:
     prov_mode: Optional[str] = None
     security: Optional[str] = None
     firmware_type: str = "Evaluation"
+    chal_resp: Optional[bool] = None
 
     def __post_init__(self):
         """Automatically normalizes fields right after the object is created."""

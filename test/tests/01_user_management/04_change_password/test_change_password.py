@@ -77,13 +77,13 @@ def should_see_toast(helper, title, message):
         poll=0.25,
         require_message=bool(message)
     )
-    if "success" in toast_title.lower():
+    if "success" in (toast_title or "").lower():
         email = getattr(helper.login, "last_login_email", None)
         new_password = getattr(helper.change_password, "last_new_password", None)
         if email and new_password:
             update_registered_user_password(email, new_password)
     if title:
-        assert toast_title == title, f"Expected toast title: {title} but found: {toast_title}"
+        assert (toast_title or "") == title, f"Expected toast title: {title} but found: {toast_title}"
     if message:
         assert toast_message == message, f"Expected toast message: {message} but found: {toast_message}"
     

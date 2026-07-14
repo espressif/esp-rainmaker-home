@@ -20,6 +20,7 @@ import {
 import { paramControlStyles as styles } from "./lib/styles";
 import { useDragBubble } from "./lib/useDragBubble";
 import { tokens } from "@shared/theme/tokens";
+import { testProps } from "@shared/utils/testProps";
 
 /**
  * BrightnessSlider
@@ -135,7 +136,7 @@ const BrightnessSlider = observer(
             </View>
           )}
 
-          <View style={styles.sliderContainer}>
+          <View style={styles.sliderContainer} {...testProps(`slider_${label}`)}>
             <Slider
               value={sliderValue}
               min={min}
@@ -179,6 +180,7 @@ const BrightnessSlider = observer(
         {!compact && (
           <View style={styles.thumbValueContainer}>
             <Text
+              {...testProps(`slider_${label}_value`)}
               style={[
                 styles.thumbValueText,
                 {

@@ -74,6 +74,7 @@ class _SerialCapture(threading.Thread):
         self._serial: Optional[serial.Serial] = None
         self._ready = threading.Event()
         self.lines: list[str] = []
+        self._pending = ""
         self.open_error: Optional[str] = None
         self.bytes_received = 0
 
@@ -88,7 +89,10 @@ class _SerialCapture(threading.Thread):
         self.bytes_received += len(text.encode("utf-8", errors="replace"))
         log_handle.write(text)
         log_handle.flush()
-        for line in text.splitlines():
+        # UART bursts can end mid-line; publish only complete lines so payload parsers never see fragments.
+        buffered = self._pending + text
+        complete, _, self._pending = buffered.rpartition("\n")
+        for line in complete.splitlines():
             clean = line.rstrip()
             if clean:
                 self.lines.append(clean)
@@ -122,6 +126,9 @@ class _SerialCapture(threading.Thread):
                             self._append_text(decode_serial_bytes(raw), log_handle)
                         else:
                             time.sleep(READ_POLL_SECONDS)
+                if self._pending.strip():
+                    self.lines.append(self._pending.strip())
+                    self._pending = ""
                 break
             except serial.SerialException as error:
                 self.open_error = str(error)

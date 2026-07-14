@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import re
 import subprocess
 from dataclasses import dataclass
@@ -58,13 +59,18 @@ class EspDiscoveryService:
         self.probe_timeout = probe_timeout
 
     def list_candidate_ports(self) -> List[str]:
-        """Return serial ports that commonly host ESP USB-UART bridges."""
+        """Return serial ports that commonly host ESP USB-UART bridges. Ports matching a
+        token in $ESP_EXCLUDE_PORTS are skipped. """
+        excluded = [t.strip().lower() for t in (os.getenv("ESP_EXCLUDE_PORTS") or "").split(",") if t.strip()]
         candidates = []
         for port in list_ports.comports():
             description = (port.description or "").lower()
             manufacturer = (port.manufacturer or "").lower()
             device = port.device
             device_lower = (device or "").lower()
+            if excluded and any(token in device_lower for token in excluded):
+                logger.info("Skipping excluded port %s ($ESP_EXCLUDE_PORTS)", device)
+                continue
             if (
                 "bluetooth" in device_lower
                 or "bluetooth" in description
@@ -128,11 +134,15 @@ class EspDiscoveryService:
             description=getattr(port_info, "description", None),
         )
 
-    def discover(self, ports: Optional[List[str]] = None) -> List[DiscoveredDevice]:
-        """Discover all connected ESP devices."""
+    def discover(self, ports: Optional[List[str]] = None, exclude_ports: Optional[List[str]] = None) -> List[DiscoveredDevice]:
+        """Discover all connected ESP devices, skipping ports currently held by another run (probing resets the board)."""
         discovered: List[DiscoveredDevice] = []
         seen_macs = set()
+        skip = {str(p) for p in (exclude_ports or [])}
         for port in ports or self.list_candidate_ports():
+            if port in skip:
+                logger.info("Skipping in-use (reserved) port %s during discovery", port)
+                continue
             device = self.probe_port(port)
             if device and device.mac_address not in seen_macs:
                 discovered.append(device)

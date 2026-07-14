@@ -53,19 +53,23 @@ class AppiumGridManager:
             return {}
     
     def _find_available_port(self, start_port: int) -> int:
-        """Find available port using socket binding"""
+        """Find a truly free port. A connect() probe detects listeners."""
         port = start_port
         max_attempts = 100
-        
+
         for attempt in range(max_attempts):
-            try:
-                with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-                    s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-                    s.bind(('localhost', port))
-                    return port
-            except OSError:
-                port += 1
-        
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
+                probe.settimeout(0.5)
+                in_use = probe.connect_ex(('127.0.0.1', port)) == 0
+            if not in_use:
+                try:
+                    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                        s.bind(('', port))
+                        return port
+                except OSError:
+                    pass
+            port += 1
+
         raise RuntimeError(f"No available ports found after {max_attempts} attempts starting from {start_port}")
     
     def _get_platform_from_model(self, model: str) -> str:
@@ -235,11 +239,18 @@ class AppiumGridManager:
             
             # Wait for server to start
             for i in range(30):
+                if process.poll() is not None:
+                    logger.error(
+                        f"Appium server process for {model} exited (rc={process.returncode}) "
+                        f"before becoming ready — see {log_file}"
+                    )
+                    self.servers.pop(server_id, None)
+                    return False
                 if self._is_server_running(server_port):
                     logger.info(f"Appium server started for {model} on port {server_port}")
                     return True
                 time.sleep(1)
-            
+
             logger.error(f"Failed to start Appium server for {model}")
             return False
             

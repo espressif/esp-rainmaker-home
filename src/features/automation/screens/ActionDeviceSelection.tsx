@@ -10,7 +10,6 @@ import { useRouter, useLocalSearchParams } from "expo-router";
 import { useTranslation } from "react-i18next";
 import { observer } from "mobx-react-lite";
 import { globalStyles } from "@shared/theme/globalStyleSheet";
-import { testProps } from "@shared/utils/testProps";
 import {
   getConditionLabel,
   getValueDisplay,
@@ -122,7 +121,7 @@ export const ActionDeviceSelectionScreen = observer(() => {
         {devices.length > 0 && (
           <View style={globalStyles.sceneFooter}>
             <ActionButton
-              {...testProps("button_done_action_selection")}
+              qaId="button_done_action_selection"
               onPress={() => router.dismissTo("/(automation)/CreateAutomation")}
               variant="secondary"
             >

@@ -5,7 +5,7 @@
  */
 
 import { useCallback, useMemo, useRef, useEffect } from "react";
-import { RefreshControl, ScrollView } from "react-native";
+import { Pressable, RefreshControl, ScrollView } from "react-native";
 import { tokens } from "@shared/theme/tokens";
 import { globalStyles } from "@shared/theme/globalStyleSheet";
 import { useRouter } from "expo-router";
@@ -170,12 +170,12 @@ export const AutomationsScreen = observer(() => {
         showBack={false}
         rightSlot={
           showFullAutomationsUi && hasDevices ? (
-            <Plus
+            <Pressable
               {...testProps("button_add_automation_header")}
-              size={24}
-              color={tokens.colors.primary}
               onPress={handleAddAutomation}
-            />
+            >
+              <Plus size={24} color={tokens.colors.primary} />
+            </Pressable>
           ) : undefined
         }
       />

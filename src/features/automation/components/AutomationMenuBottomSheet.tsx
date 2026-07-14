@@ -23,6 +23,8 @@ import { globalStyles } from "@shared/theme/globalStyleSheet";
 // Icons
 import { X } from "lucide-react-native";
 
+import { testProps } from "@shared/utils/testProps";
+
 // Types
 import {
   AutomationMenuBottomSheetProps,
@@ -61,6 +63,7 @@ const AutomationMenuBottomSheet: React.FC<AutomationMenuBottomSheetProps> = ({
 
   const renderOption = (option: AutomationMenuOption) => (
     <TouchableOpacity
+      {...testProps(`automation_menu_option_${option.id}`)}
       key={option.id}
       style={[styles.option]}
       onPress={() => {
@@ -85,6 +88,7 @@ const AutomationMenuBottomSheet: React.FC<AutomationMenuBottomSheetProps> = ({
         </View>
 
         <Text
+          {...testProps(`text_automation_menu_option_${option.id}`)}
           style={[
             styles.optionLabel,
             option.destructive && styles.destructiveText,
@@ -108,8 +112,16 @@ const AutomationMenuBottomSheet: React.FC<AutomationMenuBottomSheetProps> = ({
       animationType="slide"
       onRequestClose={onClose}
     >
-      <Pressable style={styles.backdrop} onPress={handleBackdropPress}>
-        <Pressable style={styles.content} onPress={handleContentPress}>
+      <Pressable
+        {...testProps("backdrop_automation_menu")}
+        style={styles.backdrop}
+        onPress={handleBackdropPress}
+      >
+        <Pressable
+          {...testProps("content_automation_menu")}
+          style={styles.content}
+          onPress={handleContentPress}
+        >
           {/* Handle */}
           <View style={styles.handle} />
 

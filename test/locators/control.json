@@ -1,0 +1,24 @@
+{
+  "screen": {
+    "by": "id",
+    "value": "view_light"
+  },
+  "white_tab": {
+    "by": "id",
+    "value": "button_light_white",
+    "text": "White"
+  },
+  "colour_tab": {
+    "by": "id",
+    "value": "button_light_colour",
+    "text": "Colour"
+  },
+  "power_button": {
+    "by": "id",
+    "value": "button_power_control"
+  },
+  "back_button": {
+    "by": "id",
+    "value": "button_back"
+  }
+}

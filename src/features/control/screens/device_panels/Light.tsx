@@ -235,7 +235,7 @@ const Light: React.FC<ControlPanelProps> = ({ node, device }) => {
     <TouchableOpacity
       key={tab}
       style={[styles.tab, activeTab === tab && styles.activeTab]}
-      {...testProps("button_light")}
+      {...testProps(`button_light_${tab.toLowerCase()}`)}
       onPress={() => handleTabChange(tab)}
     >
       <Text style={[styles.tabText, activeTab === tab && styles.activeTabText]}>

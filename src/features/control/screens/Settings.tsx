@@ -455,7 +455,11 @@ const Settings = observer(() => {
         excludeTop={true}
         qaId="screen_wrapper_settings"
       >
-        <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false}>
+        <ScrollView
+          {...testProps("scroll_settings")}
+          style={{ flex: 1 }}
+          showsVerticalScrollIndicator={false}
+        >
           {/* Device Name Section */}
           {validSection.includes("name") && (
             <DeviceName

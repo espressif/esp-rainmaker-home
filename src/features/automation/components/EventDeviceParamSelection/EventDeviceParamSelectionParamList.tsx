@@ -26,8 +26,9 @@ export const EventDeviceParamSelectionParamList: React.FC<
   EventDeviceParamSelectionParamListProps
 > = ({ params, activeEventParam, getParamDisplayValue, onParamPress }) => {
   return (
-    <View style={{ flex: 1 }}>
+    <View {...testProps("view_event_params_list")} style={{ flex: 1 }}>
       <FlatList
+        {...testProps("list_event_params")}
         data={params}
         style={{ flex: 1 }}
         renderItem={({ item }: { item: ESPCDFDeviceParam }) => (

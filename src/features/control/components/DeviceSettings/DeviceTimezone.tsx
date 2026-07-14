@@ -27,7 +27,7 @@ import { globalStyles } from "@shared/theme/globalStyleSheet";
 import { ESPCDFNode } from "@store";
 
 // Utils
-import { TIMEZONE_LIST, getNodeTimezoneConfig } from "@shared/utils/timezone";
+import { TIMEZONE_LIST, canonicalizeIana, getNodeTimezoneConfig } from "@shared/utils/timezone";
 
 // Hooks
 import { useToast } from "@shared/hooks/useToast";
@@ -75,10 +75,10 @@ const DeviceTimezone: React.FC<DeviceTimezoneProps> = ({ node, disabled }) => {
     [hasWritePermission, disabled],
   );
 
-  // Initialize current timezone from param value
+  // Initialize current timezone from param value (canonicalized)
   useEffect(() => {
     if (timezoneParam?.value) {
-      setCurrentTimezone(timezoneParam.value as string);
+      setCurrentTimezone(canonicalizeIana(timezoneParam.value as string));
     }
   }, [timezoneParam?.value]);
 
@@ -114,7 +114,7 @@ const DeviceTimezone: React.FC<DeviceTimezoneProps> = ({ node, disabled }) => {
     if (!isEditable || !timeService || !timezoneParam) return;
 
     // Optimization: Skip API call if the selected timezone is already the current one
-    if (timezone === currentTimezone) {
+    if (timezone === (timezoneParam.value as string)) {
       handleModalClose();
       return;
     }

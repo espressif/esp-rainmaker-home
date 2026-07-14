@@ -17,7 +17,11 @@ firmware_repository:
 
 hardware:
   lock_db_path: hardware/.resource_locks.db
-  lock_stale_seconds: 30
+  lock_stale_seconds: 300
   acquire_timeout_seconds: 30
   esptool_path: "python -m esptool"
+
+# E2E suites reserve a chip of e2e_chip_type, bind it to its cloud node, reuse if online else BLE-provision, and name it e2e_fw_name.
+e2e_chip_type: esp32c3
+e2e_fw_name: Light
 

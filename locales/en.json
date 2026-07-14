@@ -642,6 +642,7 @@
         "devicesFound": "{{count}} Device Found",
         "devicesFoundPlural": "{{count}} Devices Found",
         "noDevicesFound": "No Devices Found",
+        "noDevicesMessage": "No SoftAP devices found. Make sure your device is powered on and broadcasting its Wi-Fi network (PROV_XXXXXX).",
         "scanAgain": "Scan Again?",
         "deviceConnected": "Device connected successfully",
         "requestingPermission": "Checking location permission...",

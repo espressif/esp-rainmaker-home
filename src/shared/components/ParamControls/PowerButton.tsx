@@ -74,6 +74,7 @@ const PowerButton = observer(
         >
           {/* Inner button surface */}
           <View
+            {...testProps(`power_state_${isOn ? "on" : "off"}`)}
             style={[
               styles.powerButtonInner,
               {

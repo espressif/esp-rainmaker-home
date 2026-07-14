@@ -30,6 +30,6 @@
   },
   "rescan_button": {
     "by": "id",
-    "value": "button_rescan_on_network"
+    "value": "button_rescan"
   }
 }

@@ -95,7 +95,8 @@ export FIRMWARE_ROOT="${FIRMWARE_ROOT:-firmwares}"
 
 # --- Summary ------------------------------------------------------------------
 _missing=""
-for v in MAILOSAUR_API_KEY MAILOSAUR_SERVER_ID MAILOSAUR_DOMAIN PROVISION_WIFI_PASSWORD XCODE_ORG_ID; do
+for v in MAILOSAUR_API_KEY MAILOSAUR_SERVER_ID MAILOSAUR_DOMAIN PROVISION_WIFI_PASSWORD XCODE_ORG_ID \
+         GOOGLE_OAUTH_EMAIL GOOGLE_OAUTH_PASSWORD GOOGLE_OAUTH_TOTP_SECRET APPLE_OAUTH_EMAIL APPLE_OAUTH_PASSWORD; do
   eval "val=\${$v:-}"
   [ -z "$val" ] && _missing="$_missing $v"
 done

@@ -25,7 +25,7 @@ export const ActionDeviceParamSelectionParamList: React.FC<
   ActionDeviceParamSelectionParamListProps
 > = ({ params, getParamDisplayValue, onParamPress }) => {
   return (
-    <View style={{ flex: 1 }}>
+    <View {...testProps("view_action_params_list")} style={{ flex: 1 }}>
       <FlatList
         {...testProps("list_action_params")}
         data={params}

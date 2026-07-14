@@ -26,7 +26,11 @@
   },
   "rescan_button": {
     "by": "id",
-    "value": "button_rescan_scan_soft_ap"
+    "value": "button_rescan_ble"
+  },
+  "rescan_button_empty": {
+    "by": "id",
+    "value": "button_rescan"
   },
   "button_permission": {
     "by": "id",

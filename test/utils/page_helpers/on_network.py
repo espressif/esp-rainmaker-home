@@ -21,7 +21,10 @@ class OnNetwork(BasePage):
     def wait_for_devices(self, per_pass_timeout=15, max_passes=3):
         """Wait for an on-network device card, re-scanning when none is found."""
         logger.info("Waiting for on-network discovery results (up to %s passes)", max_passes)
+        perms = self.get_other_page_helper("permissions")
         for pass_num in range(1, max_passes + 1):
+            if perms.any_system_alert_present(timeout=1):
+                perms.handle_all_permissions(action="allow", timeout=3)
             if self.is_visible("device_card", timeout=per_pass_timeout):
                 logger.info("On-network device discovered on pass %s/%s", pass_num, max_passes)
                 return self

@@ -83,6 +83,9 @@ class ArtifactHandler(SimpleHTTPRequestHandler):
             
             # Check if file exists
             if not file_path.exists():
+                # Artifact zips are built on demand.
+                if path.endswith('.zip') and self._serve_ondemand_zip(path):
+                    return
                 logger.warning(f"File not found: {file_path} (requested: {self.path}, base: {base_path_resolved})")
                 # Try alternative paths for common cases
                 if path.startswith('html/') and base_path_resolved.exists():
@@ -110,11 +113,12 @@ class ArtifactHandler(SimpleHTTPRequestHandler):
                 '.jpg': 'image/jpeg',
                 '.jpeg': 'image/jpeg',
                 '.mp4': 'video/mp4',
-                '.txt': 'text/plain',
-                '.log': 'text/plain',
+                '.txt': 'text/plain; charset=utf-8',
+                '.log': 'text/plain; charset=utf-8',
                 '.xml': 'application/xml',
-                '.html': 'text/html',
+                '.html': 'text/html; charset=utf-8',
                 '.json': 'application/json',
+                '.zip': 'application/zip',
             }
             content_type = content_types.get(ext, 'application/octet-stream')
 
@@ -125,6 +129,20 @@ class ArtifactHandler(SimpleHTTPRequestHandler):
                 body = self._load_xml_body(file_path)
                 self.send_response(200)
                 self.send_header('Content-type', 'application/xml; charset=utf-8')
+                self.send_header('Content-Disposition', 'inline')
+                self.send_header('Access-Control-Allow-Origin', '*')
+                self.send_header('Content-Length', str(len(body)))
+                self.end_headers()
+                if not getattr(self, '_head_only', False):
+                    self.wfile.write(body)
+                return
+
+            # JSONL (cloud API logs) render as a collapsible HTML viewer, not a download.
+            if ext == '.jsonl':
+                body = self._render_jsonl_body(file_path)
+                self.send_response(200)
+                self.send_header('Content-type', 'text/html; charset=utf-8')
+                self.send_header('Content-Disposition', 'inline')
                 self.send_header('Access-Control-Allow-Origin', '*')
                 self.send_header('Content-Length', str(len(body)))
                 self.end_headers()
@@ -154,6 +172,8 @@ class ArtifactHandler(SimpleHTTPRequestHandler):
 
             length = end - start + 1 if file_size else 0
             self.send_header('Content-type', content_type)
+            if content_type.startswith('text/') or ext in ('.xml', '.json'):
+                self.send_header('Content-Disposition', 'inline')
             self.send_header('Access-Control-Allow-Origin', '*')
             self.send_header('Accept-Ranges', 'bytes')
             self.send_header('Content-Length', str(length))
@@ -195,7 +215,90 @@ class ArtifactHandler(SimpleHTTPRequestHandler):
         except Exception as e:
             logger.error(f"Error preparing XML file: {e}")
             return file_path.read_bytes()
-    
+
+    @staticmethod
+    def _render_jsonl_body(file_path: Path) -> bytes:
+        """Render a .jsonl cloud-API log as a collapsible HTML page (one <details> per call)."""
+        import json as _json
+        import html as _html
+        from urllib.parse import urlparse as _urlparse
+        rows = []
+        try:
+            lines = file_path.read_text(encoding='utf-8', errors='replace').splitlines()
+        except Exception as e:
+            return f"<pre>Could not read {_html.escape(file_path.name)}: {_html.escape(str(e))}</pre>".encode('utf-8')
+        for i, line in enumerate(lines, 1):
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                obj = _json.loads(line)
+                pretty = _json.dumps(obj, indent=2, ensure_ascii=False)
+            except Exception:
+                obj, pretty = None, line
+            if isinstance(obj, dict):
+                path = _urlparse(str(obj.get('uri', ''))).path or str(obj.get('uri', ''))
+                q = obj.get('query')
+                summary = f"{obj.get('ts', '')}  {obj.get('method', '')} {path}{('?' + str(q)) if q else ''}  → {obj.get('status', '')}  ({obj.get('elapsed_ms', '?')}ms)"
+            else:
+                summary = f"line {i}"
+            rows.append(f"<details><summary>{_html.escape(summary)}</summary><pre>{_html.escape(pretty)}</pre></details>")
+        style = "body{font-family:ui-monospace,Menlo,monospace;background:#1e1e1e;color:#d4d4d4;margin:0;padding:14px}h3{margin:0 0 10px}summary{cursor:pointer;padding:5px 0;color:#9cdcfe;white-space:pre-wrap}pre{background:#111;padding:10px;overflow:auto;border-radius:4px;color:#ce9178}details{border-bottom:1px solid #333}button{background:#333;color:#ddd;border:1px solid #555;border-radius:4px;padding:5px 10px;margin-right:6px;cursor:pointer}"
+        controls = "<button onclick=\"document.querySelectorAll('details').forEach(d=>d.open=true)\">Expand all</button><button onclick=\"document.querySelectorAll('details').forEach(d=>d.open=false)\">Collapse all</button>"
+        doc = f"<!doctype html><html><head><meta charset='utf-8'><title>{_html.escape(file_path.name)}</title><style>{style}</style></head><body><h3>{_html.escape(file_path.name)} — {len(rows)} calls</h3>{controls}<div>{''.join(rows)}</div></body></html>"
+        return doc.encode('utf-8')
+
+    @staticmethod
+    def _belongs_to_test(prefix: str, filename: str) -> bool:
+        """Match files named with the full test name, or with the timestamped truncated+hash form safe_test_name produces (screenshots/page_sources/device logs of long test names)."""
+        base = re.sub(r'^\d{8}_\d{6}_', '', filename)
+        if f"_{prefix}_" in f"_{base}":
+            return True
+        m = re.match(r'(.+?)_[0-9a-f]{8}_[a-z_]+\.\w+$', base)
+        return bool(m and len(m.group(1)) >= 20 and prefix.startswith(m.group(1)))
+
+    def _serve_ondemand_zip(self, url_path: str) -> bool:
+        """Build and stream a zip on demand: a whole run dir, or one test's files (by safe-name prefix). Returns False if nothing to zip."""
+        import io
+        import zipfile
+        artifacts_dir = (self.base_path / "artifacts").resolve()
+        test_match = re.match(r'artifacts/([^/]+)/test/(.+)\.zip$', url_path)
+        run_match = re.match(r'artifacts/([^/]+)\.zip$', url_path)
+        if test_match:
+            run_dir = (artifacts_dir / test_match.group(1)).resolve()
+            prefix = test_match.group(2)
+            download_name = f"{prefix}.zip"
+            keep = lambda p: self._belongs_to_test(prefix, p.name)
+        elif run_match:
+            run_dir = (artifacts_dir / run_match.group(1)).resolve()
+            download_name = f"{run_match.group(1)}.zip"
+            keep = lambda p: True
+        else:
+            return False
+        try:
+            run_dir.relative_to(artifacts_dir)
+        except ValueError:
+            return False
+        if not run_dir.is_dir():
+            return False
+        files = [p for p in run_dir.rglob('*') if p.is_file() and keep(p)]
+        if not files:
+            return False
+        buffer = io.BytesIO()
+        with zipfile.ZipFile(buffer, 'w', zipfile.ZIP_DEFLATED) as archive:
+            for path in files:
+                archive.write(path, path.relative_to(run_dir).as_posix())
+        data = buffer.getvalue()
+        self.send_response(200)
+        self.send_header('Content-type', 'application/zip')
+        self.send_header('Content-Disposition', f'attachment; filename="{download_name}"')
+        self.send_header('Access-Control-Allow-Origin', '*')
+        self.send_header('Content-Length', str(len(data)))
+        self.end_headers()
+        if not getattr(self, '_head_only', False):
+            self.wfile.write(data)
+        return True
+
     def log_message(self, format, *args):
         """Suppress default logging"""
         pass
@@ -270,7 +373,7 @@ class ArtifactHandler(SimpleHTTPRequestHandler):
 </html>"""
             
             self.send_response(200)
-            self.send_header('Content-type', 'text/html')
+            self.send_header('Content-type', 'text/html; charset=utf-8')
             self.send_header('Access-Control-Allow-Origin', '*')
             self.end_headers()
             self.wfile.write(html.encode('utf-8'))

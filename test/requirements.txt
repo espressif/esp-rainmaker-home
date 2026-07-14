@@ -5,6 +5,7 @@ pytest>=7.0.0
 pytest-html>=4.0.0
 pytest-bdd>=7.3.0
 pytest-xdist>=3.0.0
+pytest-repeat>=0.9.3
 
 # Test data and configuration
 PyYAML>=6.0
@@ -28,3 +29,5 @@ pytz>=2023.3
 # Report generation and email
 jinja2>=3.1.0
 pytest-json-report>=1.5.0
+pyotp
+esp-matter-mfg-tool>=1.0.6

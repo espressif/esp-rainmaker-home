@@ -8,6 +8,7 @@ import { View, Text, Pressable } from "react-native";
 import { useTranslation } from "react-i18next";
 import { globalStyles } from "@shared/theme/globalStyleSheet";
 import { SCHEDULE_DAYS } from "@shared/utils/constants";
+import { testProps } from "@shared/utils/testProps";
 import { ScheduleDaysProps } from "@src/types/global";
 
 
@@ -28,6 +29,7 @@ const ScheduleDays = ({ selectedDays, onDayPress }: ScheduleDaysProps) => {
       <View style={globalStyles.scheduleDaysContainer}>
         {SCHEDULE_DAYS.map((day, index) => (
           <Pressable
+            {...testProps("button_schedule_day")}
             key={day + index}
             style={[
               globalStyles.scheduleDayButton,

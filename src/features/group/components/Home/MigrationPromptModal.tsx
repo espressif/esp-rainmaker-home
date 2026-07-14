@@ -34,8 +34,8 @@ export const MigrationPromptModal: React.FC<MigrationPromptModalProps> = ({
     animationType="fade"
     onRequestClose={onUnderstood}
   >
-    <View style={globalStyles.modalOverlay}>
-      <View style={globalStyles.modalContent}>
+    <View style={globalStyles.modalOverlay} {...testProps("view_migration_prompt_overlay")}>
+      <View style={globalStyles.modalContent} {...testProps("view_migration_prompt")}>
         <Text style={globalStyles.modalTitle}>{title}</Text>
         <Text style={globalStyles.modalDescription}>{message}</Text>
         <View style={globalStyles.modalActions}>

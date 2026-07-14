@@ -33,10 +33,7 @@ class ResourceManager:
 
     def __init__(self, config: Optional[HardwareConfig] = None):
         self.config = config or HardwareConfig.load()
-        self.store = SqliteResourceStore(
-            self.config.lock_db_path,
-            stale_lock_seconds=self.config.lock_stale_seconds,
-        )
+        self.store = SqliteResourceStore(self.config.lock_db_path)
         self.discovery = EspDiscoveryService(esptool_path=self.config.esptool_path)
         self.firmware = FirmwareService(self.config)
         self.flasher = FlashingService(
@@ -58,7 +55,8 @@ class ResourceManager:
     def refresh_inventory(self) -> int:
         """Discover connected devices and upsert them into the registry."""
         count = 0
-        for device in self.discovery.discover():
+        reserved_ports = self.store.active_reserved_ports()
+        for device in self.discovery.discover(exclude_ports=reserved_ports):
             self.store.upsert_discovered_device(
                 mac_address=device.mac_address,
                 chip_type=device.chip_type,
@@ -130,6 +128,58 @@ class ResourceManager:
 
         raise HardwareUnavailableException(
             f"No available {chip_type} device within {timeout}s"
+        )
+
+    def acquire_mac(
+        self,
+        mac_address: str,
+        timeout: Optional[int] = None,
+        test_name: str = "",
+        lease_seconds: Optional[int] = None,
+    ) -> EspResource:
+        """Lock one SPECIFIC device by MAC (e.g. the Matter chip) so active_reserved_ports() protects it from a sibling run's discovery reset (needs the shared lock db)."""
+        timeout = timeout if timeout is not None else self.config.acquire_timeout_seconds
+        lease_seconds = lease_seconds or self.config.lock_stale_seconds
+        deadline = time.time() + timeout
+        owner_pid = os.getpid()
+
+        refreshed = False
+        while time.time() < deadline:
+            row = self.store.try_reserve_mac(
+                mac_address=mac_address,
+                owner_pid=owner_pid,
+                owner_job_id=self._job_id,
+                owner_test=test_name,
+                lease_seconds=lease_seconds,
+            )
+            if not row and not refreshed:
+                # The chip may not be in the registry yet — probe USB once.
+                self.refresh_inventory()
+                refreshed = True
+                continue
+            if row:
+                resource = EspResource(
+                    mac_address=row["mac_address"],
+                    port=row["port"],
+                    chip_type=row["chip_type"],
+                    status=ResourceStatus.RESERVED,
+                    serial_number=row.get("serial_number"),
+                    usb_path=row.get("usb_path"),
+                    owner_pid=owner_pid,
+                    owner_job_id=self._job_id,
+                    owner_test=test_name,
+                )
+                logger.info(
+                    "Acquired %s by MAC on %s for %s",
+                    resource.mac_address,
+                    resource.port,
+                    test_name or "unknown-test",
+                )
+                return resource
+            time.sleep(2)
+
+        raise HardwareUnavailableException(
+            f"Device {mac_address} not available within {timeout}s"
         )
 
     def release(self, mac_address: str, failed: bool = False, error: str = "") -> None:

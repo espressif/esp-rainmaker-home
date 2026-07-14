@@ -3,9 +3,7 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 
-"""
-Connect Wi-Fi Page Helper
-"""
+"""Connect Wi-Fi Page Helper."""
 import logging
 
 from .base import BasePage
@@ -24,9 +22,6 @@ class ConnectWifi(BasePage):
                 if wait_for_network_load:
                     self.wait_for_network_selection_loading_to_finish()
                 return True
-            # The available-networks bottom sheet auto-opens on this screen and
-            # covers the title, so the title match above can miss; the open modal
-            # is itself proof we're on Connect-to-Wi-Fi.
             return self.is_wifi_list_modal_visible(timeout=2)
         except Exception as error:
             logger.warning(f"Connect Wi-Fi screen not displayed: {error}")
@@ -50,7 +45,7 @@ class ConnectWifi(BasePage):
 
     def dismiss_wifi_list_modal(self):
         """Close the available Wi-Fi list modal if it is blocking the main screen."""
-        if not self.is_wifi_list_modal_visible(timeout=2):
+        if not self.is_wifi_list_modal_visible(timeout=3):
             logger.info("Available Wi-Fi list modal not visible")
             return self
 
@@ -67,9 +62,7 @@ class ConnectWifi(BasePage):
             logger.info("Trying backdrop tap to dismiss Wi-Fi list modal")
             self._tap_wifi_list_modal_backdrop()
 
-        # Best-effort: the iOS sheet-close animation can outlast a short wait, so
-        # don't fail here — the caller's next action (clicking Join Other Network)
-        # confirms the screen is usable.
+        # Best-effort: don't fail here (the caller's next action confirms the screen is usable).
         if not self.wait_for_element_to_disappear("network_modal_title", timeout=5):
             logger.warning("Available Wi-Fi list modal still detected; continuing")
 

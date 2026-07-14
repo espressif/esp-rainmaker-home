@@ -75,8 +75,18 @@
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
 
-                <!-- Agents Deep link schemes from gradle.properties via manifestPlaceholders -->
-                <data android:scheme="${AGENTS_DEEP_LINK_SCHEME}" />
+                <!-- Agents deep links, host/path-scoped -->
+                <data
+                    android:host="${AGENTS_DEEP_LINK_HOST}"
+                    android:pathPrefix="${AGENTS_DEEP_LINK_PATH_PREFIX}"
+                    android:scheme="${AGENTS_DEEP_LINK_SCHEME}" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+
                 <data android:scheme="${applicationId}" />
             </intent-filter>
             <intent-filter android:autoVerify="true">

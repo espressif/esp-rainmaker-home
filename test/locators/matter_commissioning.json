@@ -1,0 +1,30 @@
+{
+  "app_commissioning_screen": {
+    "by": "id",
+    "value": "view_matter_commissioning_progress"
+  },
+  "app_commissioning_status": {
+    "by": "id",
+    "value": "text_matter_commissioning_status"
+  },
+  "app_commissioning_error": {
+    "by": "id",
+    "value": "view_matter_commissioning_error"
+  },
+  "gps_ready_button": {
+    "by": "android_uiautomator",
+    "value": "new UiSelector().text(\"I'm ready\")"
+  },
+  "gps_try_again_button": {
+    "by": "android_uiautomator",
+    "value": "new UiSelector().text(\"Try again\")"
+  },
+  "gps_done_button": {
+    "by": "android_uiautomator",
+    "value": "new UiSelector().text(\"Done\")"
+  },
+  "gps_device_connected_text": {
+    "by": "android_uiautomator",
+    "value": "new UiSelector().textContains(\"Device connected\")"
+  }
+}

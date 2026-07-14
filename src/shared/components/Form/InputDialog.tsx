@@ -87,11 +87,13 @@ const InputDialog: React.FC<InputDialogProps> = ({
       onRequestClose={onCancel}
     >
       <TouchableOpacity
+        {...(qaId ? testProps(`overlay_${qaId}`) : {})}
         style={styles.overlay}
         activeOpacity={1}
         onPress={onCancel}
       >
         <TouchableOpacity
+          {...(qaId ? testProps(`content_${qaId}`) : {})}
           style={styles.dialogContent}
           activeOpacity={1}
           onPress={() => {}}

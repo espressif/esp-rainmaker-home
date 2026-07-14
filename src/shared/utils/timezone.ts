@@ -125,7 +125,6 @@ export const TIMEZONE_LIST = [
   "America/Fortaleza",
   "America/Fort_Nelson",
   "America/Glace_Bay",
-  "America/Godthab",
   "America/Goose_Bay",
   "America/Grand_Turk",
   "America/Grenada",
@@ -180,6 +179,7 @@ export const TIMEZONE_LIST = [
   "America/North_Dakota/Beulah",
   "America/North_Dakota/Center",
   "America/North_Dakota/New_Salem",
+  "America/Nuuk",
   "America/Ojinaga",
   "America/Panama",
   "America/Pangnirtung",
@@ -336,6 +336,7 @@ export const TIMEZONE_LIST = [
   "Australia/Melbourne",
   "Australia/Perth",
   "Australia/Sydney",
+  "Etc/UTC",
   "Europe/Amsterdam",
   "Europe/Andorra",
   "Europe/Astrakhan",
@@ -357,8 +358,8 @@ export const TIMEZONE_LIST = [
   "Europe/Istanbul",
   "Europe/Jersey",
   "Europe/Kaliningrad",
-  "Europe/Kiev",
   "Europe/Kirov",
+  "Europe/Kyiv",
   "Europe/Lisbon",
   "Europe/Ljubljana",
   "Europe/London",
@@ -414,7 +415,6 @@ export const TIMEZONE_LIST = [
   "Pacific/Chuuk",
   "Pacific/Easter",
   "Pacific/Efate",
-  "Pacific/Enderbury",
   "Pacific/Fakaofo",
   "Pacific/Fiji",
   "Pacific/Funafuti",
@@ -423,6 +423,7 @@ export const TIMEZONE_LIST = [
   "Pacific/Guadalcanal",
   "Pacific/Guam",
   "Pacific/Honolulu",
+  "Pacific/Kanton",
   "Pacific/Kiritimati",
   "Pacific/Kosrae",
   "Pacific/Kwajalein",
@@ -446,6 +447,43 @@ export const TIMEZONE_LIST = [
   "Pacific/Wake",
   "Pacific/Wallis",
 ];
+
+/**
+ * Deprecated IANA zone aliases that some platforms use.
+ */
+const IANA_ALIAS_TO_CANONICAL: Record<string, string> = {
+  "Asia/Calcutta": "Asia/Kolkata",
+  "Asia/Rangoon": "Asia/Yangon",
+  "Asia/Saigon": "Asia/Ho_Chi_Minh",
+  "Asia/Katmandu": "Asia/Kathmandu",
+  "Asia/Thimbu": "Asia/Thimphu",
+  "Asia/Dacca": "Asia/Dhaka",
+  "Asia/Ulan_Bator": "Asia/Ulaanbaatar",
+  "Asia/Chongqing": "Asia/Shanghai",
+  "Asia/Chungking": "Asia/Shanghai",
+  "Asia/Harbin": "Asia/Shanghai",
+  "Asia/Macao": "Asia/Macau",
+  "Pacific/Ponape": "Pacific/Pohnpei",
+  "Pacific/Truk": "Pacific/Chuuk",
+  "America/Buenos_Aires": "America/Argentina/Buenos_Aires",
+  "Asia/Istanbul": "Europe/Istanbul",
+  "Asia/Kashgar": "Asia/Urumqi",
+  "Asia/Ujung_Pandang": "Asia/Makassar",
+  "America/Godthab": "America/Nuuk",
+  "Europe/Kiev": "Europe/Kyiv",
+  "Pacific/Enderbury": "Pacific/Kanton",
+  "UTC": "Etc/UTC",
+};
+
+/**
+ * Normalizes a platform-provided IANA timezone string to its canonical form.
+ * @param zone - IANA timezone string from the platform (e.g. Intl)
+ * @returns The canonical IANA zone, or the input unchanged if not a known alias
+ */
+export function canonicalizeIana(zone: string | undefined | null): string {
+  const z = typeof zone === "string" ? zone.trim() : "";
+  return IANA_ALIAS_TO_CANONICAL[z] ?? z;
+}
 
 /**
  * Gets the timezone service and parameter from a node's configuration
@@ -498,7 +536,9 @@ export const getNodeTimezoneConfig = (node: ESPCDFNode | undefined) => {
  */
 export const setUserTimeZone = async (user: ESPCDFUser) => {
   if (!user) return;
-  const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const timezone = canonicalizeIana(
+    Intl.DateTimeFormat().resolvedOptions().timeZone
+  );
   await user.setTimeZone(timezone);
 };
 
@@ -624,9 +664,9 @@ async function resolveTimeZoneStringForProvision(
   const fromCustom = await getUserTimeZone(user);
   const trimmed = typeof fromCustom === "string" ? fromCustom.trim() : "";
   if (trimmed !== "") {
-    return trimmed;
+    return canonicalizeIana(trimmed);
   }
-  return Intl.DateTimeFormat().resolvedOptions().timeZone;
+  return canonicalizeIana(Intl.DateTimeFormat().resolvedOptions().timeZone);
 }
 
 /**

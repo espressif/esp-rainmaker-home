@@ -9,6 +9,7 @@ import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { globalStyles } from "@shared/theme/globalStyleSheet";
 import { formatTimeToAMPM } from "@shared/utils/common";
+import { testProps } from "@shared/utils/testProps";
 
 import { ScheduleTimeProps } from "@src/types/global";
 
@@ -30,7 +31,11 @@ const ScheduleTime = ({ minutes = 0, onTimePress }: ScheduleTimeProps) => {
   return (
     <View style={globalStyles.scheduleRow}>
       <Text style={globalStyles.scheduleSectionTitle}>{t("schedule.time.title")}</Text>
-      <Pressable onPress={onTimePress} style={globalStyles.scheduleTimeButton}>
+      <Pressable
+        {...testProps("button_schedule_time")}
+        onPress={onTimePress}
+        style={globalStyles.scheduleTimeButton}
+      >
         <Text style={globalStyles.scheduleTimeText}>
           {formatTimeToAMPM(selectedTime)}
         </Text>

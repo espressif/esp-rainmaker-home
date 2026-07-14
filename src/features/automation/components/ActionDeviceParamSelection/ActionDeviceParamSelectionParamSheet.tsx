@@ -55,7 +55,11 @@ export const ActionDeviceParamSelectionParamSheet: React.FC<
         style={styles.modalContainer}
         onPress={onClose}
       >
-        <Pressable style={styles.content} onPress={(e) => e.stopPropagation()}>
+        <Pressable
+          {...testProps("content_action_device_params_selection")}
+          style={styles.content}
+          onPress={(e) => e.stopPropagation()}
+        >
           <View
             style={styles.handle}
             {...testProps("view_action_device_params_selection")}

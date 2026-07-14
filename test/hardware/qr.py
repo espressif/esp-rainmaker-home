@@ -6,6 +6,7 @@
 """Provisioning QR support: payload extraction from serial logs and on-screen display."""
 from __future__ import annotations
 
+import json
 import logging
 import os
 import re
@@ -26,6 +27,18 @@ _QR_URL_DATA_PATTERN = re.compile(
 )
 _QR_JSON_PATTERN = re.compile(r"QRCODE:\s*(\{.+?\})", re.IGNORECASE)
 _QR_PAYLOAD_PATTERN = re.compile(r"(NP:[^\s'\"]+|RM:[^\s'\"]+)")
+_QR_MATTER_PATTERN = re.compile(r"(MT:[0-9A-HJ-NP-Z.\-]+)")
+
+
+def _is_complete_payload(candidate: str) -> bool:
+    """data=(.+)$ also matches a torn serial line; reject clipped '{' payloads."""
+    if not candidate.startswith("{"):
+        return True
+    try:
+        json.loads(candidate)
+    except ValueError:
+        return False
+    return True
 
 
 class QrPayloadExtractor:
@@ -52,11 +65,17 @@ class QrPayloadExtractor:
 
         url_match = _QR_URL_DATA_PATTERN.search(clean)
         if url_match:
-            return url_match.group(1).strip()
+            candidate = url_match.group(1).strip()
+            if _is_complete_payload(candidate):
+                return candidate
 
         payload_match = _QR_PAYLOAD_PATTERN.search(clean)
         if payload_match:
             return payload_match.group(1)
+
+        matter_match = _QR_MATTER_PATTERN.search(clean)
+        if matter_match:
+            return matter_match.group(1)
         return None
 
     @staticmethod
@@ -90,6 +109,7 @@ class QrDisplay:
     # Set when a QR is shown, so close() only acts for scan-QR tests and never
     # touches Preview after a non-scan test (BLE/SoftAP/on-network).
     _active: bool = False
+    _png_path: Optional[Path] = None
 
     @classmethod
     def show(cls, payload: str, output_dir: Path, platform: str = "android") -> Path:
@@ -107,6 +127,7 @@ class QrDisplay:
         png_path = cls._render_png(payload, output_dir)
         side: ScreenSide = "left" if platform.lower() == "android" else "right"
         cls._active = True
+        cls._png_path = png_path
 
         cls._wake_display()
         if sys.platform == "darwin" and cls._show_preview_macos(png_path, side):
@@ -125,9 +146,15 @@ class QrDisplay:
 
     @classmethod
     def close(cls) -> None:
-        """Silently close the provisioning QR preview once scanning is done."""
-        # Only act when a QR was actually shown (scan-QR tests). Other suites
-        # never open Preview, so closing/quitting it would disrupt the host.
+        """Close the QR preview and remove the QR PNG once scanning is done."""
+        png = cls._png_path
+        cls._png_path = None
+        if png:
+            try:
+                png.unlink()
+            except OSError:
+                pass
+        # Only touch Preview when a QR was actually shown; other suites never open it.
         if not cls._active or sys.platform != "darwin":
             return
         cls._active = False
@@ -189,21 +216,24 @@ class QrDisplay:
                 screen_w = 1440
             bounds_setup = f"set winBounds to {{{screen_w - 550}, 80, {screen_w - 150}, 520}}"
 
+        # Launch Preview via `open` and wait until it is running.
+        subprocess.run(["open", "-a", "Preview", png_abs], check=False)
+        for _ in range(20):
+            r = subprocess.run(["osascript", "-e", 'application "Preview" is running'],
+                               capture_output=True, text=True, check=False)
+            if (r.stdout or "").strip() == "true":
+                break
+            time.sleep(0.3)
+
         script = f'''
-        set pngPath to POSIX file "{png_abs}"
         {bounds_setup}
         tell application "Preview"
             activate
-            open pngPath
-        end tell
-        delay 0.8
-        tell application "Preview"
             tell front window
                 set bounds to winBounds
             end tell
         end tell
         '''
-
         try:
             result = subprocess.run(
                 ["osascript", "-e", script],
@@ -213,16 +243,10 @@ class QrDisplay:
                 timeout=20,
             )
         except subprocess.TimeoutExpired:
-            # osascript blocks on the macOS Automation prompt ("<runner> wants to
-            # control Preview") when that permission hasn't been granted on this
-            # host. Don't hang the test — just open the image unpositioned.
-            logger.warning("Preview AppleScript timed out (grant Automation control of Preview); opening unpositioned")
-            opened = subprocess.run(["open", "-a", "Preview", png_abs], check=False)
-            return opened.returncode == 0
+            logger.warning("Preview positioning timed out; QR is open unpositioned")
+            return True
         if result.returncode != 0:
-            # QR is still shown, just not positioned — good enough for scanning.
             logger.warning("Preview window positioning failed: %s", result.stderr.strip())
-            opened = subprocess.run(["open", "-a", "Preview", png_abs], check=False)
-            return opened.returncode == 0
+            return True
         logger.info("QR displayed via Preview on %s side", side)
         return True

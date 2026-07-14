@@ -288,7 +288,7 @@ export const useProvision = (): UseProvisionReturn => {
         markFinalProvisionStageComplete();
         setIsComplete(true);
       });
-      toast.showSuccess(t("device.provision.success"));
+      toast.showSuccess(t("device.provision.success"), undefined, { duration: 4000 });
     } catch (error) {
       console.error("Error in post-provision agent setup:", error);
       await syncHomeAfterProvision(store, syncHomeWithNodes);
@@ -296,7 +296,7 @@ export const useProvision = (): UseProvisionReturn => {
         markFinalProvisionStageComplete();
         setIsComplete(true);
       });
-      toast.showSuccess(t("device.provision.success"));
+      toast.showSuccess(t("device.provision.success"), undefined, { duration: 4000 });
     }
   }, [
     markFinalProvisionStageComplete,

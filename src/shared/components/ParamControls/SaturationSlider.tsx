@@ -20,6 +20,7 @@ import {
 } from "./lib/types";
 import { paramControlStyles as styles } from "./lib/styles";
 import { useDragBubble } from "./lib/useDragBubble";
+import { testProps } from "@shared/utils/testProps";
 
 
 /**
@@ -94,7 +95,7 @@ const SaturationSlider = observer(
             >
               {label}
             </Text>
-            <Text style={styles.compactValue}>{value}%</Text>
+            <Text {...testProps(`slider_${label}_value`)} style={styles.compactValue}>{value}%</Text>
           </View>
         ) : (
           <>
@@ -129,7 +130,7 @@ const SaturationSlider = observer(
             </View>
           )}
 
-          <View style={styles.sliderContainer}>
+          <View style={styles.sliderContainer} {...testProps(`slider_${label}`)}>
             <Slider
               value={[value]}
               min={min}
@@ -191,6 +192,7 @@ const SaturationSlider = observer(
         {!compact && (
           <View style={styles.thumbValueContainer}>
             <Text
+              {...testProps(`slider_${label}_value`)}
               style={[
                 styles.thumbValueText,
                 {

@@ -27,34 +27,46 @@ class ScanBle(BasePage):
             permissions_page.handle_all_permissions(action="allow", timeout=6)
         return self
 
-    def wait_for_devices(self, timeout=30):
-        """Wait until at least one BLE device card is listed."""
-        logger.info("Waiting for BLE scan results")
-        if self.is_visible("device_card", timeout=timeout):
-            return self
-        raise RuntimeError("No BLE devices discovered within timeout")
+    def _click_rescan_if_present(self):
+        """Tap the BLE rescan control, whichever state is shown: populated list
+        (button_rescan_ble) or the empty 'No devices found' card (button_rescan)."""
+        if self.is_visible("rescan_button", timeout=3):
+            self.click("rescan_button")
+            return True
+        if self.is_visible("rescan_button_empty", timeout=2):
+            self.click("rescan_button_empty")
+            return True
+        return False
 
-    def select_device(self, device_name: str = None, timeout=30):
+    def select_device(self, device_name: str = None, timeout=30, max_passes: int = 3):
         """
-        Select a discovered BLE device by its advertised name.
+        Select a discovered BLE device by its advertised name; if the target is not
+        yet listed, tap Rescan and retry (BLE advertising can be slow to surface).
 
         @param device_name - Device name from the provisioning payload
                              (e.g. PROV_xxxxxx); first device when None.
         """
         self.grant_runtime_permissions_if_needed()
-        self.wait_for_devices(timeout=timeout)
-
-        if device_name:
-            for label in self.find_all("device_name_text"):
-                if (label.text or "").strip() == device_name and label.is_displayed():
-                    logger.info("Selecting BLE device: %s", device_name)
-                    label.click()
-                    return self
-            raise RuntimeError(f"BLE device '{device_name}' not found in scan results")
-
-        logger.info("Selecting first discovered BLE device")
-        self.click("device_card", timeout=5)
-        return self
+        per_pass = timeout
+        for pass_num in range(1, max_passes + 1):
+            self.is_visible("device_card", timeout=per_pass)
+            if device_name:
+                for label in self.find_all("device_name_text"):
+                    if (label.text or "").strip() == device_name and label.is_displayed():
+                        logger.info("Selecting BLE device: %s", device_name)
+                        label.click()
+                        return self
+            elif self.is_visible("device_card", timeout=2):
+                logger.info("Selecting first discovered BLE device")
+                self.click("device_card", timeout=5)
+                return self
+            if pass_num < max_passes:
+                if self._click_rescan_if_present():
+                    logger.info("BLE target '%s' absent on pass %s/%s; rescanning", device_name, pass_num, max_passes)
+                else:
+                    logger.warning("BLE target '%s' absent on pass %s; no rescan control, waiting", device_name, pass_num)
+                per_pass = 10
+        raise RuntimeError(f"BLE device '{device_name}' not found in scan results after {max_passes} passes")
 
     def validate_screen_elements(self):
         """Validate expected elements on the Scan BLE screen."""
