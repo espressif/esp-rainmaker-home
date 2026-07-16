@@ -23,4 +23,7 @@ RCT_EXTERN_METHOD(isBluetoothEnabled:(RCTPromiseResolveBlock)resolve
 
 RCT_EXTERN_METHOD(requestAllPermissions)
 
+RCT_EXTERN_METHOD(acceptCnConsent:(RCTPromiseResolveBlock)resolve
+                  rejecter:(RCTPromiseRejectBlock)reject)
+
 @end

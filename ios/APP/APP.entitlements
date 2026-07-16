@@ -9,6 +9,7 @@
 	<key>com.apple.developer.associated-domains</key>
 	<array>
 		<string>$(ASSOCIATED_DOMAIN_ENTITLEMENT)</string>
+		<string>applinks:$(WECHAT_UNIVERSAL_LINK_HOST)</string>
 	</array>
 	<key>com.apple.developer.networking.HotspotConfiguration</key>
 	<true/>

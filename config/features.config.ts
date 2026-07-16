@@ -4,8 +4,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { Platform } from 'react-native';
 import Constants from 'expo-constants';
 import { getResolvedActiveSdk, SDK_FEATURE_MAP } from '@config/sdk.config';
+import { getRegionConfig } from '@config/region.config';
 
 /**
  * All controllable feature keys in the application.
@@ -60,26 +62,46 @@ const ENV_KEY_MAP: Record<FeatureKey, string> = {
 };
 
 /**
- * Returns the current feature flag state by cascading two levels:
+ * Returns the current feature flag state by cascading three disable-only
+ * levels:
  *
- *   Level 2 (SDK capability) — hard gate. If the active SDK does not support
- *   a feature, it is disabled regardless of the .env setting.
+ *   Level 3 (SDK capability) — hard gate. If the active SDK does not support
+ *   a feature, it is disabled regardless of any config.
  *
- *   Level 1 (.env switch) — can only disable a feature that the SDK supports.
- *   It cannot enable a feature the SDK does not support.
+ *   Level 2 (region availability) — data from the committed region env files
+ *   (.env.global.example / .env.cn.example → extra.regionConfigs.<region>.features). E.g.
+ *   voice assistants are off in the CN region. Resolved at runtime, so the
+ *   single iOS binary follows the region it detects at startup.
  *
- * This is a FUNCTION (not a const) so it reads the active SDK at call time,
- * making it safe for runtime SDK switching.
+ *   Level 1 (binary .env switch) — extra.features from the per-binary .env;
+ *   disables what a specific BINARY cannot support (e.g. notifications on the
+ *   Android CN build, which ships without FCM).
+ *
+ * No level can enable what a lower level disabled, with ONE platform exception:
+ * notifications are a push-transport capability rather than a region policy, so
+ * they stay available on iOS (APNs, every region) regardless of the region /
+ * binary ENABLE_NOTIFICATIONS flag — that flag exists to disable the Android CN
+ * flavor only. This is a FUNCTION (not a const) so it reads the active SDK,
+ * region, and platform at call time.
  */
 export function getFeatures(): Record<FeatureKey, boolean> {
   const sdk = getResolvedActiveSdk();
-  const env = (Constants.expoConfig?.extra?.features || {}) as Record<string, boolean>;
+  const binaryEnv = (Constants.expoConfig?.extra?.features || {}) as Record<string, boolean>;
+  const regionFeatures = getRegionConfig().features;
   const sdkCaps = SDK_FEATURE_MAP[sdk] ?? {};
   const resolve = (key: FeatureKey): boolean => {
-    // Level 2: SDK capability is the hard gate — cannot be overridden upward
+    // Level 3: SDK capability is the hard gate — cannot be overridden upward
     if (sdkCaps[key] === false) return false;
-    // Level 1: .env switch — can only disable, never unlock what SDK blocks
-    if (env[ENV_KEY_MAP[key]] === false) return false;
+    // Notifications are a per-binary push-transport capability, not a region
+    // policy: ENABLE_NOTIFICATIONS=false in .env.cn.example exists only to turn off the
+    // Android CN flavor, which ships without Firebase/FCM. iOS ships APNs in
+    // every region, so on iOS notifications stay available whenever the SDK
+    // allows — the region/binary env disable applies to Android only.
+    if (key === 'notifications' && Platform.OS === 'ios') return true;
+    // Level 2: region availability (data-driven, from .env.global.example / .env.cn.example)
+    if (regionFeatures[ENV_KEY_MAP[key]] === false) return false;
+    // Level 1: binary .env switch — can only disable
+    if (binaryEnv[ENV_KEY_MAP[key]] === false) return false;
     return true;
   };
 
@@ -102,12 +124,15 @@ export function getFeatures(): Record<FeatureKey, boolean> {
 }
 
 /**
- * Returns the list of enabled OAuth providers for the Login screen.
- * Returns an empty array when thirdPartyAuth is disabled at either level.
+ * Returns the list of enabled OAuth providers for the Login screen, in
+ * display order. Provider availability is fully data-driven per region: the
+ * committed region env files list exactly the providers offered there
+ * (e.g. CN lists WeChat + Apple, global lists Google + Apple), so no
+ * code-level region filtering remains.
+ * Returns an empty array when thirdPartyAuth is disabled at any level.
  */
 export function getEnabledOAuthProviders(): string[] {
   const f = getFeatures();
   if (!f.thirdPartyAuth) return [];
-  const providers = Constants.expoConfig?.extra?.features?.thirdPartyAuthProviders || [];
-  return providers
+  return getRegionConfig().features.thirdPartyAuthProviders ?? [];
 }

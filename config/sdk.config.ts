@@ -36,6 +36,7 @@ import {
   type SDKIdentifier,
   isRmngStackSdkId,
 } from "./sdk.identifiers";
+import { getRegionConfig } from "./region.config";
 
 export {
   DEFAULT_ACTIVE_SDK_ID,
@@ -51,20 +52,16 @@ export {
   type SDKIdentifier,
 } from "./sdk.identifiers";
 
-// Get environment variables from Expo Constants
+// Binary-level extra (region-invariant values). Region-scoped config comes
+// from getRegionConfig() at call time — no legacy rmSdk/rmSdkCn fallback.
 const extra = Constants.expoConfig?.extra || {};
 
 const {
-  rmSdk = {} as Record<string, string>,
-  rmngSdk = {} as Record<string, string>,
   matterSdk = {} as Record<string, string>,
-  activeSdk,
   features = {} as Record<string, any>,
 } = extra;
 
 // ─── RM SDK Config ────────────────────────────────────────────────────────────
-
-const thirdPartyAuthEnabled = features.enableThirdPartyAuth ?? false;
 
 export function getRMSDKConfig(): ESPRMBaseConfig {
   const override = (
@@ -73,9 +70,21 @@ export function getRMSDKConfig(): ESPRMBaseConfig {
       : null
   );
 
+  // Region-scoped cloud config (global vs CN), resolved at call time.
+  const region = getRegionConfig();
+  const regionalRm = region.rmSdk;
+
+  // Third-party auth: region availability AND binary capability, both
+  // disable-only (mirrors the getFeatures() cascade without importing it —
+  // features.config already imports this module).
+  const thirdPartyAuthEnabled =
+    region.features.enableThirdPartyAuth !== false &&
+    features.enableThirdPartyAuth !== false;
+
   const base = {
-    baseUrl: override?.baseUrl ?? rmSdk.baseUrl ?? "https://api.rainmaker.espressif.com",
-    version: override?.version ?? rmSdk.version ?? "v1",
+    baseUrl: override?.baseUrl ?? regionalRm.baseUrl ?? "https://api.rainmaker.espressif.com",
+    claimUrl: override?.claimUrl ?? regionalRm.claimUrl ?? "https://esp-claiming.rainmaker.espressif.com",
+    version: override?.version ?? regionalRm.version ?? "v1",
     customStorageAdapter: asyncStorageAdapter,
     localDiscoveryAdapter: EspLocalDiscoveryAdapter,
     localControlAdapter: ESPLocalControlAdapter,
@@ -88,9 +97,9 @@ export function getRMSDKConfig(): ESPRMBaseConfig {
   return thirdPartyAuthEnabled
     ? {
       ...base,
-      authUrl: override?.authUrl ?? rmSdk.authUrl,
-      clientId: override?.clientId ?? rmSdk.clientId,
-      redirectUrl: override?.redirectUrl ?? rmSdk.redirectUrl,
+      authUrl: override?.authUrl ?? regionalRm.authUrl,
+      clientId: override?.clientId ?? regionalRm.clientId,
+      redirectUrl: override?.redirectUrl ?? regionalRm.redirectUrl,
     }
     : base;
 }
@@ -108,6 +117,11 @@ export function getRMNGSDKConfig(): ESPRMNGBaseConfig {
     activeSdk != null && isRmngStackSdkId(activeSdk)
       ? (runtimeConfigManager.config as ESPRMNGRuntimeConfig | null)
       : null;
+
+  // Region-scoped RMNG cloud config, resolved at call time. Cast matches the
+  // pre-regionConfigs typing (extra was Record<string, string>); blank env
+  // values still surface as runtime config errors, not silent fallbacks.
+  const rmngSdk = getRegionConfig().rmngSdk as Record<string, string>;
 
   return {
     baseUrl:
@@ -143,8 +157,13 @@ export function getRMNGSDKConfig(): ESPRMNGBaseConfig {
 
 // ─── Active SDK ───────────────────────────────────────────────────────────────
 
-/** Build-time default from `ACTIVE_SDK` in `.env` / app.config `extra`. */
-export const ActiveSDK = (activeSdk || DEFAULT_ACTIVE_SDK_ID) as SDKIdentifier;
+/**
+ * Region default from `ACTIVE_SDK` in the committed region env files
+ * (.env.global.example / .env.cn.example), resolved once for the active region at module load
+ * (the region is session-stable — see region.config.ts).
+ */
+export const ActiveSDK = (getRegionConfig().activeSdk ||
+  DEFAULT_ACTIVE_SDK_ID) as SDKIdentifier;
 
 /**
  * Effective SDK after persisted runtime scan config (Config Scan).

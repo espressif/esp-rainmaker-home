@@ -275,6 +275,40 @@ export const globalStyles = StyleSheet.create({
     width: 44,
     height: 44,
   },
+  // CN / OAuth-only login: providers shown as full-width branded buttons.
+  oauthTilesSection: {
+    width: "100%",
+    marginTop: tokens.spacing._30,
+  },
+  oauthTilesHeading: {
+    fontSize: tokens.fontSize.lg,
+    fontFamily: tokens.fonts.medium,
+    color: tokens.colors.text_primary,
+    textAlign: "center",
+    marginBottom: tokens.spacing._5,
+  },
+  oauthTilesSubheading: {
+    fontSize: tokens.fontSize.sm,
+    fontFamily: tokens.fonts.regular,
+    color: tokens.colors.text_secondary,
+    textAlign: "center",
+    marginBottom: tokens.spacing._20,
+  },
+  oauthButtonFull: {
+    width: "100%",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: tokens.spacing._10,
+    paddingVertical: 14,
+    borderRadius: 50,
+    marginBottom: tokens.spacing._15,
+  },
+  oauthButtonFullText: {
+    color: tokens.colors.white,
+    fontFamily: tokens.fonts.medium,
+    fontSize: tokens.fontSize.md,
+  },
   versionText: {
     position: "absolute",
     bottom: tokens.spacing._20,

@@ -14,6 +14,8 @@
 		3E461D99554A48A4959DE609 /* SplashScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = AA286B85B6C04FC6940260E9 /* SplashScreen.storyboard */; };
 		5A1455722E45C0D10066A31F /* ESPOauthModule.m in Sources */ = {isa = PBXBuildFile; fileRef = 5A14556F2E45C0D10066A31F /* ESPOauthModule.m */; };
 		5A1455732E45C0D10066A31F /* ESPOauthModule.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A1455702E45C0D10066A31F /* ESPOauthModule.swift */; };
+		5A1455742E45C0D20066A31F /* ESPWeChatModule.m in Sources */ = {isa = PBXBuildFile; fileRef = 5A1455752E45C0D20066A31F /* ESPWeChatModule.m */; };
+		5A1455762E45C0D20066A31F /* ESPWeChatModule.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A1455772E45C0D20066A31F /* ESPWeChatModule.swift */; };
 		761931A5804385B28082B351 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 94D7943BDE76E78EC62286AA /* PrivacyInfo.xcprivacy */; };
 		8728E4702E98D74800DF9B82 /* MatterExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 8728E4692E98D74800DF9B82 /* MatterExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		8728E48F2E99195700DF9B82 /* RequestHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8728E48C2E99195700DF9B82 /* RequestHandler.swift */; };
@@ -98,6 +100,8 @@
 		13B07FB71A68108700A75B9A /* main.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; name = main.m; path = APP/main.m; sourceTree = "<group>"; };
 		5A14556F2E45C0D10066A31F /* ESPOauthModule.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = ESPOauthModule.m; sourceTree = "<group>"; };
 		5A1455702E45C0D10066A31F /* ESPOauthModule.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ESPOauthModule.swift; sourceTree = "<group>"; };
+		5A1455752E45C0D20066A31F /* ESPWeChatModule.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = ESPWeChatModule.m; sourceTree = "<group>"; };
+		5A1455772E45C0D20066A31F /* ESPWeChatModule.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ESPWeChatModule.swift; sourceTree = "<group>"; };
 		5FCBDEB1923C0A10AB78E478 /* Pods-APP.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-APP.debug.xcconfig"; path = "Target Support Files/Pods-APP/Pods-APP.debug.xcconfig"; sourceTree = "<group>"; };
 		6A65E7C5799BC48392D7652D /* Pods-APP.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-APP.release.xcconfig"; path = "Target Support Files/Pods-APP/Pods-APP.release.xcconfig"; sourceTree = "<group>"; };
 		8728E4692E98D74800DF9B82 /* MatterExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = MatterExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -179,6 +183,7 @@
 				F2E0D5EC2E55A900005F3B74 /* MQTT */,
 				F18184B82E4B1C33002C7B0A /* Utils */,
 				5A1455712E45C0D10066A31F /* OAuth */,
+				5A1455782E45C0D30066A31F /* WeChat */,
 				13B07FB51A68108700A75B9A /* Images.xcassets */,
 				13B07FB61A68108700A75B9A /* Info.plist */,
 				13B07FB71A68108700A75B9A /* main.m */,
@@ -212,6 +217,15 @@
 				5A1455702E45C0D10066A31F /* ESPOauthModule.swift */,
 			);
 			path = OAuth;
+			sourceTree = "<group>";
+		};
+		5A1455782E45C0D30066A31F /* WeChat */ = {
+			isa = PBXGroup;
+			children = (
+				5A1455752E45C0D20066A31F /* ESPWeChatModule.m */,
+				5A1455772E45C0D20066A31F /* ESPWeChatModule.swift */,
+			);
+			path = WeChat;
 			sourceTree = "<group>";
 		};
 		832341AE1AAA6A7D00B99B32 /* Libraries */ = {
@@ -612,6 +626,8 @@
 				F1A40E292EBC9E3A008A590D /* ESPMatterUtilityModule.swift in Sources */,
 				5A1455722E45C0D10066A31F /* ESPOauthModule.m in Sources */,
 				5A1455732E45C0D10066A31F /* ESPOauthModule.swift in Sources */,
+				5A1455742E45C0D20066A31F /* ESPWeChatModule.m in Sources */,
+				5A1455762E45C0D20066A31F /* ESPWeChatModule.swift in Sources */,
 				13B07FBC1A68108700A75B9A /* AppDelegate.mm in Sources */,
 				F1B6027F2E30C240003DA0C4 /* ESPNotificationModule.swift in Sources */,
 				F1B602802E30C240003DA0C4 /* ESPNotificationModule.m in Sources */,

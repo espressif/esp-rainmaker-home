@@ -63,37 +63,53 @@ android_apk:
   interruptible: true
   needs:
     - job: code_quality
+  parallel:
+    matrix:
+      - APP_FLAVOR: global
+      - APP_FLAVOR: cn
   script:
     - npm ci
-
-    - if [ -f .env.example ]; then cp .env.example .env; echo "Created .env from .env.example"; else echo ".env.example not found, skipping"; fi
-
-    # Release signing + Firebase config from CI variables (base64-encoded files; same as GitHub FS_* secrets).
-    # Configure: FS_KEYSTORE_FILE, FS_KEY_PROPERTIES_FILE, FS_GOOGLE_SERVICES_JSON (see scripts/secrets_to_base64.sh).
-    # keystore.properties must use e.g. storeFile=app/release.keystore when the keystore is under android/app/.
+    # Secrets: FS_ENV_<FLAVOR>_FILE, FS_KEYSTORE_<FLAVOR>_FILE, FS_GOOGLE_SERVICES_JSON (global); keystore.properties via prebuild.
     - |
       set -euo pipefail
+      FLAVOR_UPPER=$(echo "${APP_FLAVOR}" | tr '[:lower:]' '[:upper:]')
+      ENV_SECRET_VAR="FS_ENV_${FLAVOR_UPPER}_FILE"
+      KEYSTORE_SECRET_VAR="FS_KEYSTORE_${FLAVOR_UPPER}_FILE"
+      KEYSTORE_PATH="release.${APP_FLAVOR}.keystore"
+
+      ENV_B64="${!ENV_SECRET_VAR:-}"
+      [ -n "${ENV_B64}" ] || { echo "${ENV_SECRET_VAR} is not set"; exit 1; }
+
+      KEYSTORE_B64="${!KEYSTORE_SECRET_VAR:-}"
+      [ -n "${KEYSTORE_B64}" ] || { echo "${KEYSTORE_SECRET_VAR} is not set"; exit 1; }
+
+      if [ "${APP_FLAVOR}" = "global" ]; then
+        [ -n "${FS_GOOGLE_SERVICES_JSON:-}" ] || { echo "FS_GOOGLE_SERVICES_JSON is not set"; exit 1; }
+      fi
+
       umask 077
-      [ -n "${FS_KEYSTORE_FILE:-}" ] && [ -n "${FS_KEY_PROPERTIES_FILE:-}" ] && [ -n "${FS_GOOGLE_SERVICES_JSON:-}" ] || exit 1
       mkdir -p android/app
-      printf '%s' "$FS_KEYSTORE_FILE" | base64 -d > android/app/release.keystore
-      printf '%s' "$FS_KEY_PROPERTIES_FILE" | base64 -d > android/keystore.properties
-      printf '%s' "$FS_GOOGLE_SERVICES_JSON" | base64 -d > android/app/google-services.json
-      test -s android/app/release.keystore
-      test -s android/keystore.properties
-      test -s android/app/google-services.json
+
+      printf '%s' "${ENV_B64}" | base64 -d > .env
+      printf '%s' "${KEYSTORE_B64}" | base64 -d > "android/app/${KEYSTORE_PATH}"
+      if [ "${APP_FLAVOR}" = "global" ]; then
+        printf '%s' "$FS_GOOGLE_SERVICES_JSON" | base64 -d > android/app/google-services.json
+      fi
+
+      test -s .env
+      test -s "android/app/${KEYSTORE_PATH}"
+      if [ "${APP_FLAVOR}" = "global" ]; then
+        test -s android/app/google-services.json
+      fi
+
+    - npm run "prebuild:android:${APP_FLAVOR}"
 
     - if [ -z "${ANDROID_HOME:-}" ]; then echo "ANDROID_HOME is not set (configure it as a GitLab CI variable or runner env)"; exit 1; fi
     - echo "sdk.dir=${ANDROID_HOME}" > android/local.properties
-    - cat android/local.properties
-
-    # Clear stale Metro/Babel transform cache to avoid stale module resolution
     - rm -rf /tmp/metro-* "${TMPDIR:-/tmp}/metro-"* "${TMPDIR:-/tmp}/haste-map-"* 2>/dev/null || true
-
-    # Run Fastlane
     - cd android/fastlane
     - bundle install
-    - bundle exec fastlane android apk
+    - bundle exec fastlane android apk flavor:${APP_FLAVOR}
 
   artifacts:
     paths:
@@ -130,6 +146,7 @@ ios_ipa:
       fi
 
       # Secrets — GitLab CI/CD Variables only (Settings → CI/CD → Variables)
+      : "${FS_ENV_GLOBAL_FILE:?must be set as a GitLab CI/CD variable (masked)}"
       : "${PRIVATE_TOKEN:?must be set as a GitLab CI/CD variable (masked)}"
       : "${IOS_P12_PASSWORD:?must be set as a GitLab CI/CD variable (masked)}"
       : "${IOS_KEYCHAIN_PASSWORD:?must be set as a GitLab CI/CD variable (masked)}"
@@ -150,7 +167,12 @@ ios_ipa:
 
       npm ci
 
-      if [ -f .env.example ]; then cp .env.example .env; echo "Created .env from .env.example"; else echo ".env.example not found, skipping"; fi
+      # Secrets: FS_ENV_GLOBAL_FILE (base64 .env.global) → .env + .env.global for prebuild / app.config
+      umask 077
+      printf '%s' "${FS_ENV_GLOBAL_FILE}" | base64 -d > .env.global
+      cp .env.global .env
+      test -s .env.global
+      test -s .env
 
       npm run prebuild:ios
 
@@ -173,15 +195,15 @@ android_test:
   resource_group: android_moto
   timeout: 2h
   needs:
-    - job: android_apk
+    - job: "android_apk: [global]"
       artifacts: true
   script:
     - set -euo pipefail
-    - APK_PATH="${CI_PROJECT_DIR}/artifacts/android/app-release.apk"
+    - APK_PATH="${CI_PROJECT_DIR}/artifacts/android/app-global-release.apk"
     - if [ ! -f "${APK_PATH}" ]; then echo "APK not found at ${APK_PATH}"; ls -la artifacts/android || true; exit 1; fi
     - echo "APK_PATH=${APK_PATH}"
 
-    - if [ -f .env.example ]; then cp .env.example .env; fi
+    - if [ -f .env.global.example ]; then cp .env.global.example .env; fi
     - mkdir -p test/artifacts/android
     - cp "${APK_PATH}" test/artifacts/android/app-release.apk
     - ls -la test/artifacts/android
@@ -257,7 +279,7 @@ ios_test:
     - if [ -z "${IPA_PATH}" ]; then echo "IPA not found under artifacts/ios"; ls -la artifacts/ios || true; exit 1; fi
     - echo "IPA_PATH=${IPA_PATH}"
 
-    - if [ -f .env.example ]; then cp .env.example .env; fi
+    - if [ -f .env.global.example ]; then cp .env.global.example .env; fi
     - mkdir -p test/artifacts/ios
     - cp "${IPA_PATH}" test/artifacts/ios/app-release.ipa
 

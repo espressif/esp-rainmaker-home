@@ -2,12 +2,14 @@ default_platform(:android)
 
 platform :android do
 
-  lane :apk do
+  lane :apk do |options|
+    flavor = (options[:flavor] || "global").to_s
+
     Dir.chdir("..") do
-      sh("./gradlew assembleRelease --parallel --build-cache")
+      sh("./gradlew assemble#{flavor.capitalize}Release --parallel --build-cache")
 
       artifacts_dir = "../artifacts/android"
-      apk_glob = "app/build/outputs/apk/release/*.apk"
+      apk_glob = "app/build/outputs/apk/#{flavor}/release/*.apk"
 
       sh("mkdir -p #{artifacts_dir}")
 
@@ -15,11 +17,11 @@ platform :android do
       if apks.empty?
         sh("echo 'No APKs found at #{apk_glob}'")
         sh("ls -la app/build/outputs/apk || true")
-        sh("ls -la app/build/outputs/apk/release || true")
+        sh("ls -la app/build/outputs/apk/#{flavor} || true")
         UI.user_error!("APK not produced")
       end
 
-      sh("cp #{apk_glob} #{artifacts_dir}/")
+      sh("cp #{apk_glob} #{artifacts_dir}/app-#{flavor}-release.apk")
     end
   end
 

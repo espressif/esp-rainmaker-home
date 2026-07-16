@@ -133,5 +133,28 @@ class ESPAppUtilityModule: NSObject, RCTBridgeModule, CBCentralManagerDelegate {
     // On iOS, permissions are requested automatically when needed
     // This method exists for API compatibility with Android
   }
+
+  /**
+   * UserDefaults key recording CN-region privacy consent. Shared contract with
+   * AppDelegate.requestAppPermissions, which defers the startup permission
+   * prompts on CN-region devices until this flag is set.
+   */
+  static let cnConsentAcceptedKey = "cn_consent_accepted"
+
+  /**
+   * Records the CN-region privacy consent natively and runs the startup
+   * permission prompts that AppDelegate deferred until consent was given
+   * (parity with Android's acceptCnConsent). No-op effect outside CN, where
+   * the prompts were never deferred.
+   */
+  @objc(acceptCnConsent:rejecter:)
+  func acceptCnConsent(resolver resolve: @escaping RCTPromiseResolveBlock,
+                       rejecter reject: @escaping RCTPromiseRejectBlock) {
+    UserDefaults.standard.set(true, forKey: ESPAppUtilityModule.cnConsentAcceptedKey)
+    DispatchQueue.main.async {
+      ESPPermissionUtils.sharedInstance().requestAllPermissions()
+    }
+    resolve(true)
+  }
 }
  

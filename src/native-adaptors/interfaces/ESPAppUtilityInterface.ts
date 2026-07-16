@@ -31,6 +31,13 @@ interface ESPAppUtilityInterface {
    * Requests all required permissions.
    */
   requestAllPermissions(): void;
+
+  /**
+   * Records that the CN-region privacy consent was accepted and runs the
+   * startup permission prompts that were deferred until consent (no-op on
+   * non-CN builds).
+   */
+  acceptCnConsent(): Promise<boolean>;
 }
 
 const { ESPAppUtilityModule } = NativeModules;

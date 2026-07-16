@@ -19,6 +19,7 @@ import {
   Logo,
 } from "@shared/components";
 import { InfoItem } from "@features/user/components";
+import { getActiveRegionLabelKey } from "@config/region.config";
 import Constants from "expo-constants";
 
 /**
@@ -65,6 +66,13 @@ const AboutUs: React.FC = () => {
             value={appVersion}
             showSeparator={true}
             qaId="app_version_about_us"
+          />
+
+          <InfoItem
+            label={t("layout.shared.region")}
+            value={t(getActiveRegionLabelKey())}
+            showSeparator={true}
+            qaId="app_region_about_us"
           />
 
           <InfoItem

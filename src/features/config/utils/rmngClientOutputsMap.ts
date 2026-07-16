@@ -24,7 +24,7 @@ function readNonEmptyString(
 
 /**
  * Splits an execute-api style URL into origin (RMNG_BASE_URL) and path (RMNG_API_PATH),
- * matching .env.example / app.config `rmngSdk` semantics.
+ * matching .env.global.example / .env.cn.example / app.config `rmngSdk` semantics.
  */
 export function splitExecuteApiUrl(apiUrl: string): {
   baseUrl: string;
@@ -73,7 +73,7 @@ export function isRmngClientOutputsDoc(value: unknown): boolean {
 
 /**
  * Maps rmng-client-outputs.json (see public S3 bundle) into scanned RMNG runtime config.
- * Field mapping aligns with .env.example: RMNG_BASE_URL, RMNG_API_PATH, RMNG_USER_*,
+ * Field mapping aligns with .env.global.example / .env.cn.example: RMNG_BASE_URL, RMNG_API_PATH, RMNG_USER_*,
  * RMNG_IDENTITY_ID, RMNG_AWS_REGION, RMNG_USER_POOL_ID, RMNG_CLIENT_ID, RMNG_IOT_ENDPOINT.
  */
 export function mapRmngClientOutputsToScannedPayload(

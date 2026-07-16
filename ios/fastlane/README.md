@@ -11,7 +11,7 @@ All configuration comes from **process environment variables**. The Fastfile doe
 | Purpose | Location | Used by |
 |---------|----------|---------|
 | **iOS code signing** | GitLab CI/CD Variables + `~/.esp-rainmaker-ios-fastlane.env` | `ios/fastlane/Fastfile` |
-| **Expo app config** (bundle ID, SDK URLs, flags) | Repo-root `.env` (from `.env.example` in CI) | `npm run prebuild:ios` → `scripts/sync-env-to-ios.js` |
+| **Expo app config** (bundle ID, SDK URLs, flags) | Repo-root `.env` (from `.env.global.example` in CI) | `npm run prebuild:ios` → `scripts/sync-env-to-ios.js` |
 
 ---
 
@@ -109,8 +109,9 @@ nvm use 22
 rbenv global 3.3.6
 
 npm ci
-# Repo-root .env = Expo app config for prebuild (not iOS signing — see table above)
-cp .env.example .env
+# Repo-root .env = Expo app config for prebuild (not iOS signing — see table above).
+# iOS builds from the global region file (single binary; region resolves at runtime).
+cp .env.global.example .env
 npm run prebuild:ios
 
 cd ios/fastlane && bundle install && bundle exec fastlane ios adhoc

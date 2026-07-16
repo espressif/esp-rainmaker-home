@@ -21,13 +21,20 @@ const path = require('path');
  * Paths
  * ===================================================== */
 const ROOT = path.resolve(__dirname, '..');
+// Env file selectable via ENVFILE (relative to repo root or absolute);
+// defaults to .env for the existing copy-based build scripts.
+const ENV_FILE = process.env.ENVFILE || '.env';
 const PATHS = {
-  env: path.join(ROOT, '.env'),
+  env: path.isAbsolute(ENV_FILE) ? ENV_FILE : path.join(ROOT, ENV_FILE),
   gradleProps: path.join(ROOT, 'android/gradle.properties'),
   buildGradle: path.join(ROOT, 'android/app/build.gradle'),
   settingsGradle: path.join(ROOT, 'android/settings.gradle'),
   googleServices: path.join(ROOT, 'android/app/google-services.json'),
   googleServicesTemplate: path.join(ROOT, 'android/app/google-services.json.template'),
+  // Gitignored. Regenerated from the active .env each prebuild so the release
+  // signingConfig in build.gradle signs with THIS flavor's keystore. Signing
+  // creds go ONLY here — never gradle.properties (which is committed).
+  keystoreProps: path.join(ROOT, 'android/keystore.properties'),
 };
 
 /* =====================================================
@@ -35,6 +42,12 @@ const PATHS = {
  * ===================================================== */
 const ENV_TO_GRADLE = {
   APP_NAME: 'APP_NAME',
+  // Deployment region (global | cn | auto). Gates the google-services plugin
+  // and is read by the region product flavors in build.gradle.
+  APP_REGION: 'APP_REGION',
+  // Single per-build application id. The value differs per region env file
+  // (global vs cn); build.gradle's global flavor inherits it via defaultConfig
+  // and the cn flavor reads it via project.findProperty("ANDROID_APP_APPLICATION_ID").
   ANDROID_APP_APPLICATION_ID: 'ANDROID_APP_APPLICATION_ID',
   APP_VERSION: 'APP_VERSION',
   ANDROID_VERSION_CODE: 'ANDROID_VERSION_CODE',
@@ -49,6 +62,25 @@ const ENV_TO_GRADLE = {
 
   MATTER_VENDOR_ID: 'MATTER_VENDOR_ID',
   MATTER_COMMISSIONING_METHOD: 'MATTER_COMMISSIONING_METHOD',
+
+  // WeChat login (CN flavor only). Drives the CN flavor's BuildConfig field and
+  // the WXEntryActivity URL scheme manifest placeholder.
+  WECHAT_APP_ID: 'WECHAT_APP_ID',
+};
+
+/* =====================================================
+ * Env → keystore.properties (release signing credentials)
+ * Maps .env signing keys to the gitignored android/keystore.properties keys
+ * that build.gradle's release signingConfig reads. Each region's .env carries
+ * its own values, so building a flavor signs it with that flavor's keystore.
+ * DELIBERATELY separate from ENV_TO_GRADLE — signing secrets must NEVER be
+ * written to the committed android/gradle.properties.
+ * ===================================================== */
+const ENV_TO_KEYSTORE = {
+  ANDROID_KEYSTORE_FILE: 'storeFile',        // relative to android/app/ (e.g. sign/release.jks)
+  ANDROID_KEYSTORE_PASSWORD: 'storePassword',
+  ANDROID_KEY_ALIAS: 'keyAlias',
+  ANDROID_KEY_PASSWORD: 'keyPassword',
 };
 
 /* =====================================================
@@ -161,14 +193,22 @@ function syncGradleProperties(file, env) {
  * Android config updates
  * ===================================================== */
 function updateApplicationId(appId) {
-  // Allow empty string - sync exactly from .env
-  // appId can be empty string if explicitly set to empty in .env
+  // Keep the GLOBAL application id in sync across:
+  //   - build.gradle defaultConfig `applicationId "..."` (global default; the
+  //     `cn` flavor overrides it at build time, and the Expo CLI parses this
+  //     literal to launch the app — it must stay a plain quoted string).
+  //   - settings.gradle rootProject.name (stable, recognizable project name).
+  //   - google-services.json package (Firebase ships in the global flavor only).
+  // The first `applicationId "..."` literal in build.gradle is defaultConfig;
+  // the cn flavor uses project.findProperty(...) (no quoted literal), so this
+  // replacement never touches the cn id.
+  if (!appId) return;
 
   write(
     PATHS.buildGradle,
     read(PATHS.buildGradle).replace(
-      /^\s*applicationId\s+.+$/m,
-      `        applicationId "${appId}"`
+      /^(\s*)applicationId\s+["'].*["']\s*$/m,
+      `$1applicationId "${appId}"`
     )
   );
 
@@ -180,10 +220,8 @@ function updateApplicationId(appId) {
     )
   );
 
-  // Only log non-empty values (empty values are synced silently)
-  if (appId !== '') {
-    console.log(`  ✓ applicationId = ${appId}`);
-  }
+  console.log(`  ✓ global applicationId = ${appId}`);
+  console.log(`  ✓ rootProject.name = ${appId}`);
 }
 
 function ensureGoogleServicesExists() {
@@ -226,6 +264,28 @@ function updateGoogleServices(appId) {
 }
 
 /* =====================================================
+ * keystore.properties sync (release signing creds → gitignored file)
+ * ===================================================== */
+function syncKeystoreProperties(env) {
+  // Only (re)generate when this build's .env actually configures a keystore.
+  // A checkout without signing creds is left untouched, so it still builds a
+  // debug (default debug key) / unsigned release.
+  if (!env.ANDROID_KEYSTORE_FILE) {
+    console.warn('  ⚠ ANDROID_KEYSTORE_FILE not set in .env — keystore.properties left as-is (unsigned/debug build)');
+    return;
+  }
+
+  // Written ONLY to the gitignored android/keystore.properties — never to the
+  // committed gradle.properties. Overwritten from the active .env each prebuild
+  // so the release signingConfig uses THIS flavor's keystore.
+  const lines = Object.entries(ENV_TO_KEYSTORE).map(
+    ([envKey, propKey]) => `${propKey}=${env[envKey] ?? ''}`
+  );
+  fs.writeFileSync(PATHS.keystoreProps, lines.join('\n') + '\n');
+  console.log(`  ✓ keystore.properties written (storeFile = ${env.ANDROID_KEYSTORE_FILE})`);
+}
+
+/* =====================================================
  * Main
  * ===================================================== */
 function main() {
@@ -243,14 +303,29 @@ function main() {
   }
 
   syncGradleProperties(PATHS.gradleProps, env);
+  syncKeystoreProperties(env);
 
-  // Update application ID even if empty (sync exactly from .env)
-  if ('ANDROID_APP_APPLICATION_ID' in env || 'APP_APPLICATION_ID' in env) {
-    const appId = env.ANDROID_APP_APPLICATION_ID ?? env.APP_APPLICATION_ID ?? '';
+  // Single per-build application id (ANDROID_APP_APPLICATION_ID). The cn flavor
+  // reads it directly via findProperty; the global flavor inherits it via the
+  // defaultConfig literal, which we rewrite below.
+  const appId =
+    env.ANDROID_APP_APPLICATION_ID ??
+    env.APP_APPLICATION_ID ??
+    'com.espressif.novahome';
+
+  // Rewrite the defaultConfig applicationId literal, settings.gradle
+  // rootProject.name, and google-services.json package ONLY for non-CN builds.
+  // These all concern the GLOBAL flavor (Firebase / google-services + the
+  // Expo-parseable literal); the cn flavor overrides applicationId via
+  // findProperty and ships no google-services. Skipping for CN keeps
+  // build.gradle / settings.gradle stable at the global id (no per-flavor churn)
+  // — mirrors the google-services plugin gating in build.gradle.
+  const isCnBuild = (env.APP_REGION || '').toLowerCase() === 'cn';
+  if (!isCnBuild) {
     updateApplicationId(appId);
-    if (appId) {
-      updateGoogleServices(appId);
-    }
+    updateGoogleServices(appId);
+  } else {
+    console.log('  ⓘ CN build — leaving defaultConfig/settings/google-services unchanged (cn flavor sets its own applicationId)');
   }
 
   console.log('✅ Android Sync complete');

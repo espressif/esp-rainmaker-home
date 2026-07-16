@@ -19,6 +19,7 @@ import android.util.Log
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 
+import com.app.consent.ConsentPrefs
 import com.app.notification.ESPNotificationQueue
 import com.app.utils.ESPAppUtilityModule
 import com.app.utils.ESPPermissionUtils
@@ -27,11 +28,10 @@ import com.facebook.react.ReactActivityDelegate
 import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.defaults.DefaultNewArchitectureEntryPoint.fabricEnabled
 import com.facebook.react.defaults.DefaultReactActivityDelegate
-import com.google.firebase.FirebaseApp
-import com.google.firebase.messaging.FirebaseMessaging
 import expo.modules.ReactActivityDelegateWrapper
 import expo.modules.splashscreen.SplashScreenManager
 import com.app.notification.ESPNotificationHelper
+import com.app.notification.PushBootstrap
 
 class MainActivity : ReactActivity() {
 
@@ -40,20 +40,42 @@ class MainActivity : ReactActivity() {
     private val REQUEST_ENABLE_BLUETOOTH = 100
     private var appUtilityModule: ESPAppUtilityModule? = null
 
+    companion object {
+        private const val CN_FLAVOR = "cn"
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         SplashScreenManager.registerOnActivity(this)
         setTheme(R.style.AppTheme)
         super.onCreate(null)
         ESPNotificationHelper.createNotificationChannels(this)
 
-        FirebaseApp.initializeApp(this)
-        FirebaseMessaging.getInstance().isAutoInitEnabled = false
+        // Flavor-specific push init: Global initializes Firebase/FCM, CN is a no-op.
+        PushBootstrap.initialize(this)
 
+        // CN region requires privacy consent before anything else. Defer the
+        // startup permission prompts until consent is accepted; the JS consent
+        // screen calls ESPAppUtilityModule.acceptCnConsent() to run them.
+        val needsConsent =
+            BuildConfig.FLAVOR.equals(CN_FLAVOR, ignoreCase = true) &&
+                !ConsentPrefs.isAccepted(this)
+        if (!needsConsent) {
+            runStartupPermissionChecks()
+        }
+
+//        handleIntent(intent)
+    }
+
+    /**
+     * Runs the startup permission / hardware prompts (notifications, BLE,
+     * location). Invoked directly at launch for non-CN builds (and CN
+     * builds where consent was already accepted), or after consent via
+     * ESPAppUtilityModule.acceptCnConsent().
+     */
+    fun runStartupPermissionChecks() {
         checkPermissions()
         enableBluetoothIfNeeded()
         checkLocationServicesEnabled()
-
-//        handleIntent(intent)
     }
 
     override fun onResume() {

@@ -1,4 +1,11 @@
 {
+  "consent": {
+    "title": "隐私政策",
+    "acceptAndContinue": "接受并继续",
+    "disagree": "暂不使用",
+    "declinedTitle": "需要同意",
+    "declinedMessage": "您需要接受隐私政策才能使用本应用。"
+  },
   "alexa": {
     "guide": "Alexa 指南",
     "step1": "1. 在菜单中点击 \"Skills & Games\"，然后搜索 \"ESP RainMaker Home\"。",
@@ -105,6 +112,9 @@
     },
     "shared": {
       "version": "版本",
+      "region": "地区",
+      "regionGlobal": "全球",
+      "regionCn": "中国",
       "termsOfUse": "使用条款",
       "privacyPolicy": "隐私政策",
       "errorHeader": "错误",
@@ -139,6 +149,9 @@
       "signInButton": "登录",
       "forgotPassword": "忘记密码",
       "thirdPartyLogin": "第三方账户登录",
+      "signInToContinue": "登录以继续",
+      "continueWith": "使用 {{provider}} 登录",
+      "chooseSignInMethod": "选择您的登录方式",
       "navigateToSignUp": "没有账户？注册",
       "settingUpAccount": "正在设置您的账户",
       "settingUpHomes": "正在设置家庭",

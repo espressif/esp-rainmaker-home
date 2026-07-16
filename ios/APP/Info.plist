@@ -44,9 +44,22 @@
 				<string>$(APP_SCHEMA)</string>
 			</array>
 		</dict>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>weixin</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>$(WECHAT_APP_ID)</string>
+			</array>
+		</dict>
 	</array>
 	<key>CFBundleVersion</key>
 	<string>1</string>
+	<key>LSApplicationQueriesSchemes</key>
+	<array>
+		<string>weixin</string>
+		<string>weixinULAPI</string>
+	</array>
 	<key>LSMinimumSystemVersion</key>
 	<string>15.1</string>
 	<key>LSRequiresIPhoneOS</key>
@@ -87,6 +100,10 @@
 	</array>
 	<key>RCTNewArchEnabled</key>
 	<true/>
+	<key>WeChatAppID</key>
+	<string>$(WECHAT_APP_ID)</string>
+	<key>WeChatUniversalLink</key>
+	<string>https://$(WECHAT_UNIVERSAL_LINK_PREFIX)</string>
 	<key>UILaunchStoryboardName</key>
 	<string>SplashScreen</string>
 	<key>UIRequiredDeviceCapabilities</key>

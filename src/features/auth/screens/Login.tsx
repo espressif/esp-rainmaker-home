@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useContext, useMemo, useRef } from "react";
+import { ComponentProps, useContext, useMemo, useRef } from "react";
 import {
   View,
   Text,
@@ -13,6 +13,7 @@ import {
   ImageSourcePropType,
   TextInput,
 } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useTranslation } from "react-i18next";
 
@@ -22,6 +23,7 @@ import { tokens } from "@shared/theme/tokens";
 import { useLogin } from "@features/auth/hooks";
 import { getAuthAllowedUsernameTypes } from "@features/auth/utils/authHelper";
 import { getEnabledOAuthProviders } from "@/config/features.config";
+import { isCnRegion } from "@config/region.config";
 import { runtimeConfigManager } from "@config/runtime.config";
 import { cdfBootstrap } from "@integrations";
 import asyncStorageAdapter from "@native-adaptors/implementations/ESPAsyncStorage";
@@ -39,10 +41,23 @@ import { testProps } from "@shared/utils/testProps";
 
 import google from "@assets/images/google.png";
 import signinwithapple from "@assets/images/apple.png";
+import wechat from "@assets/images/wechat.png";
 
 const OAUTH_PROVIDER_IMAGES: Record<string, ImageSourcePropType> = {
   google,
   signinwithapple,
+  wechat,
+};
+
+// Per-provider metadata for the CN OAuth-only tiles: brand name (not
+// translated), brand color for the icon circle, and the Ionicons brand glyph.
+const OAUTH_TILE_META: Record<
+  string,
+  { label: string; color: string; icon: ComponentProps<typeof Ionicons>["name"] }
+> = {
+  google: { label: "Google", color: "#DB4437", icon: "logo-google" },
+  signinwithapple: { label: "Apple", color: "#000000", icon: "logo-apple" },
+  wechat: { label: "WeChat", color: "#07C160", icon: "logo-wechat" },
 };
 
 /**
@@ -82,6 +97,10 @@ export function LoginScreen() {
   } = useLogin();
 
   const passwordInputRef = useRef<TextInput>(null);
+
+  // CN-region builds omit the email / password credential login. Only the
+  // remaining login options (e.g. OAuth / sign-up) are shown.
+  const hideCredentialLogin = isCnRegion();
 
   const usernameFieldProps = useMemo(() => {
     const allowsPhone = getAuthAllowedUsernameTypes().includes("phone");
@@ -130,106 +149,157 @@ export function LoginScreen() {
             style={globalStyles.inputContainer}
             {...testProps("view_input_login")}
           >
-            <Input
-              key={`login-email-${authFieldsKey}-${usernameParam || "n"}`}
-              icon="mail-open"
-              placeholder={usernameFieldProps.placeholder}
-              initialValue={email}
-              onFieldChange={handleEmailChange}
-              validator={emailValidator}
-              validateOnBlur={true}
-              inputMode={usernameFieldProps.inputMode}
-              keyboardType={usernameFieldProps.keyboardType}
-              returnKeyType="next"
-              onSubmitEditing={() => {
-                if (isEmailValid) {
-                  passwordInputRef.current?.focus();
-                }
-              }}
-              qaId="email"
-            />
+            {!hideCredentialLogin && (
+              <>
+                <Input
+                  key={`login-email-${authFieldsKey}-${usernameParam || "n"}`}
+                  icon="mail-open"
+                  placeholder={usernameFieldProps.placeholder}
+                  initialValue={email}
+                  onFieldChange={handleEmailChange}
+                  validator={emailValidator}
+                  validateOnBlur={true}
+                  inputMode={usernameFieldProps.inputMode}
+                  keyboardType={usernameFieldProps.keyboardType}
+                  returnKeyType="next"
+                  onSubmitEditing={() => {
+                    if (isEmailValid) {
+                      passwordInputRef.current?.focus();
+                    }
+                  }}
+                  qaId="email"
+                />
 
-            <Input
-              ref={passwordInputRef}
-              key={`login-pw-${authFieldsKey}`}
-              icon="lock-closed"
-              placeholder={t("auth.shared.passwordPlaceholder")}
-              isPassword={true}
-              initialValue={password}
-              onFieldChange={handlePasswordChange}
-              validator={passwordValidator}
-              validateOnBlur={true}
-              returnKeyType="go"
-              onSubmitEditing={() => {
-                if (isEmailValid && isPasswordValid && !isLoading) {
-                  void login();
-                }
-              }}
-              qaId="password"
-            />
+                <Input
+                  ref={passwordInputRef}
+                  key={`login-pw-${authFieldsKey}`}
+                  icon="lock-closed"
+                  placeholder={t("auth.shared.passwordPlaceholder")}
+                  isPassword={true}
+                  initialValue={password}
+                  onFieldChange={handlePasswordChange}
+                  validator={passwordValidator}
+                  validateOnBlur={true}
+                  returnKeyType="go"
+                  onSubmitEditing={() => {
+                    if (isEmailValid && isPasswordValid && !isLoading) {
+                      void login();
+                    }
+                  }}
+                  qaId="password"
+                />
 
-            <Button
-              label={t("auth.login.signInButton")}
-              disabled={!isEmailValid || !isPasswordValid || isLoading}
-              onPress={login}
-              style={globalStyles.signInButton}
-              isLoading={isLoading}
-              qaId="button_login"
-            />
+                <Button
+                  label={t("auth.login.signInButton")}
+                  disabled={!isEmailValid || !isPasswordValid || isLoading}
+                  onPress={login}
+                  style={globalStyles.signInButton}
+                  isLoading={isLoading}
+                  qaId="button_login"
+                />
+              </>
+            )}
 
-            <TouchableOpacity
-              {...testProps("button_forgot_password")}
-              onPress={forgotPwd}
-            >
-              <Text
-                {...testProps("text_forgot_password")}
-                style={globalStyles.forgotPasswordText}
+            {!hideCredentialLogin && (
+              <TouchableOpacity
+                {...testProps("button_forgot_password")}
+                onPress={forgotPwd}
               >
-                {t("auth.login.forgotPassword")}
-              </Text>
-            </TouchableOpacity>
+                <Text
+                  {...testProps("text_forgot_password")}
+                  style={globalStyles.forgotPasswordText}
+                >
+                  {t("auth.login.forgotPassword")}
+                </Text>
+              </TouchableOpacity>
+            )}
           </View>
 
-          {ENABLED_OAUTH_PROVIDERS.length > 0 && (
-            <>
-              <Text
-                {...testProps("text_3plogin")}
-                style={globalStyles.thirdLoginText}
-              >
-                {t("auth.login.thirdPartyLogin")}
-              </Text>
+          {ENABLED_OAUTH_PROVIDERS.length > 0 &&
+            (hideCredentialLogin ? (
+              // CN / OAuth-only: providers are the primary login, shown as
+              // full-width tiles (icon + label + chevron) under a heading.
               <View
+                style={globalStyles.oauthTilesSection}
                 {...testProps("view_3plogin")}
-                style={globalStyles.oauthContainer}
               >
-                {ENABLED_OAUTH_PROVIDERS.map((provider) => (
-                  <TouchableOpacity
-                    key={provider}
-                    onPress={() => oauthLogin(provider)}
-                    style={globalStyles.oauthButton}
-                    {...testProps(`button_3p_${provider}`)}
-                  >
-                    <Image
-                      {...testProps(`image_3p_${provider}`)}
-                      source={
-                        OAUTH_PROVIDER_IMAGES[provider.toLocaleLowerCase()]
-                      }
-                      style={globalStyles.oauthImage}
-                    />
-                  </TouchableOpacity>
-                ))}
+                <Text style={globalStyles.oauthTilesHeading}>
+                  {t("auth.login.signInToContinue")}
+                </Text>
+                <Text style={globalStyles.oauthTilesSubheading}>
+                  {t("auth.login.chooseSignInMethod")}
+                </Text>
+                {ENABLED_OAUTH_PROVIDERS.map((provider) => {
+                  const key = provider.toLocaleLowerCase();
+                  const meta = OAUTH_TILE_META[key];
+                  return (
+                    <TouchableOpacity
+                      key={provider}
+                      onPress={() => oauthLogin(provider)}
+                      style={[
+                        globalStyles.oauthButtonFull,
+                        { backgroundColor: meta?.color ?? tokens.colors.primary },
+                      ]}
+                      {...testProps(`button_3p_${provider}`)}
+                    >
+                      <Ionicons
+                        name={meta?.icon ?? "person-circle"}
+                        size={20}
+                        color={tokens.colors.white}
+                        {...testProps(`image_3p_${provider}`)}
+                      />
+                      <Text style={globalStyles.oauthButtonFullText}>
+                        {t("auth.login.continueWith", {
+                          provider: meta?.label ?? provider,
+                        })}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
               </View>
-            </>
-          )}
+            ) : (
+              // Global: credential login is primary; OAuth is a secondary row of icons.
+              <>
+                <Text
+                  {...testProps("text_3plogin")}
+                  style={globalStyles.thirdLoginText}
+                >
+                  {t("auth.login.thirdPartyLogin")}
+                </Text>
+                <View
+                  {...testProps("view_3plogin")}
+                  style={globalStyles.oauthContainer}
+                >
+                  {ENABLED_OAUTH_PROVIDERS.map((provider) => (
+                    <TouchableOpacity
+                      key={provider}
+                      onPress={() => oauthLogin(provider)}
+                      style={globalStyles.oauthButton}
+                      {...testProps(`button_3p_${provider}`)}
+                    >
+                      <Image
+                        {...testProps(`image_3p_${provider}`)}
+                        source={
+                          OAUTH_PROVIDER_IMAGES[provider.toLocaleLowerCase()]
+                        }
+                        style={globalStyles.oauthImage}
+                      />
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </>
+            ))}
 
-          <TouchableOpacity
-            {...testProps("button_signup")}
-            onPress={() => router.push("/(auth)/Signup")}
-          >
-            <Text {...testProps("text_signup")} style={globalStyles.linkText}>
-              {t("auth.login.navigateToSignUp")}
-            </Text>
-          </TouchableOpacity>
+          {!hideCredentialLogin && (
+            <TouchableOpacity
+              {...testProps("button_signup")}
+              onPress={() => router.push("/(auth)/Signup")}
+            >
+              <Text {...testProps("text_signup")} style={globalStyles.linkText}>
+                {t("auth.login.navigateToSignUp")}
+              </Text>
+            </TouchableOpacity>
+          )}
 
           <AppVersionText testId="text_app_version_login" />
         </View>

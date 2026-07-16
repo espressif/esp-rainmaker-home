@@ -20,6 +20,7 @@ import com.app.oauth.ESPOauthModule
 import com.app.provisioning.ESPProvModule
 import com.app.mqtt.ESPMQTTModule
 import com.app.softap.ESPSoftAPModule
+import com.app.wechat.WeChatModuleProvider
 import com.facebook.react.PackageList
 import com.facebook.react.ReactApplication
 import com.facebook.react.ReactHost
@@ -100,6 +101,14 @@ class MainApplication : Application(), ReactApplication {
                 add(object : ReactPackage {
                     override fun createNativeModules(reactContext: ReactApplicationContext): List<NativeModule> =
                         listOf(ESPSoftAPModule(reactContext))
+                    override fun createViewManagers(reactContext: ReactApplicationContext): List<ViewManager<*, *>> =
+                        emptyList()
+                })
+                // WeChat login — contributes the module on the CN flavor only
+                // (no-op provider on global). See com.app.wechat.WeChatModuleProvider.
+                add(object : ReactPackage {
+                    override fun createNativeModules(reactContext: ReactApplicationContext): List<NativeModule> =
+                        WeChatModuleProvider.create(reactContext)
                     override fun createViewManagers(reactContext: ReactApplicationContext): List<ViewManager<*, *>> =
                         emptyList()
                 })
