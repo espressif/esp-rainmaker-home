@@ -130,7 +130,7 @@ export default {
   expo: {
     name: process.env.APP_NAME || "ESP RainMaker Home",
     slug: process.env.APP_SLUG || "esp-rainmaker-home",
-    version: process.env.APP_VERSION || "5.2.1",
+    version: process.env.APP_VERSION || "5.3.0",
     scheme: process.env.AGENTS_DEEP_LINK_SCHEME || "rainmaker",
     orientation: "portrait",
     icon: "./src/assets/images/logo.png",

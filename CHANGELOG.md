@@ -5,6 +5,24 @@ All notable changes to the ESP RainMaker Home app will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.3.0]
+
+### Added
+
+- China region support with separate Android global and CN builds; iOS serves both regions from a single binary with runtime region resolution
+- WeChat login for the CN region
+- First-launch privacy consent gate for the CN region
+- Active region shown on the login screen and About Us
+- In-app language selection with system-locale detection on first launch, live UI updates on change, and Simplified Chinese support
+- Language screen and Settings entry for manual locale override
+
+### Enhanced
+
+- Per-region env configuration with committed templates for global and CN deployments
+- Device claiming service is now region-aware; CN builds use the CN claiming endpoint
+- Privacy policy link resolves against the active UI language
+- Separate signing and release artifacts per region from a single tag
+
 ## [5.2.1]
 
 ### Added
