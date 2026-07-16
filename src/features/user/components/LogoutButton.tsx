@@ -7,6 +7,7 @@
 
 import React from 'react';
 import { Text, Pressable, ActivityIndicator, StyleSheet } from 'react-native';
+import { useTranslation } from 'react-i18next';
 
 // Icons
 import { LogOut } from 'lucide-react-native';
@@ -41,6 +42,7 @@ const LogoutButton: React.FC<LogoutButtonProps> = ({
   isLoading = false,
   qaId,
 }) => {
+  const { t } = useTranslation();
   return (
     <Pressable {...(qaId ? testProps(qaId) : {})}
       style={[globalStyles.settingsSection, styles.container]}
@@ -53,7 +55,7 @@ const LogoutButton: React.FC<LogoutButtonProps> = ({
         <>
           <LogOut size={20} color={tokens.colors.red} />
           <Text {...testProps("text_logout_button")} style={[globalStyles.fontMedium, styles.text]}>
-            Log Out
+            {t("user.profile.logoutButton")}
           </Text>
         </>
       )}

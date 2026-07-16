@@ -6,10 +6,11 @@
 
 import { View, StyleSheet } from "react-native";
 import { Checkbox } from "react-native-paper";
+import { useTranslation } from "react-i18next";
 import { Typo } from "@shared/components";
 import { tokens } from "@shared/theme/tokens";
 import { testProps } from "@shared/utils/testProps";
-import { TERMS_OF_USE_LINK, PRIVACY_POLICY_LINK } from "@shared/utils/constants";
+import { getTermsOfUseLink, getPrivacyPolicyLink } from "@shared/utils/constants";
 import * as WebBrowser from "expo-web-browser";
 
 interface ConsentCheckboxProps {
@@ -32,9 +33,11 @@ export function ConsentCheckbox({
   andLabel,
   privacyLabel,
 }: ConsentCheckboxProps) {
+  const { i18n } = useTranslation();
+
   const showTerms = async () => {
     try {
-      await WebBrowser.openBrowserAsync(TERMS_OF_USE_LINK);
+      await WebBrowser.openBrowserAsync(getTermsOfUseLink(i18n.language));
     } catch (error) {
       console.error("Failed to open Terms of Use:", error);
     }
@@ -42,7 +45,7 @@ export function ConsentCheckbox({
 
   const showPrivacy = async () => {
     try {
-      await WebBrowser.openBrowserAsync(PRIVACY_POLICY_LINK);
+      await WebBrowser.openBrowserAsync(getPrivacyPolicyLink(i18n.language));
     } catch (error) {
       console.error("Failed to open Privacy Policy:", error);
     }

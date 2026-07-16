@@ -13,3 +13,4 @@ export { Settings } from "./Settings";
 export { AboutUs } from "./AboutUs";
 export { AlexaGuide } from "./AlexaGuide";
 export { GoogleAssistantGuide } from "./GoogleAssistantGuide";
+export { Language } from "./Language";
