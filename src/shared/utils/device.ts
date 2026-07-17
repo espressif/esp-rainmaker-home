@@ -4,7 +4,18 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { ESPRM_NAME_PARAM_TYPE, MATTER_LOCAL_TRANSPORT_KEY } from "./constants";
+import {
+  CONTROL_SCREEN_ROUTE,
+  DEVICE_SETTINGS_SCREEN_ROUTE,
+  DEVICE_REACHABILITY_SOURCE_BRIDGE,
+  DEVICE_REACHABILITY_SOURCE_CLOUD,
+  DEVICE_REACHABILITY_SOURCE_CONTROLLER,
+  DEVICE_REACHABILITY_SOURCE_LOCAL,
+  DEVICE_REACHABILITY_SOURCE_NONE,
+  ESPRM_NAME_PARAM_TYPE,
+  MATTER_CONTROLLER_TRANSPORT_KEY,
+  MATTER_LOCAL_TRANSPORT_KEY,
+} from "./constants";
 import {
   isOperationalMatterLocalTransport,
   parseBridgedChildParentNodeId,
@@ -29,11 +40,25 @@ type NodeRegisteredTransports = Partial<
   Record<string, ESPCDFTransportConfig>
 >;
 
+/** How a node is reachable for control UI. */
+export type DeviceReachabilitySource =
+  | typeof DEVICE_REACHABILITY_SOURCE_CLOUD
+  | typeof DEVICE_REACHABILITY_SOURCE_LOCAL
+  | typeof DEVICE_REACHABILITY_SOURCE_BRIDGE
+  | typeof DEVICE_REACHABILITY_SOURCE_CONTROLLER
+  | typeof DEVICE_REACHABILITY_SOURCE_NONE;
+
+/** Reachability result for cloud and LAN transport checks. */
+export type DeviceReachability = {
+  reachable: boolean;
+  source: DeviceReachabilitySource;
+};
+
 export type { BleAdvertisedDeviceKind, ParsedBleManufacturerAdvertisement } from "./bleAdvertisement";
 
 /**
  * Device images
- */
+ */ 
 const deviceImages: Record<string, any> = {
   "light-1": require("@assets/images/devices/light-1.png"),
   "light-1-online": require("@assets/images/devices/light-1-online.png"),
@@ -106,6 +131,20 @@ const extractDeviceType = (fullType: string | undefined): string => {
 const findDeviceConfig = (deviceType: string) => {
   if (!deviceType) return undefined;
   return DEVICE_TYPE_LIST.find((item) => item.type.includes(deviceType));
+};
+
+/**
+ * Resolves the expo-router path for a device card tap.
+ * Types marked `settingsOnly` in devices.config skip Control and open Settings directly.
+ * @param deviceType - Extracted device type (e.g. `"matter-controller"`)
+ * @returns Route pathname for Control or Settings
+ */
+const resolveDeviceCardRoutePath = (deviceType: string): string => {
+  const deviceConfig = findDeviceConfig(deviceType);
+  if (deviceConfig && "settingsOnly" in deviceConfig && deviceConfig.settingsOnly) {
+    return DEVICE_SETTINGS_SCREEN_ROUTE;
+  }
+  return CONTROL_SCREEN_ROUTE;
 };
 
 /**
@@ -434,58 +473,136 @@ const getQRScanErrorType = (
 };
 
 /**
- * Whether the node has an active LAN transport (RainMaker local or Matter operational).
- * Bridged children need child shadow online plus parent operational `matter_local`.
+ * Resolves transport map for reachability checks.
+ * @param cdfNode - CDF node (prefer live `nodeStore` entry when available).
+ * @param registeredTransports - Optional subscription-store transports for MobX tracking.
+ * @returns Transports used to detect LAN availability.
  */
-const isDeviceLocallyAvailable = (
+function resolveNodeTransportsForReachability(
   cdfNode: ESPCDFNode,
   registeredTransports?: NodeRegisteredTransports | null,
-  parentRegisteredTransports?: NodeRegisteredTransports | null,
-): boolean => {
+): NodeRegisteredTransports | undefined {
+  return registeredTransports ?? cdfNode.availableTransports;
+}
+
+/**
+ * Resolves direct LAN or bridge-parent LAN reachability for a node.
+ * Bridged children use `bridge` when online in cloud shadow and parent has operational `matter_local`.
+ * @param cdfNode - Node to evaluate for LAN reachability.
+ * @param transportSource - Resolved transports for the node.
+ * @param parentTransportSource - Optional parent transports for bridged children.
+ * @returns `local`, `bridge`, or null when no LAN path is active.
+ */
+function resolveLanReachabilitySource(
+  cdfNode: ESPCDFNode,
+  transportSource?: NodeRegisteredTransports | null,
+  parentTransportSource?: NodeRegisteredTransports | null,
+): typeof DEVICE_REACHABILITY_SOURCE_LOCAL | typeof DEVICE_REACHABILITY_SOURCE_BRIDGE | null {
   const RMLocalTransport = ESPCDFNodeTransport.LOCAL;
   const MatterLocalTransport = MATTER_LOCAL_TRANSPORT_KEY;
   const parentNodeId = parseBridgedChildParentNodeId(cdfNode.id);
 
   if (parentNodeId) {
     if (!cdfNode.connectivityStatus?.isConnected) {
-      return Boolean(registeredTransports?.[RMLocalTransport]);
+      return transportSource?.[RMLocalTransport]
+        ? DEVICE_REACHABILITY_SOURCE_LOCAL
+        : null;
+    }
+    if (transportSource?.[RMLocalTransport]) {
+      return DEVICE_REACHABILITY_SOURCE_LOCAL;
     }
     const parentTransports =
-      parentRegisteredTransports ??
+      parentTransportSource ??
       ESPCDF.instance?.subscriptionStore?.registeredTransports?.[parentNodeId];
-    return Boolean(
-      registeredTransports?.[RMLocalTransport] ||
-        isOperationalMatterLocalTransport(
-          parentTransports?.[MatterLocalTransport],
-        ),
-    );
+    if (
+      isOperationalMatterLocalTransport(
+        parentTransports?.[MatterLocalTransport],
+      )
+    ) {
+      return DEVICE_REACHABILITY_SOURCE_BRIDGE;
+    }
+    return null;
   }
 
-  return Boolean(
-    registeredTransports?.[RMLocalTransport] ||
-      isOperationalMatterLocalTransport(
-        registeredTransports?.[MatterLocalTransport],
-      ),
+  if (
+    transportSource?.[RMLocalTransport] ||
+    isOperationalMatterLocalTransport(
+      transportSource?.[MatterLocalTransport],
+    )
+  ) {
+    return DEVICE_REACHABILITY_SOURCE_LOCAL;
+  }
+  return null;
+}
+
+/**
+ * Whether the device is reachable for control UI and which path is active.
+ * Prefer `registeredTransports` from `subscriptionStore` so MobX tracks discovery add/remove.
+ * LAN (`local` / `bridge`) takes precedence over cloud when active (badge semantics).
+ * @param cdfNode - Node used for cloud `connectivityStatus` (live nodeStore entry when available).
+ * @param registeredTransports - Optional subscription-store transports for this node id.
+ * @param parentRegisteredTransports - Optional parent transports for bridged Matter children.
+ * @returns Reachability flag and source (`local`, `bridge`, `cloud`, `controller`, or `none`).
+ */
+const getDeviceReachability = (
+  cdfNode: ESPCDFNode,
+  registeredTransports?: NodeRegisteredTransports | null,
+  parentRegisteredTransports?: NodeRegisteredTransports | null,
+): DeviceReachability => {
+  const transportSource = resolveNodeTransportsForReachability(
+    cdfNode,
+    registeredTransports,
   );
+  const lanSource = resolveLanReachabilitySource(
+    cdfNode,
+    transportSource,
+    parentRegisteredTransports,
+  );
+
+  if (lanSource) {
+    return {
+      reachable: true,
+      source: lanSource,
+    };
+  }
+  const viaCloud = cdfNode.connectivityStatus?.isConnected || false;
+  if (viaCloud) {
+    return {
+      reachable: true,
+      source: DEVICE_REACHABILITY_SOURCE_CLOUD,
+    };
+  }
+
+  const viaController = transportSource?.[MATTER_CONTROLLER_TRANSPORT_KEY];
+  if (viaController) {
+    return {
+      reachable: true,
+      source: DEVICE_REACHABILITY_SOURCE_CONTROLLER,
+    };
+  }
+  return {
+    reachable: false,
+    source: DEVICE_REACHABILITY_SOURCE_NONE,
+  };
 };
 
 /**
- * Whether the device is reachable for control UI: cloud online or locally discovered.
+ * Whether the device is reachable for control UI: cloud, LAN, or controller transport.
+ * @param cdfNode - Node used for cloud `connectivityStatus`.
+ * @param registeredTransports - Optional subscription-store transports for this node id.
+ * @param parentRegisteredTransports - Optional parent transports for bridged Matter children.
+ * @returns True when any control path is available.
  */
 const isDeviceConnected = (
   cdfNode: ESPCDFNode,
   registeredTransports?: NodeRegisteredTransports | null,
   parentRegisteredTransports?: NodeRegisteredTransports | null,
 ): boolean => {
-  const isCloudConnected = cdfNode.connectivityStatus?.isConnected || false;
-  return (
-    isCloudConnected ||
-    isDeviceLocallyAvailable(
-      cdfNode,
-      registeredTransports,
-      parentRegisteredTransports,
-    )
-  );
+  return getDeviceReachability(
+    cdfNode,
+    registeredTransports,
+    parentRegisteredTransports,
+  ).reachable;
 };
 
 // Export constants and utility functions
@@ -496,6 +613,7 @@ export {
   extractNodeType,
   extractDeviceType,
   findDeviceConfig,
+  resolveDeviceCardRoutePath,
   getIconName,
   getDeviceImage,
   getDeviceName,
@@ -509,6 +627,6 @@ export {
   isAIAgentFromAdvertisement,
   getProvisionBleIconName,
   parseBleManufacturerAdvertisement,
+  getDeviceReachability,
   isDeviceConnected,
-  isDeviceLocallyAvailable,
 };

@@ -5,7 +5,7 @@
  */
 
 export { useControl } from "./useControl";
-export { useSettings } from "./useSettings";
+export { useSettings, type UseSettingsReturn } from "./useSettings";
 export { useChart } from "./useChart";
 export { useGuide } from "./useGuide";
 export { useGuideSteps } from "./useGuideSteps";

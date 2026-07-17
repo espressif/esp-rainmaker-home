@@ -26,7 +26,7 @@ import { ParamControlWrap } from "@shared/components";
 
 // Utils
 import { useCDF } from "@shared/hooks/useCDF";
-import { isDeviceConnected } from "@shared/utils/device";
+import { getDeviceReachability } from "@shared/utils/device";
 import { resolveParamControl } from "@shared/utils/deviceParams";
 import { parseBridgedChildParentNodeId } from "@shared/utils/matterLocalReachability";
 import { testProps } from "@shared/utils/testProps";
@@ -72,11 +72,11 @@ const DeviceFallback = observer(
       : undefined;
     const deviceConnected = useMemo(
       () =>
-        isDeviceConnected(
+        getDeviceReachability(
           storeNode,
           registeredTransports,
           bridgeParentTransports,
-        ),
+        ).reachable,
       [storeNode, registeredTransports, bridgeParentTransports],
     );
 

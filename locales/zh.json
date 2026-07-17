@@ -512,8 +512,18 @@
       "addingSelfNotAllowed": "不允许添加自己"
     }
   },
+  "controller": {
+    "deviceCard": {
+      "viaController": "通过控制器可用"
+    }
+  },
   "device": {
     "availableOnWLAN": "在 WLAN 上可用",
+    "reachability": {
+      "wlan": "WLAN",
+      "bridge": "桥接",
+      "controller": "控制器"
+    },
     "addDeviceSelection": {
       "title": "添加设备",
       "note": "请阅读快速用户指南并选择一种方式添加设备",
@@ -747,7 +757,16 @@
       "systemOperationFailed": "启动 {{operation}} 失败",
       "systemOperationConfirm": "您确定要执行 {{operation}} 吗？",
       "addToControlGroup": "添加到联控分组",
-      "controlGroupNeedHome": "请先将设备加入家庭，再添加到联控分组。"
+      "controlGroupNeedHome": "请先将此设备加入家庭，再添加到联控分组。",
+      "rmakerUserAuthTitle": "认证",
+      "updateRegistrationToken": "更新认证令牌",
+      "updatingRegistrationToken": "正在更新认证令牌...",
+      "registrationTokenUpdated": "已在此设备上更新认证令牌",
+      "registrationTokenUpdateFailed": "无法更新认证令牌，请重试。",
+      "registrationTokenNotAvailable": "您尚未登录，请登录后重试。",
+      "updateDeviceList": "更新设备列表",
+      "deviceListUpdated": "已请求刷新设备列表",
+      "deviceListUpdateFailed": "无法刷新设备列表，请重试。"
     },
     "panels": {
       "light": {

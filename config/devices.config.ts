@@ -285,6 +285,7 @@ export const DEVICE_TYPE_LIST = [
       "matter-controller": { icon: "matter-controller" },
     },
     defaultIcon: "matter-controller",
-    disabled: false
+    disabled: false,
+    settingsOnly: true,
   },
 ];

@@ -512,8 +512,18 @@
       "addingSelfNotAllowed": "Adding self not allowed"
     }
   },
+  "controller": {
+    "deviceCard": {
+      "viaController": "controller"
+    }
+  },
   "device": {
     "availableOnWLAN": "Available on WLAN",
+    "reachability": {
+      "wlan": "WLAN",
+      "bridge": "Bridge",
+      "controller": "Controller"
+    },
     "addDeviceSelection": {
       "title": "Add Device",
       "note": "Please read quick user guide and choose an option to add device",
@@ -751,8 +761,17 @@
       "systemOperationSuccess": "{{operation}} initiated successfully",
       "systemOperationFailed": "Failed to initiate {{operation}}",
       "systemOperationConfirm": "Are you sure you want to perform {{operation}}?",
-      "addToControlGroup": "Add to control group",
-      "controlGroupNeedHome": "This device must belong to a home before you can add it to a control group."
+      "addToControlGroup": "Add to Control Group",
+      "controlGroupNeedHome": "Add this device to a home before you can add it to a control group.",
+      "rmakerUserAuthTitle": "Authentication",
+      "updateRegistrationToken": "Update Auth Token",
+      "updatingRegistrationToken": "Updating auth token...",
+      "registrationTokenUpdated": "Auth token updated on this device",
+      "registrationTokenUpdateFailed": "Couldn't update the auth token. Please try again.",
+      "registrationTokenNotAvailable": "You're not signed in. Sign in and try again.",
+      "updateDeviceList": "Update Device List",
+      "deviceListUpdated": "Device list refresh requested",
+      "deviceListUpdateFailed": "Couldn't refresh the device list. Please try again."
     },
     "panels": {
       "light": {
