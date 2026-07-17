@@ -536,6 +536,8 @@ export const CONFIG_FETCH_TIMEOUT_MS = 10000;
 
 // QR Code Scanner constants
 export const QR_CODE_TYPE = "qr";
+export const QR_PROVISION_CONNECT_TIMEOUT_MS = 15000;
+export const QR_PROVISION_CONNECT_TIMEOUT_ERROR = "DEVICE_CONNECTION_TIMEOUT";
 export const CAMERA_TYPE_FRONT = "front";
 export const CAMERA_TYPE_BACK = "back";
 
