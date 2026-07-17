@@ -570,6 +570,8 @@
       "softAPDescription": "使用 SoftAP 连接添加设备",
       "onNetworkOption": "网络中",
       "onNetworkDescription": "添加已连接到您 Wi-Fi 网络的设备",
+      "matterManualOption": "Matter 配对码",
+      "matterManualDescription": "通过输入配置码添加 Matter 设备",
       "sharedHomeRestriction": "不允许添加设备",
       "sharedHomeMessage": "您没有权限向“{{homeName}}”添加设备，因为这是一个共享家庭。",
       "defaultHomeName": "此家庭"
@@ -757,6 +759,7 @@
         "notSupported": "{{deployment}} 不支持 Matter 配网。",
         "notSupportedGeneric": "此部署不支持 Matter 配网。",
         "notSupportedHint": "请切换到支持 Matter 的部署后再添加此设备。",
+        "enterCodeAgainHint": "请返回并重新输入配对码。",
         "convertTitle": "为此家庭启用 Matter",
         "convertMessage": "需要先为“{{homeName}}”配置 Matter Fabric 才能添加设备。是否继续转换此家庭？",
         "convertConfirm": "继续",
@@ -765,6 +768,14 @@
         "statusStartingCommissioning": "正在启动调试...",
         "statusIssuingCertificate": "正在签发用户证书...",
         "statusConvertingFabric": "正在将家庭转换为 Matter Fabric..."
+      },
+      "manual": {
+        "title": "输入配对码",
+        "heading": "输入 Matter 配对码",
+        "description": "输入 Matter 设备或其包装上印制的配置码。",
+        "placeholder": "11 位或 21 位配对码",
+        "invalidCode": "请输入有效的 11 位或 21 位 Matter 配对码。",
+        "authRequired": "请先登录后再进行 Matter 设备调试。"
       }
     },
     "wifi": {

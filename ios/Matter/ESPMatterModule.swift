@@ -405,20 +405,28 @@ class ESPMatterModule: RCTEventEmitter {
     if #available(iOS 16.4, *) {
       Task {
         do {
-          if let setupPayload = try? MTRSetupPayload(onboardingPayload: qrData) {
-            // Create MatterAddDeviceRequest topology
-            let topology = MatterAddDeviceRequest.Topology(
-              ecosystemName: ESPMatterConstants.ecosystemName,
-              homes: [MatterAddDeviceRequest.Home(displayName: fabricName)]
-            )
-            let setupRequest = MatterAddDeviceRequest(topology: topology, setupPayload: setupPayload)
-            
-            try await setupRequest.perform()
+          // Parse the onboarding payload (QR "MT:..." or a manual pairing code).
+          // A nil result means the payload failed to parse; surface it through the
+          // catch below instead of silently completing the do-block (which would
+          // leave the JS commissioning promise pending and the screen stuck on the
+          // spinner). Mirrors startMatterCommissioningWithUserNOC's guard.
+          guard let setupPayload = try? MTRSetupPayload(onboardingPayload: qrData) else {
+            throw NSError(domain: ESPMatterConstants.moduleDomain, code: -1, userInfo: [
+              NSLocalizedDescriptionKey: ESPMatterConstants.failedToParseQR
+            ])
+          }
+          // Create MatterAddDeviceRequest topology
+          let topology = MatterAddDeviceRequest.Topology(
+            ecosystemName: ESPMatterConstants.ecosystemName,
+            homes: [MatterAddDeviceRequest.Home(displayName: fabricName)]
+          )
+          let setupRequest = MatterAddDeviceRequest(topology: topology, setupPayload: setupPayload)
 
-            // Step 2: Start custom fabric commissioning after Apple commissioning
-            if let qrData = ESPMatterEcosystemInfo.shared.getOnboardingPayload() {
-              try await self.startCustomFabricCommissioning(qrData: qrData, fabric: fabric)
-            }
+          try await setupRequest.perform()
+
+          // Step 2: Start custom fabric commissioning after Apple commissioning
+          if let qrData = ESPMatterEcosystemInfo.shared.getOnboardingPayload() {
+            try await self.startCustomFabricCommissioning(qrData: qrData, fabric: fabric)
           }
         } catch {
 

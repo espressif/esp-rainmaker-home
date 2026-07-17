@@ -171,7 +171,9 @@
     "KVS",
     "hls",
     "HLS",
-    "CREDS"
+    "CREDS",
+    "Verhoeff",
+    "discriminator"
   ],
   "flagWords": [],
   "ignoreRegExpList": [

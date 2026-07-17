@@ -560,6 +560,8 @@
       "softAPDescription": "Add device using SoftAP connection",
       "onNetworkOption": "On Network",
       "onNetworkDescription": "Add a device that is already on your Wi-Fi network",
+      "matterManualOption": "Matter Pairing Code",
+      "matterManualDescription": "Add a Matter device by entering its setup code",
       "sharedHomeRestriction": "Device Addition Not Allowed",
       "sharedHomeMessage": "You don't have permission to add devices to '{{homeName}}' because it's a shared home.",
       "defaultHomeName": "this home"
@@ -747,6 +749,7 @@
         "notSupported": "Matter commissioning is not supported for {{deployment}}.",
         "notSupportedGeneric": "Matter commissioning is not supported for this deployment.",
         "notSupportedHint": "Switch to a deployment that supports Matter to add this device.",
+        "enterCodeAgainHint": "Go back and enter the pairing code again.",
         "convertTitle": "Enable Matter for this home",
         "convertMessage": "\"{{homeName}}\" must be set up as a Matter fabric before you can add devices. Continue to convert this home?",
         "convertConfirm": "Continue",
@@ -755,6 +758,14 @@
         "statusStartingCommissioning": "Starting commissioning...",
         "statusIssuingCertificate": "Issuing user certificate...",
         "statusConvertingFabric": "Converting home to Matter fabric..."
+      },
+      "manual": {
+        "title": "Enter Pairing Code",
+        "heading": "Enter Matter pairing code",
+        "description": "Enter the setup code printed on your Matter device or its packaging.",
+        "placeholder": "11 or 21 digit pairing code",
+        "invalidCode": "Enter a valid 11 or 21 digit Matter pairing code.",
+        "authRequired": "Please sign in to commission Matter devices."
       }
     },
     "wifi": {

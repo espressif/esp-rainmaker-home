@@ -7,7 +7,7 @@
 import { useRouter } from "expo-router";
 import { useTranslation } from "react-i18next";
 import { useCDF } from "@shared/hooks/useCDF";
-import { Bluetooth, HouseWifi, Wifi } from "lucide-react-native";
+import { Bluetooth, HouseWifi, Wifi, KeyRound } from "lucide-react-native";
 import { tokens } from "@shared/theme/tokens";
 import { testProps } from "@shared/utils/testProps";
 import { getFeatures } from "@config/features.config";
@@ -84,6 +84,24 @@ export const useAddDeviceSelection = (): UseAddDeviceSelectionReturn => {
             // current typed-route union until the next dev server start.
             onClick: () =>
               router.push("/(provision)/OnNetworkDiscovery" as never),
+          } satisfies DeviceOption,
+        ]
+      : []),
+    // Hidden wherever the active SDK doesn't support Matter commissioning.
+    ...(features.matterCommissioning
+      ? [
+          {
+            icon: (
+              <KeyRound
+                {...testProps("icon_matter_manual")}
+                size={24}
+                color={tokens.colors.primary}
+              />
+            ),
+            label: t("device.addDeviceSelection.matterManualOption"),
+            description: t("device.addDeviceSelection.matterManualDescription"),
+            onClick: () =>
+              router.push("/(matter)/ManualCommissioning" as never),
           } satisfies DeviceOption,
         ]
       : []),

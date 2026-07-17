@@ -21,6 +21,7 @@ from pytest_bdd import given, parsers
 from hardware.qr import QrDisplay
 from hardware.serial import _SerialCapture
 from scripts.download_firmwares import download_matter_image, download_rmneo_matter_image
+from utils.matter_pairing import manual_pairing_code
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +33,9 @@ MATTER_QR = os.getenv("MATTER_QR")
 RMNEO_MATTER_FW_BIN = os.getenv("RMNEO_MATTER_FW_BIN")        # merged RMNEO matter-light app image (flashed at 0x0)
 RMNEO_MATTER_FCTRY_BIN = os.getenv("RMNEO_MATTER_FCTRY_BIN")  # factory_autoreg --matter fctry.bin (injected at the `fctry` offset)
 RMNEO_MATTER_QR = os.getenv("RMNEO_MATTER_QR")               # factory_autoreg qr_payload (MT: ...)
+# Optional manual pairing code for the static-override path. For the dynamic
+# path it is derived from the generated discriminator/passcode instead.
+MATTER_MANUAL_CODE = os.getenv("MATTER_MANUAL_CODE")
 COMMISSIONING_WINDOW_MARKER = "Commissioning window opened"
 MATTER_TEST_VENDOR_ID = int(os.getenv("MATTER_TEST_VENDOR_ID", "65521"))   # 0xFFF1 test VID
 MATTER_TEST_PRODUCT_ID = int(os.getenv("MATTER_TEST_PRODUCT_ID", "32768"))  # 0x8000
@@ -106,7 +110,13 @@ def _generate_factory(workdir):
                     qr = token.strip().strip('"')
     if not qr:
         raise RuntimeError(f"No MT: payload found next to {fctry_bin}")
-    return {"fctry_bin": str(fctry_bin), "qr": qr, "discriminator": discriminator, "passcode": passcode}
+    return {
+        "fctry_bin": str(fctry_bin),
+        "qr": qr,
+        "discriminator": discriminator,
+        "passcode": passcode,
+        "manual_code": manual_pairing_code(discriminator, passcode),
+    }
 
 
 def _prepare_dynamic_firmware(workdir):
@@ -136,7 +146,8 @@ def _matter_scenario(request):
     return "rmneo_matter" if request.node.get_closest_marker("rmneo_matter") else "matter_only"
 
 
-def _matter_plan(scenario, *, fw, inject, qr, expected_discriminator, source, commission_id=""):
+def _matter_plan(scenario, *, fw, inject, qr, expected_discriminator, source, commission_id="",
+                 manual_code=None):
     meta = _MATTER_SCENARIO_META[scenario]
     return {
         "scenario": scenario,
@@ -144,6 +155,10 @@ def _matter_plan(scenario, *, fw, inject, qr, expected_discriminator, source, co
         "inject": inject,
         "qr": qr,
         "expected_discriminator": expected_discriminator,
+        # Typed instead of scanned by the manual-entry scenario. None for plans
+        # that cannot derive one (rmneo_matter, or an env-pinned image with no
+        # MATTER_MANUAL_CODE set).
+        "manual_code": manual_code,
         "product": meta["product"],
         "firmware_type": meta["firmware_type"],
         "source": source,
@@ -155,12 +170,14 @@ def _matter_only_plan(workdir):
     """esp-matter demo light: pinned MATTER_FW_BIN override, else the auto-updated esp-matter image + a freshly generated (esp-matter-mfg-tool) factory partition/QR."""
     if MATTER_FW_BIN and MATTER_QR:
         return _matter_plan("matter_only", fw=MATTER_FW_BIN, inject=None, qr=MATTER_QR,
-                            expected_discriminator=None, source="env-pinned (MATTER_FW_BIN)")
+                            expected_discriminator=None, source="env-pinned (MATTER_FW_BIN)",
+                            manual_code=MATTER_MANUAL_CODE)
     fw_info = _prepare_dynamic_firmware(workdir)
     inject = [(offset, fw_info["fctry_bin"]) for offset in fw_info["inject_offsets"]]
     return _matter_plan("matter_only", fw=fw_info["merged_bin"], inject=inject,
                         qr=fw_info["qr"], expected_discriminator=fw_info["discriminator"],
-                        source="github-download", commission_id=f"discriminator={fw_info['discriminator']}")
+                        source="github-download", commission_id=f"discriminator={fw_info['discriminator']}",
+                        manual_code=fw_info["manual_code"])
 
 
 def _rmneo_fctry_node_id():
@@ -354,6 +371,11 @@ def matter_device(request, resource_manager, per_test_debug_dir, helper, matter_
     inject = plan["inject"]
     qr = plan["qr"]
     expected_discriminator = plan["expected_discriminator"]
+    # Manual pairing code for the manual-entry scenario. Only the matter_only
+    # plans can supply one (derived from the generated discriminator/passcode,
+    # or MATTER_MANUAL_CODE when the image is env-pinned); rmneo_matter leaves
+    # it None and the manual test asserts on it rather than typing "None".
+    manual_code = plan["manual_code"]
     fw_sha = ""
     skip_app = False
     if fw is not None:
@@ -377,6 +399,7 @@ def matter_device(request, resource_manager, per_test_debug_dir, helper, matter_
             resource_manager.flasher.invalidate_flash_cache(MATTER_CHIP_MAC)
         log_path = per_test_debug_dir.root / "matter_esp32c3.log"
         device = MatterDevice(port, log_path)
+        device.manual_code = manual_code
         device.start_capture(trigger_reset=True)
         if not device.wait_for_serial(COMMISSIONING_WINDOW_MARKER, timeout=60):
             pytest.skip("Matter device did not open a commissioning window after flashing")
@@ -395,8 +418,15 @@ def matter_device(request, resource_manager, per_test_debug_dir, helper, matter_
             "commission_id": plan["commission_id"],
         })
         request.node._chip_serial_log_path = str(log_path)
-        platform = helper.driver._test_info.get("platform", "android")
-        QrDisplay.show(qr, per_test_debug_dir.root, platform=platform)
+        # The scan-QR scenarios rely on this display: opening the scanner is the
+        # whole "user adds a device via scan qr" step, and the app auto-commissions
+        # whatever it sees. The manual-entry scenario has to walk THROUGH that same
+        # live scanner to reach "I don't have a QR code", so leaving the payload on
+        # screen would let it commission via the QR path before the test can tap
+        # through — never reaching the pairing-code screen. Keep it dark there.
+        if not request.node.get_closest_marker("manual_pairing"):
+            platform = helper.driver._test_info.get("platform", "android")
+            QrDisplay.show(qr, per_test_debug_dir.root, platform=platform)
         yield device
     finally:
         QrDisplay.close()

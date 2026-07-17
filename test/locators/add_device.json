@@ -19,6 +19,11 @@
     "value": "text_add_device_selection_on_network",
     "text": "On Network"
   },
+  "matter_manual_option": {
+    "by": "id",
+    "value": "text_add_device_selection_matter_pairing_code",
+    "text": "Matter Pairing Code"
+  },
   "text_add_device_selection_note": {
     "by": "id",
     "value": "text_add_device_selection_note",
