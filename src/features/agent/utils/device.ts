@@ -104,7 +104,6 @@ export function getCurrentAgentId(device: ESPCDFDevice): string | undefined {
  * This is done in the background and doesn't block the flow
  */
 export async function setUserAuthForNode(node: ESPCDFNode): Promise<void> {
-  try {
     // Find the rmaker-user-auth service
     const userAuthService = node?.services?.find(
       (service) => service.type === ESPRM_RMAKER_USER_AUTH_SERVICE
@@ -156,9 +155,6 @@ export async function setUserAuthForNode(node: ESPCDFNode): Promise<void> {
     await node?.setMultipleParams({
       [userAuthService.name]: [paramsToSet],
     });
-  } catch {
-    // Silent error handling - don't block the flow
-  }
 }
 
 /**

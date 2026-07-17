@@ -46,6 +46,7 @@ import {
 } from "../groupSync";
 import { ensureMatterInChannelOrder } from "./matterChannelOrder";
 import { rewriteMatterShadowPayload } from "./matterSubscriptionRouting";
+import { addDeviceProvision } from "../utils/addDeviceProvision";
 
 interface MatterDiscoverySubscribeConfig {
     serviceType?: string;
@@ -156,6 +157,17 @@ export function transformToESPCDFUser(esprmUser: ESPRMUser | null): ESPCDFUser {
 
         async storePrecommissionInfo(info: ESPCDFMatterPrecommissionInfo): Promise<void> {
             return ESPMatterUtilityAdapter.storePrecommissionInfo(info);
+        },
+        /**
+         * Wraps RM base Wi-Fi provision with Matter post-provision steps
+         * (`ESPRMMatterBase/utils/addDeviceProvision`).
+         */
+        async addDevice(
+            user: ESPCDFUser,
+            params: Parameters<typeof addDeviceProvision>[1],
+            callbacks: GroupStoreCallbacks,
+        ) {
+            return addDeviceProvision(user, params, callbacks);
         },
         /**
          * Subscribes through Matter SDK event types so discovery subscriptions
