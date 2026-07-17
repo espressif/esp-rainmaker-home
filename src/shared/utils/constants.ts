@@ -396,6 +396,7 @@ export const MAX_MATTER_DEVICE_NAME_LENGTH = 32;
 export const MATTER_METADATA_KEY = "Matter";
 export const MATTER_METADATA_DEVICE_NAME_KEY = "deviceName";
 export const MATTER_METADATA_DEVICE_TYPE_KEY = "deviceType";
+export const MATTER_METADATA_ACCEPTED_COMMANDS_KEY = "accepted_commands";
 export const MATTER_METADATA_ENDPOINTS_KEY = "endpoints";
 
 /**

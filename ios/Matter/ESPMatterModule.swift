@@ -77,7 +77,7 @@ class ESPMatterModule: RCTEventEmitter {
   private var isRainMakerDevice: Bool = false
 
   /// Most recently parsed Matter device info from the post-commissioning attribute scan.
-  /// Used to populate `deviceType` and the nested `endpoints` map in the cloud Matter metadata.
+  /// Used to populate the nested `endpoints` map in the cloud Matter metadata.
   private var lastParsedDeviceInfo: MatterDeviceInfo?
   
   // MARK: - RCTEventEmitter Override
@@ -1148,11 +1148,13 @@ class ESPMatterModule: RCTEventEmitter {
   /// ```
   /// {
   ///   "deviceName": "...",
-  ///   "deviceType": <int>,         // primary Matter device type id (omitted if unknown)
   ///   "isRainmaker": <bool>,
   ///   "group_id": "...",
-  ///   "endpoints": {                // omitted if no parsed device info available
-  ///     "0x<EP>": { "clusters": { "servers": {...}, "clients": {...} } }
+  ///   "endpoints": {
+  ///     "0x<EP>": {
+  ///       "deviceType": [<int>...],
+  ///       "clusters": { "servers": {...}, "clients": {...} }
+  ///     }
   ///   }
   /// }
   /// ```
@@ -1169,16 +1171,34 @@ class ESPMatterModule: RCTEventEmitter {
     ]
 
     if let deviceInfo = self.lastParsedDeviceInfo {
-      if let primaryDeviceType = deviceInfo.primaryDeviceType {
-        matterMetadata[ESPMatterConstants.deviceType] = Int(primaryDeviceType)
-      }
       let endpointsDict = ESPMatterModule.buildEndpointsDict(from: deviceInfo)
       if !endpointsDict.isEmpty {
         matterMetadata[ESPMatterConstants.endpoints] = endpointsDict
       }
     }
 
+    logMatterDeviceDataModel(matterMetadata)
     return matterMetadata
+  }
+
+  /// Logs the complete Matter device data model as pretty-printed JSON after successful commissioning.
+  private func logMatterDeviceDataModel(_ metadata: [String: Any]) {
+    do {
+      let data = try JSONSerialization.data(
+        withJSONObject: metadata,
+        options: [.prettyPrinted, .sortedKeys]
+      )
+      guard let json = String(data: data, encoding: .utf8) else {
+        NSLog("[ESPMatterModule] Failed to encode Matter device data model for logging")
+        return
+      }
+      NSLog("[ESPMatterModule] Complete Matter device data model (post-commissioning):\n%@", json)
+    } catch {
+      NSLog(
+        "[ESPMatterModule] Failed to serialize Matter device data model for logging: %@",
+        error.localizedDescription
+      )
+    }
   }
   
   /// Store parsed device info
@@ -1224,7 +1244,7 @@ struct MatterDeviceInfo {
 
   /// Returns the first Matter device type id from the first non-zero endpoint
   /// that exposes a DeviceTypeList. Endpoint 0 is the Root Node and is excluded.
-  /// Used to populate the canonical `deviceType` field in cloud Matter metadata.
+  /// Used for default device naming during commissioning.
   var primaryDeviceType: UInt32? {
     for endpoint in endpoints where endpoint.id != 0 {
       if let firstType = endpoint.deviceTypes.first {
@@ -1246,6 +1266,7 @@ struct MatterDeviceInfo {
     let name: String
     let attributes: [Attribute]
     let events: [Event]
+    let acceptedCommands: [UInt32]
   }
   
   struct Attribute {
@@ -1262,6 +1283,27 @@ struct MatterDeviceInfo {
 
 @available(iOS 16.4, *)
 extension ESPMatterModule {
+
+  /// Parses a Matter global list attribute value (e.g. AttributeList / AcceptedCommandList).
+  private static func parseMatterIdList(from data: [String: Any]) -> [UInt32] {
+    guard let value = data["value"] else { return [] }
+    if let numbers = value as? [NSNumber] {
+      return numbers.map { UInt32($0.uint32Value) }
+    }
+    if let entries = value as? [[String: Any]] {
+      return entries.compactMap { entry -> UInt32? in
+        if let inner = entry["data"] as? [String: Any],
+           let number = inner["value"] as? NSNumber {
+          return UInt32(number.uint32Value)
+        }
+        if let number = entry["value"] as? NSNumber {
+          return UInt32(number.uint32Value)
+        }
+        return nil
+      }
+    }
+    return []
+  }
   
   /// Parse matter device info
   /// - Parameter result: result
@@ -1322,7 +1364,8 @@ extension ESPMatterModule {
               MatterDeviceInfo.Cluster(id: serverId,
                                        name: "Cluster 0x\(String(format: "%x", serverId))",
                                        attributes: [],
-                                       events: [])
+                                       events: [],
+                                       acceptedCommands: [])
             }
           }
           
@@ -1341,22 +1384,33 @@ extension ESPMatterModule {
               MatterDeviceInfo.Cluster(id: clientId,
                                        name: "Cluster 0x\(String(format: "%x", clientId))",
                                        attributes: [],
-                                       events: [])
+                                       events: [],
+                                       acceptedCommands: [])
             }
           }
         default:
           break
         }
-      } else {
+      } else if attributeId == 0xFFF9 {
+        let acceptedCommands = parseMatterIdList(from: data)
+        if var servers = endpointMap[endpoint]?.servers,
+           let index = servers.firstIndex(where: { $0.id == clusterId }) {
+          let cluster = servers[index]
+          servers[index] = MatterDeviceInfo.Cluster(id: cluster.id,
+                                                    name: cluster.name,
+                                                    attributes: cluster.attributes,
+                                                    events: cluster.events,
+                                                    acceptedCommands: acceptedCommands)
+          endpointMap[endpoint]?.servers = servers
+        }
+      } else if attributeId != 0xFFFB {
         // Handle attribute data for other clusters
-        // Find the cluster in servers or clients and add the attribute
         let attribute = MatterDeviceInfo.Attribute(
           id: attributeId,
           name: "Attribute 0x\(String(format: "%x", attributeId))",
           value: data["value"] ?? "Unknown"
         )
-        
-        // Add attribute to appropriate cluster
+
         if var servers = endpointMap[endpoint]?.servers {
           if let index = servers.firstIndex(where: { $0.id == clusterId }) {
             var cluster = servers[index]
@@ -1365,7 +1419,8 @@ extension ESPMatterModule {
             cluster = MatterDeviceInfo.Cluster(id: cluster.id,
                                                name: cluster.name,
                                                attributes: attributes,
-                                               events: cluster.events)
+                                               events: cluster.events,
+                                               acceptedCommands: cluster.acceptedCommands)
             servers[index] = cluster
             endpointMap[endpoint]?.servers = servers
           }
@@ -1385,7 +1440,7 @@ extension ESPMatterModule {
   }
   
   /// Build the inner `endpoints` map for cloud Matter metadata, organized by clusters.
-  /// Shape: `{ "0x<EP>": { "clusters": { "servers": { "0x<CID>": { "attributes": [...] } }, "clients": {...} } } }`
+  /// Shape: `{ "0x<EP>": { "deviceType": [<int>...], "clusters": { "servers": { "0x<CID>": { "attributes": [...], "accepted_commands": [...] } }, "clients": {...} } } }`
   /// matches reference iOS / reference Android.
   static func buildEndpointsDict(from deviceInfo: MatterDeviceInfo) -> [String: Any] {
     var endpointsDict: [String: Any] = [:]
@@ -1398,8 +1453,16 @@ extension ESPMatterModule {
         var serversDict: [String: Any] = [:]
         for server in endpoint.servers {
           let clusterKey = String(format: "0x%x", server.id)
-          let attributeIds = server.attributes.map { String(format: "0x%x", $0.id) }
-          serversDict[clusterKey] = [ESPMatterConstants.attributes: attributeIds]
+          let attributeIds = server.attributes
+            .filter { $0.id != 0xFFFB && $0.id != 0xFFF9 }
+            .map { String(format: "0x%x", $0.id) }
+          var clusterDict: [String: Any] = [
+            ESPMatterConstants.attributes: attributeIds.isEmpty ? NSNull() : attributeIds
+          ]
+          let commandIds = server.acceptedCommands.map { String(format: "0x%x", $0) }
+          clusterDict[ESPMatterConstants.acceptedCommands] =
+            commandIds.isEmpty ? NSNull() : commandIds
+          serversDict[clusterKey] = clusterDict
         }
         clustersDict[ESPMatterConstants.servers] = serversDict
       }
@@ -1408,13 +1471,16 @@ extension ESPMatterModule {
         var clientsDict: [String: Any] = [:]
         for client in endpoint.clients {
           let clusterKey = String(format: "0x%x", client.id)
-          let attributeIds = client.attributes.map { String(format: "0x%x", $0.id) }
-          clientsDict[clusterKey] = [ESPMatterConstants.attributes: attributeIds]
+          clientsDict[clusterKey] = [ESPMatterConstants.attributes: NSNull()]
         }
         clustersDict[ESPMatterConstants.clients] = clientsDict
       }
 
-      endpointsDict[endpointKey] = [ESPMatterConstants.clusters: clustersDict]
+      var endpointDict: [String: Any] = [
+        ESPMatterConstants.clusters: clustersDict,
+        ESPMatterConstants.deviceType: endpoint.deviceTypes.map { Int($0) }
+      ]
+      endpointsDict[endpointKey] = endpointDict
     }
 
     return endpointsDict
