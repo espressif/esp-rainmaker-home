@@ -49,6 +49,9 @@ target 'APP' do
   pod 'ESPProvision', '>= 3.0.2'
   # AWS IoT MQTT (ESPMQTTModule — parity with Android aws-android-sdk-iot)
   pod 'AWSIoT', '~> 2.40'
+  # WeChat SDK (CN login). Bundled in the single iOS binary; the WeChat option
+  # is gated to the CN region at runtime by the JS provider filter.
+  pod 'WechatOpenSDK-XCFramework'
 
   post_install do |installer|
     react_native_post_install(

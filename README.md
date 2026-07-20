@@ -35,9 +35,11 @@ cd esp-rainmaker-home
 nvm use 22
 npm install
 
-# Configure environment
-cp .env.example .env
-# Edit .env if needed, then sync to native projects
+# Configure environment. Each region has a committed template (.env.global.example /
+# .env.cn.example). Copy it to a local, gitignored real-values file and edit as needed:
+cp .env.global.example .env.global      # or: cp .env.cn.example .env.cn
+# Builds prefer the local .env.global / .env.cn and fall back to the .example.
+# See docs/CONFIGURATION.md.
 npm run prebuild
 
 # Development Build
@@ -194,11 +196,12 @@ This guide covers:
 
 Before running the app, set up your environment variables and sync them to the native projects:
 
-1. Copy the example env file:
+1. Create your local region config from the committed template:
   ```bash
-   cp .env.example .env
+   cp .env.global.example .env.global      # and/or: cp .env.cn.example .env.cn
   ```
-   Open `.env` and update the values as needed. The defaults work out of the box for the public ESP RainMaker deployment.
+   The `.example` defaults work out of the box for the public ESP RainMaker deployment; the local `.env.global` / `.env.cn` are gitignored, so put real/private values there. Builds prefer the local file and fall back to the `.example`.
+   > Each region file is **self-contained** — it holds *both* native/binary values (application ids, deep links, WeChat native keys, `APP_REGION`) **and** the region's cloud endpoints, OAuth clients, legal links, and feature availability. `app.config.ts` embeds **both** regions into the bundle as `extra.regionConfigs` so the single iOS binary resolves its region at runtime. See [docs/CONFIGURATION.md](docs/CONFIGURATION.md).
 2. Sync env variables to native projects:
   ```bash
    npm run prebuild
@@ -421,10 +424,11 @@ The project uses TypeScript path aliases (configured in `tsconfig.json`) for cle
 
 ## ⚙️ Feature Flags
 
-Features can be enabled or disabled through a **two-level gating** system:
+Features can be enabled or disabled through a **three-level, disable-only gating** system:
 
-- **Level 2 — SDK capability** (hard gate): defined per SDK in `SDK_FEATURE_MAP` inside `config/sdk.config.ts`. If the active SDK does not support a feature, it is disabled regardless of environment settings.
-- **Level 1 — Environment switch** (soft gate): can only *disable* a feature that the SDK supports. Set via `.env` file (see `.env.example`).
+- **Level 3 — SDK capability** (hard gate): defined per SDK in `SDK_FEATURE_MAP` inside `config/sdk.config.ts`. If the active SDK does not support a feature, it is disabled regardless of config.
+- **Level 2 — region availability**: set in the committed `.env.global.example` / `.env.cn.example` region files, resolved at runtime (e.g. voice assistants are off in the CN region).
+- **Level 1 — binary `.env` override** (soft gate): can only *disable* a feature, for what a specific binary cannot support (e.g. notifications on the Android CN binary, which ships without FCM).
 
 
 | Feature                  | Environment Variable      | Default |

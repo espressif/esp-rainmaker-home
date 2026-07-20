@@ -40,6 +40,13 @@ import {
   type OAuthFlowState,
   type PipelineProgress as OAuthPipelineProgress,
 } from "@features/auth/utils/oauthFlow";
+import {
+  performWeChatLogin,
+  isWeChatCancellation,
+  hasReceivedWeChatAuthCode,
+} from "@native-adaptors/implementations/ESPWeChatAdapter";
+import { espOauthAdapter } from "@native-adaptors/implementations/ESPOauthAdapter";
+
 export type PostSignupLoginCredentials = {
   username: string;
   password: string;
@@ -239,6 +246,24 @@ export function useLogin() {
   }, []);
 
   /**
+   * CN-only WeChat login. Drives native WeChat auth + token exchange, persists
+   * the issued tokens, and restores the session so the shared OAuth post-login
+   * flow below proceeds exactly like any other provider. Returns null when the
+   * user cancels (so the caller completes silently, without an error toast).
+   */
+  const loginWithWeChat = async () => {
+    try {
+      await performWeChatLogin();
+      return (await store?.userStore.restoreSession()) ?? null;
+    } catch (error) {
+      if (isWeChatCancellation(error)) {
+        return null;
+      }
+      throw error;
+    }
+  };
+
+  /**
    * Starts provider OAuth authentication and runs post-login setup on success.
    * @param provider OAuth provider key.
    */
@@ -254,9 +279,12 @@ export function useLogin() {
     }
     setPipelineProgress(null);
     try {
-      const user = await store?.userStore.auth?.loginWithOauth({
-        identityProvider: provider,
-      });
+      const user =
+        provider.toLowerCase() === "wechat"
+          ? await loginWithWeChat()
+          : await store?.userStore.auth?.loginWithOauth({
+              identityProvider: provider,
+            });
       if (!isCurrentOAuthAttempt(oauthFlowStateRef.current, oauthAttemptId)) {
         return;
       }
@@ -344,6 +372,17 @@ export function useLogin() {
         shouldMonitorOAuthAppLifecycle(oauthFlowStateRef.current.status) &&
         oauthAttemptInFlightRef.current
       ) {
+        // The watchdog exists to catch the user returning from the browser /
+        // WeChat WITHOUT completing auth (no redirect will ever arrive). Once
+        // the authorization code HAS been received, the attempt is past the
+        // browser phase — the token exchange is in flight and will resolve or
+        // fail on its own — so cancelling here would discard a valid login
+        // (seen with SignInWithApple when the CN token exchange exceeded the
+        // grace period). Let it finish; the loading overlay's close button
+        // still allows a manual cancel.
+        if (espOauthAdapter.hasReceivedAuthCode() || hasReceivedWeChatAuthCode()) {
+          return;
+        }
         cancelOAuthFlow();
         toast.showError("OAuth Login Failed", "OAuth login was cancelled.");
       }

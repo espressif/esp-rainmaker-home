@@ -1,4 +1,11 @@
 {
+  "consent": {
+    "title": "隐私政策",
+    "acceptAndContinue": "接受并继续",
+    "disagree": "暂不使用",
+    "declinedTitle": "需要同意",
+    "declinedMessage": "您需要接受隐私政策才能使用本应用。"
+  },
   "alexa": {
     "guide": "Alexa 指南",
     "step1": "1. 在菜单中点击 \"Skills & Games\"，然后搜索 \"ESP RainMaker Home\"。",
@@ -105,6 +112,9 @@
     },
     "shared": {
       "version": "版本",
+      "region": "地区",
+      "regionGlobal": "全球",
+      "regionCn": "中国",
       "termsOfUse": "使用条款",
       "privacyPolicy": "隐私政策",
       "errorHeader": "错误",
@@ -139,6 +149,9 @@
       "signInButton": "登录",
       "forgotPassword": "忘记密码",
       "thirdPartyLogin": "第三方账户登录",
+      "signInToContinue": "登录以继续",
+      "continueWith": "使用 {{provider}} 登录",
+      "chooseSignInMethod": "选择您的登录方式",
       "navigateToSignUp": "没有账户？注册",
       "settingUpAccount": "正在设置您的账户",
       "settingUpHomes": "正在设置家庭",
@@ -229,6 +242,7 @@
       "thirdPartyIntegration": {
         "title": "语音助手与集成"
       },
+      "logoutButton": "退出登录",
       "logoutModal": {
         "message": "您确定要退出登录吗？退出登录后，从您账户配置的智能体也将退出登录。",
         "confirmButton": "是的，退出登录",
@@ -240,7 +254,15 @@
       "personalInformation": "个人信息",
       "accountSecurity": "账户与安全",
       "aiSettings": "智能体设置",
+      "language": "语言",
       "aboutUs": "关于我们"
+    },
+    "language": {
+      "title": "语言",
+      "systemDefault": "跟随系统",
+      "english": "English",
+      "chinese": "简体中文",
+      "helper": "选择「跟随系统」以使用手机的语言设置。所选语言会立即生效。"
     },
     "personalInfo": {
       "title": "个人信息",
@@ -1166,6 +1188,12 @@
       "deleteErrorMessage": "删除会话失败，请重试。",
       "activateErrorTitle": "打开会话失败",
       "activateErrorMessage": "打开会话时发生错误。"
+    },
+    "welcomeMessage": "今天我能为您做些什么？",
+    "suggestions": {
+      "showDevices": "可以显示我所有的设备吗？",
+      "turnOnFan": "请打开卧室的风扇",
+      "setSchedule": "请设置一个定时，每天下午6点打开我所有的灯"
     }
   },
   "chatSettings": {

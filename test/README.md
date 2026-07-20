@@ -62,7 +62,7 @@ appium driver install xcuitest       # iOS
    #   ~/.esp_test_secrets.env  ->  export MAILOSAUR_API_KEY=...  (see "Environment Variables")
    source scripts/setup_test_env.sh --config   # exports vars + regenerates config/*.yaml
    ```
-   Or manually: `cp ../.env.example ../.env` (in repo root; add secrets), then `python3 scripts/ci_setup_config.py`.
+   Or manually: `cp ../.env.global.example ../.env` (in repo root; add secrets), then `python3 scripts/ci_setup_config.py`.
 
    See [Configuration & environment variables](#configuration--environment-variables) for the full list of what each var does.
 
@@ -174,7 +174,7 @@ real, **never-committed** `config/*.yaml`.
 - **Local runner:** `source scripts/setup_test_env.sh --config`
   exports the non-secret defaults, loads your secrets from `~/.esp_test_secrets.env`,
   then generates the config.
-- **CI (GitLab):** the test jobs do `cp .env.example .env` → `. scripts/setup_test_env.sh`
+- **CI (GitLab):** the test jobs do `cp .env.global.example .env` → `. scripts/setup_test_env.sh`
   → `python scripts/ci_setup_config.py`. Secrets come from **GitLab CI/CD variables**
   (Settings → CI/CD → Variables), which are already in the environment, so the
   script's `${VAR:-default}` never overwrites them.
@@ -184,7 +184,7 @@ So each variable lives in exactly one of four places:
 | Where it lives | Committed? | Contains |
 |---|---|---|
 | `scripts/setup_test_env.sh` | yes | Non-secret test defaults (deployment, app IDs, paths, SSID) |
-| `.env.example` (repo root) | yes | App-build identity / feature flags / SDK endpoints (`cp` → `.env`) |
+| `.env.global.example` / `.env.cn.example` (repo root) | yes | App-build identity / feature flags / SDK endpoints (`cp` one → `.env`) |
 | GitLab CI/CD variables / `~/.esp_test_secrets.env` | **no** | All secrets + internal endpoints |
 | `config/*.yaml` (generated), `config/*.yaml.example` (committed) | generated: no | Final runtime config from the templates |
 

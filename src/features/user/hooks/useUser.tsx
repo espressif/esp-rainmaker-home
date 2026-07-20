@@ -20,8 +20,8 @@ import { useToast } from "@shared/hooks/useToast";
 import { openUrl } from "@shared/utils/common";
 import {
   CDF_EXTERNAL_PROPERTIES,
-  PRIVACY_POLICY_LINK,
-  TERMS_OF_USE_LINK,
+  getPrivacyPolicyLink,
+  getTermsOfUseLink,
 } from "@shared/utils/constants";
 import { unregisterForNotification } from "@shared/utils/notifications";
 import { pipelineTask } from "@shared/utils/pipelineTask";
@@ -51,7 +51,7 @@ export type RouteAction = keyof RouteMap;
  */
 export const useUser = () => {
   const router = useRouter();
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { setESPCDFUser, store } = useCDF();
   const toast = useToast();
 
@@ -110,8 +110,8 @@ export const useUser = () => {
       handleGoogleAssistant: "/(user)/GoogleAssistantGuide",
       handleNotificationCenter: "/(user)/NotificationCenter",
       handleAssistantSettings: "/(agent)/Settings",
-      handlePrivacyPolicy: () => openUrl(PRIVACY_POLICY_LINK),
-      handleTermsOfUse: () => openUrl(TERMS_OF_USE_LINK),
+      handlePrivacyPolicy: () => openUrl(getPrivacyPolicyLink(i18n.language)),
+      handleTermsOfUse: () => openUrl(getTermsOfUseLink(i18n.language)),
     };
 
     if (action === "handlePrivacyPolicy" || action === "handleTermsOfUse") {

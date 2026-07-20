@@ -62,12 +62,18 @@ const ScreenWrapper: React.FC<ScreenWrapperProps> = ({
   return (
     <SafeAreaView style={[globalStyles.container, style]} edges={safeAreaEdges}>
       <StatusBar style="dark" backgroundColor="#ffffff" translucent={false} />
-      <TouchableWithoutFeedback
-        {...(qaId ? testProps(qaId) : {})}
-        onPress={handleDismissKeyboard}
-      >
-        <View style={{ flex: 1 }}>{children}</View>
-      </TouchableWithoutFeedback>
+      {dismissKeyboard ? (
+        <TouchableWithoutFeedback
+          {...(qaId ? testProps(qaId) : {})}
+          onPress={handleDismissKeyboard}
+        >
+          <View style={{ flex: 1 }}>{children}</View>
+        </TouchableWithoutFeedback>
+      ) : (
+        <View style={{ flex: 1 }} {...(qaId ? testProps(qaId) : {})}>
+          {children}
+        </View>
+      )}
     </SafeAreaView>
   );
 };

@@ -7,3 +7,4 @@
 #import <AWSCore/AWSCore.h>
 #import <AWSIoT/AWSIoT.h>
 #import "MTRCSRKeys.h"
+#import <WechatOpenSDK/WechatOpenSDK.h>

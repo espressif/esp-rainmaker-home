@@ -41,7 +41,7 @@ APP_GROUP_ID = group.com.espressif.novahome
 APP_MATTER_EXTENSION = com.espressif.nova.MatterExtension
 
 // App Version (marketing version)
-APP_VERSION = 5.2.1
+APP_VERSION = 5.3.0
 
 // App URL Scheme (used in Info.plist)
 APP_SCHEMA = rainmaker
@@ -58,3 +58,14 @@ MATTER_VENDOR_ID = 0x131B
 
 // Ecosystem Name (used in Matter module)
 MATTER_ECOSYSTEM_NAME = Rainmaker Home
+
+// WeChat login (CN). App ID also feeds the Info.plist URL scheme. The Universal
+// Link is stored scheme-less because xcconfig treats "//" as a comment:
+// HOST (host only) feeds the applinks entitlement; PREFIX (host + optional
+// path, trailing slash) feeds Info.plist's WeChatUniversalLink. Do NOT hardcode
+// these — they are populated from WECHAT_APP_ID / WECHAT_UNIVERSAL_LINK in
+// .env by scripts/sync-env-to-ios.js. Keep the keys present (empty) so the
+// sync can fill them.
+WECHAT_APP_ID =wx9d48fe3e583d36ab
+WECHAT_UNIVERSAL_LINK_HOST =wechat-212038829774-prod.s3.cn-north-1.amazonaws.com.cn
+WECHAT_UNIVERSAL_LINK_PREFIX =wechat-212038829774-prod.s3.cn-north-1.amazonaws.com.cn/

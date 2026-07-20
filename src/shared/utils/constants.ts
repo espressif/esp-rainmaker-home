@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import Constants from "expo-constants";
+import { getRegionConfig } from "@config/region.config";
 
 // CONSTANTS
 export const TOAST_ANIMATION_DURATION = "200ms";
@@ -16,26 +16,76 @@ export const PLATFORM_IOS = "ios";
 export const DEFAULT_HOME_GROUP_NAME = "Home";
 export const HOME_NAME_MAX_LENGTH = 32;
 
-// LINKS — defaults; override via WEBSITE_LINK / TERMS_OF_USE_LINK / PRIVACY_POLICY_LINK (.env → app.config extra.websiteLinks)
+// LINKS — region-scoped values come from the committed region env files
+// (.env.global.example / .env.cn.example → extra.regionConfigs.<region>.websiteLinks); the
+// hard-coded defaults below are the last-resort fallback for blank values.
 const DEFAULT_WEBSITE_LINK = "https://rainmaker.espressif.com";
-const DEFAULT_TERMS_OF_USE_LINK =
-  "https://rainmaker.espressif.com/docs/terms-of-use.html";
-const DEFAULT_PRIVACY_POLICY_LINK =
-  "https://rainmaker.espressif.com/docs/privacy-policy.html";
 
-const websiteLinksFromEnv = (Constants.expoConfig?.extra?.websiteLinks ||
-  {}) as {
-    website?: string;
-    termsOfUse?: string;
-    privacyPolicy?: string;
-  };
+// Legal pages exist per language × region
+// (rainmaker.espressif.com/<en|zh>/<page>?region=<global|china>), so the
+// region env files carry the URLs as templates with a {lang} placeholder
+// filled with the active UI language at resolve time. A plain URL (no
+// placeholder) is used verbatim for every language.
+const LEGAL_LINK_LANG_PLACEHOLDER = "{lang}";
+const DEFAULT_TERMS_OF_USE_LINK_TEMPLATE =
+  "https://rainmaker.espressif.com/{lang}/terms-of-use?region=global";
+const DEFAULT_PRIVACY_POLICY_LINK_TEMPLATE =
+  "https://rainmaker.espressif.com/{lang}/privacy-policy?region=global";
+
+// Resolved once at module load; the active region is session-stable
+// (region.config.ts caches it), so this agrees with every call-time reader.
+const websiteLinks = getRegionConfig().websiteLinks;
 
 export const WEBSITE_LINK =
-  websiteLinksFromEnv.website?.trim() || DEFAULT_WEBSITE_LINK;
-export const TERMS_OF_USE_LINK =
-  websiteLinksFromEnv.termsOfUse?.trim() || DEFAULT_TERMS_OF_USE_LINK;
-export const PRIVACY_POLICY_LINK =
-  websiteLinksFromEnv.privacyPolicy?.trim() || DEFAULT_PRIVACY_POLICY_LINK;
+  websiteLinks.website?.trim() || DEFAULT_WEBSITE_LINK;
+
+/**
+ * Fills a legal-link template's `{lang}` placeholder with the supported UI
+ * language for the given tag — regional tags map to their base (`zh-CN` →
+ * `zh`), anything unsupported falls back to English. Do not call at module
+ * scope: the language constants it reads are declared later in this file.
+ */
+const resolveLegalLink = (template: string, language?: string): string => {
+  const base = (language || "").toLowerCase().split("-")[0];
+  const lang = (SUPPORTED_LANGUAGE_CODES as readonly string[]).includes(base)
+    ? base
+    : LANGUAGE_DEFAULT;
+  return template.split(LEGAL_LINK_LANG_PLACEHOLDER).join(lang);
+};
+
+/**
+ * Terms of use URL for the given UI language (callers pass `i18n.language`).
+ * Takes the active region's configured link and substitutes its `{lang}`
+ * placeholder with the UI language; a plain URL (no placeholder) applies to
+ * all languages.
+ * @param language Optional UI language tag (e.g. `en`, `zh-CN`).
+ * @returns The resolved terms of use URL.
+ */
+export const getTermsOfUseLink = (language?: string): string =>
+  resolveLegalLink(
+    websiteLinks.termsOfUse?.trim() || DEFAULT_TERMS_OF_USE_LINK_TEMPLATE,
+    language
+  );
+
+/**
+ * Privacy policy URL for the given UI language (callers pass `i18n.language`).
+ * Takes the active region's configured link template and substitutes its
+ * `{lang}` placeholder with the UI language; a plain URL (no placeholder)
+ * applies to all languages.
+ * @param language Optional UI language tag (e.g. `en`, `zh-CN`).
+ * @returns The resolved privacy policy URL.
+ */
+export const getPrivacyPolicyLink = (language?: string): string =>
+  resolveLegalLink(
+    websiteLinks.privacyPolicy?.trim() || DEFAULT_PRIVACY_POLICY_LINK_TEMPLATE,
+    language
+  );
+
+// STORAGE KEYS
+// Persisted flag recording that the user accepted the CN-region privacy
+// consent shown at first launch. Stored via the AsyncStorage adapter.
+export const CN_CONSENT_ACCEPTED_KEY = "@esp_cn_consent_accepted";
+export const CONSENT_ACCEPTED_VALUE = "true";
 
 // TOAST TYPES
 export const SUCESS = "success";
@@ -549,3 +599,40 @@ export const MATTER_DATA_VALUE_TYPE_UTF8_STRING = "UTF8String";
 export const MATTER_DATA_VALUE_TYPE_OCTET_STRING = "OctetString";
 export const MATTER_DATA_VALUE_TYPE_STRUCTURE = "Structure";
 export const MATTER_DATA_VALUE_TYPE_ARRAY = "Array";
+
+// LANGUAGE / i18n
+/** Supported locale (ISO 639-1) for English bundle. */
+export const LANGUAGE_CODE_EN = "en";
+/** Supported locale (ISO 639-1) for Simplified Chinese bundle. */
+export const LANGUAGE_CODE_ZH = "zh";
+/** Sentinel value used in persisted storage / UI to mean "follow device language". */
+export const LANGUAGE_CODE_SYSTEM = "system";
+/** Fallback when device locale does not match any supported bundle. */
+export const LANGUAGE_DEFAULT = LANGUAGE_CODE_EN;
+/** AsyncStorage key for the user-selected language override. */
+export const LANGUAGE_STORAGE_KEY = "@app/language";
+
+/** ISO codes shipped as full translation bundles (must match `i18n.ts` resources). */
+export const SUPPORTED_LANGUAGE_CODES = [
+  LANGUAGE_CODE_EN,
+  LANGUAGE_CODE_ZH,
+] as const;
+export type SupportedLanguageCode = (typeof SUPPORTED_LANGUAGE_CODES)[number];
+
+/**
+ * Maps regional / script-tagged BCP-47 codes (e.g. `zh-CN`, `zh-Hans`, `en-US`) to one of the
+ * `SUPPORTED_LANGUAGE_CODES`. Anything not listed falls back to `LANGUAGE_DEFAULT`.
+ */
+export const LANGUAGE_REGIONAL_MAP: Record<string, SupportedLanguageCode> = {
+  en: LANGUAGE_CODE_EN,
+  "en-US": LANGUAGE_CODE_EN,
+  "en-GB": LANGUAGE_CODE_EN,
+  zh: LANGUAGE_CODE_ZH,
+  "zh-CN": LANGUAGE_CODE_ZH,
+  "zh-Hans": LANGUAGE_CODE_ZH,
+  "zh-Hans-CN": LANGUAGE_CODE_ZH,
+  "zh-SG": LANGUAGE_CODE_ZH,
+  "zh-Hant": LANGUAGE_CODE_ZH,
+  "zh-TW": LANGUAGE_CODE_ZH,
+  "zh-HK": LANGUAGE_CODE_ZH,
+};

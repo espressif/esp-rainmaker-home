@@ -49,11 +49,10 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
   const isTimeout = item.messageType === "timeout";
   const hasJsonData = item.jsonData !== undefined && item.jsonData !== null;
 
-  // Check if this is the welcome message
+  // Check if this is the locally added welcome message (see
+  // `addDefaultWelcomeMessage`); id-based so it works in every locale.
   const isWelcomeMessage =
-    isAssistant &&
-    !item.isUser &&
-    item.text.toLowerCase().includes("how can i help you");
+    isAssistant && !item.isUser && item.id.startsWith("welcome-");
 
   // Get screen width for RenderHTML
   const screenWidth = useMemo(() => Dimensions.get("window").width, []);

@@ -21,6 +21,7 @@ import {
 // Validation schema (Single Responsibility: config validation)
 const ESPRM_BASE_CONFIG_SCHEMA = Joi.object({
   baseUrl: Joi.string().uri({ scheme: ["https"] }),
+  claimUrl: Joi.string().uri({ scheme: ["https"] }).optional(),
   version: Joi.string(),
   authUrl: Joi.string().uri({ scheme: ["https"] }).optional(),
   clientId: Joi.string().min(1).optional(),

@@ -21,8 +21,11 @@ const path = require('path');
  * Paths
  * ===================================================== */
 const ROOT = path.resolve(__dirname, '..');
+// Env file selectable via ENVFILE (relative to repo root or absolute);
+// defaults to .env for the existing copy-based build scripts.
+const ENV_FILE = process.env.ENVFILE || '.env';
 const PATHS = {
-  env: path.join(ROOT, '.env'),
+  env: path.isAbsolute(ENV_FILE) ? ENV_FILE : path.join(ROOT, ENV_FILE),
   xcconfig: path.join(ROOT, 'ios/APP.xcconfig'),
 };
 
@@ -145,6 +148,36 @@ function updateXcconfig(file, env) {
       key: 'MATTER_ECOSYSTEM_NAME',
       sourceKey: 'MATTER_ECOSYSTEM_NAME',
       computeValue: (env) => env.MATTER_ECOSYSTEM_NAME ?? ''
+    },
+    // WeChat login (CN). The App ID also feeds the URL scheme in Info.plist.
+    {
+      key: 'WECHAT_APP_ID',
+      sourceKey: 'WECHAT_APP_ID',
+      computeValue: (env) => env.WECHAT_APP_ID ?? ''
+    },
+    // The Universal Link is split into two xcconfig values (xcconfig treats
+    // "//" as a comment, so neither carries the scheme):
+    //  - HOST: host only — used by the associated-domains entitlement
+    //    (applinks: accepts no path).
+    //  - PREFIX: host + optional path, trailing slash ensured — used by
+    //    Info.plist's WeChatUniversalLink (WeChat matches the full prefix).
+    {
+      key: 'WECHAT_UNIVERSAL_LINK_HOST',
+      sourceKey: 'WECHAT_UNIVERSAL_LINK',
+      computeValue: (env) =>
+        (env.WECHAT_UNIVERSAL_LINK ?? '')
+          .replace(/^https?:\/\//, '')
+          .split('/')[0]
+    },
+    {
+      key: 'WECHAT_UNIVERSAL_LINK_PREFIX',
+      sourceKey: 'WECHAT_UNIVERSAL_LINK',
+      computeValue: (env) => {
+        const stripped = (env.WECHAT_UNIVERSAL_LINK ?? '')
+          .replace(/^https?:\/\//, '')
+          .replace(/\/+$/, '');
+        return stripped ? `${stripped}/` : '';
+      }
     }
   ];
 
@@ -159,8 +192,12 @@ function updateXcconfig(file, env) {
     // Empty string means the key exists in .env but has empty value
     const finalValue = computeValue(env);
     
-    // Find and replace the value (similar to Android sync script)
-    const regex = new RegExp(`^(${key}\\s*=\\s*)([^\\n]+)$`, 'm');
+    // Find and replace the value (similar to Android sync script).
+    // [^\S\n] = whitespace EXCEPT newline: plain \s would cross the line
+    // break on keys with an empty value (e.g. `WECHAT_APP_ID =`) and swallow
+    // the following line. The value part is `*` (not `+`) so empty keys can
+    // be both matched and filled.
+    const regex = new RegExp(`^(${key}[^\\S\\n]*=[^\\S\\n]*)([^\\n]*)$`, 'm');
     
     if (regex.test(content)) {
       content = content.replace(regex, `$1${finalValue}`);

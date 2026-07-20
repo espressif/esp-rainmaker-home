@@ -33,7 +33,7 @@ import { setAgentTermsAccepted } from "@features/agent/utils/storage";
 import { DEFAULT_ANONYMOUS_NICKNAME } from "@features/agent/utils/constants";
 import { useCDF } from "@shared/hooks/useCDF";
 import { useToast } from "@shared/hooks/useToast";
-import { TERMS_OF_USE_LINK, PRIVACY_POLICY_LINK } from "@shared/utils/constants";
+import { getTermsOfUseLink, getPrivacyPolicyLink } from "@shared/utils/constants";
 import { agentTermsBottomSheetStyles } from "@shared/theme";
 import { tokens } from "@shared/theme/tokens";
 import type { AgentTermsBottomSheetProps } from "@src/types/global";
@@ -54,7 +54,7 @@ const AgentTermsBottomSheet: React.FC<AgentTermsBottomSheetProps> = ({
   onComplete,
   allowClose = true,
 }) => {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { store } = useCDF();
   const toast = useToast();
   const insets = useSafeAreaInsets();
@@ -116,7 +116,7 @@ const AgentTermsBottomSheet: React.FC<AgentTermsBottomSheetProps> = ({
    */
   const showTerms = async () => {
     try {
-      await WebBrowser.openBrowserAsync(TERMS_OF_USE_LINK);
+      await WebBrowser.openBrowserAsync(getTermsOfUseLink(i18n.language));
     } catch (error) {
       console.error("Failed to open Terms of Use:", error);
     }
@@ -127,7 +127,7 @@ const AgentTermsBottomSheet: React.FC<AgentTermsBottomSheetProps> = ({
    */
   const showPrivacy = async () => {
     try {
-      await WebBrowser.openBrowserAsync(PRIVACY_POLICY_LINK);
+      await WebBrowser.openBrowserAsync(getPrivacyPolicyLink(i18n.language));
     } catch (error) {
       console.error("Failed to open Privacy Policy:", error);
     }

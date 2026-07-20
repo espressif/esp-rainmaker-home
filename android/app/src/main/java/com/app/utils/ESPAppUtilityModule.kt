@@ -11,6 +11,8 @@ import android.content.pm.PackageManager
 import android.os.Build
 import android.view.View
 import androidx.core.content.ContextCompat
+import com.app.MainActivity
+import com.app.consent.ConsentPrefs
 import com.facebook.react.ReactPackage
 import com.facebook.react.bridge.*
 import com.facebook.react.uimanager.ReactShadowNode
@@ -135,6 +137,25 @@ class ESPAppUtilityModule(private val reactCtx: ReactApplicationContext) :
                 64001,
                 PermissionListener { _, _, _ -> true }
             )
+        }
+    }
+
+    /**
+     * Records the CN-region privacy consent natively and runs the startup
+     * permission prompts that MainActivity deferred until consent was given.
+     * No-op effect on non-CN builds (consent is never deferred there).
+     */
+    @ReactMethod
+    fun acceptCnConsent(promise: Promise) {
+        try {
+            ConsentPrefs.setAccepted(reactCtx, true)
+            val activity = reactApplicationContext.currentActivity
+            if (activity is MainActivity) {
+                activity.runOnUiThread { activity.runStartupPermissionChecks() }
+            }
+            promise.resolve(true)
+        } catch (t: Throwable) {
+            promise.reject("ERR_ACCEPT_CONSENT", t)
         }
     }
 }

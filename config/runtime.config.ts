@@ -13,6 +13,7 @@ export type { SDKIdentifier } from "./sdk.identifiers";
 
 export interface ESPRMRuntimeConfig {
   baseUrl?: string;
+  claimUrl?: string;
   version?: string;
   authUrl?: string;
   clientId?: string;

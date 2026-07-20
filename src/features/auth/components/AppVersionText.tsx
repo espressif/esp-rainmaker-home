@@ -9,6 +9,7 @@ import { useTranslation } from "react-i18next";
 import Constants from "expo-constants";
 import { globalStyles } from "@shared/theme/globalStyleSheet";
 import { testProps } from "@shared/utils/testProps";
+import { getActiveRegionLabelKey } from "@config/region.config";
 
 interface AppVersionTextProps {
   testId?: string;
@@ -23,7 +24,7 @@ export function AppVersionText({ testId = "text_app_version" }: AppVersionTextPr
 
   return (
     <Text {...testProps(testId)} style={globalStyles.versionText}>
-      {t("layout.shared.version")} {appVersion}
+      {t("layout.shared.version")} {appVersion} · {t(getActiveRegionLabelKey())}
     </Text>
   );
 }
