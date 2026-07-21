@@ -5,6 +5,27 @@ All notable changes to the ESP RainMaker Home app will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.4.0]
+
+### Added
+
+- [Matter] Controller-based control for Matter fabric devices, including controller setup subscriptions and per-fabric-device update fan-out
+- [Matter] Controller reachability tracking alongside other transports, with the control source shown on the device card
+- [Matter] Post-provision fabric conversion and group binding for Matter controller nodes
+- [Matter] Quick actions on Matter Controller nodes for auth-token and device-list refresh
+
+### Enhanced
+
+- [Matter] Post-commissioning cloud metadata now includes AcceptedCommandList per server cluster
+- [Matter] Device types are captured per endpoint so multi-type endpoints are represented correctly
+
+### Fixed
+
+- QR scanner recovers after connect timeout and other failure paths (invalid PoP, session init failure, missing device name)
+- Device connect races against a 15s timeout and disconnects cleanly on timeout
+- Scan Again forces a fresh camera and only accepts scans once the preview is live
+- Removed artificial delays before Matter commissioning and provision handoff
+
 ## [5.3.0]
 
 ### Added
