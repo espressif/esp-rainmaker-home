@@ -9,14 +9,11 @@ import { DEVICE_TYPE_LIST } from '@/config/devices.config';
 import {
   ESPRM_AGENT_AUTH_SERVICE,
   ESPRM_REFRESH_TOKEN_PARAM_TYPE,
-  ESPRM_RMAKER_USER_AUTH_SERVICE,
-  ESPRM_USER_TOKEN_PARAM_TYPE,
-  ESPRM_BASE_URL_PARAM_TYPE,
 } from '@shared/utils/constants';
+import { updateRmakerUserAuthForNode } from '@shared/utils/userAuthServiceHelper';
 import { TOKEN_STORAGE_KEYS, AI_ASSISTANT_TYPES } from './constants';
-import { getRMSDKConfig } from "@config/sdk.config";
 import type { AIDeviceData } from '@src/types/global';
-import { ESPCDFDevice, ESPCDFDeviceParam, ESPCDFNode, ESPCDFServiceParam } from '@store';
+import { ESPCDFDevice, ESPCDFDeviceParam, ESPCDFNode } from '@store';
 
 
 /**
@@ -104,61 +101,7 @@ export function getCurrentAgentId(device: ESPCDFDevice): string | undefined {
  * This is done in the background and doesn't block the flow
  */
 export async function setUserAuthForNode(node: ESPCDFNode): Promise<void> {
-  try {
-    // Find the rmaker-user-auth service
-    const userAuthService = node?.services?.find(
-      (service) => service.type === ESPRM_RMAKER_USER_AUTH_SERVICE
-    );
-
-    if (!userAuthService) {
-      // Device doesn't have user auth service, skip
-      return;
-    }
-
-    // Find the user-token parameter (required)
-    const userTokenParam: ESPCDFServiceParam | undefined =
-      userAuthService.params?.find(
-        (param) => param.type === ESPRM_USER_TOKEN_PARAM_TYPE
-      );
-
-    // Find the base-url parameter (optional)
-    const baseUrlParam: ESPCDFServiceParam | undefined =
-      userAuthService.params?.find(
-        (param) => param.type === ESPRM_BASE_URL_PARAM_TYPE
-      );
-
-    // User token parameter is required
-    if (!userTokenParam) {
-      return;
-    }
-
-    // Get refresh token from ESPAsyncStorage
-    const refreshToken = await StorageAdapter.getItem(
-      TOKEN_STORAGE_KEYS.REFRESH_TOKEN
-    );
-
-    if (!refreshToken) {
-      return;
-    }
-
-    // Build parameters object - always include user-token, conditionally include base-url
-    const paramsToSet: Record<string, string> = {
-      [userTokenParam.name]: refreshToken,
-    };
-
-    // Only add base-url if the parameter exists in the service
-    if (baseUrlParam) {
-      const baseUrl = getRMSDKConfig().baseUrl;
-      paramsToSet[baseUrlParam.name] = baseUrl;
-    }
-
-    // Update parameters
-    await node?.setMultipleParams({
-      [userAuthService.name]: [paramsToSet],
-    });
-  } catch {
-    // Silent error handling - don't block the flow
-  }
+  await updateRmakerUserAuthForNode(node);
 }
 
 /**

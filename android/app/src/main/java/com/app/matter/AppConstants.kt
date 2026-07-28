@@ -135,6 +135,7 @@ object AppConstants {
     const val KEY_SERVERS = "servers"
     const val KEY_CLIENTS = "clients"
     const val KEY_ATTRIBUTES = "attributes"
+    const val KEY_ACCEPTED_COMMANDS = "accepted_commands"
 
     const val DEFAULT_MATTER_DEVICE_NAME = "Matter Device"
     const val MATTER_CONTROLLER_DEVICE_NAME = "Matter Controller"

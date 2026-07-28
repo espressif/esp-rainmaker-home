@@ -17,6 +17,7 @@ import { mapNodeUpdateDataToEvent } from "@shared/utils/subscriptionHelper";
 import { registerSubscribeRetryForUser } from "@shared/utils/matterSubscribeRetry";
 import { registerAttributeReadForUser } from "@shared/utils/matterAttributeRead";
 import { isMatterNodeLocallyReachable } from "@shared/utils/matterLocalReachability";
+import { setMatterNodeUpdateHandler } from "../matterControllerTransportHandler";
 import {
     ESPCDFGroup,
     ESPCDFMatterPrecommissionInfo,
@@ -46,6 +47,7 @@ import {
 } from "../groupSync";
 import { ensureMatterInChannelOrder } from "./matterChannelOrder";
 import { rewriteMatterShadowPayload } from "./matterSubscriptionRouting";
+import { addDeviceProvision } from "../utils/addDeviceProvision";
 
 interface MatterDiscoverySubscribeConfig {
     serviceType?: string;
@@ -156,6 +158,17 @@ export function transformToESPCDFUser(esprmUser: ESPRMUser | null): ESPCDFUser {
 
         async storePrecommissionInfo(info: ESPCDFMatterPrecommissionInfo): Promise<void> {
             return ESPMatterUtilityAdapter.storePrecommissionInfo(info);
+        },
+        /**
+         * Wraps RM base Wi-Fi provision with Matter post-provision steps
+         * (`ESPRMMatterBase/utils/addDeviceProvision`).
+         */
+        async addDevice(
+            user: ESPCDFUser,
+            params: Parameters<typeof addDeviceProvision>[1],
+            callbacks: GroupStoreCallbacks,
+        ) {
+            return addDeviceProvision(user, params, callbacks);
         },
         /**
          * Subscribes through Matter SDK event types so discovery subscriptions
@@ -300,6 +313,7 @@ export function transformToESPCDFUser(esprmUser: ESPRMUser | null): ESPCDFUser {
             // initial subscribe-all so a transport added mid-flight can
             // still be retried even if the caller never re-invokes this op.
             lastSubscribeUpdateHandler = handleNodeUpdate;
+            setMatterNodeUpdateHandler(handleNodeUpdate);
             lastSubscribeSdkNodes = sdkNodes;
 
             // Re-assert that the Matter channel is registered AND in

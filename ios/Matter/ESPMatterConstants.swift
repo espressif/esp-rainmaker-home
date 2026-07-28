@@ -213,6 +213,7 @@ struct ESPMatterConstants {
     
     // MARK: - JSON Format Keys
     static let attributes = "attributes"
+    static let acceptedCommands = "accepted_commands"
     static let clusters = "clusters"
     static let endpoints = "endpoints"
     static let servers = "servers"

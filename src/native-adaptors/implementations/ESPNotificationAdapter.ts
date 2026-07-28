@@ -28,6 +28,7 @@ export const ESPNotificationAdapter = {
         emitterSubscription = DeviceEventEmitter.addListener(
           "ESPNotificationModule",
           (data: Record<string, any>) => {
+            console.log("ESPNotificationAdapter", "notification received", data);
             const normalized = normalizeNotificationPayload(
               data as Record<string, unknown>
             ) as Record<string, any>;

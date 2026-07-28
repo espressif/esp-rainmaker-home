@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type {
+import {
   ESPCDFUser,
   ESPCDFGroup,
   ESPCDFNode,
@@ -25,6 +25,7 @@ import type { ESPRMGetGroupsRequestParams } from "@espressif/rainmaker-matter-sd
 import { ESPRMFabric } from "@espressif/rainmaker-matter-sdk";
 import { ESPRMMatterBaseAdaptorIdentifier } from "./constants";
 import { transformToESPCDFGroup } from "./transformers/transformToESPCDFGroup";
+import { subscribeMatterControllerTransport } from "./matterControllerTransportHandler";
 
 type MatterSdkGroupsPage = {
   groups?: ESPRMGroup[];
@@ -177,7 +178,7 @@ export async function syncHomeWithNodes(
     await esprmSetCurrentHome(user, callbacks, selected);
   }
 
-  runNodeSyncForAllGroups(finalValid, selected, callbacks);
+  runNodeSyncForAllGroups(finalValid, selected, callbacks, esprmUser);
 
   return selected;
 }
@@ -187,10 +188,11 @@ function runNodeSyncForAllGroups(
   allHomes: ESPCDFGroup[],
   primary: ESPCDFGroup | null,
   callbacks: GroupStoreCallbacks,
+  esprmUser: ESPRMUser,
 ): void {
   const fetchAndAddForGroup = async (group: ESPCDFGroup) => {
     try {
-      const nodes = await fetchNodesForGroup(group);
+      const nodes = await fetchNodesForGroup(group, esprmUser);
       if (nodes.length > 0) callbacks.addNodesToGroup(group.id, nodes);
     } catch (e) {
       console.error(`[matterGroupSync] Failed to fetch nodes for group ${group.id}:`, e);
@@ -221,7 +223,7 @@ function runNodeSyncForAllGroups(
  * @param group - CDF group whose `_raw` SDK instance provides node details
  * @returns Transformed CDF nodes for the group
  */
-async function fetchNodesForGroup(group: ESPCDFGroup): Promise<ESPCDFNode[]> {
+async function fetchNodesForGroup(group: ESPCDFGroup, esprmUser: ESPRMUser): Promise<ESPCDFNode[]> {
   const raw = (group as { _raw?: ESPRMGroup | ESPRMFabric })._raw;
   if (!raw) return [];
 
@@ -231,10 +233,14 @@ async function fetchNodesForGroup(group: ESPCDFGroup): Promise<ESPCDFNode[]> {
         : new ESPRMFabric(raw as ESPRMGroup)
       ).getNodesWithDetails()
     : await (raw as ESPRMGroup & {
-        getNodesWithDetails?: () => Promise<unknown[]>;
-      }).getNodesWithDetails?.() ?? [];
+      getNodesWithDetails?: () => Promise<unknown[]>;
+    }).getNodesWithDetails?.() ?? [];
 
-  return transformToESPCDFNodes(nodes, "matterGroupSync.fetchNodesForGroup");
+  const cdfNodes = transformToESPCDFNodes(nodes, "matterGroupSync.fetchNodesForGroup");
+
+  subscribeMatterControllerTransport(esprmUser);
+
+  return cdfNodes;
 }
 
 

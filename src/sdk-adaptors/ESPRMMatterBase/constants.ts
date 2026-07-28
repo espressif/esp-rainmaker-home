@@ -105,3 +105,19 @@ export const MATTER_DEVICE_TYPE_TEMPERATURE_SENSOR = toMatterDeviceType(
 export const MATTER_DEVICE_TYPE_HUMIDITY_SENSOR = toMatterDeviceType(
   MATTER_DEVICE_TYPE_ID_HUMIDITY_SENSOR,
 );
+
+export const MATTER_CTL_SETUP_PARAM_MT_DEVICES = "esp.param.matter-devices";
+export const MATTER_CTL_SETUP_SERVICE_TYPE = "esp.service.matter-controller-setup";
+export const MATTER_CTL_SETUP_PARAM_RMAKER_GROUP_ID = "esp.param.rmaker-group-id";
+
+/** RainMaker notification shadow keys for Matter controller setup (not CDF param types). */
+export const MATTER_CTL_SETUP_NOTIFICATION_KEY = "MatterCTLSetup";
+export const MATTER_CTL_SETUP_PARAM_MT_DEVICES_NOTIFICATION_KEY = "MTDevices";
+
+/** Nested keys inside `MatterCTLSetup.MTDevices.*` attribute reports. */
+export const MATTER_CTL_SETUP_PAYLOAD_CLUSTERS_KEY = "clusters";
+export const MATTER_CTL_SETUP_PAYLOAD_CLUSTER_SERVERS_KEY = "servers";
+export const MATTER_CTL_SETUP_PAYLOAD_ATTRIBUTES_KEY = "attributes";
+
+/** `ESPNodeUpdateData.source` for matter subscription and controller fan-out. */
+export const MATTER_NODE_UPDATE_SOURCE = "matter";

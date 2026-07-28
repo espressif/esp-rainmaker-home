@@ -3139,6 +3139,49 @@ export const globalStyles = StyleSheet.create({
     shadowRadius: 10,
     elevation: 6,
   },
+  settingsQuickActionsWrapper: {
+    marginBottom: tokens.spacing._15,
+  },
+  settingsQuickActionsScrollContent: {
+    gap: tokens.spacing._10,
+  },
+  settingsQuickActionTile: {
+    width: 108,
+    minHeight: 100,
+    paddingVertical: tokens.spacing._10,
+    paddingHorizontal: tokens.spacing._10,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: tokens.colors.white,
+    borderRadius: tokens.radius.md,
+    borderWidth: tokens.border.defaultWidth,
+    borderColor: tokens.colors.borderColor,
+    shadowColor: "transparent",
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0,
+    shadowRadius: 0,
+    elevation: 0,
+  },
+  settingsQuickActionIconSlot: {
+    width: tokens.iconSize._20,
+    height: tokens.iconSize._20,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: tokens.spacing._10,
+  },
+  settingsQuickActionTileLabel: {
+    fontSize: tokens.fontSize.xs,
+    fontFamily: tokens.fonts.medium,
+    color: tokens.colors.gray,
+    textAlign: "center",
+    lineHeight: tokens.fontSize.xs * 1.35,
+  },
+  settingsQuickActionTileDisabled: {
+    opacity: 0.45,
+  },
+  settingsQuickActionTilePressed: {
+    opacity: 0.85,
+  },
 
   // Rooms screen styles
   roomsScreenContainer: {
