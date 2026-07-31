@@ -233,7 +233,9 @@ export const SDK_FEATURE_MAP: Record<
     thirdPartyAuth: false,
     voiceAssistants: false,
     authAllowedUsernameTypes: ["email", "phone"],
-    onNetworkProvisioning: false,
+    // Challenge-response association over LAN HTTP, against the `ch_resp`
+    // endpoint set on the shared `_esp_rmaker_ctrl._tcp` instance.
+    onNetworkProvisioning: true,
     // The RMNeo stack has no Matter support: its CDF group exposes no
     // `convertToMatterFabric` / `issueUserNoC`, so commissioning cannot run.
     matterCommissioning: false,

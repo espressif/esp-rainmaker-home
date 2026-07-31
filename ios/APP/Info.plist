@@ -82,6 +82,7 @@
 	<key>NSBonjourServices</key>
 	<array>
 		<string>_esp_local_ctrl._tcp</string>
+		<string>_esp_rmaker_ctrl._tcp</string>
 		<string>_esp_rmaker_chal_resp._tcp</string>
 		<string>_matter._tcp</string>
 		<string>_matterc._udp</string>

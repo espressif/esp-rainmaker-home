@@ -15,6 +15,7 @@ import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.bridge.ReactContextBaseJavaModule
 import java.util.Base64
 import com.facebook.react.bridge.ReactMethod
+import com.facebook.react.bridge.ReadableMap
 import com.espressif.provisioning.security.Security
 import com.espressif.provisioning.security.Security0
 import com.espressif.provisioning.security.Security1
@@ -45,7 +46,18 @@ class ESPLocalControlModule(reactContext: ReactApplicationContext) :
 
     companion object {
         private const val TAG = "ESPLocalControlModule"
+
+        /** Legacy `esp_local_ctrl` protocol (RainMaker classic firmware). */
         const val LOCAL_SESSION_ENDPOINT: String = "esp_local_ctrl/session"
+        const val LOCAL_VERSION_ENDPOINT: String = "esp_local_ctrl/version"
+        const val LOCAL_VERSION_KEY: String = "local_ctrl"
+
+        // Keys of the optional `options` map JS passes to connect(), letting the
+        // caller select the protocol's protocomm endpoints. Absent options keep
+        // the legacy defaults above, so older JS bundles are unaffected.
+        private const val OPTION_SESSION_PATH = "sessionPath"
+        private const val OPTION_VERSION_PATH = "versionPath"
+        private const val OPTION_VERSION_KEY = "versionKey"
     }
 
     private val localDeviceMap: HashMap<String, EspLocalDevice> = HashMap()
@@ -88,6 +100,21 @@ class ESPLocalControlModule(reactContext: ReactApplicationContext) :
     }
 
     /**
+     * Protocomm endpoints of the local-control protocol a node speaks. Defaults
+     * to the legacy `esp_local_ctrl` paths; RainMaker Neo nodes are connected
+     * with the `rmaker_local_ctrl` paths supplied by the JS transport.
+     *
+     * @property sessionPath Session-security endpoint.
+     * @property versionPath Version/service-info endpoint.
+     * @property versionKey Root key holding `sec_patch_ver` in the version JSON.
+     */
+    data class LocalCtrlEndpoints(
+        val sessionPath: String = LOCAL_SESSION_ENDPOINT,
+        val versionPath: String = LOCAL_VERSION_ENDPOINT,
+        val versionKey: String = LOCAL_VERSION_KEY
+    )
+
+    /**
      * Per-node connection state captured at connect() time. Re-used by sendData()
      * to re-handshake with the original credentials if the session is torn down.
      */
@@ -98,7 +125,8 @@ class ESPLocalControlModule(reactContext: ReactApplicationContext) :
         val baseUrl: String,
         val securityType: Int,
         val pop: String?,
-        val username: String?
+        val username: String?,
+        val endpoints: LocalCtrlEndpoints
     )
 
     /**
@@ -107,7 +135,11 @@ class ESPLocalControlModule(reactContext: ReactApplicationContext) :
      * @property transport Transport mechanism used for communication.
      * @property security Security layer for encrypting/decrypting data.
      */
-    inner class EspLocalSession(private val transport: EspLocalTransport, private val security: Security) {
+    inner class EspLocalSession(
+        private val transport: EspLocalTransport,
+        private val security: Security,
+        private val sessionPath: String = LOCAL_SESSION_ENDPOINT
+    ) {
 
         private var isSessionEstablished = false
 
@@ -132,7 +164,7 @@ class ESPLocalControlModule(reactContext: ReactApplicationContext) :
                     sessionListener.onSessionEstablished()
                 } else {
                     transport.sendConfigData(
-                        LOCAL_SESSION_ENDPOINT,
+                        sessionPath,
                         request,
                         object : ResponseListener {
                             override fun onSuccess(returnData: ByteArray?) {
@@ -319,6 +351,25 @@ class ESPLocalControlModule(reactContext: ReactApplicationContext) :
     }
 
     /**
+     * Reads the protocomm endpoints from the optional `options` map JS passes to
+     * [connect]. A missing map (or missing keys) keeps the legacy
+     * `esp_local_ctrl` paths, so callers that predate multi-protocol support
+     * behave exactly as before.
+     */
+    private fun endpointsFrom(options: ReadableMap?): LocalCtrlEndpoints {
+        if (options == null) return LocalCtrlEndpoints()
+        fun read(key: String, fallback: String): String {
+            val value = if (options.hasKey(key)) options.getString(key) else null
+            return if (value.isNullOrBlank()) fallback else value
+        }
+        return LocalCtrlEndpoints(
+            sessionPath = read(OPTION_SESSION_PATH, LOCAL_SESSION_ENDPOINT),
+            versionPath = read(OPTION_VERSION_PATH, LOCAL_VERSION_ENDPOINT),
+            versionKey = read(OPTION_VERSION_KEY, LOCAL_VERSION_KEY)
+        )
+    }
+
+    /**
      * Connects to an ESP device using the given parameters.
      *
      * @param nodeId Unique identifier of the device.
@@ -326,6 +377,9 @@ class ESPLocalControlModule(reactContext: ReactApplicationContext) :
      * @param securityType Type of security (0, 1, or 2).
      * @param pop Proof of possession for security levels that require it.
      * @param username Optional username for Security 2.
+     * @param options Optional protocomm endpoints (`sessionPath`, `versionPath`,
+     *   `versionKey`) selecting the local-control protocol. Defaults to the
+     *   legacy `esp_local_ctrl` endpoints when omitted.
      * @param promise Promise to resolve with connection status or reject on failure.
      */
     @ReactMethod
@@ -335,11 +389,13 @@ class ESPLocalControlModule(reactContext: ReactApplicationContext) :
         securityType: Int,
         pop: String?,
         username: String?,
+        options: ReadableMap?,
         promise: Promise
     ) {
 
         this.securityType = securityType
         this.baseUrl = baseUrl
+        val endpoints = endpointsFrom(options)
 
         val address: String
         val port: Int
@@ -353,13 +409,14 @@ class ESPLocalControlModule(reactContext: ReactApplicationContext) :
             return
         }
 
-        val device = EspLocalDevice(nodeId, address, port, baseUrl, securityType, pop, username)
+        val device =
+            EspLocalDevice(nodeId, address, port, baseUrl, securityType, pop, username, endpoints)
 
         // Drop any prior session so initSession() isn't short-circuited by a stale state.
         session = null
         sessionState = SessionState.NOT_CREATED
 
-        initSession(device, baseUrl, securityType, pop, username, object : ResponseListener {
+        initSession(device, baseUrl, securityType, pop, username, endpoints, object : ResponseListener {
             override fun onSuccess(returnData: ByteArray?) {
                 localDeviceMap[nodeId] = device
                 val result = WritableNativeMap().apply {
@@ -385,28 +442,35 @@ class ESPLocalControlModule(reactContext: ReactApplicationContext) :
         securityType: Int,
         pop: String?,
         username: String?,
+        endpoints: LocalCtrlEndpoints,
         listener: ResponseListener
     ) {
         if (sessionState == SessionState.CREATING) return
         sessionState = SessionState.CREATING
 
         if (securityType == 2) {
-            fetchSecPatchVersion(baseUrl) { secPatchVersion ->
-                establishSession(baseUrl, securityType, pop, username, secPatchVersion, listener)
+            fetchSecPatchVersion(baseUrl, endpoints) { secPatchVersion ->
+                establishSession(
+                    baseUrl, securityType, pop, username, secPatchVersion, endpoints, listener
+                )
             }
         } else {
-            establishSession(baseUrl, securityType, pop, username, 0, listener)
+            establishSession(baseUrl, securityType, pop, username, 0, endpoints, listener)
         }
     }
 
-    private fun fetchSecPatchVersion(baseUrl: String, onResult: (Int) -> Unit) {
+    private fun fetchSecPatchVersion(
+        baseUrl: String,
+        endpoints: LocalCtrlEndpoints,
+        onResult: (Int) -> Unit
+    ) {
         val versionTransport = EspLocalTransport(baseUrl)
         versionTransport.sendConfigData(
-            "esp_local_ctrl/version",
+            endpoints.versionPath,
             "---".toByteArray(),
             object : ResponseListener {
                 override fun onSuccess(returnData: ByteArray?) {
-                    val version = parseSecPatchVersion(returnData)
+                    val version = parseSecPatchVersion(returnData, endpoints.versionKey)
                     Log.d(TAG, "Device advertises sec_patch_ver=$version")
                     onResult(version)
                 }
@@ -419,11 +483,11 @@ class ESPLocalControlModule(reactContext: ReactApplicationContext) :
         )
     }
 
-    private fun parseSecPatchVersion(returnData: ByteArray?): Int {
+    private fun parseSecPatchVersion(returnData: ByteArray?, versionKey: String): Int {
         if (returnData == null) return 0
         return try {
             val root = org.json.JSONObject(String(returnData))
-            val localCtrl = root.optJSONObject("local_ctrl")
+            val localCtrl = root.optJSONObject(versionKey)
             localCtrl?.optInt("sec_patch_ver", 0) ?: 0
         } catch (e: Exception) {
             Log.w(TAG, "Could not parse version JSON, using sec_patch_ver=0: ${e.message}")
@@ -437,6 +501,7 @@ class ESPLocalControlModule(reactContext: ReactApplicationContext) :
         pop: String?,
         username: String?,
         secPatchVersion: Int,
+        endpoints: LocalCtrlEndpoints,
         listener: ResponseListener
     ) {
         val security: Security = when (securityType) {
@@ -459,7 +524,7 @@ class ESPLocalControlModule(reactContext: ReactApplicationContext) :
         }
 
         val transport = EspLocalTransport(baseUrl)
-        session = EspLocalSession(transport, security)
+        session = EspLocalSession(transport, security, endpoints.sessionPath)
 
         session?.init(null, object : SessionListener {
             override fun onSessionEstablished() {
@@ -514,6 +579,7 @@ class ESPLocalControlModule(reactContext: ReactApplicationContext) :
                 device.securityType,
                 device.pop,
                 device.username,
+                device.endpoints,
                 object : ResponseListener {
                     override fun onSuccess(returnData: ByteArray?) {
                         sendDataToDevice(nodeId, finalUrl, decodedData, promise)

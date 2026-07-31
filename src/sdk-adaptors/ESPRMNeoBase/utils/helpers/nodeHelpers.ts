@@ -125,13 +125,16 @@ export function createPropertyChangeSyncCallback(
         break;
       case ESPRMNEO_CDF_PROP_CHANGE.AVAILABLE_TRANSPORTS: {
         // CDF store is SoT for LAN discovery; project only `local` onto `_raw`.
-        const localBaseUrl =
-          event.availableTransports?.[ESPCDFNodeTransport.LOCAL]?.metadata
-            ?.baseUrl;
+        const localMetadata =
+          event.availableTransports?.[ESPCDFNodeTransport.LOCAL]?.metadata;
+        const localBaseUrl = localMetadata?.baseUrl;
         if (typeof localBaseUrl === "string" && localBaseUrl) {
+          // Carry the whole metadata bag, not just baseUrl: discovery also tags
+          // the local-control `protocol` (and `capabilities`) there, and the SDK
+          // picks its local transport implementation from that tag.
           rawNode.addTransport(ESPTransportMode.local, {
             type: ESPTransportMode.local,
-            metadata: { baseUrl: localBaseUrl },
+            metadata: { ...localMetadata, baseUrl: localBaseUrl },
           });
         } else {
           rawNode.removeTransport(ESPTransportMode.local);
@@ -366,14 +369,22 @@ export function applyRefreshedCdfNodeToStore(cdfNode: ESPCDFNode): void {
     // transport now lives per-node on availableTransports.
     if (!mergedLocalBaseUrl) {
         const existingRaw = nodeStore.getNodeById(cdfNode.id)?._raw as
-            | { availableTransports?: Record<string, { metadata?: { baseUrl?: string } }> }
+            | {
+                availableTransports?: Record<
+                    string,
+                    { metadata?: Record<string, unknown> & { baseUrl?: string } }
+                >;
+            }
             | undefined;
-        const rawBaseUrl =
-            existingRaw?.availableTransports?.[ESPCDFNodeTransport.LOCAL]?.metadata?.baseUrl;
+        const rawLocalMetadata =
+            existingRaw?.availableTransports?.[ESPCDFNodeTransport.LOCAL]?.metadata;
+        const rawBaseUrl = rawLocalMetadata?.baseUrl;
         if (rawBaseUrl) {
+            // Preserve the local-control `protocol` tag alongside baseUrl — the SDK
+            // selects its local transport implementation from it.
             const localCfg = {
                 type: ESPCDFNodeTransport.LOCAL,
-                metadata: { baseUrl: rawBaseUrl },
+                metadata: { ...rawLocalMetadata, baseUrl: rawBaseUrl },
             };
             merged.availableTransports = {
                 ...merged.availableTransports,
