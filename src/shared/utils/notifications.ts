@@ -100,7 +100,9 @@ const validate = async (store: ESPCDF) => {
  * @returns Promise<void>
  * @throws Error - When endpoint creation fails
  */
-export const registerForNotification = async (cdfStore: ESPCDF): Promise<void> => {
+export const registerForNotification = async (
+  cdfStore: ESPCDF,
+): Promise<void> => {
   try {
     const { user, platform, deviceToken } = await validate(cdfStore);
     await user?.registerForNotification(platform, deviceToken);

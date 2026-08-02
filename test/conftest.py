@@ -13,6 +13,7 @@ import atexit
 import os
 import re
 import subprocess
+import time
 from pathlib import Path
 from typing import Optional
 # Logging is captured by pytest itself; no root StreamHandler here (would duplicate every log line).
@@ -34,6 +35,7 @@ from utils.debug_helper import DebugHelper
 from utils.device_detector import MobileDeviceDetector
 from utils.api_user_helper import ApiUserHelper
 from utils.registered_user_resolver import (
+    deployment_type,
     load_deployment_config,
     load_registered_users,
     mutate_registered_users,
@@ -81,6 +83,21 @@ def _load_deployment_config(deployment: str) -> dict:
     return config
 
 
+def _ensure_rmneo_home(env_config: dict, email: str, password: str) -> None:
+    """RMNEO-only: a brand-new account has no home (root node group), so GET /v1/groups 500s and the app
+    can't reach the home screen. Log in via the SigV4 cloud client and create one so the fresh account is
+    test-ready. No-op for `type: rm` deployments."""
+    from utils.rainmaker_cloud import cloud_for, is_rmneo_deployment
+    if not is_rmneo_deployment(env_config):
+        return
+    try:
+        group_id = cloud_for(env_config, email, password).create_home()
+        logger.info("RMNEO: created home (group_id=%s) for fresh user %s", group_id, email)
+    except Exception as error:
+        logger.error("RMNEO: failed to create home for fresh user %s: %s", email, error)
+        raise
+
+
 @pytest.fixture(scope="session")
 def api_user_factory(pytestconfig):
     deployment = pytestconfig.getoption("--deployment")
@@ -95,11 +112,22 @@ def api_user_factory(pytestconfig):
     users = load_registered_users(config, deployment, model)
     logger.info("Loaded %s registered users for %s/%s", len(users), deployment, model)
 
+    from utils.rainmaker_cloud import is_rmneo_deployment
+    is_rmneo = is_rmneo_deployment(env_config)
+
     def create_users(count: int = 1, user_password: Optional[str] = None):
         nonlocal users
+        pw = user_password or password
         logger.info("Creating %s registered user(s) via API for %s/%s", count, deployment, model)
-        # Create via API first (slow), then persist under the lock to minimize concurrent-run blocking.
-        created = [helper.create_and_confirm_user(user_password or password) for _ in range(count)]
+        created = []
+        for _ in range(count):
+            if is_rmneo:
+                from utils.rainmaker_cloud import create_and_confirm_rmneo_user
+                user = create_and_confirm_rmneo_user(env_config, pw)
+            else:
+                user = helper.create_and_confirm_user(pw)
+            _ensure_rmneo_home(env_config, user["email"], pw)
+            created.append(user)
         users = mutate_registered_users(deployment, model, lambda existing: existing + created)
         logger.info("Saved %s registered users for %s/%s", len(users), deployment, model)
         return users if count > 1 else users[-1]
@@ -297,18 +325,24 @@ def _coerce_param_value(value):
     return token
 
 
+@pytest.fixture
+def primary_cloud(pytestconfig, registered_user_resolver, registered_user_password_resolver):
+    """Deployment-appropriate cloud client authenticated as 'registered user 1' (None if uri/creds unavailable)."""
+    return _cloud_for_user(pytestconfig, registered_user_resolver, registered_user_password_resolver)
+
+
 def _cloud_for_user(pytestconfig, registered_user_resolver, registered_user_password_resolver):
-    """RainMakerCloud client for the scenario's 'registered user 1' (None if uri/creds unavailable)."""
-    from utils.rainmaker_cloud import RainMakerCloud
+    """Deployment-appropriate cloud client for the scenario's 'registered user 1' (None if uri/creds unavailable)."""
+    from utils.rainmaker_cloud import cloud_for
 
     deployment = pytestconfig.getoption("--deployment")
-    base_uri = _load_deployment_config(deployment).get(deployment, {}).get("uri")
-    if not base_uri:
+    env_config = _load_deployment_config(deployment).get(deployment, {}) or {}
+    if not env_config.get("uri"):
         return None
     try:
         email = registered_user_resolver("registered user 1")
         password = registered_user_password_resolver("registered user 1 password")
-        return RainMakerCloud(base_uri, email, password)
+        return cloud_for(env_config, email, password)
     except Exception as error:
         logger.warning("Could not build cloud client: %s", error)
         return None
@@ -323,8 +357,17 @@ def _online_node_ids(cloud, chip_type):
     except Exception as error:
         logger.warning("Cloud node lookup failed (%s); cannot confirm online state", error)
         return set()
-    return {n["node_id"] for n in nodes
-            if n.get("online") and str(n.get("platform", "")).lower() == str(chip_type).lower()}
+    out = set()
+    for n in nodes:
+        if not n.get("online"):
+            continue
+        platform = str(n.get("platform", "")).lower()
+        if platform:
+            if platform == str(chip_type).lower():
+                out.add(n["node_id"])
+        elif "matter" not in (n.get("capabilities") or []):
+            out.add(n["node_id"])
+    return out
 
 
 def _read_node_id_from_serial(resource_manager, resource, timeout=20):
@@ -384,16 +427,18 @@ def _provision_reserved_chip(cloud, helper, hardware_session, resource_manager, 
     from hardware.requirements import HardwareRequirement
     from hardware.qr import QrPayloadExtractor
 
-    logger.warning("No online E2E device; BLE-provisioning reserved chip %s (%s)", resource.mac_address, resource.port)
-    requirement = HardwareRequirement(chip_type=chip_type, product="led_light", prov_mode="ble", chal_resp=None)
+    e2e_log.warning("No online E2E device; BLE-provisioning reserved chip %s (%s)", resource.mac_address, resource.port)
+    requirement = HardwareRequirement(chip_type=chip_type, product="led_light", prov_mode="ble", chal_resp=None,
+                                      deployment=deployment_type(request.config.getoption("--deployment")))
     hardware_session["requirement"] = requirement
     metadata = resource_manager.firmware.load_metadata(requirement)
     resource_manager.firmware.validate(requirement, metadata)
     image = resource_manager.firmware.resolve_image(requirement, metadata)
     resource_manager.serial_logger.stop(resource)
     resource_manager.update_status(resource.mac_address, ResourceStatus.FLASHING)
-    resource_manager.flasher.hard_reset(resource)
+    resource_manager.flasher.prepare_certs(resource, request.config.getoption("--deployment"), image)
     resource_manager.flasher.flash(resource, image)
+    resource_manager.flasher.hard_reset(resource, image)
     resource.build_metadata = metadata
     log_path = hardware_session["artifact_dir"].serial_log_path(resource)
     resource_manager.serial_logger.start(resource, log_path, wait_for_port=True, trigger_reset=True)
@@ -404,9 +449,8 @@ def _provision_reserved_chip(cloud, helper, hardware_session, resource_manager, 
     payload = QrPayloadExtractor.from_log_file(Path(resource.serial_log_path), timeout=60, poll_lines=live_lines)
     if not payload:
         pytest.skip(f"No QR provisioning payload from {resource.mac_address} within 60s; cannot BLE-provision the E2E device")
-    try:
-        info = _json.loads(payload)
-    except (ValueError, TypeError):
+    info = QrPayloadExtractor.parse(payload)
+    if not info:
         pytest.skip(f"Unparseable QR provisioning payload from {resource.mac_address}: {str(payload)[:120]!r}")
     ssid = provision_config_resolver("ssid")
     password = provision_config_resolver("ssid_password")
@@ -444,6 +488,7 @@ def _provision_reserved_chip(cloud, helper, hardware_session, resource_manager, 
             _time.sleep(1)
     if not reached_home:
         raise AssertionError("Provisioned device did not return to the home screen after naming/room setup")
+    resource_manager.update_status(resource.mac_address, ResourceStatus.RESERVED)
 
 
 @given(parsers.parse('a reserved online "{device_name}" device'))
@@ -463,7 +508,7 @@ def reserve_online_device(request, helper, hardware_session, resource_manager, h
     chosen_node = e2e_device_hold.get("node_id")
     if chosen is None:
         online_ids = _online_node_ids(cloud, chip_type)
-        logger.info("E2E reserve-by-type '%s'; online %s node(s): %s", chip_type, chip_type, online_ids or "none")
+        e2e_log.info("E2E reserve-by-type '%s'; online %s node(s): %s", chip_type, chip_type, online_ids or "none")
         held = []
         for _ in range(4):
             try:
@@ -479,13 +524,13 @@ def reserve_online_device(request, helper, hardware_session, resource_manager, h
                 chosen, chosen_node = resource, node_id
                 request.node._chip_serial_log_path = str(log_path)
                 break
-            logger.info("Chip %s (node %s) is not the online E2E device; holding as provision candidate",
-                        resource.mac_address, node_id)
+            e2e_log.info("Chip %s (node %s) is not the online E2E device; holding as provision candidate",
+                         resource.mac_address, node_id)
             resource_manager.serial_logger.stop(resource)
             held.append((resource, node_id))
 
         if chosen is not None:
-            logger.info("Reusing online E2E chip %s (node %s) on %s", chosen.mac_address, chosen_node, chosen.port)
+            e2e_log.info("Reusing online E2E chip %s (node %s) on %s", chosen.mac_address, chosen_node, chosen.port)
         else:
             assert held, f"No available {chip_type} chip to serve the E2E device"
             chosen, chosen_node = held.pop(0)
@@ -503,7 +548,7 @@ def reserve_online_device(request, helper, hardware_session, resource_manager, h
         e2e_device_hold["resource"] = chosen
         e2e_device_hold["node_id"] = chosen_node
     else:
-        logger.info("Reusing session-held E2E chip %s (node %s) on %s", chosen.mac_address, chosen_node, chosen.port)
+        e2e_log.info("Reusing session-held E2E chip %s (node %s) on %s", chosen.mac_address, chosen_node, chosen.port)
 
     _poll_node_online(cloud, chosen_node, timeout=60)
     _name_e2e_node(cloud, chosen_node, fw_name, device_name)
@@ -511,7 +556,7 @@ def reserve_online_device(request, helper, hardware_session, resource_manager, h
     # Per-scenario bindings; the chip is held by e2e_device_hold (session), not released between scenarios.
     hardware_session["resource"] = chosen
     hardware_session["e2e_held"] = chosen
-    metadata = BuildMetadata(chip=chip_type, product="RainMaker", firmware_type="Reserved (E2E)")
+    metadata = BuildMetadata(chip=chip_type, product="", firmware_type="Reserved (E2E)")
     chosen.build_metadata = metadata
     hardware_session["build_metadata"] = metadata
     record_hardware_report(request, chosen, metadata)
@@ -573,12 +618,40 @@ def _serial_since(hardware_session):
     return since
 
 
+@then(parsers.parse('the home card should show "{device}" power as "{state}"'))
+def home_card_power_should_be(helper, device, state):
+    import time
+    helper.home.go_home()
+    deadline = time.time() + 10
+    actual = None
+    while time.time() < deadline:
+        actual = helper.home.read_card_power(device, timeout=3)
+        if actual == state:
+            return
+        time.sleep(1)
+    assert actual == state, f"Home card power for {device} is {actual}, expected {state}"
+
+
+@when(parsers.parse('user toggles "{device}" power to "{state}" from the home screen'))
+def toggle_home_power(helper, hardware_session, device, state):
+    helper.home.go_home()
+    _serial_since(hardware_session)
+    helper.home.set_card_power(device, state == "on")
+
+
+@then(parsers.parse('device "{device}" should be visible on the home screen'))
+def device_visible_on_home(helper, device):
+    helper.home.go_home()
+    assert helper.home.is_device_visible(device, timeout=10, attempts=2), f"{device} is not visible on the home screen"
+
+
 def _expected_value(hardware_session, param, value):
     """The value to verify: the slider's actually-applied readback if captured, else the nominal."""
     return hardware_session.get("set_values", {}).get(param, _coerce_param_value(value))
 
 
 _TOL = 3  # slider read/apply tolerance
+POST_LANDING_SETTLE_TIMEOUT = 60
 
 
 @then(parsers.re(r'the device log should show (?P<pairs>.+?)(?: within "(?P<seconds>\d+)" seconds)?$'))
@@ -682,6 +755,14 @@ def land_on_home_page(helper):
 @given("user should be on login screen")
 def given_login_screen(request, helper):
     """Ensure app is on login screen; force logout for user-management flows, else defer it."""
+    from utils.registered_user_resolver import deployment_type
+    first_launch = not getattr(request.session, "_landing_handled", False)
+    settled = helper.login.dismiss_landing_if_shown(
+        deployment_type(request.config.getoption("--deployment")),
+        timeout=90 if first_launch else POST_LANDING_SETTLE_TIMEOUT,
+    )
+    if settled:
+        request.session._landing_handled = True
     is_user_mgmt = "01_user_management" in str(getattr(request.node, "nodeid", ""))
     helper.login.ensure_login_screen(force_logout=is_user_mgmt)
 
@@ -741,13 +822,60 @@ def pytest_addoption(parser):
     parser.addoption("--debug-dir", action="store", default="debug", help="Debug artifacts directory")
     parser.addoption("--enable-recording", action="store_true", default=True, help="Enable automatic screen recording")
     parser.addoption("--install-app", action="store", default="y", help="Install app before tests (y/n)")
-    parser.addoption("--deployment", action="store", default="production", help="Deployment name in config/deployment.yaml")
+    parser.addoption("--reboot-device", action="store", default="y", help="Reboot the phone once at session start (y/n)")
+    parser.addoption("--deployment", action="store", default="rm", help="Deployment name in config/deployment.yaml")
+    parser.addoption("--active-sdk", action="store", default=None, help="SDK the app under test was built with, overriding ACTIVE_SDK (ids in config/sdk.identifiers.ts)")
     parser.addoption("--fresh-users", action="store_true", default=False, help="Clear persisted registered users at session start so the run creates fresh ones")
+
+
+def _active_sdk_under_test(config) -> str:
+    """The SDK id the installed app was built with: --active-sdk wins, else ACTIVE_SDK (CI exports it from .select_deployment)."""
+    active_sdk = (config.getoption("--active-sdk") or os.environ.get("ACTIVE_SDK") or "").strip()
+    if not active_sdk:
+        raise pytest.UsageError(
+            "Cannot tell which SDK the app under test was built with: ACTIVE_SDK is unset and --active-sdk was "
+            "not passed. CI exports ACTIVE_SDK from the .select_deployment anchor in .gitlab-ci.yml; for a manual "
+            "run export it or pass --active-sdk=<id from config/sdk.identifiers.ts>"
+        )
+    return active_sdk
+
+
+def pytest_collection_modifyitems(config, items):
+    """Deselect (do NOT collect, not merely skip) what the run cannot exercise: deployment.yaml `features` maps marker names to false for what the CLOUD lacks, and Matter suites need a Matter build (ACTIVE_SDK/--active-sdk), since the SDK family itself follows the deployment via the landing selection."""
+    deployment = config.getoption("--deployment")
+    try:
+        deployments = _load_deployment_config(deployment)
+    except Exception as error:
+        raise pytest.UsageError(f"Cannot read the deployment config to gate tests: {error}")
+    env_block = deployments.get(deployment) or {}
+    if not env_block:
+        known = ", ".join(sorted(name for name, block in deployments.items() if isinstance(block, dict) and block.get("type")))
+        raise pytest.UsageError(f"Deployment '{deployment}' is not in config/deployment.yaml (known: {known or 'none'})")
+    features = env_block.get("features", {}) or {}
+    disabled = {name for name, enabled in features.items() if enabled is False}
+    active_sdk = _active_sdk_under_test(config)
+    matter_build = "matter" in active_sdk.lower()
+    e2e_log.info(
+        "Gating on deployment '%s' + SDK '%s' (matter build: %s): deployment disables %s",
+        deployment, active_sdk, matter_build, sorted(disabled) or "nothing",
+    )
+    selected, deselected = [], []
+    for item in items:
+        markers = {marker.name for marker in item.iter_markers()}
+        if disabled.intersection(markers) or (not matter_build and any("matter" in marker for marker in markers)):
+            deselected.append(item)
+        else:
+            selected.append(item)
+    if deselected:
+        config.hook.pytest_deselected(items=deselected)
+        items[:] = selected
 
 
 def pytest_configure(config):
     """Configure pytest with Appium servers"""
     global grid_manager, debug_helper
+
+    _active_sdk_under_test(config)
     
     debug_dir = config.getoption("--debug-dir")
     debug_helper = DebugHelper(debug_dir)
@@ -855,6 +983,91 @@ def appium_grid():
     if not grid_manager:
         grid_manager = AppiumGridManager()
     return grid_manager
+
+def _reboot_android_device(adb_path: str, udid: Optional[str], model: str, timeout: int = 180) -> bool:
+    """
+    Reboot an Android device and wait until it finishes booting.
+
+    Args:
+        adb_path: Path to ADB executable
+        udid: Device UDID (optional)
+        model: Device model name for logging
+        timeout: Seconds to wait for the device to come back
+
+    Returns:
+        True once the device reports boot completed, False otherwise
+    """
+    adb_cmd = [adb_path]
+    if udid:
+        adb_cmd.extend(["-s", udid])
+    try:
+        logger.info(f"Rebooting {model} before the session")
+        subprocess.run(adb_cmd + ["reboot"], capture_output=True, text=True, timeout=30)
+    except Exception as e:
+        logger.warning(f"Reboot command failed for {model}: {e}")
+        return False
+
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        try:
+            result = subprocess.run(adb_cmd + ["shell", "getprop", "sys.boot_completed"],
+                                    capture_output=True, text=True, timeout=10)
+            if result.returncode == 0 and result.stdout.strip() == "1":
+                subprocess.run(adb_cmd + ["shell", "input", "keyevent", "82"],
+                               capture_output=True, text=True, timeout=10)
+                logger.info(f"{model} finished booting")
+                return True
+        except Exception:
+            pass
+        time.sleep(5)
+
+    logger.warning(f"{model} did not report boot completed within {timeout}s; continuing anyway")
+    return False
+
+
+def _reboot_ios_device(udid: Optional[str], model: str, timeout: int = 180) -> bool:
+    """
+    Restart an iOS device with idevicediagnostics and wait until it responds again.
+
+    Args:
+        udid: Device UDID (optional)
+        model: Device model name for logging
+        timeout: Seconds to wait for the device to come back
+
+    Returns:
+        True once the device answers ideviceinfo, False otherwise
+    """
+    restart_cmd = ["idevicediagnostics"]
+    info_cmd = ["ideviceinfo"]
+    if udid:
+        restart_cmd.extend(["-u", udid])
+        info_cmd.extend(["-u", udid])
+    try:
+        logger.info(f"Restarting {model} before the session")
+        subprocess.run(restart_cmd + ["restart"], capture_output=True, text=True, timeout=30)
+    except FileNotFoundError:
+        logger.warning("idevicediagnostics not found; skipping iOS reboot")
+        return False
+    except Exception as e:
+        logger.warning(f"Restart command failed for {model}: {e}")
+        return False
+
+    time.sleep(15)
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        try:
+            result = subprocess.run(info_cmd + ["-k", "DeviceName"],
+                                    capture_output=True, text=True, timeout=10)
+            if result.returncode == 0 and result.stdout.strip():
+                logger.info(f"{model} is back online")
+                return True
+        except Exception:
+            pass
+        time.sleep(5)
+
+    logger.warning(f"{model} did not come back within {timeout}s; continuing anyway")
+    return False
+
 
 def _uninstall_android_app(adb_path: str, udid: Optional[str], package: str, model: str) -> bool:
     """
@@ -973,10 +1186,10 @@ def _uninstall_ios_app(udid: Optional[str], bundle_id: str, model: str) -> bool:
 
         # Fallback: ideviceinstaller (libimobiledevice)
         idevice_cmd = ["ideviceinstaller"] + (["-u", udid] if udid else [])
-        result = subprocess.run(idevice_cmd + ["-l"], capture_output=True, text=True, timeout=10)
+        result = subprocess.run(idevice_cmd + ["list"], capture_output=True, text=True, timeout=10)
         if result.returncode == 0 and bundle_id in result.stdout:
             uninstall_result = subprocess.run(
-                idevice_cmd + ["-U", bundle_id], capture_output=True, text=True, timeout=60
+                idevice_cmd + ["uninstall", bundle_id], capture_output=True, text=True, timeout=60
             )
             if uninstall_result.returncode == 0:
                 logger.info(f"Successfully uninstalled {bundle_id} from {model}")
@@ -1026,10 +1239,10 @@ def _install_ios_app(udid: Optional[str], ipa_path: str, bundle_id: str, model: 
                 return True
             logger.warning(f"devicectl install failed: {result.stderr.strip()[:200]}")
 
-        # Fallback: ideviceinstaller (libimobiledevice)
+        # Fallback: ideviceinstaller (libimobiledevice) — 1.2.0+ takes subcommands, not -i
         idevice_cmd = ["ideviceinstaller"] + (["-u", udid] if udid else [])
         install_result = subprocess.run(
-            idevice_cmd + ["-i", ipa_path], capture_output=True, text=True, timeout=120
+            idevice_cmd + ["install", ipa_path], capture_output=True, text=True, timeout=180
         )
         if install_result.returncode == 0:
             logger.info(f"Successfully installed {bundle_id} on {model}")
@@ -1049,7 +1262,54 @@ def _install_ios_app(udid: Optional[str], ipa_path: str, bundle_id: str, model: 
 
 
 @pytest.fixture(scope="session")
-def app_installer(request):
+def device_reboot(request):
+    """
+    Session-scoped fixture to reboot the phone once per test session.
+    Reboot is controlled via --reboot-device command line argument.
+    Uses ADB for Android and idevicediagnostics for iOS; a failed or slow reboot
+    only warns so the session still runs.
+    """
+
+    reboot_device = request.config.getoption("--reboot-device", "y")
+    if reboot_device.lower() != "y":
+        logger.info("Device reboot is disabled (use --reboot-device=y to enable)")
+        return
+
+    models = request.config.getoption("--model")
+    if not models:
+        return
+
+    model = models.split(",")[0].strip()
+
+    config_path = Path("config")
+    try:
+        with open(config_path / "app.yaml", 'r') as f:
+            app_config = yaml.safe_load(f) or {}
+        with open(config_path / "mobiles.yaml", 'r') as f:
+            mobiles_config = yaml.safe_load(f) or {}
+    except Exception as e:
+        logger.error(f"Failed to load config files: {e}")
+        return
+
+    device_config = mobiles_config.get("mobiles", {}).get(model, {})
+    platform = device_config.get("platform", "Android").lower()
+    udid = device_config.get("udid")
+
+    if platform == "android":
+        rainmaker_home_config = app_config.get("rainmaker-home", {})
+        android_path = rainmaker_home_config.get("android_path")
+        adb_path = rainmaker_home_config.get("adb_path") or (
+            f"{android_path.rstrip('/')}/platform-tools/adb" if android_path else "adb"
+        )
+        _reboot_android_device(adb_path, udid, model)
+    elif platform == "ios":
+        _reboot_ios_device(udid, model)
+    else:
+        logger.warning(f"Unknown platform '{platform}' for {model}; skipping reboot")
+
+
+@pytest.fixture(scope="session")
+def app_installer(request, device_reboot):
     """
     Session-scoped fixture to install app once per test session.
     Installation is controlled via --install-app command line argument.
@@ -1108,7 +1368,7 @@ def app_installer(request):
             if not apk_path:
                 pytest.fail("APK path not set in config/app.yaml")
             if not _install_android_app(adb_path, udid, apk_path, package, model):
-                logger.error(f"Failed to install Android app on {model}")
+                pytest.fail(f"Failed to install the Android app on {model}; the run would test the build already on the phone")
                 
         elif platform == "ios":
             ipa_path = rainmaker_home_config.get("ipa_path")
@@ -1121,16 +1381,18 @@ def app_installer(request):
             if not ipa_path:
                 pytest.fail("IPA path not set in config/app.yaml")
             if not _install_ios_app(udid, ipa_path, bundle_id, model):
-                logger.error(f"Failed to install iOS app on {model}")
+                pytest.fail(f"Failed to install the iOS app on {model}; the run would test the build already on the phone")
         else:
             logger.warning(f"Unsupported platform: {platform}")
             yield
             return
             
+    except pytest.fail.Exception:
+        raise
     except Exception as e:
         logger.error(f"Error during app installation for {model}: {e}")
-    
-    yield 
+
+    yield
 
 @pytest.fixture(scope="function")
 def driver(request, appium_grid, app_installer):
@@ -1210,11 +1472,14 @@ def driver(request, appium_grid, app_installer):
                 pass  # Ignore cleanup errors
 
 def _expected_app_version_display() -> str:
-    """Expected app version string as shown in UI (e.g. 'Version 3.5.0')."""
-    from utils.common_utils import read_app_version
+    """Expected app version string as shown in UI (e.g. 'Version 3.5.0 (a1b2c3d)')."""
+    from utils.common_utils import read_app_version, read_commit_id
 
     version = read_app_version()
-    return f"Version {version}" if version else "Version N/A"
+    if not version:
+        return "Version N/A"
+    commit = read_commit_id()
+    return f"Version {version} ({commit})" if commit else f"Version {version}"
 
 
 @pytest.fixture(scope="session")

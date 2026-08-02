@@ -16,7 +16,10 @@ import {
   ESPDevice,
 } from "@espressif/rainmaker-base-sdk";
 import ESPLocalControlAdapter from "@native-adaptors/implementations/ESPLocalControlAdapter";
-import { applyProvisionNodeTimezoneWithRetries } from "@shared/utils/timezone";
+import {
+  applyProvisionNodeTimezoneWithRetries,
+  markProvisionTimezoneFailed,
+} from "@shared/utils/timezone";
 import { pollUntilReady } from "@shared/utils/common";
 import { ON_NETWORK_DEFAULT_CH_RESP_ENDPOINT } from "@shared/utils/constants";
 
@@ -376,13 +379,21 @@ export async function addOnNetworkDeviceProvision(
   }
 
   try {
-    node = await applyProvisionNodeTimezoneWithRetries(
+    const tzResult = await applyProvisionNodeTimezoneWithRetries(
       user,
       nodeId,
       node,
       (id) => user.getNodeDetails(id)
     );
+    node = tzResult.node;
+    if (!tzResult.timezoneApplied) {
+      console.warn(
+        `${LOG_PREFIX} Timezone setTimeZone did not succeed (non-blocking); nodeId=`,
+        nodeId
+      );
+    }
   } catch (tzError) {
+    markProvisionTimezoneFailed(nodeId);
     console.error(
       `${LOG_PREFIX} Timezone setup failed (non-blocking):`,
       tzError

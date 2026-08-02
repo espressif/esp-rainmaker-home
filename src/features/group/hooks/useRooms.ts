@@ -9,6 +9,7 @@ import type { ESPCDFGroup } from "@store";
 import { getRoomSubGroups } from "@features/group/utils/roomsHelpers";
 import { useCDF } from "@shared/hooks/useCDF";
 import { useFocusEffect } from "expo-router";
+import { hasGroupLevelAccess } from "@shared/utils/groupAccess";
 
 export interface UseRoomsOptions {
   homeId: string | undefined;
@@ -18,6 +19,8 @@ export interface UseRoomsOptions {
 export interface UseRoomsResult {
   home: ESPCDFGroup | null;
   rooms: ESPCDFGroup[];
+  /** False for subgroup-only viewers — the backend rejects room creation for them. */
+  canAddRoom: boolean;
   refreshing: boolean;
   handleRefresh: () => Promise<void>;
   handleAddRoom: () => void;
@@ -35,6 +38,9 @@ export function useRooms(options: UseRoomsOptions): UseRoomsResult {
 
   const [refreshing, setRefreshing] = useState(false);
   const home = groupStore?.groupsByIDMap?.[homeId as string] ?? null;
+
+  // Subgroup-only viewers can browse their shared rooms but cannot create new ones.
+  const canAddRoom = hasGroupLevelAccess(home?.accessType);
 
   const rooms = useMemo(() => {
     const subGroups = (home?.subGroups as ESPCDFGroup[]) || [];
@@ -68,11 +74,14 @@ export function useRooms(options: UseRoomsOptions): UseRoomsResult {
   }, [loadRooms, refreshing]);
 
   const handleAddRoom = useCallback(() => {
+    // Subgroup-only viewers cannot create rooms (backend-rejected); the entry
+    // points are hidden, this guards any remaining path (e.g. empty state).
+    if (!canAddRoom) return;
     router.push({
       pathname: "/(group)/CreateRoom",
       params: { id: homeId, dismissTo: "/(group)/Rooms" },
     } as any);
-  }, [router, homeId]);
+  }, [router, homeId, canAddRoom]);
 
   const handlePressRoom = useCallback(
     (roomId: string) => {
@@ -90,6 +99,7 @@ export function useRooms(options: UseRoomsOptions): UseRoomsResult {
   return {
     home: home ?? null,
     rooms,
+    canAddRoom,
     refreshing,
     handleRefresh,
     handleAddRoom,

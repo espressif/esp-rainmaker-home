@@ -267,7 +267,20 @@ android {
     }
     buildTypes {
         debug {
-            // Debug variants use the default debug keystore (signingConfigs.debug).
+            // Opt-in FCM debug signing: sign debug builds (`npm run android` → globalDebug)
+            // with the release keystore so Firebase Installations can mint an FCM token. The
+            // default debug.keystore SHA is NOT registered with FIS for the esp-novahome
+            // project, so without this, debug builds fail with FIS_AUTH_ERROR (push testing
+            // only). OFF by default, so release/CI and other devs keep the standard debug key
+            // and this is safe to commit. Enable locally (uncommitted) via any of:
+            //   • ~/.gradle/gradle.properties  ->  fcmDebugSigning=true   (set once, per-user)
+            //   • FCM_DEBUG_SIGNING=true npm run android                  (per-invocation)
+            //   • ./gradlew ... -PfcmDebugSigning=true
+            def fcmDebugSigning = (project.findProperty('fcmDebugSigning')
+                    ?: System.getenv('FCM_DEBUG_SIGNING') ?: 'false').toString().toBoolean()
+            if (fcmDebugSigning && keystoreProperties['storeFile']) {
+                signingConfig signingConfigs.release
+            }
             minifyEnabled false
             shrinkResources false
             proguardFiles getDefaultProguardFile("proguard-android.txt"), "proguard-rules.pro"

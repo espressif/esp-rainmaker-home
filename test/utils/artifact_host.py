@@ -37,6 +37,30 @@ def _primary_ip() -> str:
         s.close()
 
 
+def parse_cloud_api_calls(text: str) -> list:
+    """Parse cloud_api.jsonl text into [{'summary', 'pretty'}] rows, shared by the server viewer and the report's embedded Cloud API Calls section."""
+    import json as _json
+    from urllib.parse import urlparse as _urlparse
+    calls = []
+    for i, line in enumerate((text or "").splitlines(), 1):
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            obj = _json.loads(line)
+            pretty = _json.dumps(obj, indent=2, ensure_ascii=False)
+        except Exception:
+            obj, pretty = None, line
+        if isinstance(obj, dict):
+            path = _urlparse(str(obj.get('uri', ''))).path or str(obj.get('uri', ''))
+            q = obj.get('query')
+            summary = f"{obj.get('ts', '')}  {obj.get('method', '')} {path}{('?' + str(q)) if q else ''}  → {obj.get('status', '')}  ({obj.get('elapsed_ms', '?')}ms)"
+        else:
+            summary = f"line {i}"
+        calls.append({"summary": summary, "pretty": pretty})
+    return calls
+
+
 class ArtifactHandler(SimpleHTTPRequestHandler):
     """Custom HTTP handler for serving artifacts"""
     
@@ -137,8 +161,8 @@ class ArtifactHandler(SimpleHTTPRequestHandler):
                     self.wfile.write(body)
                 return
 
-            # JSONL (cloud API logs) render as a collapsible HTML viewer, not a download.
-            if ext == '.jsonl':
+            # Cloud-API logs render as a collapsible HTML viewer, matched by name so any extension serves inline (never a download).
+            if ext == '.jsonl' or 'cloud_api' in file_path.name.lower():
                 body = self._render_jsonl_body(file_path)
                 self.send_response(200)
                 self.send_header('Content-type', 'text/html; charset=utf-8')
@@ -219,30 +243,15 @@ class ArtifactHandler(SimpleHTTPRequestHandler):
     @staticmethod
     def _render_jsonl_body(file_path: Path) -> bytes:
         """Render a .jsonl cloud-API log as a collapsible HTML page (one <details> per call)."""
-        import json as _json
         import html as _html
-        from urllib.parse import urlparse as _urlparse
-        rows = []
         try:
-            lines = file_path.read_text(encoding='utf-8', errors='replace').splitlines()
+            text = file_path.read_text(encoding='utf-8', errors='replace')
         except Exception as e:
             return f"<pre>Could not read {_html.escape(file_path.name)}: {_html.escape(str(e))}</pre>".encode('utf-8')
-        for i, line in enumerate(lines, 1):
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                obj = _json.loads(line)
-                pretty = _json.dumps(obj, indent=2, ensure_ascii=False)
-            except Exception:
-                obj, pretty = None, line
-            if isinstance(obj, dict):
-                path = _urlparse(str(obj.get('uri', ''))).path or str(obj.get('uri', ''))
-                q = obj.get('query')
-                summary = f"{obj.get('ts', '')}  {obj.get('method', '')} {path}{('?' + str(q)) if q else ''}  → {obj.get('status', '')}  ({obj.get('elapsed_ms', '?')}ms)"
-            else:
-                summary = f"line {i}"
-            rows.append(f"<details><summary>{_html.escape(summary)}</summary><pre>{_html.escape(pretty)}</pre></details>")
+        rows = [
+            f"<details><summary>{_html.escape(c['summary'])}</summary><pre>{_html.escape(c['pretty'])}</pre></details>"
+            for c in parse_cloud_api_calls(text)
+        ]
         style = "body{font-family:ui-monospace,Menlo,monospace;background:#1e1e1e;color:#d4d4d4;margin:0;padding:14px}h3{margin:0 0 10px}summary{cursor:pointer;padding:5px 0;color:#9cdcfe;white-space:pre-wrap}pre{background:#111;padding:10px;overflow:auto;border-radius:4px;color:#ce9178}details{border-bottom:1px solid #333}button{background:#333;color:#ddd;border:1px solid #555;border-radius:4px;padding:5px 10px;margin-right:6px;cursor:pointer}"
         controls = "<button onclick=\"document.querySelectorAll('details').forEach(d=>d.open=true)\">Expand all</button><button onclick=\"document.querySelectorAll('details').forEach(d=>d.open=false)\">Collapse all</button>"
         doc = f"<!doctype html><html><head><meta charset='utf-8'><title>{_html.escape(file_path.name)}</title><style>{style}</style></head><body><h3>{_html.escape(file_path.name)} — {len(rows)} calls</h3>{controls}<div>{''.join(rows)}</div></body></html>"
@@ -404,6 +413,8 @@ class ArtifactHost:
         for port in range(start_port, start_port + 100):
             try:
                 with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                    # SO_REUSEADDR so a restart's TIME_WAIT doesn't skip :8000 -> :8001.
+                    s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
                     s.bind(('', port))
                     return port
             except OSError:

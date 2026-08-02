@@ -201,3 +201,24 @@ export const createNewPasswordValidator =
     }
     return { isValid: true };
   };
+
+/**
+ * Surfaces a user-visible auth error string from CDF / adaptor throws.
+ * Prefers `description` (adaptor contract), then `message` (SDK Error).
+ *
+ * @param error - Caught value from an auth store call
+ * @returns First non-empty description/message, or `undefined`
+ */
+export function getAuthErrorDescription(error: unknown): string | undefined {
+  if (!error || typeof error !== "object") {
+    return typeof error === "string" && error.trim() ? error : undefined;
+  }
+  const err = error as { description?: unknown; message?: unknown };
+  if (typeof err.description === "string" && err.description.trim()) {
+    return err.description;
+  }
+  if (typeof err.message === "string" && err.message.trim()) {
+    return err.message;
+  }
+  return undefined;
+}

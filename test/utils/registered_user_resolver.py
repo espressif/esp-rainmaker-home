@@ -55,7 +55,7 @@ def _resolve_deployment(deployment: Optional[str]) -> str:
         or os.getenv("ESP_DEPLOYMENT")
         or os.getenv("PYTEST_DEPLOYMENT")
         or os.getenv("DEPLOYMENT")
-        or "production"
+        or "rm"
     )
 
 
@@ -94,6 +94,25 @@ def load_deployment_config(deployment: str) -> Dict:
     if deployment not in config:
         raise KeyError(f"Deployment '{deployment}' not found in {config_path}")
     return config
+
+
+RMNEO_TYPE_ALIASES = ("neo", "rmneo")
+
+def deployment_family(declared: str) -> str:
+    """rm|rmneo family for a `type` value or deployment name; the family names persisted rig state (cert-store dirs, firmware matching), so config vocabulary funnels through here only."""
+    return "rmneo" if (declared or "").strip().lower() in RMNEO_TYPE_ALIASES else "rm"
+
+
+def deployment_type(deployment: str) -> str:
+    """Firmware/SDK family for a deployment: the block's `type` (classic|neo) when present, else the name itself. Adding a new deployment only needs a `type:` in deployment.yaml."""
+    try:
+        block = load_deployment_config(deployment).get(deployment, {}) or {}
+        declared = str(block.get("type") or "")
+        if declared.strip():
+            return deployment_family(declared)
+    except Exception:
+        pass
+    return deployment_family(deployment)
 
 
 def load_registered_users(

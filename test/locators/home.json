@@ -24,6 +24,11 @@
     "value": "button_tab_user",
     "text": "User"
   },
+  "home_tab_button": {
+    "by": "id",
+    "value": "button_tab_home",
+    "text": "Home"
+  },
   "nickname_input": {
     "by": "id",
     "value": "input_nickname",
@@ -65,6 +70,10 @@
     "by": "id",
     "value": "text_local_control_device_card",
     "text": "Available on WLAN"
+  },
+  "device_offline_badge": {
+    "by": "id",
+    "value": "text_offline_device_card"
   },
   "button_migration_prompt_understood": {
     "by": "id",

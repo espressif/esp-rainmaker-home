@@ -19,16 +19,11 @@ import { observer } from "mobx-react-lite";
 import { tokens } from "@shared/theme/tokens";
 import { globalStyles } from "@shared/theme/globalStyleSheet";
 import { personalInfoStyles } from "@features/user/theme/userStyleSheet";
-import {
-  getResolvedActiveSdk,
-  isRmngStackSdkId,
-} from "@config/sdk.config";
 
 const PersonalInfo: React.FC = observer(() => {
   const { t } = useTranslation();
   const {
     userName,
-    userCode,
     nickName,
     setNickName,
     userId,
@@ -90,26 +85,6 @@ const PersonalInfo: React.FC = observer(() => {
             qaId="copy_userid"
           />
         </ContentWrapper>
-
-        {isRmngStackSdkId(getResolvedActiveSdk()) && (
-          <ContentWrapper
-            title={t("user.profile.userCode")}
-            style={{
-              ...globalStyles.shadowElevationForLightTheme,
-              backgroundColor: tokens.colors.white,
-              marginTop: tokens.spacing._15,
-            }}
-            qaId="user_code"
-          >
-            <EditableField
-              value={userCode}
-              placeholder={t("user.personalInfo.notSet")}
-              onEdit={() => {}}
-              mode="copy"
-              qaId="copy_user_code"
-            />
-          </ContentWrapper>
-        )}
 
         <EditModal
           visible={showEditModal}

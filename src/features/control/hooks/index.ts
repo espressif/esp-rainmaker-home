@@ -6,7 +6,6 @@
 
 export { useControl } from "./useControl";
 export { useSettings, type UseSettingsReturn } from "./useSettings";
-export { useChart } from "./useChart";
+export { useTimeSeriesChart } from "./useTimeSeriesChart";
 export { useGuide } from "./useGuide";
 export { useGuideSteps } from "./useGuideSteps";
-export { useTimeSeriesData } from "./useTimeSeriesData";

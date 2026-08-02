@@ -15,7 +15,41 @@ workflow:
   auto_cancel:
     on_new_commit: interruptible
   rules:
+    # Skip CI for draft merge requests (Draft:/WIP: title or draft flag).
+    - if: '$CI_MERGE_REQUEST_DRAFT == "true"'
+      when: never
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TITLE =~ /^(Draft|WIP):/i'
+      when: never
     - if: $CI_MERGE_REQUEST_ID
+
+
+# Deployment/SDK select (orthogonal to the region APP_FLAVOR global/cn): ACTIVE_SDK (build) + DEPLOYMENT (test) from the commit message — contains "RMNEO" (any case) -> rmneo, else rm; a preset ACTIVE_SDK/DEPLOYMENT CI/CD variable overrides.
+.select_deployment:
+  script:
+    - |
+      if printf '%s' "${CI_COMMIT_MESSAGE:-${CI_COMMIT_TITLE:-}}" | grep -qi 'RMNEO'; then
+        _sel_sdk="rainmaker-neo-base-sdk"; _sel_dep="rmneo"
+      else
+        _sel_sdk="rainmaker-matter-sdk"; _sel_dep="rm"
+      fi
+      export ACTIVE_SDK="${ACTIVE_SDK:-$_sel_sdk}"
+      export DEPLOYMENT="${DEPLOYMENT:-$_sel_dep}"
+      echo "Commit-message deployment select: ACTIVE_SDK=${ACTIVE_SDK} DEPLOYMENT=${DEPLOYMENT}"
+
+
+# Both build jobs bake the selected ACTIVE_SDK into the env file the app reads at build time.
+.env_tools:
+  script:
+    - |
+      inject_active_sdk() {
+        local env_file="$1"
+        if grep -qE '^ACTIVE_SDK=' "${env_file}"; then
+          sed -i.bak -E "s|^ACTIVE_SDK=.*|ACTIVE_SDK=${ACTIVE_SDK}|" "${env_file}" && rm -f "${env_file}.bak"
+        else
+          printf '\nACTIVE_SDK=%s\n' "${ACTIVE_SDK}" >> "${env_file}"
+        fi
+        echo "ACTIVE_SDK=${ACTIVE_SDK} -> ${env_file}"
+      }
 
 
 before_script:
@@ -51,7 +85,6 @@ code_quality:
       node -v && npm -v
       npm ci
       npm run check
-  allow_failure: false
 
 ###############################################################
 # ANDROID — MR builds APK
@@ -68,6 +101,7 @@ android_apk:
       - APP_FLAVOR: global
       - APP_FLAVOR: cn
   script:
+    - !reference [.select_deployment, script]
     - npm ci
     # Secrets: FS_ENV_<FLAVOR>_FILE, FS_KEYSTORE_<FLAVOR>_FILE, FS_GOOGLE_SERVICES_JSON (global); keystore.properties via prebuild.
     - |
@@ -102,6 +136,12 @@ android_apk:
         test -s android/app/google-services.json
       fi
 
+    - !reference [.env_tools, script]
+    - |
+      REGION_ENV=".env.${APP_FLAVOR}"
+      cp .env "${REGION_ENV}"
+      inject_active_sdk "${REGION_ENV}"
+
     - npm run "prebuild:android:${APP_FLAVOR}"
 
     - if [ -z "${ANDROID_HOME:-}" ]; then echo "ANDROID_HOME is not set (configure it as a GitLab CI variable or runner env)"; exit 1; fi
@@ -128,6 +168,8 @@ ios_ipa:
   needs:
     - job: code_quality
   script:
+    - !reference [.select_deployment, script]
+    - !reference [.env_tools, script]
     - |
       set -eo pipefail
       node -v && npm -v && xcodebuild -version && ruby -v
@@ -170,6 +212,9 @@ ios_ipa:
       # Secrets: FS_ENV_GLOBAL_FILE (base64 .env.global) → .env + .env.global for prebuild / app.config
       umask 077
       printf '%s' "${FS_ENV_GLOBAL_FILE}" | base64 -d > .env.global
+
+      inject_active_sdk .env.global
+
       cp .env.global .env
       test -s .env.global
       test -s .env
@@ -186,39 +231,50 @@ ios_ipa:
     expire_in: 1 day
 
 ###############################################################
-# ANDROID — Run tests
+# DEVICE TESTS — one harness, parameterized per platform
 ###############################################################
 
-android_test:
+# The workspace venv survives checkouts (GIT_CLEAN_FLAGS) and is rebuilt only
+# when requirements.txt changes, so a run does not pay a fresh pip install.
+.device_test:
   stage: test
   tags: [mac-mini-runner]
-  resource_group: android_moto
   timeout: 2h
-  needs:
-    - job: "android_apk: [global]"
-      artifacts: true
+  variables:
+    GIT_CLEAN_FLAGS: -ffdx -e test/.venv
+  artifacts:
+    when: always
+    paths:
+      - test/reports/
+    expire_in: 1 day
+
+.device_test_env:
   script:
-    - set -euo pipefail
-    - APK_PATH="${CI_PROJECT_DIR}/artifacts/android/app-global-release.apk"
-    - if [ ! -f "${APK_PATH}" ]; then echo "APK not found at ${APK_PATH}"; ls -la artifacts/android || true; exit 1; fi
-    - echo "APK_PATH=${APK_PATH}"
+    - if [ -n "${FS_ENV_GLOBAL_FILE:-}" ]; then printf '%s' "${FS_ENV_GLOBAL_FILE}" | base64 -d > .env; elif [ -f .env.global.example ]; then cp .env.global.example .env; fi
 
-    - if [ -f .env.global.example ]; then cp .env.global.example .env; fi
-    - mkdir -p test/artifacts/android
-    - cp "${APK_PATH}" test/artifacts/android/app-release.apk
-    - ls -la test/artifacts/android
-
+.device_test_run:
+  script:
     - cd test
-    - python3 -m venv .venv
-    - . .venv/bin/activate
-    - python -m pip install -U pip
-    - pip install -r requirements.txt
+    - |
+      REQUIREMENTS_SHA=$(shasum -a 256 requirements.txt | cut -d' ' -f1)
+      if [ ! -x .venv/bin/python ] || [ "$(cat .venv/.requirements_sha 2>/dev/null)" != "${REQUIREMENTS_SHA}" ]; then
+        rm -rf .venv
+        python3 -m venv .venv
+        . .venv/bin/activate
+        python -m pip install -U pip
+        pip install -r requirements.txt
+        echo "${REQUIREMENTS_SHA}" > .venv/.requirements_sha
+      else
+        . .venv/bin/activate
+        echo "Reusing test/.venv (requirements unchanged)"
+      fi
 
     # Export non-secret test defaults (CI/CD variables and .env still take precedence), then generate config
     - . scripts/setup_test_env.sh
+    # Parallel android+ios: one shared lock DB across the two job workspaces so acquire() atomically hands out disjoint chips (no ESP_EXCLUDE partitioning needed).
+    - export ESP_LOCK_DB_PATH="${ESP_LOCK_DB_PATH:-$HOME/.esp_resource_locks.db}"
     - python scripts/ci_setup_config.py
 
-    - MODEL="${MODEL:-motorola edge 60 pro}"
     - MARKER="${MARKER:-sanity}"
 
     # Provisioning firmware bundles from Jenkins (set DOWNLOAD_FIRMWARES=y on
@@ -231,8 +287,9 @@ android_test:
     - |
       set +e
       python -m pytest \
-        --model "${MODEL}" \
+        --model "${TEST_MODEL}" \
         -m "${MARKER}" \
+        --deployment "${DEPLOYMENT}" \
         --tb=short \
         --disable-warnings \
         -v
@@ -251,79 +308,43 @@ android_test:
         *) exit "${TEST_EXIT}" ;;
       esac
 
-  artifacts:
-    when: always
-    paths:
-      - test/reports/
-    expire_in: 1 day
-
-###############################################################
-# IOS — Run tests on iPhone Air attached to mac-mini-runner
-###############################################################
+android_test:
+  extends: .device_test
+  resource_group: android_moto
+  needs:
+    - job: "android_apk: [global]"
+      artifacts: true
+  script:
+    - set -euo pipefail
+    - !reference [.select_deployment, script]
+    - APK_PATH="${CI_PROJECT_DIR}/artifacts/android/app-global-release.apk"
+    - if [ ! -f "${APK_PATH}" ]; then echo "APK not found at ${APK_PATH}"; ls -la artifacts/android || true; exit 1; fi
+    - echo "APK_PATH=${APK_PATH}"
+    - !reference [.device_test_env, script]
+    - mkdir -p test/artifacts/android
+    - cp "${APK_PATH}" test/artifacts/android/app-release.apk
+    - ls -la test/artifacts/android
+    - TEST_MODEL="${MODEL:-motorola edge 60 pro}"
+    - !reference [.device_test_run, script]
 
 ios_test:
-  stage: test
-  tags: [mac-mini-runner]
+  extends: .device_test
   resource_group: iphone_air
-  timeout: 2h
   before_script: []
   needs:
     - job: ios_ipa
       artifacts: true
   script:
     - set -euo pipefail
-
+    - !reference [.select_deployment, script]
     - command -v appium >/dev/null || { echo "appium not found (npm i -g appium)"; exit 1; }
-
     - IPA_PATH=$(ls "${CI_PROJECT_DIR}"/artifacts/ios/*.ipa 2>/dev/null | head -1)
     - if [ -z "${IPA_PATH}" ]; then echo "IPA not found under artifacts/ios"; ls -la artifacts/ios || true; exit 1; fi
     - echo "IPA_PATH=${IPA_PATH}"
-
-    - if [ -f .env.global.example ]; then cp .env.global.example .env; fi
+    - !reference [.device_test_env, script]
     - mkdir -p test/artifacts/ios
     - cp "${IPA_PATH}" test/artifacts/ios/app-release.ipa
-
-    - cd test
-    - python3 -m venv .venv
-    - . .venv/bin/activate
-    - python -m pip install -U pip
-    - pip install -r requirements.txt
-
-    # Export non-secret test defaults (CI/CD variables and .env still take precedence), then generate config
-    - . scripts/setup_test_env.sh
-    - python scripts/ci_setup_config.py
-
-    - MODEL="${IOS_MODEL:-iPhone Air}"
-    - MARKER="${MARKER:-sanity}"
-
+    - TEST_MODEL="${IOS_MODEL:-iPhone Air}"
     # WebDriverAgent is built fresh from the Apple account signed in to Xcode on
     # this runner (no prebuilt-WDA bootstrap).
-
-    - if [ "${DOWNLOAD_FIRMWARES:-n}" = "y" ]; then python scripts/download_firmwares.py; fi
-
-    - |
-      set +e
-      python -m pytest \
-        --model "${MODEL}" \
-        -m "${MARKER}" \
-        --tb=short \
-        --disable-warnings \
-        -v
-      TEST_EXIT=$?
-      set -e
-
-    - python scripts/notify_mr.py || true
-
-    - |
-      STATUS=$(python -c "import json;print(json.load(open('reports/last_run_summary.json'))['status'])" 2>/dev/null || true)
-      echo "Run status: ${STATUS:-<none>} (pytest exit ${TEST_EXIT})"
-      case "$STATUS" in
-        "ALL PASSED"|"MOSTLY PASSED") exit 0 ;;
-        *) exit "${TEST_EXIT}" ;;
-      esac
-
-  artifacts:
-    when: always
-    paths:
-      - test/reports/
-    expire_in: 1 day
+    - !reference [.device_test_run, script]

@@ -122,7 +122,6 @@ const Switch: React.FC<ControlPanelProps> = ({ node, device }) => {
     <View
       style={[
         styles.container,
-        { opacity: isConnected ? 1 : 0.5 },
         { backgroundColor: tokens.colors.bg5 },
       ]}
       {...testProps("view_switch")}

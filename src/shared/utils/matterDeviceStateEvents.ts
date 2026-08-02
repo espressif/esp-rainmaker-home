@@ -34,6 +34,35 @@ export function readMatterNodeIdFromCdfNode(node: ESPCDFNode): string | undefine
     return typeof fromMeta === "string" && fromMeta.trim() ? fromMeta.trim() : undefined;
 }
 
+/**
+ * Extracts a Matter node's software version for display. The version is captured at
+ * commissioning from the Basic Information cluster (0x28) and persisted under
+ * `metadata.Matter`. Prefers the human-readable SoftwareVersionString, falling back to the numeric
+ * SoftwareVersion. Also checks a flattened `metadata.*` location in case the
+ * persistence layer hoists the fields out of the `Matter` sub-object.
+ */
+export function readMatterSoftwareVersionFromCdfNode(
+    node: ESPCDFNode,
+): string | undefined {
+    const meta = node.metadata as
+        | {
+              Matter?: {
+                  softwareVersion?: unknown;
+                  softwareVersionString?: unknown;
+              };
+              softwareVersion?: unknown;
+              softwareVersionString?: unknown;
+          }
+        | undefined;
+    const matter = meta?.Matter;
+    const str = matter?.softwareVersionString ?? meta?.softwareVersionString;
+    if (typeof str === "string" && str.trim()) return str.trim();
+    const num = matter?.softwareVersion ?? meta?.softwareVersion;
+    if (typeof num === "string" && num.trim()) return num.trim();
+    if (typeof num === "number" && Number.isFinite(num)) return String(num);
+    return undefined;
+}
+
 /** Broadcast endpoint-scoped Matter param updates for shared `matterNodeId` UIs. */
 export function emitMatterDeviceStateChanged(
     node: ESPCDFNode,

@@ -19,12 +19,9 @@ import {
   type ESPRMMatterBaseConfig,
 } from "@espressif/rainmaker-matter-sdk";
 import { resolveMatterFabricByGroupId } from "@sdk-adaptors/ESPRMMatterBase/resolveMatterFabricByGroupId";
-import { getMatterSDKConfig, getResolvedActiveSdk, isRmngStackSdkId } from "@config/sdk.config";
+import { getMatterSDKConfig } from "@config/sdk.config";
 import { runtimeConfigManager } from "@config/runtime.config";
-import {
-  rmngMatterConfirmCommissionTask,
-  rmngMatterIssueNocTask,
-} from "./matterCommissioningTask.rmng";
+import { setMatterNodeId } from "@shared/utils/matterLocalStorage";
 import {
   NODE_TYPE,
   MATTER_METADATA_KEY,
@@ -100,17 +97,8 @@ interface ConfirmCommissionTaskData {
   sigv4Expiration?: string;
 }
 
-async function isRmngMatterCommissioningActive(): Promise<boolean> {
-  await runtimeConfigManager.loadFromStorage();
-  return isRmngStackSdkId(getResolvedActiveSdk());
-}
-
 /** Issues Node Operational Certificate via backend API. Triggered when CSR is received from device. */
 export const MatterIssueNocTask = async (taskData: IssueNocTaskData) => {
-  if (await isRmngMatterCommissioningActive()) {
-    return rmngMatterIssueNocTask(taskData);
-  }
-
   try {
     await initializeSDK();
 
@@ -159,7 +147,7 @@ export const MatterIssueNocTask = async (taskData: IssueNocTaskData) => {
     if (ESPMatterModule && ESPMatterModule.handleHeadlessTaskResult) {
       ESPMatterModule.handleHeadlessTaskResult(
         HEADLESS_TASK_ISSUE_NOC,
-        JSON.stringify(errorData)
+        JSON.stringify(errorData),
       );
     }
 
@@ -169,12 +157,8 @@ export const MatterIssueNocTask = async (taskData: IssueNocTaskData) => {
 
 /** Confirms commissioning via backend API. Triggered after device is successfully commissioned. */
 export const MatterConfirmCommissionTask = async (
-  taskData: ConfirmCommissionTaskData
+  taskData: ConfirmCommissionTaskData,
 ) => {
-  if (await isRmngMatterCommissioningActive()) {
-    return rmngMatterConfirmCommissionTask(taskData);
-  }
-
   try {
     await initializeSDK();
 
@@ -248,6 +232,13 @@ export const MatterConfirmCommissionTask = async (
         metadata: cloudMatterMetadata,
       });
 
+    // Persist the operational Matter node id (keyed by RainMaker node id) so a
+    // later cold-start sync can re-attach it — the cloud doesn't reliably echo
+    // matter_node_id for hybrid nodes. Pure-Matter nodes have no rainmakerNodeId.
+    if (rainmakerNodeId && matterNodeId) {
+      await setMatterNodeId(rainmakerNodeId, matterNodeId);
+    }
+
     const resultData = {
       success: true,
       requestId: requestId,
@@ -258,7 +249,7 @@ export const MatterConfirmCommissionTask = async (
     if (ESPMatterModule && ESPMatterModule.handleHeadlessTaskResult) {
       ESPMatterModule.handleHeadlessTaskResult(
         HEADLESS_TASK_CONFIRM_COMMISSION,
-        JSON.stringify(resultData)
+        JSON.stringify(resultData),
       );
     } else {
       throw new Error(HEADLESS_ERROR_NATIVE_MODULE_UNAVAILABLE);
@@ -268,7 +259,7 @@ export const MatterConfirmCommissionTask = async (
   } catch (error: any) {
     console.error(
       "[HeadlessJS] MatterConfirmCommissionTask error:",
-      error.message
+      error.message,
     );
 
     const errorData = {
@@ -281,7 +272,7 @@ export const MatterConfirmCommissionTask = async (
     if (ESPMatterModule && ESPMatterModule.handleHeadlessTaskResult) {
       ESPMatterModule.handleHeadlessTaskResult(
         HEADLESS_TASK_CONFIRM_COMMISSION,
-        JSON.stringify(errorData)
+        JSON.stringify(errorData),
       );
     }
 

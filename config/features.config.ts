@@ -15,14 +15,18 @@ import { getRegionConfig } from '@config/region.config';
  * Essential (always enabled, not configurable):
  *   provisioning, deviceManagement, accountDeletion
  *
- * SDK-gated (RMNG = false):
+ * SDK-gated (RMNeo = false):
  *   scenes, schedules, localControl, notifications, groupSharing, subGroupSharing, transferGroupSharing, ota
  *
  * Both SDKs supported (env-only control):
  *   automations, aiAgent, thirdPartyAuth, voiceAssistants
  *
- * SDK-gated (RMNG / rmng-base-sdk only):
+ * SDK-gated (RMNeo / rainmaker-neo-base-sdk only):
  *   controlGroups — device control groups (homogeneous subgroups); not on rainmaker-base-sdk or rainmaker-matter-sdk
+ *   secondaryGroupManagement — secondary users get RainMaker Neo's group-management surface:
+ *   browse/manage rooms (listing, rename, delete-if-empty) and rename the home
+ *   (backend grants `group:update` + subgroup permissions to secondary access;
+ *   classic RM keeps group/room management primary-only)
  */
 export type FeatureKey =
   | 'scenes'
@@ -38,7 +42,10 @@ export type FeatureKey =
   | 'thirdPartyAuth'
   | 'voiceAssistants'
   | 'controlGroups'
-  | 'onNetworkProvisioning';
+  | 'secondaryGroupManagement'
+  | 'onNetworkProvisioning'
+  | 'matterCommissioning'
+  | 'backendSelector';
 
 /**
  * Maps each FeatureKey to its corresponding key in the features block
@@ -58,7 +65,11 @@ const ENV_KEY_MAP: Record<FeatureKey, string> = {
   thirdPartyAuth:         'enableThirdPartyAuth',
   voiceAssistants:        'enableVoiceAssistants',
   controlGroups:          'enableControlGroups',
+  secondaryGroupManagement: 'enableSecondaryGroupManagement',
   onNetworkProvisioning:  'enableOnNetworkProvisioning',
+  // SDK-capability only: no region/binary env switch, so the SDK map decides.
+  matterCommissioning:    'enableMatterCommissioning',
+  backendSelector:        'enableBackendSelector',
 };
 
 /**
@@ -119,7 +130,10 @@ export function getFeatures(): Record<FeatureKey, boolean> {
     thirdPartyAuth:         resolve('thirdPartyAuth'),
     voiceAssistants:        resolve('voiceAssistants'),
     controlGroups:          resolve('controlGroups'),
+    secondaryGroupManagement: resolve('secondaryGroupManagement'),
     onNetworkProvisioning:  resolve('onNetworkProvisioning'),
+    matterCommissioning:    resolve('matterCommissioning'),
+    backendSelector:        resolve('backendSelector'),
   };
 }
 

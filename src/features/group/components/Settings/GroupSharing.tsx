@@ -28,6 +28,7 @@ import {
 // Styles
 import { tokens } from "@shared/theme/tokens";
 import { globalStyles } from "@shared/theme/globalStyleSheet";
+import { testProps } from "@shared/utils/testProps";
 import type { GroupSharedUser, GroupSharingProps } from "@src/types/global";
 
 /**
@@ -119,6 +120,7 @@ const GroupSharing: React.FC<GroupSharingProps> = ({
         description={sharedByUser?.username || ""}
         style={cardStyle}
         isExpandable={false}
+        qaId="section_shared_by"
       />
     );
   }
@@ -155,8 +157,9 @@ const GroupSharing: React.FC<GroupSharingProps> = ({
 
       {/* Pending for Acceptance Section */}
       {pendingUsers && pendingUsers.length > 0 && (
-        <View style={{ marginBottom: tokens.spacing._15 }}>
+        <View style={{ marginBottom: tokens.spacing._15 }} {...testProps("view_pending_section")}>
           <Text
+            {...testProps("text_title_pending_for_acceptance")}
             style={{
               fontWeight: 500,
               fontFamily: tokens.fonts.medium,
@@ -166,11 +169,16 @@ const GroupSharing: React.FC<GroupSharingProps> = ({
             {t("group.settings.homeSharingPendingForAcceptance")}
           </Text>
           {pendingUsers.map((user: GroupSharedUser, index: number) => (
-            <View key={user.id || index} style={globalStyles.userItem}>
-              <View style={globalStyles.userInfo}>
-                <Text style={globalStyles.userEmail}>{user.username}</Text>
+            <View
+              key={user.id || index}
+              {...testProps(`view_pending_users`)}
+              style={globalStyles.userItem}
+            >
+              <View style={globalStyles.userInfo} {...testProps("view_pending_user_info")}>
+                <Text style={globalStyles.userEmail} {...testProps("text_pending_user_name")}>{user.username}</Text>
                 {user.expirationMessage && (
                   <Text
+                    {...testProps("text_pending_user_expiration_message")}
                     style={[
                       globalStyles.userEmail,
                       {
@@ -185,6 +193,7 @@ const GroupSharing: React.FC<GroupSharingProps> = ({
                 )}
               </View>
               <Pressable
+                {...testProps("button_remove_pending_user")}
                 style={globalStyles.removeButton}
                 onPress={() =>
                   handleOpenRevokeDialog(GROUP_SHARING_REVOKE_PENDING, user.username)
@@ -199,8 +208,9 @@ const GroupSharing: React.FC<GroupSharingProps> = ({
 
       {/* Shared With Section */}
       {sharedUsers && sharedUsers.length > 0 && (
-        <View>
+        <View {...testProps("view_shared_with_section")}>
           <Text
+            {...testProps("text_title_shared_with")}
             style={{
               fontWeight: 500,
               fontFamily: tokens.fonts.medium,
@@ -210,11 +220,16 @@ const GroupSharing: React.FC<GroupSharingProps> = ({
             {t("group.settings.homeSharingSharedWith")}
           </Text>
           {sharedUsers.map((user: GroupSharedUser, index: number) => (
-            <View key={user.id || index} style={globalStyles.userItem}>
-              <View style={globalStyles.userInfo}>
-                <Text style={globalStyles.userEmail}>{user.username}</Text>
+            <View
+              key={user.id || index}
+              {...testProps("view_shared_with_users")}
+              style={globalStyles.userItem}
+            >
+              <View style={globalStyles.userInfo} {...testProps("view_shared_with_user_info")}>
+                <Text style={globalStyles.userEmail} {...testProps("text_shared_with_username")}>{user.username}</Text>
               </View>
               <Pressable
+                {...testProps("button_remove_shared_with_user")}
                 style={globalStyles.removeButton}
                 onPress={() =>
                   handleOpenRevokeDialog(GROUP_SHARING_REVOKE_SHARED, user.username)

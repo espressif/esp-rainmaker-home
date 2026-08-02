@@ -87,6 +87,37 @@ def read_app_version() -> str:
     return ""
 
 
+def read_commit_id() -> str:
+    """Return the short git commit id for the build under test.
+
+    Mirrors app.config.ts's resolveCommitId so the expected version string
+    matches what the app displays: prefer the CI-provided value (GitLab
+    CI_COMMIT_SHORT_SHA, or an explicit APP_COMMIT_ID override), then fall back
+    to `git rev-parse --short HEAD`. Returns "" when unavailable.
+    """
+    import os
+    import subprocess
+    from pathlib import Path
+
+    env_value = os.environ.get("CI_COMMIT_SHORT_SHA") or os.environ.get("APP_COMMIT_ID")
+    if env_value:
+        return env_value.strip()
+    try:
+        repo_root = Path(__file__).resolve().parents[2]
+        return (
+            subprocess.check_output(
+                ["git", "rev-parse", "--short", "HEAD"],
+                cwd=str(repo_root),
+                stderr=subprocess.DEVNULL,
+            )
+            .decode()
+            .strip()
+        )
+    except Exception as error:
+        logger.warning("Could not read commit id: %s", error)
+        return ""
+
+
 def read_device_app_version(platform: str, identifier: str, udid: Optional[str] = None, adb_path: str = "adb") -> str:
     """Return the app version actually installed on the connected device.
 

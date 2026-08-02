@@ -16,6 +16,7 @@ import com.facebook.react.bridge.ReactMethod
 import com.facebook.react.bridge.Promise
 import com.facebook.react.uimanager.ReactShadowNode
 import com.facebook.react.uimanager.ViewManager
+import com.google.firebase.FirebaseApp
 import com.google.firebase.messaging.FirebaseMessaging
 
 /**
@@ -106,6 +107,28 @@ class ESPNotificationModule(reactContext: ReactApplicationContext) :
             promise.resolve(PLATFORM_IDENTIFIER)
         } catch (e: Exception) {
             promise.reject("PLATFORM_ERROR", "Failed to get notification platform: ${e.message}")
+        }
+    }
+
+    /**
+     * Retrieves the Firebase project id this build's FCM token belongs to.
+     *
+     * Read live from the compiled google-services.json via the initialized
+     * FirebaseApp, so it always matches the project that mints the device token.
+     * The RainMaker Neo push flow uses it to select the correct `gcm` integration when
+     * registering a delivery endpoint (see pushIntegration.ts). Resolves an empty
+     * string when Firebase is unavailable so the JS layer can fall back safely.
+     *
+     * @param promise Promise that resolves with the Firebase project id (or "").
+     */
+    @ReactMethod
+    fun getPushProjectId(promise: Promise) {
+        try {
+            val projectId = FirebaseApp.getInstance().options.projectId
+            promise.resolve(projectId ?: "")
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to get Firebase project id", e)
+            promise.resolve("")
         }
     }
 

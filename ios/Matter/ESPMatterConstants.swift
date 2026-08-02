@@ -77,9 +77,7 @@ struct ESPMatterConstants {
     static let commissioningError = "COMMISSIONING_ERROR"
     static let nodeNocRequest = "NODE_NOC_REQUEST"
     static let commissioningConfirmationRequest = "COMMISSIONING_CONFIRMATION_REQUEST"
-    static let rmngAttestationChallenge = "RMNG_ATTESTATION_CHALLENGE"
-    static let rmngMatterAttestationData = "RMNG_MATTER_ATTESTATION_DATA"
-    
+
     // MARK: - Dictionary Keys
     static let groupId = "groupId"
     static let fabricId = "fabricId"
@@ -124,11 +122,7 @@ struct ESPMatterConstants {
     static let challenge = "challenge"
     static let challengeResponse = "challengeResponse"
     static let metadata = "metadata"
-    static let csrNonce = "csrNonce"
-    static let attestationChallenge = "attestationChallenge"
-    static let attestationSignature = "attestationSignature"
-    static let nocsrElements = "nocsrElements"
-    
+
     // MARK: - Error Codes
     static let invalidParams = "INVALID_PARAMS"
     static let csrGenerationFailed = "CSR_GENERATION_FAILED"

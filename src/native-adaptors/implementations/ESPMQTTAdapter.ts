@@ -22,6 +22,50 @@ const topicHandlers = new Map<
 
 let bridgeSubscription: EmitterSubscription | null = null;
 
+/** Optional post-dispatch observers (sdk-adaptors register; keeps layering clean). */
+type MqttMessageHook = (topic: string, message: string) => void;
+const mqttMessageHooks = new Set<MqttMessageHook>();
+
+/**
+ * Registers a hook invoked after each native MQTT message is dispatched to
+ * topic handlers. Returns an unsubscribe function.
+ */
+export function addMqttMessageHook(hook: MqttMessageHook): () => void {
+    mqttMessageHooks.add(hook);
+    return () => {
+        mqttMessageHooks.delete(hook);
+    };
+}
+
+/**
+ * Serializes native `ESPMQTTModule.subscribe`/`unsubscribe` calls per topic.
+ *
+ * `subscribe()`/`unsubscribe()` below only call into the native module when the
+ * JS-side handler count for a topic transitions to/from zero, which can happen
+ * back-to-back for the same topic (e.g. two overlapping shadow `get` requests
+ * settling one after another). Without this queue, the native "unsubscribe"
+ * for the last handler leaving and the native "resubscribe" for the next
+ * handler arriving are independent, unawaited native bridge calls with no
+ * ordering guarantee between them — if the bridge applies them out of order,
+ * the client ends up silently unsubscribed at the broker even though
+ * `topicHandlers` shows an active listener, and further messages/responses
+ * for that topic are never delivered until something else resubscribes.
+ */
+const topicOpQueue = new Map<string, Promise<unknown>>();
+
+function runExclusive<T>(topic: string, op: () => Promise<T>): Promise<T> {
+    const prior = topicOpQueue.get(topic) ?? Promise.resolve();
+    const result = prior.then(op, op);
+    topicOpQueue.set(
+        topic,
+        result.then(
+            () => undefined,
+            () => undefined
+        )
+    );
+    return result;
+}
+
 function logMqttJson(event: string, data: Record<string, unknown>): void {
     console.log(JSON.stringify({ event, ...data }));
 }
@@ -78,6 +122,13 @@ function ensureBridgeListener(): void {
             logMqttJson("mqtt.received", { topic: t, message: event.message });
             const payload = Buffer.from(event.message, "utf8");
             dispatchMessage(t, payload);
+            for (const hook of mqttMessageHooks) {
+                try {
+                    hook(t, event.message);
+                } catch (error) {
+                    console.warn("[ESPMQTTAdapter] mqtt message hook failed:", error);
+                }
+            }
         }
     );
 }
@@ -113,6 +164,7 @@ export const ESPMQTTAdapter: ESPMQTTInterface = {
     },
     disconnect: async () => {
         topicHandlers.clear();
+        topicOpQueue.clear();
         bridgeSubscription?.remove();
         bridgeSubscription = null;
         return ESPMQTTModule.disconnect();
@@ -145,7 +197,7 @@ export const ESPMQTTAdapter: ESPMQTTInterface = {
         set.add(handler);
 
         if (firstForPattern) {
-            await ESPMQTTModule.subscribe(topic);
+            await runExclusive(topic, () => ESPMQTTModule.subscribe(topic));
         }
     },
     unsubscribe: async (
@@ -169,7 +221,7 @@ export const ESPMQTTAdapter: ESPMQTTInterface = {
 
         const connected = await ESPMQTTModule.isConnected();
         if (connected) {
-            await ESPMQTTModule.unsubscribe(topic);
+            await runExclusive(topic, () => ESPMQTTModule.unsubscribe(topic));
         }
         removeBridgeListenerIfIdle();
     }

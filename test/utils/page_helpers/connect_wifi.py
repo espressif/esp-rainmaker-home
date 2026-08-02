@@ -18,6 +18,7 @@ class ConnectWifi(BasePage):
     def check_screen_displayed(self, timeout=10, wait_for_network_load=True, **kwargs):
         """Check if the Connect to Wi-Fi screen is displayed."""
         try:
+            self.wait_out_claiming()
             if super().check_screen_displayed(timeout, **kwargs):
                 if wait_for_network_load:
                     self.wait_for_network_selection_loading_to_finish()
@@ -27,6 +28,10 @@ class ConnectWifi(BasePage):
             logger.warning(f"Connect Wi-Fi screen not displayed: {error}")
             return False
 
+
+    def wait_out_claiming(self):
+        """Assisted claiming sits between PoP/QR and this screen; let it finish before looking here."""
+        return self.get_other_page_helper("claiming").wait_until_finished()
 
     def wait_for_network_selection_loading_to_finish(self, timeout=10):
         """Wait for the network picker loading spinner to disappear."""
@@ -84,6 +89,7 @@ class ConnectWifi(BasePage):
 
     def open_join_other_network_modal(self):
         """Dismiss Wi-Fi list if open, then open Join Other Network."""
+        self.wait_out_claiming()
         self.dismiss_wifi_list_modal()
         self.click("button_join_other_network_wifi", timeout=5)
         return self

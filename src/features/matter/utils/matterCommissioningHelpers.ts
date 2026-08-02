@@ -257,6 +257,54 @@ export async function hydrateNativeFabricSessionIfNeeded(
   });
 }
 
+/**
+ * Serializes NOC issuance/hydration per fabricId.
+ *
+ * `generateKeypair` (Android KeyStore, keyed by fabricId) unconditionally overwrites any
+ * existing key for that alias, and `storePrecommissionInfo` rebinds the newly-issued NOC to
+ * whatever key currently sits under that alias with no check that they still match. Two
+ * overlapping callers issuing/hydrating a NOC for the same fabricId can therefore leave the
+ * KeyStore private key permanently mismatched with the NOC stored alongside it - every later
+ * CASE session on that fabric then fails Sigma3 signature verification ("ECP - The signature
+ * is not valid") until that fabric's key/NOC pair is regenerated together. Callers here
+ * (`prepareFabric`, `bootstrapMatterFabricForOperationalDiscovery`) share one in-flight
+ * promise per fabricId so only one issuance/hydration ever runs at a time.
+ */
+const fabricSessionInFlight = new Map<string, Promise<void>>();
+
+async function ensureNocReadyForFabric(
+  fabric: ESPCDFGroup,
+  user: ESPCDFUser,
+  messages: MatterCommissioningErrorMessages,
+  onIssuingCertificate?: () => void,
+): Promise<void> {
+  const fabricId = fabric.fabricId ?? "";
+  if (!fabricId) {
+    return;
+  }
+
+  const existing = fabricSessionInFlight.get(fabricId);
+  if (existing) {
+    return existing;
+  }
+
+  const run = (async () => {
+    if (await isNocRequired(fabric, user)) {
+      onIssuingCertificate?.();
+      await issueNoc(fabric, user, messages);
+    } else {
+      await hydrateNativeFabricSessionIfNeeded(fabric, user);
+    }
+  })();
+
+  fabricSessionInFlight.set(fabricId, run);
+  try {
+    await run;
+  } finally {
+    fabricSessionInFlight.delete(fabricId);
+  }
+}
+
 export async function prepareFabric(
   fabric: ESPCDFGroup,
   user: ESPCDFUser,
@@ -264,12 +312,7 @@ export async function prepareFabric(
   progress?: MatterCommissioningProgressCallbacks,
 ): Promise<ESPCDFMatterFabricDetails> {
   const details = await fabric.getFabricDetails();
-  if (await isNocRequired(fabric, user)) {
-    progress?.onIssuingCertificate?.();
-    await issueNoc(fabric, user, messages);
-  } else {
-    await hydrateNativeFabricSessionIfNeeded(fabric, user);
-  }
+  await ensureNocReadyForFabric(fabric, user, messages, progress?.onIssuingCertificate);
   return details;
 }
 
@@ -302,18 +345,18 @@ export async function bootstrapMatterFabricForOperationalDiscovery(
     return;
   }
 
-  if (await isNocRequired(home, user)) {
-    console.log(
-      `${MATTER_DISCOVERY_VERIFY_LOG} fabric bootstrap: issuing user NOC for fabricId=${fabricId}`,
-    );
-    await issueNoc(home, user, {
+  await ensureNocReadyForFabric(
+    home,
+    user,
+    {
       fabricIdMismatch: MATTER_FABRIC_BOOTSTRAP_ERROR_FABRIC_ID_MISMATCH,
       missingFabricCredentials: MATTER_FABRIC_BOOTSTRAP_ERROR_MISSING_FABRIC_CREDENTIALS,
-    });
-    return;
-  }
-
-  await hydrateNativeFabricSessionIfNeeded(home, user);
+    },
+    () =>
+      console.log(
+        `${MATTER_DISCOVERY_VERIFY_LOG} fabric bootstrap: issuing user NOC for fabricId=${fabricId}`,
+      ),
+  );
 }
 
 /**

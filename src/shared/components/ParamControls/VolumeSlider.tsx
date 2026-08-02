@@ -142,7 +142,7 @@ const VolumeSlider = observer(
                 style={[
                   styles.thumb,
                   styles.thumbSmall,
-                  disabled && styles.disabled,
+                  disabled && styles.thumbDisabled,
                 ]}
                 size="$1.5"
                 borderWidth={1}

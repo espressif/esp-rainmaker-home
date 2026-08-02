@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useEffect, ReactElement } from "react";
+import React, { useEffect, useRef, ReactElement } from "react";
 import { View, TouchableOpacity } from "react-native";
 
 // Components
@@ -24,21 +24,24 @@ import {
 import { paramControlStyles as styles } from "./lib/styles";
 import { tokens } from "@shared/theme/tokens";
 import { testProps } from "@shared/utils/testProps";
+import { PARAM_CONTROL_THROTTLE_MS } from "@shared/utils/constants";
 
 /**
- * ParamControlWrap
+ * ParamWrap
  *
- * A wrapper component for controlling device parameter.
- * Provides common functionality like value validation, error handling,
- * and optional checkbox selection for scene creation.
+ * Wrapper for scene/group/automation param controls. Updates local UI immediately;
+ * persists or forwards values via a latest-wins throttle matching Device Control
+ * (`PARAM_CONTROL_THROTTLE_MS`) so slider drags do not flood broadcasts/`setValue`.
+ *
  * @param param - The device parameter to control
  * @param disabled - Whether the control is disabled
  * @param showCheckbox - Whether to show selection checkbox
  * @param isSelected - Whether the parameter is selected
  * @param onSelect - Callback when selection changes
+ * @param onValueChange - Optional parent forward path (e.g. group broadcast)
  * @returns Column with optional scene checkbox, throttled writes, and the nested param UI
  */
-const ParamControlWrap = observer(
+const ParamWrap = observer(
   ({
     param,
     disabled = false,
@@ -50,30 +53,59 @@ const ParamControlWrap = observer(
     onValueChange,
     qaId,
   }: ParamControlProps & { qaId?: string }) => {
-    // 1. Computed Values
     const { min, max } = getParamBounds(param);
     const toast = useToast();
+    const onValueChangeRef = useRef(onValueChange);
+    onValueChangeRef.current = onValueChange;
+    const paramRef = useRef(param);
+    paramRef.current = param;
+
     const state = useLocalObservable(() => ({
       value: param.value,
-      setValue: (value: number) => {
+      setValue: (value: unknown) => {
         state.value = value;
       },
     }));
 
     useEffect(() => {
       state.value = param.value;
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional hook deps
+      // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional hook deps
     }, [param.value]);
 
-    // 2. Handlers
+    const throttledForward = useThrottle(
+      async (value: unknown) => {
+        onValueChangeRef.current?.(value);
+      },
+      PARAM_CONTROL_THROTTLE_MS,
+      {
+        throttleWithLoading: true,
+        setLoadingWhilePending: setUpdating,
+      },
+    );
+
+    const throttledParamSetValue = useThrottle(
+      async (value: unknown) => {
+        await paramRef.current.setValue(value);
+      },
+      PARAM_CONTROL_THROTTLE_MS,
+      {
+        throttleWithLoading: true,
+        setLoadingWhilePending: setUpdating,
+      },
+    );
+
+    /**
+     * Validates optional numeric bounds, updates local UI state, then throttles
+     * either parent forward (`onValueChange`) or `param.setValue`.
+     */
     const handleValueChange = async (
-      _: any,
-      newValue: any,
+      _: unknown,
+      newValue: unknown,
       validate: boolean = true,
     ) => {
-      // update value if not forwarded to parent
-      if (typeof newValue == "number" && validate) {
-        const roundedValue = Math.round(newValue);
+      let nextValue = newValue;
+      if (typeof nextValue === "number" && validate) {
+        const roundedValue = Math.round(nextValue);
         if (roundedValue === state.value) return;
         if (roundedValue < min) {
           toast.showError("Value is below minimum");
@@ -83,33 +115,32 @@ const ParamControlWrap = observer(
           toast.showError("Value is above maximum");
           return;
         }
-        newValue = roundedValue;
+        nextValue = roundedValue;
       }
 
-      setUpdating(true);
       if (disabled) return;
+
+      state.setValue(nextValue);
+
       if (onValueChange) {
-        // forward value to parent
-        onValueChange(newValue);
-        setTimeout(() => setUpdating(false), 100);
+        throttledForward(nextValue);
       } else {
-        state.setValue(newValue);
-        throttledValueChange();
+        throttledParamSetValue(nextValue);
       }
     };
 
-    const throttledValueChange = useThrottle(async () => {
-      await param.setValue(state.value);
-      setTimeout(() => setUpdating(false), 100);
-    }, 100);
-
+    /**
+     * Toggles scene/schedule selection checkbox when enabled.
+     */
     const handleSelect = () => {
       if (onSelect && !disabled) {
         onSelect(!isSelected);
       }
     };
 
-    // 3. Render
+    /**
+     * Clones child controls with local value + throttled change handler.
+     */
     const renderControl = () => {
       return React.Children.map(children, (child) => {
         if (!React.isValidElement(child)) return child;
@@ -130,12 +161,10 @@ const ParamControlWrap = observer(
       });
     };
 
-    // If no checkbox is needed, render control directly
     if (!showCheckbox) {
       return renderControl();
     }
 
-    // Render with checkbox when in selection mode
     return (
       <View {...(qaId ? testProps(`view_${qaId}`) : {})}>
         <TouchableOpacity
@@ -174,4 +203,4 @@ const ParamControlWrap = observer(
   },
 );
 
-export default ParamControlWrap;
+export default ParamWrap;

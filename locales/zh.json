@@ -125,6 +125,13 @@
       "save": "保存",
       "delete": "删除",
       "offline": "离线",
+      "offlineLastSeen": "离线 - {{timeAgo}}",
+      "lastSeen": {
+        "seconds": "{{count}}秒前",
+        "minutes": "{{count}}分钟前",
+        "hours": "{{count}}小时前",
+        "days": "{{count}}天前"
+      },
       "confirm": "确认",
       "edit": "编辑",
       "next": "下一步",
@@ -158,7 +165,11 @@
       "settingUpNodes": "正在设置节点",
       "gettingProfile": "正在获取个人资料",
       "finishingUp": "即将完成",
-      "loading": "加载中..."
+      "loading": "加载中...",
+      "deploymentBanner": {
+        "change": "更换部署"
+      },
+      "neoCredentialsHint": "您可以使用现有的 RainMaker 凭据登录"
     },
     "signup": {
       "title": "注册",
@@ -238,13 +249,13 @@
   "user": {
     "profile": {
       "title": "我的资料",
-      "userCode": "我的用户代码",
       "thirdPartyIntegration": {
         "title": "语音助手与集成"
       },
       "logoutButton": "退出登录",
       "logoutModal": {
-        "message": "您确定要退出登录吗？退出登录后，从您账户配置的智能体也将退出登录。",
+        "message": "您确定要退出登录吗？",
+        "messageWithAgents": "您确定要退出登录吗？退出登录后，从您账户配置的智能体也将退出登录。",
         "confirmButton": "是的，退出登录",
         "cancelButton": "保持登录状态"
       }
@@ -285,7 +296,8 @@
       "noNotification": "暂无通知",
       "invitationFromUnknown": "You received an invitation",
       "sharingRequestAccepted": "共享请求已接受",
-      "sharingRequestDeclined": "共享请求已拒绝"
+      "sharingRequestDeclined": "共享请求已拒绝",
+      "sharingRequestUpdateFailed": "无法处理该邀请。邀请可能已失效，例如您已拥有该家庭的访问权限。"
     },
     "aboutUs": {
       "title": "关于我们",
@@ -387,11 +399,8 @@
       "confirmRemoveHomeTitle": "确认移除家庭",
       "confirmRemoveHomeMessage": "您确定要移除此家庭吗？",
       "addUserModalTitle": "添加用户",
-      "addUserModalDescription": "输入您想要共享家庭的用户的邮箱地址。",
-      "addUserModalDescriptionEmailOrUserCode": "输入对方的邮箱地址或 6 位用户代码（字母与数字）。",
-      "addUserModalEmailPlaceholder": "邮箱",
-      "addUserModalUserCodePlaceholder": "用户代码",
-      "addUserModalEmailOrUserCodePlaceholder": "邮箱或用户代码",
+      "addUserModalDescription": "输入您想要共享家庭的用户的用户名。",
+      "addUserModalUsernamePlaceholder": "用户名",
       "grantOwnershipDescription": "授予所有权/完全访问权限",
       "transferGroupDescription": "转移群组所有权",
       "transferAndAssignRoleDescription": "转移群组并为自身分配新角色",
@@ -453,14 +462,18 @@
       "roomUpdatedSuccessfully": "房间更新成功",
       "roomRemovedSuccessfully": "房间移除成功",
       "confirmRemoveRoom": "确认移除房间",
-      "confirmRemoveRoomMessage": "您确定要移除此房间吗？"
+      "confirmRemoveRoomMessage": "您确定要移除此房间吗？",
+      "leaveRoomButton": "退出房间",
+      "confirmLeaveRoomTitle": "确认退出房间",
+      "confirmLeaveRoomMessage": "您确定要退出此房间吗？您将失去对其设备的访问权限。",
+      "roomLeftSuccessfully": "您已退出该房间"
     },
     "customizeRoomName": {
       "title": "自定义房间名称",
       "nameList": "名称列表",
       "addOwnRoomName": "添加您自己的房间名称",
       "roomNamePlaceholder": "房间名称",
-      "selectExitingRoomName": "选择现有房间名称",
+      "selectExitingRoomName": "建议的房间名称",
       "confirmBtn": "确认",
       "cancelBtn": "取消",
       "roomNames": {
@@ -490,10 +503,7 @@
       "homeNameTooLong": "家庭名称不能超过 32 个字符",
       "homeNameAlreadyExists": "此名称的家庭已存在",
       "homeNameMinLength": "家庭名称至少需要 3 个字符",
-      "homeNameMaxLength": "家庭名称必须少于 20 个字符",
-      "pleaseEnterValidEmail": "请输入有效的邮箱地址",
-      "invalidUserCode": "请输入有效的 6 位用户代码（仅字母与数字）。",
-      "invalidEmailOrUserCode": "请输入有效邮箱或 6 位用户代码。"
+      "homeNameMaxLength": "家庭名称必须少于 20 个字符"
     },
     "errors": {
       "homeNameUpdateFailed": "更新家庭名称失败",
@@ -506,6 +516,7 @@
       "errorRemovingUser": "移除用户共享失败",
       "errorRemovingHome": "移除家庭出错",
       "errorLeavingHome": "退出家庭出错",
+      "errorLeavingRoom": "退出房间出错",
       "homeNotEmpty": "This home isn't empty. Remove all rooms and devices first.",
       "roomNotEmpty": "This room isn't empty. Remove all devices first.",
       "userNotFound": "用户未找到",
@@ -579,6 +590,7 @@
     "provision": {
       "title": "正在连接设备",
       "success": "设备配置成功",
+      "timezoneNotSet": "当前时区未设置。日程可能不可靠。请在设备设置中设置时区。",
       "sendingCredentialsTitle": "正在发送 Wi-Fi 凭据",
       "sendingCredentialsDescription": "正在向设备发送网络凭据...",
       "confirmingConnectionTitle": "正在确认 Wi-Fi 连接",
@@ -696,6 +708,9 @@
         "invalidChallenge": "设备确认失败。",
         "success": "已成功添加 {{deviceName}}",
         "scanAgainHint": "请返回并重新扫描 Matter 二维码。",
+        "notSupported": "{{deployment}} 不支持 Matter 配网。",
+        "notSupportedGeneric": "此部署不支持 Matter 配网。",
+        "notSupportedHint": "请切换到支持 Matter 的部署后再添加此设备。",
         "convertTitle": "为此家庭启用 Matter",
         "convertMessage": "需要先为“{{homeName}}”配置 Matter Fabric 才能添加设备。是否继续转换此家庭？",
         "convertConfirm": "继续",
@@ -841,33 +856,25 @@
     "chart": {
       "title": "图表",
       "errorLoadingData": "加载数据时出错：{{message}}",
-      "retry": "重试",
-      "value": "值",
       "loadingChartData": "正在加载图表数据...",
-      "notSupportedForDuration": "不支持此持续时间",
       "noDataAvailable": "没有可用数据",
-      "interval": "时间间隔",
-      "types": "类型",
-      "selectDateRange": "选择日期范围",
-      "simpleTimeSeries": "简单时间序列",
-      "valueUpdated": "值已更新",
-      "valueUpdatedSuccessfully": "值更新成功",
-      "failedToUpdateValue": "更新值失败",
-      "updateError": "更新值时出错",
-      "chartHeader": {
-        "cancel": "取消",
-        "save": "保存",
-        "saving": "正在保存...",
-        "enterValue": "输入值"
+      "notSupported": "该参数不支持图表",
+      "noValue": "--",
+      "rangeSeparator": "至",
+      "tabs": {
+        "daily": "按日",
+        "weekly": "按周",
+        "monthly": "按月"
       },
-      "aggregation": {
-        "raw": "原始",
-        "avg": "平均",
-        "min": "最小",
-        "max": "最大",
-        "count": "计数",
-        "latest": "最新"
-      }
+      "lastWindow": {
+        "daily": "最近 {{count}} 天",
+        "weekly": "最近 {{count}} 周",
+        "monthly": "最近 {{count}} 个月"
+      },
+      "proTipLabel": "小提示：",
+      "proTipText": "轻点柱形即可查看对应数值。",
+      "disclaimerLabel": "免责声明：",
+      "disclaimerText": "数值基于设备上报数据估算，实际数据可能有所差异。"
     }
   },
   "scene": {
@@ -1349,5 +1356,19 @@
     "continue": "继续",
     "confirm": "确认",
     "clear": "清除"
+  },
+  "landing": {
+    "title": "欢迎",
+    "subtitle": "选择一个平台以继续",
+    "classic": {
+      "title": "ESP RainMaker Classic"
+    },
+    "neo": {
+      "title": "ESP RainMaker Neo"
+    },
+    "ownDeployment": {
+      "title": "私有部署",
+      "subtitle": "扫描配置二维码"
+    }
   }
 }

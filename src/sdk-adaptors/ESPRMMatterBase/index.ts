@@ -26,7 +26,7 @@ import { transformToESPCDFUser } from "./transformers";
 import { ESPRMMatterBaseAdaptorIdentifier } from "./constants";
 import { getActiveMatterFabricId } from "@native-adaptors/implementations/ESPMatterUtilityAdapter";
 import { installCrossClusterInvokePatch } from "./installCrossClusterInvokePatch";
-import { getResolvedActiveSdk, isRmngStackSdkId } from "@config/sdk.config";
+import { getResolvedActiveSdk, isRmneoStackSdkId } from "@config/sdk.config";
 
 export { ESPRMMatterBaseAdaptorIdentifier };
 export type {
@@ -102,10 +102,25 @@ export class ESPRMMatterBaseSDKAdaptor {
         // Matter subscription here co-initializes the shared native Matter layer
         // and re-orders the global channel list — churn that destabilizes the
         // RMNG stack's operational discovery. Skip it unless RM is active.
-        const isRmngActive = isRmngStackSdkId(getResolvedActiveSdk());
+        const isRmngActive = isRmneoStackSdkId(getResolvedActiveSdk());
         if (config.matterSubscriptionAdapter && !isRmngActive) {
             try {
-                await ESPRMMatterBase.initializeMatterSubscription();
+                // `registerChannel` throws when the id is already present, which
+                // happens on an in-place SDK re-init (deployment switch): the
+                // base SDK's subscription manager lives on module statics and
+                // outlives the CDF runtime. An existing registration is the
+                // desired end state, so treat it as success — the resolver and
+                // channel order below still have to be applied to the surviving
+                // channel, or `subscribe()` fails with "Fabric ID resolver not
+                // configured".
+                try {
+                    await ESPRMMatterBase.initializeMatterSubscription();
+                } catch (error) {
+                    const alreadyRegistered =
+                        error instanceof Error &&
+                        error.message.includes("already registered");
+                    if (!alreadyRegistered) throw error;
+                }
 
                 // Wire the matter subscription channel's `fabricIdResolver`.
                 // The matter SDK's `MatterSubscriptionChannel.subscribe()`

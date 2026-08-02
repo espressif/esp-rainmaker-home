@@ -19,7 +19,12 @@ type UserHeaderRightProps = {
  * Renders the user header right UI section.
  */
 const UserHeaderRight: React.FC<UserHeaderRightProps> = ({ onPress }) => (
-  <Pressable {...testProps("button_settings")} onPress={onPress}>
+  <Pressable
+    {...testProps("button_settings")}
+    onPress={onPress}
+    hitSlop={{ top: 15, bottom: 15, left: 15, right: 15 }}
+    style={{ transform: [{ translateX: 8 }] }}
+  >
     <Settings size={24} color={tokens.colors.primary} />
   </Pressable>
 );

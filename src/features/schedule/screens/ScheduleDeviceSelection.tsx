@@ -13,7 +13,7 @@ import { observer } from "mobx-react-lite";
 import { useDeviceSelection } from "@features/provision/hooks";
 import type { ScheduleDeviceSelectionData } from "@src/types/global";
 import { useCDF } from "@shared/hooks/useCDF";
-import { isRmngStackSdkId } from "@config/sdk.identifiers";
+import { isRmneoStackSdkId } from "@config/sdk.identifiers";
 
 // Components
 import { DeviceSelectionList, Header, ScreenWrapper } from "@shared/components";
@@ -40,7 +40,7 @@ import { DEVICE_SELECTION_LIST_VARIANT_SCHEDULE } from "@shared/utils/constants"
 export const ScheduleDeviceSelectionScreen = observer(() => {
   const { t } = useTranslation();
   const { store } = useCDF();
-  const allowOfflineForSchedule = isRmngStackSdkId(
+  const allowOfflineForSchedule = isRmneoStackSdkId(
     store.getActiveAdaptorIdentifier(),
   );
   const {

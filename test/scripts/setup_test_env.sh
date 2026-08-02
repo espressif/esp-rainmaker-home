@@ -57,7 +57,7 @@ export BASE_URL="${BASE_URL:-https://api.rainmaker.espressif.com}"
 export API_VERSION="${API_VERSION:-v1}"
 export DEPLOYMENT_URI="${DEPLOYMENT_URI:-$BASE_URL/$API_VERSION}"
 export DEPLOYMENT_PASSWORD="${DEPLOYMENT_PASSWORD:-Welcome01}"
-# Which deployment block in config/deployment.yaml to use (production | rmng):
+# Which deployment block in config/deployment.yaml to use (production | rmneo):
 export DEPLOYMENT="${DEPLOYMENT:-production}"
 
 # --- Email verification (Mailosaur) — REQUIRED for sign-up/login tests --------

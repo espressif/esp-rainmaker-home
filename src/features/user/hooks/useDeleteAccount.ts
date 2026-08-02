@@ -15,6 +15,7 @@ import { useToast } from "@shared/hooks/useToast";
 
 // Utils
 import { createCodeValidator } from "@features/auth/utils/authHelper";
+import { getPreAuthRoute } from "@features/landing";
 
 /**
  * Manages delete account state and related actions.
@@ -75,7 +76,9 @@ export const useDeleteAccount = () => {
       await user?.confirmAccountDeletion(code.trim());
       await StorageAdapter.clear();
       toast.showSuccess(t("user.deleteAccount.deleteConfirmed"));
-      router.dismissTo("/(auth)/Login");
+      // Account is gone: same helper the logout flow uses — Landing only if
+      // the user hasn't picked a backend yet, Login otherwise.
+      router.replace(getPreAuthRoute() as never);
     } catch (error: unknown) {
       const err = error as { description?: string };
       toast.showError(

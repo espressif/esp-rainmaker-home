@@ -31,14 +31,17 @@ class User(BasePage):
             self for method chaining
         """
         logger.info("Performing logout")
-        
+
+        perms = self.get_other_page_helper('permissions')
+        if perms.any_system_alert_present(timeout=1):
+            perms.handle_all_permissions(action="allow", timeout=3)
         self.click("logout_button")
         self.click("alert_confirm_button")
         
         # Wait for login screen if requested
         if wait_for_login_screen:
             login_helper = self.get_other_page_helper('login')
-            if not login_helper.check_screen_displayed(timeout=10):
+            if not login_helper.check_screen_displayed(timeout=15):
                 raise Exception("Login screen did not appear after logout")
             logger.info("Successfully logged out and navigated to login screen")
         

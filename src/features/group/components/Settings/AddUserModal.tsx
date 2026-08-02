@@ -5,7 +5,7 @@
  */
 
 
-import React, { useMemo } from "react";
+import React from "react";
 import {
   View,
   Text,
@@ -19,6 +19,7 @@ import { Check } from "lucide-react-native";
 // Components
 import Input from "@shared/components/Form/Input";
 import ActionButton from "@shared/components/Form/ActionButton";
+import { testProps } from "@shared/utils/testProps";
 
 // Styles
 import { tokens } from "@shared/theme/tokens";
@@ -26,7 +27,6 @@ import { globalStyles } from "@shared/theme/globalStyleSheet";
 
 // Types
 import { AddUserModalProps } from "@src/types/global";
-import { getGroupSharingAllowedTypes } from "@features/group/utils/settingsHelpers";
 import { getFeatures } from "@config/features.config";
 
 /**
@@ -36,7 +36,7 @@ import { getFeatures } from "@config/features.config";
  * Handles invite identifier and validation.
  *
  * Features:
- * - Email and/or 6-character user code (per SDK `groupSharingAllowedTypes`)
+ * - Username input
  * - Input validation
  * - Loading state
  * - Success/error handling
@@ -57,37 +57,11 @@ const AddUserModal: React.FC<AddUserModalProps> = ({
   onTransferChange,
   transferAndAssignRole = false,
   onTransferAndAssignRoleChange,
+  showRoleOptions = true,
   contentContainerStyle,
 }) => {
   const { t } = useTranslation();
   const transferGroupSharingEnabled = getFeatures().transferGroupSharing;
-
-  const inviteFieldProps = useMemo(() => {
-    const allowed = getGroupSharingAllowedTypes();
-    const allowsUserCode = allowed.includes("userCode");
-    const allowsEmail = allowed.includes("email");
-    const both = allowsEmail && allowsUserCode;
-    return {
-      description: both
-        ? t("group.settings.addUserModalDescriptionEmailOrUserCode")
-        : t("group.settings.addUserModalDescription"),
-      placeholder: both
-        ? t("group.settings.addUserModalEmailOrUserCodePlaceholder")
-        : allowsUserCode && !allowsEmail
-          ? t("group.settings.addUserModalUserCodePlaceholder")
-          : t("group.settings.addUserModalEmailPlaceholder"),
-      inputMode: (both || allowsUserCode ? "text" : "email") as
-        | "text"
-        | "email",
-      keyboardType: (both || allowsUserCode ? "default" : "email-address") as
-        | "default"
-        | "email-address",
-    };
-  }, [t]);
-
-  const handleFieldChange = (value: string, isValid: boolean) => {
-    handleInviteChange(value, isValid);
-  };
 
   /**
    * Handle make primary checkbox change
@@ -128,30 +102,31 @@ const AddUserModal: React.FC<AddUserModalProps> = ({
 
   return (
     <Modal
+      {...testProps("modal_add_user_selection")}
       visible={visible}
       transparent={true}
       animationType="fade"
       onRequestClose={onClose}
     >
-      <View style={globalStyles.modalOverlay}>
+      <View style={globalStyles.modalOverlay} {...testProps("view_overlay_add_user_selection")}>
         <View style={[globalStyles.modalContent, contentContainerStyle]}>
-          <Text style={globalStyles.modalTitle}>
+          <Text style={globalStyles.modalTitle} {...testProps("text_title_add_user_selection")} >
             {t("group.settings.addUserModalTitle")}
           </Text>
-          <Text style={globalStyles.modalDescription}>
-            {inviteFieldProps.description}
+          <Text {...testProps("text_description_add_user_selection")} style={globalStyles.modalDescription}>
+            {t("group.settings.addUserModalDescription")}
           </Text>
           <Input
-            key={inviteFieldProps.placeholder}
+            qaId="invite_user_sharing"
             icon="mail-open"
-            placeholder={inviteFieldProps.placeholder}
+            placeholder={t("group.settings.addUserModalUsernamePlaceholder")}
             initialValue={email}
-            onFieldChange={handleFieldChange}
+            onFieldChange={handleInviteChange}
             validator={inviteValidator}
             validateOnChange={true}
             debounceDelay={500}
-            inputMode={inviteFieldProps.inputMode}
-            keyboardType={inviteFieldProps.keyboardType}
+            inputMode="text"
+            keyboardType="default"
             style={{ width: "100%" }}
             returnKeyType="done"
             validateOnBlur={true}
@@ -162,8 +137,10 @@ const AddUserModal: React.FC<AddUserModalProps> = ({
             }}
           />
 
-          {/* Ownership Checkbox */}
+          {/* Ownership Checkbox — hidden when the share target has no role support (e.g. room shares) */}
+          {showRoleOptions && (
           <TouchableOpacity
+            {...testProps("button_primary_sharing")}
             style={{
               flexDirection: "row",
               alignItems: "center",
@@ -202,10 +179,12 @@ const AddUserModal: React.FC<AddUserModalProps> = ({
               {t("group.settings.grantOwnershipDescription")}
             </Text>
           </TouchableOpacity>
+          )}
 
           {/* Transfer Group Checkbox — SDK / env gated */}
-          {transferGroupSharingEnabled && (
+          {showRoleOptions && transferGroupSharingEnabled && (
             <TouchableOpacity
+              {...testProps("button_transfer_group_sharing")}
               style={{
                 flexDirection: "row",
                 alignItems: "center",
@@ -251,8 +230,9 @@ const AddUserModal: React.FC<AddUserModalProps> = ({
           )}
 
           {/* Transfer Group and Assign New Role Checkbox */}
-          {transferGroupSharingEnabled && (
+          {showRoleOptions && transferGroupSharingEnabled && (
             <TouchableOpacity
+              {...testProps("button_transfer_group_sharing_assign_new_role")}
               style={{
                 flexDirection: "row",
                 alignItems: "center",
@@ -299,12 +279,13 @@ const AddUserModal: React.FC<AddUserModalProps> = ({
             </TouchableOpacity>
           )}
 
-          <View style={globalStyles.modalActions}>
+          <View style={globalStyles.modalActions} {...testProps("view_action_add_user_sharing")}>
             <ActionButton
+              qaId="button_cancel_add_user_sharing"
               onPress={onClose}
               disabled={isLoading}
               variant="secondary"
-              style={{ flex: 1 }}
+              style={{ flex: 1, width: "auto" }}
             >
               <Text style={globalStyles.buttonTextSecondary}>
                 {t("layout.shared.cancel")}
@@ -314,10 +295,11 @@ const AddUserModal: React.FC<AddUserModalProps> = ({
             <View style={{ width: 10 }} />
 
             <ActionButton
+              qaId="button_confirm_add_user_sharing"
               onPress={onAdd}
               disabled={isLoading || !isInviteValid}
               variant="primary"
-              style={{ flex: 1 }}
+              style={{ flex: 1, width: "auto" }}
             >
               {isLoading ? (
                 <ActivityIndicator size="small" color={tokens.colors.white} />

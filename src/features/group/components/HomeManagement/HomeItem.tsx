@@ -15,7 +15,6 @@ export interface HomeItemProps {
   homeName: string;
   description: string;
   onPress: () => void;
-  qaId?: string;
 }
 
 /**
@@ -25,8 +24,7 @@ export interface HomeItemProps {
 export const HomeItem: React.FC<HomeItemProps> = ({
   homeName,
   description,
-  onPress,
-  qaId = "home_management",
+  onPress
 }) => (
   <TouchableOpacity
     style={[
@@ -36,9 +34,9 @@ export const HomeItem: React.FC<HomeItemProps> = ({
       globalStyles.homeManagementHomeItem,
     ]}
     onPress={onPress}
-    {...testProps(`button_${qaId}`)}
+    {...testProps(`button_${homeName}`)}
   >
-    <View {...testProps(`view_${qaId}`)}>
+    <View {...testProps(`view_home_name`)}>
       <Text
         {...testProps("text_name_home")}
         style={[globalStyles.fontRegular, globalStyles.fontMd]}

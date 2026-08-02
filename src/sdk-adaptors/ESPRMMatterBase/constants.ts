@@ -17,11 +17,22 @@ export const MATTER_CLUSTER_ID_RVC_RUN_MODE = 0x0054;
 export const MATTER_CLUSTER_ID_RVC_CLEAN_MODE = 0x0055;
 export const MATTER_CLUSTER_ID_RVC_OPERATIONAL_STATE = 0x0061;
 export const MATTER_CLUSTER_ID_POWER_SOURCE = 0x002f;
+export const MATTER_CLUSTER_ID_USER_LABEL = 0x0041;
 export const MATTER_CLUSTER_ID_DOOR_LOCK = 0x0101;
 export const MATTER_CLUSTER_ID_ILLUMINANCE_MEASUREMENT = 0x0400;
 export const MATTER_CLUSTER_ID_TEMPERATURE_MEASUREMENT = 0x0402;
 export const MATTER_CLUSTER_ID_RELATIVE_HUMIDITY_MEASUREMENT = 0x0405;
 export const MATTER_CLUSTER_ID_OCCUPANCY_SENSING = 0x0406;
+
+/** User Label cluster attribute and reserved app label key. */
+export const MATTER_USER_LABEL_LIST_ATTRIBUTE_ID = 0x0000;
+export const MATTER_USER_LABEL_DEVICE_NAME_KEY = "deviceName";
+export const MATTER_USER_LABEL_FIELD_LABEL = "label";
+export const MATTER_USER_LABEL_FIELD_VALUE = "value";
+export const MATTER_USER_LABEL_CONTEXT_TAG_LABEL = "0";
+export const MATTER_USER_LABEL_CONTEXT_TAG_VALUE = "1";
+/** Spec limit for LabelStruct `label` / `value` strings (16 chars). */
+export const MATTER_USER_LABEL_MAX_LENGTH = 16;
 
 /** Prefix for Matter cluster param types in `params.config` (`server:0x…`). */
 export const MATTER_SERVER_PARAM_TYPE_PREFIX = "server:0x";

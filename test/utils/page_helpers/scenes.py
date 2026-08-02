@@ -46,7 +46,7 @@ class Scenes(BasePage):
 
     def select_action_param(self, param_name, value):
         """Open a named action param, set its value, and return the value actually applied."""
-        self.click("id", f"button_device_param_{param_name}_selection", timeout=10)
+        self.open_param_editor(f"button_device_param_{param_name}_selection", "param_value_save_button")
         actual = self.set_modal_param_value(param_name, value)
         self.click("param_value_save_button", timeout=10)
         return actual

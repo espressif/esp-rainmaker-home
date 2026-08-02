@@ -19,7 +19,6 @@ Feature: Dynamic light params end-to-end
     When user toggles "E2E Light" power to "on" from the home screen
     Then the device log should show "Power" set to "on"
 
-  @sanity
   Scenario: Control screen power and White tab brightness
     When the device is prepared with "Brightness" set to "80"
     And user opens the "E2E Light" control screen
@@ -51,7 +50,6 @@ Feature: Dynamic light params end-to-end
     And user sets "Brightness" to "70" from the control screen
     Then the device log should show "Brightness" set to "70"
 
-  @sanity
   Scenario: Params are delivered over cloud when Wi-Fi is off
     When the device is prepared with "Brightness" set to "90"
     And the phone switches to mobile data only

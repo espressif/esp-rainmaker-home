@@ -141,15 +141,19 @@ Each variant always resolves the **newest** matching Jenkins build; after a full
 sweep the script prunes superseded bundle folders, so exactly one (newest) bundle per
 variant remains.
 
-**Matter firmware is dynamic**: `download_firmwares.download_matter_image()` fetches the
-auto-updated esp-matter light merged image from
-`https://espressif.github.io/esp-matter/esp32c3_wifi_matter_light.bin` into
-`$FIRMWARE_ROOT/matter/` (ETag-cached; also refreshed by a plain `download_firmwares.py`
-run), and the matter conftest generates a **unique factory partition per run** with
-`esp-matter-mfg-tool` (random discriminator/passcode → fresh `MT:` QR payload, so nearby
-devices flashed with the generic payload can't be commissioned by mistake), locates the
-`nvs`/`fctry` offsets from the image's own partition table, flashes both, and verifies
-over serial that the device advertises the injected discriminator.
+**Matter firmware is per-scenario** (the two `matter.feature` scenarios flash **different**
+images — the matter conftest picks by the scenario's BDD tag):
+
+**Matter is currently supported on the RM (ESP Rainmaker Classic) deployment only.**
+
+- **`@matter_only`** (esp-matter demo light) is dynamic: `download_firmwares.download_matter_image()`
+  fetches the auto-updated esp-matter light merged image from
+  `https://espressif.github.io/esp-matter/esp32c3_wifi_matter_light.bin` into
+  `$FIRMWARE_ROOT/matter/` (ETag-cached; also refreshed by a plain `download_firmwares.py`
+  run), and the conftest generates a **unique factory partition per run** with
+  `esp-matter-mfg-tool` (random discriminator/passcode → fresh `MT:` QR payload, locates the
+  `nvs`/`fctry` offsets from the image's own partition table, flashes both, and verifies
+  over serial that the device advertises the injected discriminator. Node boots Matter-only.
 
 Serial logs: `test/debug/<test_name>/esp32c3_<mac>.log` — QR parsed from RainMaker URL in UART output.
 
@@ -196,7 +200,7 @@ So each variable lives in exactly one of four places:
 | `PROVISION_WIFI_PASSWORD` | Password of the Wi-Fi the ESP joins during provisioning                                                                                                                                                                                                                                                |
 | `XCODE_ORG_ID` | Apple Team ID for WDA signing (iOS). Find: `security find-identity -v -p codesigning`                                                                                                                                                                                                                  |
 | `JENKINS_URL` / `JENKINS_FIRMWARE_JOB` / `JENKINS_USER` / `JENKINS_API_TOKEN` | Firmware download (`scripts/download_firmwares.py`) — the internal build host + job path are env-only, never committed; `JENKINS_TRIGGER_TOKEN` optional                                                                                                                                               |
-| `MATTER_CHIP_MAC` | Matter commissioning rig — the dedicated chip's MAC (reserved by MAC; keep it in `ESP_EXCLUDE_MACS` so the rainmaker type pool skips it). Firmware + QR are **dynamic per run** (`scripts/matter_firmware.py`); set `MATTER_FW_BIN` **and** `MATTER_QR` together only to force a static image/payload override |
+| `MATTER_CHIP_MAC` | Matter commissioning rig — the dedicated chip's MAC (reserved by MAC; keep it in `ESP_EXCLUDE_MACS` so the rainmaker type pool skips it). Per-scenario firmware/QR selection lives in the matter conftest (`scripts/download_firmwares.py`): `@matter_only` is dynamic per run, set `MATTER_FW_BIN` **and** `MATTER_QR` together to force a static override. See the Matter firmware section above |
 | `EMAIL_SENDER` / `EMAIL_PASSWORD` | Report email delivery (optional)                                                                                                                                                                                                                                                                       |
 | _CI build jobs only:_ `FS_KEYSTORE_FILE` / `FS_KEY_PROPERTIES_FILE` / `FS_GOOGLE_SERVICES_JSON` | Android release signing (base64)                                                                                                                                                                                                                                                                       |
 | _CI build jobs only:_ `PRIVATE_TOKEN` / `IOS_P12_PASSWORD` / `IOS_KEYCHAIN_PASSWORD` | iOS release signing                                                                                                                                                                                                                                                                                    |
@@ -206,7 +210,7 @@ So each variable lives in exactly one of four places:
 
 | Variable | Default | Used for |
 |---|---|---|
-| `DEPLOYMENT` | `production` | Which block in `deployment.yaml` (`production` \| `rmng`) |
+| `DEPLOYMENT` | `production` | Which block in `deployment.yaml` (`production` \| `rmneo`) |
 | `BASE_URL` / `API_VERSION` | `https://api.rainmaker.espressif.com` / `v1` | Compose `DEPLOYMENT_URI` (RainMaker REST base) |
 | `DEPLOYMENT_PASSWORD` | `Welcome01` | Default password for created accounts |
 | `PROVISION_WIFI_SSID` | `ESP_WIFI` | SSID the ESP joins (override per lab) |
@@ -224,6 +228,6 @@ So each variable lives in exactly one of four places:
 | `ESP_EXCLUDE_MACS` | _(empty)_ | Chips this run must never reserve (the other run's partition + the Matter chip, which is reserved by MAC, not from the type pool) |
 | `ESP_EXCLUDE_PORTS` | _(empty)_ | Serial ports this run must never probe — set it **together with** `ESP_EXCLUDE_MACS`: discovery's esptool probes hard-reset chips before the MAC is known. Ports re-enumerate on USB changes; re-map with `python -m esptool --port <p> read_mac` |
 | `ESP_LOCK_DB_PATH` | `hardware/.resource_locks.db` | Resource-lock SQLite db; point every concurrent run/executor at **one shared absolute path** or their reservations are invisible to each other |
-| `MATTER_DEVICE_NAME` | `Light` | Device name the commissioned Matter node reports |
+| `RMNEO_DEPLOYMENT_URL` | _(empty)_ | RMNEO client-outputs S3 bundle; endpoints (uri/pools/client-id/iot) are fetched + mapped from it at runtime so the private account details are not committed |
 
 **Set automatically by GitLab CI** (used by `scripts/notify_mr.py` + reporting, no action needed): `CI_*`, `GITLAB_USER_EMAIL` / `GITLAB_USER_NAME`, `BUILD_ID`, `RUN_SUMMARY_FILE`, `ESP_RAINMAKER_BRANCH` (default `master`). Per-run job overrides: `MODEL` (Android), `IOS_MODEL` (iOS), `MARKER`, `DOWNLOAD_FIRMWARES`. The pipeline triggerer (`GITLAB_USER_EMAIL`) is always added to the report-email recipients.

@@ -67,6 +67,7 @@ export {
 
 // CreateRoom / CreateRoomSuccess screens
 export { CreateRoomDeviceItem } from "./CreateRoom/CreateRoomDeviceItem";
+export { default as RoomLeave } from "./CreateRoom/RoomLeave";
 export {
   CreateRoomNameSection,
   type CreateRoomNameSectionProps,

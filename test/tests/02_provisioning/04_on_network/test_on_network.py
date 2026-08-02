@@ -27,7 +27,7 @@ import pytest
 from pytest_bdd import scenarios, then, when
 
 logger = logging.getLogger(__name__)
-pytestmark = [pytest.mark.regression, pytest.mark.provisioning]
+pytestmark = [pytest.mark.regression, pytest.mark.provisioning, pytest.mark.on_network]
 
 scenarios("on_network.feature")
 
@@ -46,6 +46,7 @@ _LOCAL_CTRL_STARTED_MARKERS = ("esp_local_ctrl service started",)
 # "Local Control":{"POP":"0ba78da8","Type":1}. The app must enter this POP for
 # the on-network session, or security_1 fails with "Key mismatch".
 _LOCAL_CTRL_POP_RE = re.compile(r'"Local Control":\s*\{[^}]*"POP":"([^"]+)"')
+_NODE_ID_RE = re.compile(r'Node ID -----\s*(\S+)')
 
 
 def _log_offset(log_path):
@@ -165,6 +166,9 @@ def device_online_on_network(hardware_session, resource_manager, request, hardwa
     if pop:
         info = dict(hardware_session.get("prov_info") or {})
         info["pop"] = pop
+        node_ids = _NODE_ID_RE.findall(Path(log_path).read_text(errors="replace"))
+        if node_ids:
+            info["node_id"] = node_ids[-1]
         hardware_session["prov_info"] = info
         logger.info("Captured local-control POP for the on-network session")
     else:
@@ -178,9 +182,13 @@ def should_be_on_discover_devices_screen(helper):
 
 @when("user selects the discovered on-network device")
 def select_discovered_on_network_device(helper, hardware_session):
-    """Select the first device found by mDNS discovery."""
+    """Select the device under test by node id"""
     hardware_session["pop_required"] = helper.on_network.is_pop_required(timeout=3)
-    helper.on_network.select_first_device()
+    node_id = (hardware_session.get("prov_info") or {}).get("node_id")
+    if node_id:
+        helper.on_network.select_device_by_node_id(node_id)
+    else:
+        helper.on_network.select_first_device()
 
 
 @then("discover devices screen elements should be present")

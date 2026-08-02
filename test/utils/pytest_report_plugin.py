@@ -78,6 +78,7 @@ class PytestReportPlugin:
         self.device_model: str = None
         self.session = None  # Store session for marker access
         self._app_version_value: Optional[str] = None  # cached device app version
+        self._active_sdk_value: Optional[str] = None  # cached active SDK flavor
         
         if not UTILITIES_AVAILABLE:
             logger.warning("Required utilities not available - report generation disabled")
@@ -416,9 +417,26 @@ class PytestReportPlugin:
                 
                 self._update_test_history()
                 git_info = git_ref_info()
+                git_info["app_commit"] = self._app_commit()
                 download_url = None
                 if self.artifact_host and getattr(self.artifact_host, "base_url", None) and self.run_id:
                     download_url = f"{self.artifact_host.base_url}/artifacts/{self.run_id}.zip"
+                # Deployment + SDK details for the report summary box (production / rmneo / ...).
+                deployment = self._deployment_name()
+                deployment_uri = ""
+                deployment_backend = ""
+                deployment_broker = ""
+                deployment_region = ""
+                try:
+                    from utils.registered_user_resolver import load_deployment_config
+                    _dep = load_deployment_config(deployment).get(deployment, {}) or {}
+                    deployment_uri = _dep.get("uri", "") or ""
+                    deployment_backend = _dep.get("backend", "") or ""
+                    deployment_broker = _dep.get("broker", "") or ""
+                    deployment_region = _dep.get("aws_region", "") or _dep.get("region", "") or ""
+                except Exception:
+                    deployment_uri = os.environ.get("DEPLOYMENT_URI", "") or ""
+                active_sdk = self._active_sdk()
                 report_path = self.report_generator.generate_report(
                     test_results=self.test_results,
                     run_id=self.run_id,
@@ -430,6 +448,12 @@ class PytestReportPlugin:
                     app_version=app_version,
                     git_info=git_info,
                     download_url=download_url,
+                    deployment=deployment,
+                    deployment_uri=deployment_uri,
+                    deployment_backend=deployment_backend,
+                    deployment_broker=deployment_broker,
+                    deployment_region=deployment_region,
+                    active_sdk=active_sdk,
                     jira_base=(os.getenv("JIRA_BASE_URL") or "").rstrip("/") or None,
                     jira_project=os.getenv("JIRA_PROJECT_KEY") or None,
                     jira_project_id=os.getenv("JIRA_PROJECT_ID") or None,
@@ -515,6 +539,51 @@ class PytestReportPlugin:
             logger.info("App version under test (repo fallback): %s", self._app_version_value)
         return self._app_version_value
 
+    def _app_commit(self) -> str:
+        """Short git commit of the esp-rainmaker-home app repo (CI env var first, then local git)."""
+        commit = os.environ.get("CI_COMMIT_SHORT_SHA", "").strip()
+        if commit:
+            return commit
+        try:
+            import subprocess
+            repo_root = Path(__file__).resolve().parents[2]
+            commit = subprocess.run(
+                ["git", "rev-parse", "--short", "HEAD"],
+                cwd=str(repo_root), capture_output=True, text=True, timeout=5,
+            ).stdout.strip()
+        except Exception as error:
+            logger.warning("Could not read app git commit: %s", error)
+            commit = ""
+        return commit
+
+    def _deployment_name(self) -> str:
+        """The --deployment name for this run (default 'production'); '' if unavailable."""
+        try:
+            if self.session and self.session.config:
+                return self.session.config.getoption("--deployment", default="") or ""
+        except Exception:
+            pass
+        return ""
+
+    def _active_sdk(self) -> str:
+        """Active SDK flavor: ACTIVE_SDK env override, else the repo-root .env ACTIVE_SDK. Cached per run."""
+        if self._active_sdk_value is not None:
+            return self._active_sdk_value
+        active_sdk = os.environ.get("ACTIVE_SDK", "") or ""
+        if not active_sdk:
+            try:
+                _env_file = Path(__file__).resolve().parents[2] / ".env"
+                if _env_file.exists():
+                    for _line in _env_file.read_text().splitlines():
+                        _s = _line.strip()
+                        if _s.startswith("ACTIVE_SDK=") and not _s.startswith("#"):
+                            active_sdk = _s.split("=", 1)[1].strip().strip('"').strip("'")
+                            break
+            except Exception:
+                active_sdk = ""
+        self._active_sdk_value = active_sdk
+        return active_sdk
+
     def _update_test_history(self, max_per_test: int = 20):
         """Append this run's per-test outcomes to the shared test_history.json (trimmed)."""
         try:
@@ -524,6 +593,8 @@ class PytestReportPlugin:
             version = self._app_version()
             branch = (git_ref_info() or {}).get("branch", "")
             platform = self._platform_label()
+            deployment = self._deployment_name()
+            active_sdk = self._active_sdk()
             with _reports_lock(hist_path.parent):
                 history = json.loads(hist_path.read_text()) if hist_path.exists() else {}
                 for t in self.test_results:
@@ -532,7 +603,8 @@ class PytestReportPlugin:
                         continue
                     history.setdefault(nid, []).append(
                         {"ts": ts, "outcome": t.get('outcome', 'unknown'), "version": version,
-                         "branch": branch, "platform": platform, "run_id": self.run_id}
+                         "branch": branch, "platform": platform, "run_id": self.run_id,
+                         "deployment": deployment, "active_sdk": active_sdk}
                     )
                     history[nid] = history[nid][-max_per_test:]
                 _atomic_write_text(hist_path, json.dumps(history, indent=2))

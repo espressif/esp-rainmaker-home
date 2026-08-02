@@ -1,5 +1,6 @@
 import fs from "fs";
 import path from "path";
+import { execSync } from "child_process";
 
 /**
  * Region config files, one per region. Each holds native/build identity AND
@@ -56,6 +57,37 @@ function parseEnvFile(fileName: string): Record<string, string> {
   return result;
 }
 
+/**
+ * Parses a region's env, and — when a local override is in play — asserts it
+ * still covers every key the committed template defines.
+ *
+ * The local file REPLACES the template wholesale; there is no per-key fallback.
+ * So a key added to the template after a developer created their local file
+ * silently resolves to `undefined`, which surfaces far from the cause (an SDK
+ * rejecting an empty config, often only after a config-switch process restart).
+ * Failing the build here names the missing keys instead.
+ *
+ * Keys the template leaves blank are developer-supplied by design (the release
+ * keystore credentials), so only keys with a real template value are required.
+ */
+function loadRegionEnv(pair: { local: string; example: string }): Record<string, string> {
+  const fileName = resolveRegionEnvFile(pair);
+  const env = parseEnvFile(fileName);
+  if (fileName !== pair.local) return env;
+
+  const template = parseEnvFile(pair.example);
+  const missing = Object.keys(template).filter((key) => template[key] !== "" && !(key in env));
+  if (missing.length > 0) {
+    throw new Error(
+      `"${pair.local}" is missing ${missing.length} key(s) that "${pair.example}" defines: ` +
+        `${missing.join(", ")}. The local file replaces the template wholesale — there is no ` +
+        `per-key fallback — so these would resolve to undefined at runtime. Copy the lines ` +
+        `across from "${pair.example}".`
+    );
+  }
+  return env;
+}
+
 /** `true` unless the value is exactly "false" (same semantics as before). */
 const flag = (v?: string): boolean => v !== "false";
 
@@ -82,17 +114,11 @@ function buildRegionConfig(env: Record<string, string>) {
       redirectUrl: env.THIRD_PARTY_AUTH_REDIRECT_URL,
       claimUrl: env.CLAIM_URL || undefined,
     },
-    rmngSdk: {
-      baseUrl: env.RMNG_BASE_URL,
-      apiPath: env.RMNG_API_PATH,
-      userApiBase: env.RMNG_USER_API_BASE,
-      userApiBaseUrl: env.RMNG_USER_API_BASE_URL,
-      userApiPath: env.RMNG_USER_API_PATH,
-      identityId: env.RMNG_IDENTITY_ID,
-      awsRegion: env.RMNG_AWS_REGION,
-      userPoolId: env.RMNG_USER_POOL_ID,
-      clientId: env.RMNG_CLIENT_ID,
-      iotEndpoint: env.RMNG_IOT_ENDPOINT,
+    rmneoSdk: {
+      baseUrl: env.RMNEO_BASE_URL,
+      userApiBase: env.RMNEO_USER_API_BASE,
+      awsRegion: env.RMNEO_AWS_REGION,
+      iotEndpoint: env.RMNEO_IOT_ENDPOINT,
     },
     websiteLinks: {
       website: env.WEBSITE_LINK,
@@ -122,9 +148,53 @@ function buildRegionConfig(env: Record<string, string>) {
 }
 
 const regionConfigs = {
-  global: buildRegionConfig(parseEnvFile(resolveRegionEnvFile(REGION_ENV_FILES.global))),
-  cn: buildRegionConfig(parseEnvFile(resolveRegionEnvFile(REGION_ENV_FILES.cn))),
+  global: buildRegionConfig(loadRegionEnv(REGION_ENV_FILES.global)),
+  cn: buildRegionConfig(loadRegionEnv(REGION_ENV_FILES.cn)),
 };
+
+/**
+ * Kept separate from `expo.version` because iOS CFBundleShortVersionString
+ * must stay dotted-numeric. Precedence: CI env (`CI_COMMIT_SHORT_SHA` or
+ * `APP_COMMIT_ID`), then local git, else empty string.
+ */
+function resolveCommitId(): string {
+  const fromEnv = process.env.CI_COMMIT_SHORT_SHA || process.env.APP_COMMIT_ID;
+  if (fromEnv) return fromEnv.trim();
+  try {
+    return execSync("git rev-parse --short HEAD", {
+      cwd: __dirname,
+      stdio: ["ignore", "pipe", "ignore"],
+    })
+      .toString()
+      .trim();
+  } catch {
+    return "";
+  }
+}
+
+const commitId = resolveCommitId();
+
+/**
+ * Read from the compiled google-services.json so the id always tracks the FCM
+ * project baked into THIS build. The template's placeholder id is treated as
+ * unset — dev builds without a real Firebase config cannot receive push anyway.
+ */
+function readAndroidFcmProjectId(): string | undefined {
+  try {
+    const raw = fs.readFileSync(
+      path.join(__dirname, "android/app/google-services.json"),
+      "utf8"
+    );
+    const projectId = JSON.parse(raw)?.project_info?.project_id;
+    return typeof projectId === "string" &&
+      projectId &&
+      projectId !== "placeholder-project-id"
+      ? projectId
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
 
 export default {
   expo: {
@@ -195,6 +265,8 @@ export default {
       // single iOS binary resolve by device Region; Android flavors force one.
       appRegion: process.env.APP_REGION || 'auto',
 
+      commitId,
+
       // Region-scoped runtime config, one block per region with an identical
       // shape, built from the committed .env.global.example / .env.cn.example files. Consumed
       // via config/region.config.ts getRegionConfig(); legacy top-level
@@ -205,6 +277,13 @@ export default {
       // Matter SDK (hardware/brand property — not region-varying)
       matterSdk: {
         vendorId: process.env.MATTER_VENDOR_ID,
+      },
+
+      // RMNeo /v1/integrations selection: iOS matches by bundle id, Android
+      // by Firebase project id.
+      push: {
+        iosBundleId: process.env.IOS_APP_APPLICATION_ID || "com.espressif.novahome",
+        androidFcmProjectId: readAndroidFcmProjectId(),
       },
 
       // BINARY-level feature overrides (disable-only). Region availability
@@ -225,6 +304,7 @@ export default {
         enableCdfAutoSync: process.env.ENABLE_CDF_AUTOSYNC !== 'false',
         enableControlGroups: process.env.ENABLE_CONTROL_GROUPS !== 'false',
         enableOnNetworkProvisioning: process.env.ENABLE_ON_NETWORK_PROVISIONING !== 'false',
+        enableBackendSelector: process.env.ENABLE_BACKEND_SELECTOR !== 'false',
       }
 
     }

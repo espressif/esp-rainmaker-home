@@ -13,6 +13,10 @@ import {
 import { useRouter } from "expo-router";
 import { useTranslation } from "react-i18next";
 
+import {
+  getMatterUnsupportedMessage,
+  isMatterCommissioningSupported,
+} from "@features/matter/utils/matterSupport";
 import { useCDF } from "@shared/hooks/useCDF";
 import { useToast } from "@shared/hooks/useToast";
 import {
@@ -44,6 +48,8 @@ import {
   prepareFabric,
   syncStore,
 } from "@features/matter/utils/matterCommissioningHelpers";
+import { applyMatterCommissionedNodeTimezone } from "@shared/utils/timezone";
+import { startMatterLocalDiscovery } from "@features/matter/utils/matterLocalDiscovery";
 import {
   MATTER_COMMISSIONING_PHASE_COMMISSIONING,
   MATTER_COMMISSIONING_PHASE_CONVERTING,
@@ -136,6 +142,7 @@ export function useCommissioning({
   const [statusMessage, setStatusMessage] = useState("");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [activeHomeName, setActiveHomeName] = useState("");
+  const [matterUnsupported, setMatterUnsupported] = useState(false);
 
   const preparedFabricRef = useRef<ESPCDFGroup | null>(null);
 
@@ -156,6 +163,11 @@ export function useCommissioning({
         "device.matter.commissioning.missingFabricCredentials",
       ),
     }),
+    [t],
+  );
+
+  const deploymentUnsupportedMessage = useMemo(
+    () => getMatterUnsupportedMessage(t),
     [t],
   );
 
@@ -269,6 +281,12 @@ export function useCommissioning({
     setErrorMessage(null);
     setPhase(MATTER_COMMISSIONING_PHASE_LOADING);
 
+    if (!isMatterCommissioningSupported()) {
+      setMatterUnsupported(true);
+      fail(deploymentUnsupportedMessage);
+      return;
+    }
+
     const home = getActiveHomeOrFail();
     if (!home) {
       return;
@@ -293,7 +311,9 @@ export function useCommissioning({
     await runFabricCommissioning(fabric);
   }, [
     convertActiveHomeToFabric,
+    deploymentUnsupportedMessage,
     fabricConversionConsentRequired,
+    fail,
     getActiveHomeOrFail,
     runFabricCommissioning,
   ]);
@@ -415,6 +435,15 @@ export function useCommissioning({
         );
         routerRef.current.dismissTo("/(group)/Home");
       }
+      startMatterLocalDiscovery(storeRef.current);
+
+      // Matter commissioning skips the provisioning-time timezone stage, so push
+      // it best-effort in the background (hybrid-only; never blocks navigation).
+      const rainmakerNodeId =
+        typeof payload.rainmakerNodeId === "string"
+          ? payload.rainmakerNodeId
+          : undefined;
+      void applyMatterCommissionedNodeTimezone(userRef.current, rainmakerNodeId);
     },
     [handleCommissioningFailure, t],
   );
@@ -507,6 +536,7 @@ export function useCommissioning({
     phase,
     statusMessage,
     errorMessage,
+    matterUnsupported,
     activeHomeName,
     onConfirmConvert,
     onDeclineConvert,

@@ -20,6 +20,7 @@ import {
   type GroupParamBroadcastOptions,
 } from "@shared/utils/groupParamBroadcastEnvelope";
 import { useCDF } from "@shared/hooks/useCDF";
+import { useDeviceConnected } from "@shared/hooks/useDeviceConnected";
 import { filterExcludedParamTypes } from "@shared/utils/paramUtils";
 
 /**
@@ -123,9 +124,7 @@ export function useGroupControl(
     });
   }, [deviceGroup, homogeneousDeviceType, referenceDevice, nodesById]);
 
-  const isConnected = Boolean(
-    referenceNode?.connectivityStatus?.isConnected
-  );
+  const isConnected = useDeviceConnected(referenceNode ?? undefined);
 
   const handleEditGroup = useCallback(() => {
     router.push({
@@ -144,7 +143,12 @@ export function useGroupControl(
       value: unknown,
       options?: GroupParamBroadcastOptions
     ) => {
-      broadcastGroupParam(deviceGroup, broadcastTargets, value, options);
+      broadcastGroupParam(
+        deviceGroup,
+        broadcastTargets,
+        value,
+        options,
+      );
     },
     [deviceGroup]
   );

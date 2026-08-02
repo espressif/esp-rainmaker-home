@@ -5,7 +5,8 @@
  */
 
 import { useEffect } from "react";
-import { View, Text, StyleSheet, Pressable } from "react-native";
+import { View, Text, StyleSheet, Pressable, Platform } from "react-native";
+import { Stack } from "expo-router";
 
 // Styles
 import { tokens } from "@shared/theme/tokens";
@@ -21,7 +22,7 @@ import { useCDF } from "@shared/hooks/useCDF";
 import { Settings } from "lucide-react-native";
 
 // Components
-import { Header, ScreenWrapper } from "@shared/components";
+import { Header, ScreenWrapper, DeviceOfflineBanner } from "@shared/components";
 import Fallback from "./device_panels/Fallback";
 import LightControl from "./device_panels/Light";
 import SwitchControl from "./device_panels/Switch";
@@ -32,6 +33,14 @@ import CameraControl from "./device_panels/Camera";
 import { testProps } from "@shared/utils/testProps";
 import { readAttributesForNodeId } from "@shared/utils/matterAttributeRead";
 
+// iOS's interactive swipe-back gesture and the horizontal param sliders
+// (Hue/Brightness/etc.) both claim horizontal pans with no coordination
+// between them (sliders use Tamagui's JS responder system, not
+// react-native-gesture-handler), so dragging a slider also pans the whole
+// screen back. Android's stack gesture doesn't hijack drags the same way, so
+// only disable it on iOS - the header back button still works everywhere.
+const STACK_GESTURE_ENABLED = Platform.OS !== "ios";
+
 const CONTROL_PANELS: Record<string, React.FC<any>> = {
   light: LightControl,
   switch: SwitchControl,
@@ -41,7 +50,8 @@ const CONTROL_PANELS: Record<string, React.FC<any>> = {
 
 /**
  * Control Component
- * Main device control screen that renders different device controls based on device type
+ * Main device control screen that renders different device controls based on device type.
+ * Shows an offline last-seen banner above the panel when the node is unreachable.
  */
 const Control = () => {
   const { t } = useTranslation();
@@ -66,13 +76,29 @@ const Control = () => {
     void readAttributesForNodeId(user, node.id);
   }, [node?.id, node?.isMatter, store?.userStore?.user]);
 
-  // Early return for missing device
+  // Early return for missing device. The node itself may still be resolved
+  // (e.g. an offline pure-Matter node whose fallback device schema doesn't
+  // match up), so keep the settings gear reachable off `node` alone -
+  // Settings' Remove Device flow only needs the node, not a resolved device.
   if (!device) {
     return (
       <>
+        <Stack.Screen options={{ gestureEnabled: STACK_GESTURE_ENABLED }} />
         <Header
           label={t("device.control.title")}
           showBack={true}
+          rightSlot={
+            node ? (
+              <Pressable
+                {...testProps("button_more")}
+                onPress={handleMorePress}
+                hitSlop={{ top: 15, bottom: 15, left: 15, right: 15 }}
+                style={{ transform: [{ translateX: 8 }] }}
+              >
+                <Settings size={24} color={tokens.colors.primary} />
+              </Pressable>
+            ) : undefined
+          }
           qaId="header_control"
         />
         <ScreenWrapper
@@ -80,6 +106,11 @@ const Control = () => {
           qaId="screen_wrapper_control"
           excludeTop={true}
         >
+          <DeviceOfflineBanner
+            node={node}
+            qaId="device_control_offline"
+            containerStyle={styles.offlineBanner}
+          />
           <View
             {...testProps("view_control")}
             style={globalStyles.errorContainer}
@@ -107,11 +138,17 @@ const Control = () => {
   // Render
   return (
     <>
+      <Stack.Screen options={{ gestureEnabled: STACK_GESTURE_ENABLED }} />
       <Header
         label={displayName}
         showBack={true}
         rightSlot={
-          <Pressable {...testProps("button_more")} onPress={handleMorePress}>
+          <Pressable
+            {...testProps("button_more")}
+            onPress={handleMorePress}
+            hitSlop={{ top: 15, bottom: 15, left: 15, right: 15 }}
+            style={{ transform: [{ translateX: 8 }] }}
+          >
             <Settings size={24} color={tokens.colors.primary} />
           </Pressable>
         }
@@ -123,6 +160,11 @@ const Control = () => {
         excludeTop={true}
       >
         <View {...testProps("view_control")} style={globalStyles.flex1}>
+          <DeviceOfflineBanner
+            node={node}
+            qaId="device_control_offline"
+            containerStyle={styles.offlineBanner}
+          />
           {renderDeviceControl()}
         </View>
       </ScreenWrapper>
@@ -138,6 +180,10 @@ const styles = StyleSheet.create({
   containerPadding: {
     ...globalStyles.container,
     paddingBottom: 100,
+  },
+  offlineBanner: {
+    marginHorizontal: tokens.spacing._10,
+    marginBottom: tokens.spacing._10,
   },
 });
 

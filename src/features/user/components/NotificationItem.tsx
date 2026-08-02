@@ -103,7 +103,12 @@ const NotificationItem: React.FC<NotificationItemProps> = ({
       ]}
     >
       <View style={styles.header}>
-        <Text style={[globalStyles.fontMedium, styles.title]}>{title}</Text>
+        <Text
+          {...(qaId ? testProps(`text_title_${qaId}`) : {})}
+          style={[globalStyles.fontMedium, styles.title]}
+        >
+          {title}
+        </Text>
       </View>
 
       <View style={[globalStyles.flex, styles.content]}>
@@ -114,10 +119,16 @@ const NotificationItem: React.FC<NotificationItemProps> = ({
         </View>
 
         <View style={[globalStyles.flex1, styles.infoContent]}>
-          <Text style={[globalStyles.fontRegular, styles.description]}>
+          <Text
+            {...(qaId ? testProps(`text_description_${qaId}`) : {})}
+            style={[globalStyles.fontRegular, styles.description]}
+          >
             {description}
           </Text>
-          <Text style={[globalStyles.fontRegular, styles.timestamp]}>
+          <Text
+            {...(qaId ? testProps(`text_timestamp_${qaId}`) : {})}
+            style={[globalStyles.fontRegular, styles.timestamp]}
+          >
             {timestamp}
           </Text>
         </View>
@@ -126,6 +137,7 @@ const NotificationItem: React.FC<NotificationItemProps> = ({
       {status === "pending" && onAccept && onDecline && (
         <View style={[globalStyles.flex, styles.buttonContainer]}>
           <Pressable
+            {...(qaId ? testProps(`button_decline_${qaId}`) : {})}
             onPress={onDecline}
             disabled={loading}
             style={[
@@ -142,6 +154,7 @@ const NotificationItem: React.FC<NotificationItemProps> = ({
           </Pressable>
 
           <Pressable
+            {...(qaId ? testProps(`button_accept_${qaId}`) : {})}
             onPress={onAccept}
             disabled={loading}
             style={[

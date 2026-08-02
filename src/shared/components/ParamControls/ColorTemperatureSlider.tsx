@@ -18,12 +18,17 @@ import { tokens } from "@shared/theme/tokens";
 // Types
 import {
   ParamControlChildProps,
-  clampValue,
   comparableRoundedParamNumber,
+  snapSliderValue,
 } from "./lib/types";
 import { paramControlStyles as styles } from "./lib/styles";
 import { useDragBubble } from "./lib/useDragBubble";
 import { testProps } from "@shared/utils/testProps";
+import {
+  CCT_KELVIN_MAX,
+  CCT_KELVIN_MIN,
+  CCT_KELVIN_STEP,
+} from "@shared/utils/constants";
 
 /**
  * ColorTemperatureSlider
@@ -31,11 +36,17 @@ import { testProps } from "@shared/utils/testProps";
  * A slider component for controlling color temperature of a light.
  * Features a gradient background representing warm to cool temperatures
  * and displays the current value in Kelvin.
+ * Device `bounds.min` below {@link CCT_KELVIN_MIN} is floored so the warm end
+ * never goes under 2700K.
  * @param param - The device parameter to control
  * @param disabled - Whether the control is disabled
  * @returns Color-temperature slider (K) with rounded commits
  */
-const KELVIN_DEFAULTS = { min: 2700, max: 6500, step: 100 };
+const KELVIN_DEFAULTS = {
+  min: CCT_KELVIN_MIN,
+  max: CCT_KELVIN_MAX,
+  step: CCT_KELVIN_STEP,
+};
 
 const ColorTemperatureSlider = observer(
   ({
@@ -50,9 +61,10 @@ const ColorTemperatureSlider = observer(
     const rawMax = meta?.max;
     const rawStep = meta?.step;
 
+    // Prefer device max; always enforce a Kelvin floor so CCT cannot start below 2700K.
     let min =
       typeof rawMin === "number" && Number.isFinite(rawMin)
-        ? rawMin
+        ? Math.max(rawMin, CCT_KELVIN_MIN)
         : KELVIN_DEFAULTS.min;
     let max =
       typeof rawMax === "number" && Number.isFinite(rawMax)
@@ -72,8 +84,8 @@ const ColorTemperatureSlider = observer(
 
     const n = Number(value);
     const clamped = Number.isFinite(n)
-      ? clampValue(Math.round(n), min, max)
-      : Math.round(min + (max - min) / 2);
+      ? snapSliderValue(n, min, max, step)
+      : snapSliderValue(min + (max - min) / 2, min, max, step);
 
     const sliderValue = useMemo(() => [clamped], [clamped]);
     const gradientId = `ctg-${useId().replace(/[^a-zA-Z0-9_-]/g, "")}`;
@@ -87,12 +99,10 @@ const ColorTemperatureSlider = observer(
     ) => {
       onSlideTick();
       if (disabled) return;
-      const roundedValue = Math.round(newValue);
+      const snappedValue = snapSliderValue(newValue, min, max, step);
       const cur = comparableRoundedParamNumber(value);
-      if (cur !== null && roundedValue === cur) return;
-      if (roundedValue < min) return;
-      if (roundedValue > max) return;
-      onValueChange(event, roundedValue);
+      if (cur !== null && snappedValue === cur) return;
+      onValueChange(event, snappedValue);
     };
 
     const thumbPercent = max > min ? ((clamped - min) / (max - min)) * 100 : 0;
@@ -113,7 +123,7 @@ const ColorTemperatureSlider = observer(
             >
               {label}
             </Text>
-            <Text style={styles.compactValue}>{clamped}K</Text>
+            <Text {...testProps(`slider_${label}_value`)} style={styles.compactValue}>{clamped}K</Text>
           </View>
         ) : (
           <>
@@ -181,7 +191,7 @@ const ColorTemperatureSlider = observer(
                   styles.thumb,
                   styles.thumbSmall,
                   { zIndex: 10 },
-                  disabled && styles.disabled,
+                  disabled && styles.thumbDisabled,
                 ]}
                 size="$1.5"
                 borderWidth={1}
@@ -219,6 +229,7 @@ const ColorTemperatureSlider = observer(
         {!compact && (
           <View style={styles.thumbValueContainer}>
             <Text
+              {...testProps(`slider_${label}_value`)}
               style={[
                 styles.thumbValueText,
                 {

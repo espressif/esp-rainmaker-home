@@ -22,6 +22,14 @@ interface ESPNotificationInterface {
   getNotificationPlatform(): Promise<string>;
 
   /**
+   * Retrieves the Firebase project id backing this build's FCM token (Android
+   * only; resolves "" when Firebase/FCM is unavailable, e.g. the CN build).
+   * Used to select the correct RainMaker Neo `gcm` push integration.
+   * @returns Promise<string> - The Firebase project id, or "" when unavailable.
+   */
+  getPushProjectId(): Promise<string>;
+
+  /**
    * Adds a notification listener to the ESP notification module.
    * @param callback - The callback function to handle the notification.
    */

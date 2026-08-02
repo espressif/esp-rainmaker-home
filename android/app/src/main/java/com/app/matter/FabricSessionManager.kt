@@ -24,8 +24,7 @@ data class FabricInfo(
     val sigv4SecretKey: String? = null,
     val sigv4SessionToken: String? = null,
     val sigv4Expiration: String? = null,
-    val requestId: String? = null,
-    val csrNonce: String? = null
+    val requestId: String? = null
 )
 
 object FabricSessionManager {
@@ -68,21 +67,14 @@ object FabricSessionManager {
     }
 
     /**
-     * Pushes RMNG commissioning credentials from the in-memory fabric session onto the
+     * Pushes commissioning credentials from the in-memory fabric session onto the
      * active [ChipClient]. Required because [ESPMatterCommissioningService.onCreate] can run
-     * before JS calls `initiateNodeAssociation` / [ESPMatterModule.storeFabricDetails], leaving
-     * a stale null csrNonce on the client until GPS reaches `commissionDevice`.
+     * before JS calls `initiateNodeAssociation` / [ESPMatterModule.storeFabricDetails].
      */
     fun syncCommissioningCredentialsToChipClient() {
         val fabric = currentFabric ?: return
         val client = currentChipClient ?: return
         fabric.requestId?.let { client.requestId = it }
-        fabric.csrNonce?.let { client.csrNonce = it }
-        Log.d(
-            TAG,
-            "[NONCE-TRACE] syncCommissioningCredentials: csrNonce=${fabric.csrNonce?.take(16)}..." +
-                " (len=${fabric.csrNonce?.length}), requestId=${fabric.requestId}",
-        )
     }
 
     /**
@@ -150,7 +142,6 @@ object FabricSessionManager {
             fabric.groupCatIdAdmin ?: "",
         ).also { client ->
             fabric.requestId?.let { client.requestId = it }
-            fabric.csrNonce?.let { client.csrNonce = it }
             currentChipClient = client
             Log.d(TAG, "[MatterDiscovery] resolveChipClient: ChipClient cached for fabricId=$fabricId")
         }

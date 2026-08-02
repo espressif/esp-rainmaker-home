@@ -85,12 +85,12 @@ The active SDK and its API endpoints are **region config**: they live in the com
 
 | Variable      | Description                                         | Global value                          | CN value                                    |
 | ------------- | --------------------------------------------------- | ------------------------------------- | ------------------------------------------- |
-| `ACTIVE_SDK`  | SDK to use: `rainmaker-base-sdk` or `rmng-base-sdk` | `rainmaker-matter-sdk`                | `rainmaker-matter-sdk`                      |
+| `ACTIVE_SDK`  | SDK to use: `rainmaker-base-sdk` or `rainmaker-neo-base-sdk` | `rainmaker-matter-sdk`                | `rainmaker-matter-sdk`                      |
 | `BASE_URL`    | ESP RainMaker API base URL                          | `https://api.rainmaker.espressif.com` | `https://api2.rainmaker.espressif.com.cn`   |
 | `API_VERSION` | API version path segment                            | `v1`                                  | `v1`                                        |
 | `CLAIM_URL`      | Claiming service URL                             | `https://esp-claiming.rainmaker.espressif.com` | `https://claiming.rainmaker.espressif.com.cn` |
 
-The `RMNG_*` endpoint set follows the same pattern. These are embedded as `extra.regionConfigs.{global,cn}` and resolved by `config/sdk.config.ts` via `getRegionConfig()` at startup — there is **no fallback** to legacy top-level keys; a missing region block fails fast.
+The `RMNEO_*` endpoint set follows the same pattern. These are embedded as `extra.regionConfigs.{global,cn}` and resolved by `config/sdk.config.ts` via `getRegionConfig()` at startup — there is **no fallback** to legacy top-level keys; a missing region block fails fast.
 
 ---
 

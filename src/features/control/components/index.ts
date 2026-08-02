@@ -5,8 +5,6 @@
  */
 
 export { default as DevicePanelNoParamsEmptyState } from "./DevicePanelNoParamsEmptyState";
-export { default as BadgeText } from "./BadgeText";
-export { default as DateRangeCalendarBottomSheet } from "./DateRangeCalendarBottomSheet";
 export { default as AgentSelectionBottomSheet } from "./AgentSelectionBottomSheet";
 export { RoundedSlider } from "./RoundedSlider";
 export * from "./Charts";

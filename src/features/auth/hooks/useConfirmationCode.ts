@@ -9,7 +9,7 @@ import { useLocalSearchParams } from "expo-router";
 import { useCDF } from "@shared/hooks/useCDF";
 import { useToast } from "@shared/hooks/useToast";
 import { useTranslation } from "react-i18next";
-import { createCodeValidator } from "@features/auth/utils/authHelper";
+import { createCodeValidator, getAuthErrorDescription } from "@features/auth/utils/authHelper";
 import { setPendingPostSignupLogin } from "@features/auth/hooks/useLogin";
 import { router } from "expo-router";
 
@@ -67,10 +67,9 @@ export function useConfirmationCode() {
         setCountdown(60);
       }
     } catch (error: unknown) {
-      const err = error as { description?: string };
       toast.showError(
         t("auth.errors.verificationCodeSendFailed"),
-        err.description || t("auth.errors.fallback")
+        getAuthErrorDescription(error) || t("auth.errors.fallback")
       );
     } finally {
       setIsLoading(false);
@@ -95,10 +94,9 @@ export function useConfirmationCode() {
         router.dismissTo("/(auth)/Login");
       }
     } catch (error: unknown) {
-      const err = error as { description?: string };
       toast.showError(
         t("auth.errors.signupConfirmationFailed"),
-        err.description || t("auth.errors.fallback")
+        getAuthErrorDescription(error) || t("auth.errors.fallback")
       );
     } finally {
       setIsLoading(false);
