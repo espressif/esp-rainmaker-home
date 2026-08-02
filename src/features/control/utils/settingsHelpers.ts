@@ -99,7 +99,11 @@ export const resolveSettingsDevice = (
 export const getDeviceNameParam = (
   device: ESPCDFDevice | undefined,
 ): ESPCDFDeviceParam | undefined =>
-  device?.params?.find((param) => param.type === ESPRM_NAME_PARAM_TYPE) as
+  device?.params?.find(
+    (param) =>
+      param.type === ESPRM_NAME_PARAM_TYPE &&
+      param.properties?.includes("write"),
+  ) as
     | ESPCDFDeviceParam
     | undefined;
 
@@ -210,7 +214,10 @@ export const isNodeDeleteSuccess = (status: unknown): boolean =>
   status === SUCESS || String(status ?? "").toLowerCase() === SUCESS;
 
 /**
- * Persists an edited device display name via Matter metadata or the name param.
+ * Persists an edited device display name via the writable name param or
+ * Matter metadata. A writable `esp.param.name` wins whenever the device
+ * exposes one; Matter devices without that param fall back to the
+ * `updateMetadata` rename.
  * @param node - Parent CDF node
  * @param device - Target sub-device (optional for Matter metadata-only path)
  * @param name - Trimmed display name to save
@@ -222,6 +229,16 @@ export const saveDeviceDisplayName = async (
   name: string,
 ): Promise<SaveDeviceDisplayNameOutcome> => {
   try {
+    const nameParam = getDeviceNameParam(device);
+
+    if (nameParam) {
+      await nameParam.setValue(name);
+      if (device) {
+        device.displayName = name;
+      }
+      return SAVE_DEVICE_NAME_STATUS_SUCCESS;
+    }
+
     const isMatterDevice = Boolean(
       node.metadata && node.metadata[MATTER_METADATA_KEY],
     );
@@ -244,16 +261,7 @@ export const saveDeviceDisplayName = async (
       return SAVE_DEVICE_NAME_STATUS_SUCCESS;
     }
 
-    const nameParam = getDeviceNameParam(device);
-    if (!nameParam) {
-      return SAVE_DEVICE_NAME_STATUS_NO_PARAM;
-    }
-
-    await nameParam.setValue(name);
-    if (device) {
-      device.displayName = name;
-    }
-    return SAVE_DEVICE_NAME_STATUS_SUCCESS;
+    return SAVE_DEVICE_NAME_STATUS_NO_PARAM;
   } catch {
     return SAVE_DEVICE_NAME_STATUS_FAILED;
   }

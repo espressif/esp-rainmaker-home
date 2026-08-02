@@ -5,6 +5,7 @@ import android.os.Looper
 import android.util.Log
 import com.amazonaws.auth.*
 import com.amazonaws.mobileconnectors.iot.*
+import com.amazonaws.regions.Region
 import com.amazonaws.regions.Regions
 import com.amazonaws.util.StringUtils
 import com.facebook.react.bridge.*
@@ -139,6 +140,7 @@ class ESPMQTTModule(private val reactContext: ReactApplicationContext) :
                 accessKeyId,
                 secretAccessKey,
                 sessionToken,
+                regionId,
                 promise
             )
         }
@@ -187,8 +189,18 @@ class ESPMQTTModule(private val reactContext: ReactApplicationContext) :
     }
 
     /**
-     * Creates [AWSIotMqttManager], connects with static session credentials, and drives [promise]
-     * from the AWS status callback (resolve on first Connected; reject on fatal error with throwable).
+     * Creates [AWSIotMqttManager] via the region-aware factory (required for custom Neo
+     * hosts that do not embed `*.iot.<region>.*`), connects with static session credentials,
+     * and drives [promise] from the AWS status callback (resolve on first Connected; reject
+     * on invalid args / fatal error with throwable).
+     *
+     * @param endpoint MQTT broker host (no scheme / `/mqtt` suffix).
+     * @param clientId AWS IoT MQTT client id.
+     * @param accessKey Temporary access key id.
+     * @param secretKey Temporary secret access key.
+     * @param sessionToken Temporary session token.
+     * @param regionId AWS region id (e.g. `us-east-1`) used for SigV4 on custom domains.
+     * @param promise Resolved with null on success, or rejected with `connection_failed`.
      */
     private fun startConnect(
         endpoint: String,
@@ -196,12 +208,40 @@ class ESPMQTTModule(private val reactContext: ReactApplicationContext) :
         accessKey: String,
         secretKey: String,
         sessionToken: String,
+        regionId: String,
         promise: Promise
     ) {
+        val manager: AWSIotMqttManager
+        try {
+            // Custom domains (e.g. mqtt.neo.rainmaker.espressif.com) have no region in the
+            // hostname; AWSIotMqttManager(clientId, endpoint) would throw
+            // "Cannot find AWS Region code within endpoint".
+            manager = AWSIotMqttManager.from(
+                Region.getRegion(Regions.fromName(regionId)),
+                AWSIotMqttManager.ClientId.fromString(clientId),
+                AWSIotMqttManager.Endpoint.fromString(endpoint)
+            )
+        } catch (e: Exception) {
+            logE("Failed to create AWSIotMqttManager for endpoint=$endpoint region=$regionId", e)
+            state = State.DISCONNECTED
+            promise.reject("connection_failed", e)
+            return
+        }
 
-        val manager = AWSIotMqttManager(clientId, endpoint)
-
-        manager.setAutoReconnect(true)
+        // Auto-reconnect is disabled on purpose: this manager's credentials
+        // provider below is a fixed, non-refreshable session token
+        // (`refresh()` is a no-op), so once that token expires the SDK's
+        // internal auto-reconnect loop can never actually succeed - it just
+        // cycles Reconnecting/ConnectionLost forever with the same stale
+        // creds. Worse, those status transitions write to the shared `state`
+        // field below, racing with an explicit `connect()` call made from JS
+        // with *fresh* credentials (see `ensureRmneoMqttConnected` on the JS
+        // side): if that call lands while this loop's status happens to be
+        // `Reconnecting`, the `state == CONNECTING` guard above short-circuits
+        // it, silently discarding the new credentials. Reconnection is
+        // instead driven entirely from JS, which re-fetches valid credentials
+        // before calling `connect()` again.
+        manager.setAutoReconnect(false)
         manager.keepAlive = 30
 
         mqttManager = manager
@@ -322,8 +362,14 @@ class ESPMQTTModule(private val reactContext: ReactApplicationContext) :
      * Subscribes to [topic] at QoS 0. Incoming messages are sent to JS as `mqttMessageReceived`
      * with `topic`, `message`, and `timestamp`.
      *
+     * [promise] must resolve only once the SDK confirms the subscription is active (hence the
+     * [AWSIotMqttSubscriptionStatusCallback] overload), not when the call is merely queued: JS
+     * callers publish their request as soon as `subscribe()` resolves, and a QoS 0 response that
+     * arrives before the broker has registered us is dropped and never redelivered.
+     *
      * @param topic MQTT topic filter.
-     * @param promise Resolved with null when subscription is registered; rejected with `not_connected` or `error`.
+     * @param promise Resolved with null once the subscription is confirmed; rejected with
+     * `not_connected` or `error`.
      */
     @ReactMethod
     fun subscribe(topic: String, promise: Promise) {
@@ -337,7 +383,17 @@ class ESPMQTTModule(private val reactContext: ReactApplicationContext) :
         try {
             manager.subscribeToTopic(
                 topic,
-                AWSIotMqttQos.QOS0
+                AWSIotMqttQos.QOS0,
+                object : AWSIotMqttSubscriptionStatusCallback {
+                    override fun onSuccess() {
+                        promise.resolve(null)
+                    }
+
+                    override fun onFailure(e: Throwable) {
+                        logE("subscribe failed for topic: $topic", e)
+                        promise.reject("error", e.message)
+                    }
+                }
             ) { receivedTopic, data ->
 
                 log("Message received topic=$receivedTopic payload=${String(data)}")
@@ -350,8 +406,6 @@ class ESPMQTTModule(private val reactContext: ReactApplicationContext) :
 
                 emitEvent("mqttMessageReceived", event)
             }
-
-            promise.resolve(null)
 
         } catch (e: Exception) {
             logE("subscribe failed for topic: $topic", e)

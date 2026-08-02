@@ -13,6 +13,7 @@ import {
   createCodeValidator,
   createPasswordValidator,
   createConfirmPasswordValidator,
+  getAuthErrorDescription,
   isUsernameAllowedForAuth,
 } from "@features/auth/utils/authHelper";
 import { getAuthAllowedUsernameTypes } from "@features/auth/utils/authHelper";
@@ -104,10 +105,9 @@ export function useResetPassword() {
         setCountdown(60);
       }
     } catch (error: unknown) {
-      const err = error as { description?: string };
       toast.showError(
         t("auth.errors.verificationCodeSendFailed"),
-        err.description || t("auth.errors.fallback")
+        getAuthErrorDescription(error) || t("auth.errors.fallback")
       );
     } finally {
       setIsLoading(false);
@@ -151,10 +151,9 @@ export function useResetPassword() {
         });
       }
     } catch (error: unknown) {
-      const err = error as { description?: string };
       toast.showError(
         t("auth.errors.passwordResetFailed"),
-        err.description || t("auth.errors.fallback")
+        getAuthErrorDescription(error) || t("auth.errors.fallback")
       );
     } finally {
       setIsLoading(false);

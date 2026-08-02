@@ -10,7 +10,10 @@ import type {
   GroupStoreCallbacks,
   AddDeviceParams,
 } from "@store";
-import { applyProvisionNodeTimezoneWithRetries } from "@shared/utils/timezone";
+import {
+  applyProvisionNodeTimezoneWithRetries,
+  markProvisionTimezoneFailed,
+} from "@shared/utils/timezone";
 import { pollUntilReady } from "@shared/utils/common";
 import { ProvisionType } from "@espressif/rainmaker-base-sdk";
 
@@ -96,13 +99,21 @@ export async function addDeviceProvision(
   }
 
   try {
-    node = await applyProvisionNodeTimezoneWithRetries(
+    const tzResult = await applyProvisionNodeTimezoneWithRetries(
       user,
       nodeId,
       node,
       (id) => user.getNodeDetails(id)
     );
+    node = tzResult.node;
+    if (!tzResult.timezoneApplied) {
+      console.warn(
+        `${LOG_PREFIX} Timezone setTimeZone did not succeed (non-blocking); nodeId=`,
+        nodeId
+      );
+    }
   } catch (tzError) {
+    markProvisionTimezoneFailed(nodeId);
     console.error(`${LOG_PREFIX} Timezone setup failed (non-blocking):`, tzError);
   }
 

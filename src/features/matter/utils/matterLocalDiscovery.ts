@@ -29,7 +29,6 @@ import {
 } from "@native-adaptors/implementations/ESPMatterSubscriptionAdapter";
 import { bootstrapMatterFabricForOperationalDiscovery } from "@features/matter/utils/matterCommissioningHelpers";
 import { retrySubscribeForNodeId } from "@shared/utils/matterSubscribeRetry";
-import { getMatterLocalDiscoveryRmngHooks } from "@shared/utils/matterLocalDiscoveryRmngHooks";
 import {
   describeChipOperationalLookup,
   formatMatterNodeIdForChipLog,
@@ -62,34 +61,6 @@ interface MatterDiscoveryEventPayload {
 }
 
 // ─── Pure helpers (no controller state) ─────────────────────────────────────
-
-/** CDF metadata flags set at build time in ESPRMNGMatterBase — prefer registered RMNG hook. */
-function shouldSkipMatterSubscriptionForDiscovery(node: ESPCDFNode): boolean {
-  const fromHook =
-    getMatterLocalDiscoveryRmngHooks()?.shouldSkipMatterSubscriptionForCdfNode;
-  if (fromHook) return fromHook(node);
-
-  const meta = node.metadata as
-    | { isBridgeParent?: boolean; isBridgedRmngMatterChild?: boolean }
-    | undefined;
-  return meta?.isBridgeParent === true || meta?.isBridgedRmngMatterChild === true;
-}
-
-function isBridgeParentCdfNodeForDiscovery(node: ESPCDFNode): boolean {
-  const meta = node.metadata as { isBridgeParent?: boolean } | undefined;
-  return meta?.isBridgeParent === true;
-}
-
-/** Bridged children share the parent's operational Matter id — keep the parent owner. */
-function shouldReplaceMatterNodeMapOwner(
-  existingNode: ESPCDFNode | undefined,
-  candidateNode: ESPCDFNode,
-): boolean {
-  if (!existingNode) return true;
-  if (isBridgeParentCdfNodeForDiscovery(existingNode)) return false;
-  if (isBridgeParentCdfNodeForDiscovery(candidateNode)) return true;
-  return true;
-}
 
 /**
  *
@@ -296,7 +267,6 @@ function createMatterLocalDiscoveryController(
     }
 
     const homeNodes = collectMatterHomeNodes(store, home);
-    const homeNodesById = new Map(homeNodes.map((n) => [n.id, n]));
     const nextMap = new Map<string, string>();
     const subscriptionPairs: {
       nodeId: string;
@@ -316,19 +286,7 @@ function createMatterLocalDiscoveryController(
         );
         continue;
       }
-      const existingOwnerId = nextMap.get(normalized);
-      if (
-        shouldReplaceMatterNodeMapOwner(
-          existingOwnerId ? homeNodesById.get(existingOwnerId) : undefined,
-          node,
-        )
-      ) {
-        nextMap.set(normalized, node.id);
-      }
-
-      if (shouldSkipMatterSubscriptionForDiscovery(node)) {
-        continue;
-      }
+      nextMap.set(normalized, node.id);
 
       const rawEndpoints = (
         node._raw as {
@@ -508,10 +466,6 @@ function createMatterLocalDiscoveryController(
 
     handleNodeTransportUpdate(store, nodeId, transportDetails, operation);
     if (operation === "remove") {
-      getMatterLocalDiscoveryRmngHooks()?.onMatterLocalTransportRemoved?.(
-        store,
-        nodeId,
-      );
       return;
     }
 
@@ -542,27 +496,6 @@ function createMatterLocalDiscoveryController(
         );
       },
     );
-
-    getMatterLocalDiscoveryRmngHooks()?.onMatterLocalTransportAdded?.(
-      store,
-      nodeId,
-      transportDetails,
-    );
-
-    const cdfNode = store.nodeStore.getNodeById(nodeId);
-    const meta = cdfNode?.metadata as
-      | { isRmngPureMatterOfflineStub?: boolean }
-      | undefined;
-    if (cdfNode && meta?.isRmngPureMatterOfflineStub) {
-      console.log(
-        `${MATTER_DISCOVERY_VERIFY_LOG} pure-Matter offline stub refresh: nodeId=${nodeId}`,
-      );
-      getMatterLocalDiscoveryRmngHooks()?.onPureMatterStubReachable?.(
-        store,
-        nodeId,
-        cdfNode,
-      );
-    }
   }
 
   function onMatterDiscovered(event: unknown): void {
@@ -697,7 +630,7 @@ function createMatterLocalDiscoveryController(
         ];
       }
 
-      // iOS: RMNG never starts `_matter._tcp` browse — kick ESPDiscoveryModule directly (Android already does via CHIP/RMNG path).
+      // iOS: kick ESPDiscoveryModule directly to start the `_matter._tcp` browse (Android does this via the CHIP discovery path).
       if (Platform.OS === "ios") {
         const espDiscoveryModule = NativeModules.ESPDiscoveryModule as
           | { startDiscovery?: (params: Record<string, string>) => void }

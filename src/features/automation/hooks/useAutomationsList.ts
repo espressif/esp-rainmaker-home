@@ -15,7 +15,7 @@ import { useCDF } from "@shared/hooks/useCDF";
 import { isAutomationsSupportedForGroupUserAccess } from "@shared/utils/groupAccess";
 
 /**
- * Resolves automation error copy for toasts: `description` may be an i18next key (e.g. from RMNG adaptor) or plain API text.
+ * Resolves automation error copy for toasts: `description` may be an i18next key (e.g. from RainMaker Neo adaptor) or plain API text.
  * Missing keys fall back to the input string per i18next defaults.
  * @param t - i18next translate function
  * @param description - Error description from the store operation, if any
@@ -92,7 +92,7 @@ export interface UseAutomationsListResult {
   ) => Promise<ToggleAutomationResult>;
   /** Get automation by id from store */
   getAutomationById: (automationId: string) => ESPCDFAutomation | undefined;
-  /** True when current home is subgroup-only share (RMNG); Automations screen shows a notice instead of the list. */
+  /** True when current home is subgroup-only share (RainMaker Neo); Automations screen shows a notice instead of the list. */
   isAutomationsAccessRestricted: boolean;
   /** Handlers and menu options (when options param is provided) */
   handleAutomationAction?: (

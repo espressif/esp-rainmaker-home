@@ -61,7 +61,9 @@ const styles = StyleSheet.create({
     backgroundColor: tokens.colors.white,
     borderRadius: tokens.radius.md,
     margin: tokens.spacing._15,
-    width: '100%',
+    // Fill the parent minus the margins; a hard width of 100% ignores the
+    // horizontal margin and shifts the card off-center.
+    alignSelf: 'stretch',
   },
   text: {
     fontSize: tokens.fontSize.md,

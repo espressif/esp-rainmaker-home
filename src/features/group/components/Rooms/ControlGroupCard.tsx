@@ -16,7 +16,7 @@ import { observer } from "mobx-react-lite";
 import { useTranslation } from "react-i18next";
 import { router } from "expo-router";
 import { Switch } from "tamagui";
-import { LayoutDashboard } from "lucide-react-native";
+import { LayoutDashboard, WifiOff } from "lucide-react-native";
 import type { ESPCDFDevice, ESPCDFGroup, ESPCDFNode } from "@store";
 import { useCDF } from "@shared/hooks/useCDF";
 import { useToast } from "@shared/hooks/useToast";
@@ -167,6 +167,7 @@ const ControlGroupCard = observer(
               ? tokens.colors.bg2
               : tokens.colors.white,
           },
+          !allOnline && globalStyles.offlineCardNoShadow,
         ]}
         onPress={handlePress}
         activeOpacity={0.7}
@@ -268,12 +269,15 @@ const ControlGroupCard = observer(
           </Text>
           <View style={globalStyles.controlGroupCardStatusContainer}>
             {!allOnline ? (
-              <Text
-                {...testProps("text_control_group_offline")}
-                style={globalStyles.controlGroupCardStatus}
-              >
-                {t("layout.shared.offline")}
-              </Text>
+              <View style={globalStyles.controlGroupCardOfflineRow}>
+                <WifiOff size={11} color={tokens.colors.gray} />
+                <Text
+                  {...testProps("text_control_group_offline")}
+                  style={globalStyles.controlGroupCardStatus}
+                >
+                  {t("layout.shared.offline")}
+                </Text>
+              </View>
             ) : total > 0 ? (
               <Text style={globalStyles.controlGroupCardStatus}>
                 {total}{" "}

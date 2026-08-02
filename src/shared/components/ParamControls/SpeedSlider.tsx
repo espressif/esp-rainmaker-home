@@ -148,7 +148,12 @@ const SpeedSlider = observer(
               </Slider.Track>
               <Slider.Thumb
                 index={0}
-                style={[styles.thumb, styles.thumbSmall, { zIndex: 10 }]}
+                style={[
+                  styles.thumb,
+                  styles.thumbSmall,
+                  { zIndex: 10 },
+                  disabled && styles.thumbDisabled,
+                ]}
                 size="$1.5"
                 borderWidth={1}
               />

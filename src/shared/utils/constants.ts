@@ -34,73 +34,22 @@ export const FULFILLED_STATUS = "fulfilled";
 
 // PLATFORMS
 export const PLATFORM_IOS = "ios";
+export const PLATFORM_ANDROID = "android";
 export const DEFAULT_HOME_GROUP_NAME = "Home";
 export const HOME_NAME_MAX_LENGTH = 32;
 
 // LINKS — region-scoped values come from the committed region env files
 // (.env.global.example / .env.cn.example → extra.regionConfigs.<region>.websiteLinks); the
-// hard-coded defaults below are the last-resort fallback for blank values.
+// hard-coded default below is the last-resort fallback for a blank value.
 const DEFAULT_WEBSITE_LINK = "https://rainmaker.espressif.com";
 
-// Legal pages exist per language × region
-// (rainmaker.espressif.com/<en|zh>/<page>?region=<global|china>), so the
-// region env files carry the URLs as templates with a {lang} placeholder
-// filled with the active UI language at resolve time. A plain URL (no
-// placeholder) is used verbatim for every language.
-const LEGAL_LINK_LANG_PLACEHOLDER = "{lang}";
-const DEFAULT_TERMS_OF_USE_LINK_TEMPLATE =
-  "https://rainmaker.espressif.com/{lang}/terms-of-use?region=global";
-const DEFAULT_PRIVACY_POLICY_LINK_TEMPLATE =
-  "https://rainmaker.espressif.com/{lang}/privacy-policy?region=global";
+// Legal-page links live in `./legalLinks`: they also read the active deployment,
+// which cannot be imported here without closing a require cycle.
 
 // Resolved once at module load; the active region is session-stable
 // (region.config.ts caches it), so this agrees with every call-time reader.
-const websiteLinks = getRegionConfig().websiteLinks;
-
 export const WEBSITE_LINK =
-  websiteLinks.website?.trim() || DEFAULT_WEBSITE_LINK;
-
-/**
- * Fills a legal-link template's `{lang}` placeholder with the supported UI
- * language for the given tag — regional tags map to their base (`zh-CN` →
- * `zh`), anything unsupported falls back to English. Do not call at module
- * scope: the language constants it reads are declared later in this file.
- */
-const resolveLegalLink = (template: string, language?: string): string => {
-  const base = (language || "").toLowerCase().split("-")[0];
-  const lang = (SUPPORTED_LANGUAGE_CODES as readonly string[]).includes(base)
-    ? base
-    : LANGUAGE_DEFAULT;
-  return template.split(LEGAL_LINK_LANG_PLACEHOLDER).join(lang);
-};
-
-/**
- * Terms of use URL for the given UI language (callers pass `i18n.language`).
- * Takes the active region's configured link and substitutes its `{lang}`
- * placeholder with the UI language; a plain URL (no placeholder) applies to
- * all languages.
- * @param language Optional UI language tag (e.g. `en`, `zh-CN`).
- * @returns The resolved terms of use URL.
- */
-export const getTermsOfUseLink = (language?: string): string =>
-  resolveLegalLink(
-    websiteLinks.termsOfUse?.trim() || DEFAULT_TERMS_OF_USE_LINK_TEMPLATE,
-    language
-  );
-
-/**
- * Privacy policy URL for the given UI language (callers pass `i18n.language`).
- * Takes the active region's configured link template and substitutes its
- * `{lang}` placeholder with the UI language; a plain URL (no placeholder)
- * applies to all languages.
- * @param language Optional UI language tag (e.g. `en`, `zh-CN`).
- * @returns The resolved privacy policy URL.
- */
-export const getPrivacyPolicyLink = (language?: string): string =>
-  resolveLegalLink(
-    websiteLinks.privacyPolicy?.trim() || DEFAULT_PRIVACY_POLICY_LINK_TEMPLATE,
-    language
-  );
+  getRegionConfig().websiteLinks.website?.trim() || DEFAULT_WEBSITE_LINK;
 
 // STORAGE KEYS
 // Persisted flag recording that the user accepted the CN-region privacy
@@ -146,7 +95,13 @@ export const ESPRM_CCT_PARAM_TYPE = "esp.param.cct";
 export const ESPRM_HUE_PARAM_TYPE = "esp.param.hue";
 export const ESPRM_SATURATION_PARAM_TYPE = "esp.param.saturation";
 export const ESPRM_TEMPERATURE_PARAM_TYPE = "esp.param.temperature";
+export const ESPRM_ENERGY_PARAM_TYPE = "esp.param.energy";
 export const ESPRM_LIGHT_MODE_PARAM_TYPE = "esp.param.light-mode";
+
+/** CCT / color-temperature slider defaults (Kelvin). UI floors `min` at `CCT_KELVIN_MIN`. */
+export const CCT_KELVIN_MIN = 2700;
+export const CCT_KELVIN_MAX = 6500;
+export const CCT_KELVIN_STEP = 100;
 export const ESPRM_FACTORY_RESET_PARAM_TYPE = "esp.param.factory-reset";
 export const ESPRM_REBOOT_PARAM_TYPE = "esp.param.reboot";
 export const ESPRM_WIFI_RESET_PARAM_TYPE = "esp.param.wifi-reset";
@@ -183,6 +138,18 @@ export const VOLUME_PARAM_NAME = "Volume";
 
 /** Min ms between throttled `setValue` (burst coalesce, post-write queue). */
 export const PARAM_CONTROL_THROTTLE_MS = 400;
+
+// DURATION / LAST-SEEN (connectivity offline banner)
+export const MS_PER_SECOND = 1000;
+export const MS_PER_MINUTE = 60 * MS_PER_SECOND;
+export const MS_PER_HOUR = 60 * MS_PER_MINUTE;
+export const MS_PER_DAY = 24 * MS_PER_HOUR;
+/** Epoch values below this are treated as seconds rather than milliseconds. */
+export const EPOCH_SECONDS_MAX = 1_000_000_000_000;
+export const LAST_SEEN_UNIT_SECONDS = "seconds";
+export const LAST_SEEN_UNIT_MINUTES = "minutes";
+export const LAST_SEEN_UNIT_HOURS = "hours";
+export const LAST_SEEN_UNIT_DAYS = "days";
 
 // SUPPORTED PARAM UI TYPES
 export const ESPRM_UI_TEXT_PARAM_TYPE = "esp.ui.text";
@@ -398,8 +365,8 @@ export const AUTOMATION_RMNG_ENABLE_DISABLE_UNSUPPORTED_I18N_KEY =
 export const MAX_MESSAGES_IN_MEMORY = 500;
 
 export const ERROR_CODES_MAP = {
-  USER_NOT_FOUND: "108052",
-  ADDING_SELF_NOT_ALLOWED: "108046",
+  USER_NOT_FOUND: 108050,
+  ADDING_SELF_NOT_ALLOWED: 108046,
   GROUP_NAME_ALREADY_EXISTS_ERROR_CODE: 108007,
 } as const;
 
@@ -538,6 +505,13 @@ export const CONFIG_FETCH_TIMEOUT_MS = 10000;
 export const QR_CODE_TYPE = "qr";
 export const QR_PROVISION_CONNECT_TIMEOUT_MS = 15000;
 export const QR_PROVISION_CONNECT_TIMEOUT_ERROR = "DEVICE_CONNECTION_TIMEOUT";
+
+/**
+ * Max wait for the node to report online after Wi-Fi credentials are applied
+ * (RMNG chal-resp `waitForOnline`). Timer starts only after successful Wi-Fi
+ * provisioning — not during association / credential send.
+ */
+export const PROVISION_WAIT_FOR_ONLINE_TIMEOUT_MS = 60_000;
 export const CAMERA_TYPE_FRONT = "front";
 export const CAMERA_TYPE_BACK = "back";
 
@@ -559,42 +533,6 @@ export const POLLING = {
   DEFAULT_LABEL: "Polling",
   NODE_CONFIG_LABEL: "Node config",
 };
-// TIME SERIES CONSTANTS
-export const TIME_SERIES_PERIODS = ["1H", "1D", "7D", "4W", "1Y"] as const;
-
-// Time Series Period Values
-export const TIME_SERIES_PERIOD_1H = "1H";
-export const TIME_SERIES_PERIOD_1D = "1D";
-export const TIME_SERIES_PERIOD_7D = "7D";
-export const TIME_SERIES_PERIOD_4W = "4W";
-export const TIME_SERIES_PERIOD_1Y = "1Y";
-
-// Aggregation Values
-export const AGGREGATION_RAW = "raw";
-export const AGGREGATION_AVG = "avg";
-export const AGGREGATION_MIN = "min";
-export const AGGREGATION_MAX = "max";
-export const AGGREGATION_COUNT = "count";
-export const AGGREGATION_LATEST = "latest";
-
-export const TIME_SERIES_AGGREGATIONS = [AGGREGATION_RAW, AGGREGATION_AVG, AGGREGATION_MIN, AGGREGATION_MAX, AGGREGATION_COUNT, AGGREGATION_LATEST] as const;
-
-// Chart Types
-export const CHART_TYPE_AREA = "area";
-export const CHART_TYPE_BAR = "bar";
-export const CHART_TYPE_LINE = "line";
-
-// TIME SERIES DISPLAY TEXT
-export const TIME_SERIES_LABELS = {
-  LAST_HOUR: "Last Hour",
-  TODAY: "Today",
-  LAST_7_DAYS: "Last 7 Days",
-  LAST_4_WEEKS: "Last 4 Weeks",
-  LAST_YEAR: "Last Year",
-  CURRENT_PERIOD: "Current Period"
-} as const;
-
-
 // WebRTC Connection State constants
 export const WEBRTC_CONNECTION_STATE = {
   CONNECTED: "connected",
@@ -677,3 +615,21 @@ export const LANGUAGE_REGIONAL_MAP: Record<string, SupportedLanguageCode> = {
   "zh-TW": LANGUAGE_CODE_ZH,
   "zh-HK": LANGUAGE_CODE_ZH,
 };
+/** RMNG+Matter compressed endpoint topology keys (`endpoint.c.s.<cluster>.c|a.<id>`). */
+export const MATTER_TOPOLOGY_KEY_C = "c";
+export const MATTER_TOPOLOGY_KEY_S = "s";
+export const MATTER_TOPOLOGY_KEY_A = "a";
+
+/** Fieldless On/Off command TLV (empty Structure). */
+export const MATTER_EMPTY_STRUCTURE_TLV_HEX = "0x1518";
+
+/** Default Matter attribute id (hex) when a param's `_matterPath` omits one. */
+export const MATTER_DEFAULT_ATTRIBUTE_HEX = "0x0";
+
+/** CDF / Matter light param names used in schedule encode/decode. */
+export const MATTER_PARAM_NAME_POWER = "Power";
+export const MATTER_PARAM_NAME_BRIGHTNESS = "Brightness";
+export const MATTER_PARAM_NAME_CCT = "CCT";
+export const MATTER_PARAM_NAME_COLOR_TEMPERATURE = "ColorTemperature";
+export const MATTER_PARAM_NAME_HUE = "Hue";
+export const MATTER_PARAM_NAME_SATURATION = "Saturation";

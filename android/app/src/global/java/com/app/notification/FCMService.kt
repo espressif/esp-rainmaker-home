@@ -35,9 +35,11 @@ class FCMService : FirebaseMessagingService() {
         
         // FCM payload keys
         private const val KEY_EVENT_DATA_PAYLOAD = "event_data_payload"
+        private const val KEY_EVENT_DATA = "event_data"
         private const val KEY_TITLE = "title"
         private const val KEY_BODY = "body"
         private const val KEY_EVENT_TYPE = "event_type"
+        private const val KEY_TYPE = "type"
         
         // Default notification content from BuildConfig
         private val DEFAULT_TITLE: String
@@ -64,8 +66,8 @@ class FCMService : FirebaseMessagingService() {
             val notificationData = remoteMessage.data.toMutableMap()
             ESPNotificationQueue.addNotification(notificationData)
 
-            processSystemNotification(remoteMessage.data)
-            
+            processSystemNotification(remoteMessage)
+
         } catch (e: Exception) {
             Log.e(TAG, "Error processing FCM message", e)
         }
@@ -75,11 +77,17 @@ class FCMService : FirebaseMessagingService() {
      * Processes and displays system notifications for ESP RainMaker events.
      */
     @RequiresPermission(Manifest.permission.POST_NOTIFICATIONS)
-    private fun processSystemNotification(data: Map<String, String>) {
+    private fun processSystemNotification(remoteMessage: RemoteMessage) {
         try {
-            val eventPayload = data[KEY_EVENT_DATA_PAYLOAD]
-            val title = data[KEY_TITLE] ?: DEFAULT_TITLE
-            val body = data[KEY_BODY] ?: DEFAULT_BODY
+            val data = remoteMessage.data
+
+            // RainMaker Neo delivers the event payload under `event_data_payload`; legacy
+            // RainMaker used `event_data`. Accept either so both formats work.
+            val eventPayload = data[KEY_EVENT_DATA_PAYLOAD] ?: data[KEY_EVENT_DATA]
+
+            // Title/body can arrive in the FCM data map or the notification block.
+            val title = data[KEY_TITLE] ?: remoteMessage.notification?.title ?: DEFAULT_TITLE
+            val body = data[KEY_BODY] ?: remoteMessage.notification?.body ?: DEFAULT_BODY
 
             if (eventPayload.isNullOrEmpty()) {
                 Log.d(TAG, "No event payload found, skipping system notification")
@@ -87,7 +95,9 @@ class FCMService : FirebaseMessagingService() {
             }
 
             val eventJson = JSONObject(eventPayload)
+            // RainMaker Neo uses `type`; legacy RainMaker used `event_type`. Accept either.
             val rawEventType = eventJson.optString(KEY_EVENT_TYPE)
+                .ifEmpty { eventJson.optString(KEY_TYPE) }
             val mappedEventType = mapEventTypeToNotificationChannel(rawEventType)
 
             if (mappedEventType != null) {
@@ -110,6 +120,7 @@ class FCMService : FirebaseMessagingService() {
             "rmaker.event.user_node_removed" -> "node_removed"
             "rmaker.event.node_connected" -> "node_online"
             "rmaker.event.node_disconnected" -> "node_offline"
+            "node_alert" -> "node_alert"
             else -> null
         }
     }

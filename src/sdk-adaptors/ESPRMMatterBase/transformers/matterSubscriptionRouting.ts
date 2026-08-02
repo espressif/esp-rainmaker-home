@@ -7,11 +7,15 @@
 import { ESPNodeUpdateData } from "@espressif/rainmaker-base-sdk";
 import {
     getClusterRegistryEntry,
+    type ClusterParamDefinition,
+    type ClusterParamResolver,
 } from "@espressif/rainmaker-matter-sdk";
 import { MATTER_PARAM_VALUE_UNKNOWN } from "../matterParamConstants";
 import {
+    coerceParamValueForDataType,
     coerceParamValueToBoolean,
     isBooleanControlParamByLabels,
+    resolveParamDataType,
 } from "@shared/utils/paramUtils";
 
 /**
@@ -41,14 +45,17 @@ import {
  *     `handleNodeParamsChanged` expects to find via
  *     `node.devices.find(d => d.name === entityName)`.
  *
+ * Hybrid RainMaker + Matter nodes have no Matter metadata on their params at
+ * all and route by name instead — see {@link buildCloudParamShadow}.
+ *
  * Wildcard subscriptions (e.g. PowerSource `0x2f`) deliver one update per
  * reported attribute. Updates whose attribute does not map to a registered
  * param produce an empty shadow and are dropped by the caller.
  * @param update    Subscription update from the matter channel.
  * @param sdkNodes  Latest SDK node list captured by `subscribeToNodeUpdates`.
  * @returns A shadow-style payload `{ [deviceName]: { [paramName]: value } }`,
- *          or `undefined` when no matter param matches (let the caller
- *          forward the original payload unchanged or drop it).
+ *          or `undefined` when no param matches (let the caller forward the
+ *          original payload unchanged or drop it).
  */
 type MatterRoutingNode = {
     id?: string;
@@ -88,11 +95,18 @@ export function rewriteMatterShadowPayload(
     // Recover the raw matter value. The matter SDK's default-branch payload
     // shape is `{ cluster_<dec>_attr_<dec>: rawValue }`. Fall back to other
     // common shapes defensively, since handled-cluster payload keys differ.
-    const rawValue = extractRawMatterValue(
-        update.payload,
-        clusterId,
-        attributeId,
+    const extracted = extractMatterSubscriptionValue(
+      update.payload,
+      clusterId,
+      attributeId,
     );
+    const extractedValue = extracted?.value;
+    // Skip the app resolver only for values the SDK already scaled (see
+    // SDK_PRESCALED_ATTRS) — re-decoding those double-scales (100% → 39%). Raw
+    // frames still decode; defaults to raw for unclassifiable shapes.
+    const isRaw = extracted?.isRaw ?? true;
+    const sdkAlreadyScaled =
+      !isRaw && isSdkPrescaledAttr(clusterId, attributeId);
 
     // Walk nodeConfig.devices (Rainmaker) or top-level devices (RMNG Matter payload).
     const devices = collectMatterRoutingDevices(node);
@@ -104,7 +118,9 @@ export function rewriteMatterShadowPayload(
             if (!isMatterParamMatch(param, endpointId, clusterId, attributeId)) {
                 continue;
             }
-            const decoded = decodeMatterParamValue(param, rawValue);
+            const decoded = sdkAlreadyScaled
+              ? normalizeDecodedParamValue(param, extractedValue)
+              : decodeMatterParamValue(param, extractedValue);
             if (decoded === undefined) return undefined;
             if (isUnmappableMatterEnumValue(decoded)) {
                 // FW emitted a manufacturer-specific or transient enum the
@@ -157,7 +173,9 @@ export function rewriteMatterShadowPayload(
             ) {
                 continue;
             }
-            const decoded = decodeMatterParamValue(param, rawValue);
+            const decoded = sdkAlreadyScaled
+              ? normalizeDecodedParamValue(param, extractedValue)
+              : decodeMatterParamValue(param, extractedValue);
             if (decoded === undefined) return undefined;
             if (isUnmappableMatterEnumValue(decoded)) {
                 // Same rationale as in the direct-match branch above —
@@ -172,7 +190,91 @@ export function rewriteMatterShadowPayload(
             };
         }
     }
-    return undefined;
+
+    // Last resort: hybrid RainMaker + Matter nodes. The SDK's `isMatterNode()`
+    // only accepts `node_type === "pure_matter"`, so a Matter-commissioned
+    // RainMaker node is built from its cloud config — params carry no
+    // `(endpointId, clusterId, matterAttributeId)` and both matches above always
+    // miss. Forwarding the flat payload loses it silently: CDF
+    // `handleNodeParamsChanged` reads top-level keys as DEVICE names, so `Power`
+    // matches nothing. Match the cloud param by registry name instead.
+    return buildCloudParamShadow(
+        devices,
+        fallbackParamDef,
+        extractedValue,
+        sdkAlreadyScaled,
+    );
+}
+
+/** Registry param name → cloud param names for the same control. */
+const CLOUD_PARAM_NAME_ALIASES: Readonly<Record<string, readonly string[]>> = {
+    CCT: ["ColorTemperature"],
+};
+
+/**
+ * Builds the shadow for a cloud-config param matched by registry name — the
+ * hybrid-node path, where no param carries Matter cluster metadata.
+ * @param devices          Devices of the node the update belongs to.
+ * @param paramDef         Registry definition matched on `valueAttribute`.
+ * @param extractedValue   Value pulled from the update payload.
+ * @param sdkAlreadyScaled Whether the SDK already scaled it (see {@link SDK_PRESCALED_ATTRS}).
+ * @returns The shadow payload, or `undefined` when nothing matched unambiguously.
+ */
+function buildCloudParamShadow(
+    devices: { name?: string; params?: MatterDeviceParamLike[] }[],
+    paramDef: ClusterParamDefinition,
+    extractedValue: unknown,
+    sdkAlreadyScaled: boolean,
+): Record<string, Record<string, unknown>> | undefined {
+    const candidateNames = [
+        paramDef.name,
+        ...(CLOUD_PARAM_NAME_ALIASES[paramDef.name] ?? []),
+    ];
+
+    const matches: { deviceName: string; param: MatterDeviceParamLike }[] = [];
+    for (const device of devices) {
+        if (!device?.params || !device.name) continue;
+        for (const param of device.params) {
+            // Cloud params only. A matter-built param already had its chance in
+            // both matches above, and matching one by name alone could route the
+            // frame onto a different cluster's param.
+            if (param.clusterId !== undefined) continue;
+            if (!param.name || !candidateNames.includes(param.name)) continue;
+            matches.push({ deviceName: device.name, param });
+        }
+    }
+
+    if (matches.length === 0) return undefined;
+    // Multi-gang: the name repeats per gang and a cloud param carries nothing to
+    // tie it to `endpointId`. Drop rather than apply it to a guessed device.
+    if (matches.length > 1) {
+        console.warn(
+            `[matterSubscriptionRouting] dropping frame for "${paramDef.name}": matched cloud params on ${matches.length} devices, no endpoint mapping to disambiguate`,
+        );
+        return undefined;
+    }
+
+    const { deviceName, param } = matches[0];
+    // Decode through the registry definition — the cloud param has no resolver of
+    // its own, and this is what turns CCT mireds into the Kelvin the UI expects.
+    const decoded = sdkAlreadyScaled
+        ? normalizeDecodedParamValue(param, extractedValue)
+        : decodeMatterParamValue(param, extractedValue, paramDef.resolver);
+    if (decoded === undefined) return undefined;
+    if (isUnmappableMatterEnumValue(decoded)) return undefined;
+
+    // Resolvers emit strings; keep the RainMaker mirror on its declared type.
+    const value = coerceParamValueForDataType(
+        decoded,
+        resolveParamDataType(param),
+        param.bounds,
+    );
+    (param as { value?: unknown }).value = value;
+    return {
+        [deviceName]: {
+            [param.name as string]: value,
+        },
+    };
 }
 
 /**
@@ -203,6 +305,8 @@ interface MatterDeviceParamLike {
     endpointId?: number;
     matterAttributeId?: number;
     rawModes?: Record<string, number>;
+    /** Cloud-config params carry UI bounds (min/max/step) used when coercing. */
+    bounds?: Record<string, any>;
     _raw?: { cluster?: number; attribute?: number; endpointId?: number };
     resolver?: {
         decodeValue?: (
@@ -239,25 +343,44 @@ function isMatterParamMatch(
 }
 
 /**
- * Pulls the raw matter value out of the SDK's flat payload. The default
- * branch of `MatterSubscriptionChannel.transformMatterToRainmaker` keys it
- * as `cluster_<dec>_attr_<dec>`; for handled clusters (OnOff/LevelControl/…)
- * the payload may already use a friendly key — there we fall back to the
- * single payload entry's value, which is good enough for the param's own
- * resolver to decode (most resolvers either pass-through or coerce).
+ * Pulls the value for (clusterId, attributeId) out of the SDK's flat payload and
+ * reports whether it still needs resolver decoding: raw `cluster_<c>_attr_<a>`
+ * frames are `isRaw: true` (decode); values the SDK already decoded under a
+ * friendly key (e.g. `{ Brightness: 100 }`) are `isRaw: false` (pass through).
  */
-function extractRawMatterValue(
-    payload: unknown,
-    clusterId: number,
-    attributeId: number,
-): unknown {
-    if (!payload || typeof payload !== "object") return undefined;
-    const flat = payload as Record<string, unknown>;
-    const defaultKey = `cluster_${clusterId}_attr_${attributeId}`;
-    if (defaultKey in flat) return flat[defaultKey];
-    const entries = Object.entries(flat);
-    if (entries.length === 1) return entries[0][1];
-    return undefined;
+function extractMatterSubscriptionValue(
+  payload: unknown,
+  clusterId: number,
+  attributeId: number,
+): { value: unknown; isRaw: boolean } | undefined {
+  if (!payload || typeof payload !== "object") return undefined;
+  const flat = payload as Record<string, unknown>;
+  const defaultKey = `cluster_${clusterId}_attr_${attributeId}`;
+  if (defaultKey in flat) {
+    return { value: flat[defaultKey], isRaw: true };
+  }
+  const entries = Object.entries(flat);
+  if (entries.length === 1) {
+    return { value: entries[0][1], isRaw: false };
+  }
+  return undefined;
+}
+
+/**
+ * `<clusterId>:<attributeId>` pairs the RM-Matter SDK already scales into
+ * Rainmaker units on push frames — running the app resolver again double-scales
+ * them. Excludes CCT (768/7) and Power (6/0): the SDK renames but doesn't scale
+ * those, so they still need the resolver. Keep in sync with the SDK switch.
+ */
+const SDK_PRESCALED_ATTRS: ReadonlySet<string> = new Set([
+    "8:0", // LevelControl CurrentLevel
+    "768:0", // ColorControl CurrentHue
+    "768:1", // ColorControl CurrentSaturation
+    "1026:0", // TemperatureMeasurement
+]);
+
+function isSdkPrescaledAttr(clusterId: number, attributeId: number): boolean {
+    return SDK_PRESCALED_ATTRS.has(`${clusterId}:${attributeId}`);
 }
 
 function normalizeDecodedParamValue(
@@ -275,12 +398,17 @@ function normalizeDecodedParamValue(
     return decoded;
 }
 
+/**
+ * @param resolverOverride Resolver to decode with when the param has none of its
+ *   own — cloud-config params are built without one.
+ */
 function decodeMatterParamValue(
     param: MatterDeviceParamLike,
     rawValue: unknown,
+    resolverOverride?: ClusterParamResolver,
 ): unknown {
     if (rawValue === undefined) return undefined;
-    const decoder = param.resolver?.decodeValue;
+    const decoder = param.resolver?.decodeValue ?? resolverOverride?.decodeValue;
     if (typeof decoder !== "function") {
         return normalizeDecodedParamValue(param, rawValue);
     }

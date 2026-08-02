@@ -26,7 +26,27 @@ READ_POLL_SECONDS = 0.05
 PORT_RELEASE_DELAY_SECONDS = 2.0
 POST_RESET_BOOT_DELAY_SECONDS = 0.2
 RETRY_MAX = 3
+DOWNLOAD_RECOVERY_INTERVAL_SECONDS = 5.0
+DOWNLOAD_RECOVERY_MAX_ATTEMPTS = 4
 _ANSI_ESCAPE = re.compile(r"\x1b\[[0-9;]*m")
+_BOOT_BANNER = re.compile(r"(?:cpu_start|app_init):\s+(Project name|App version):\s+(\S+)")
+
+
+def booted_firmware(log_path) -> Dict[str, str]:
+    """Project name and app version the chip last printed at boot, so a report states the image that actually ran."""
+    try:
+        text = _ANSI_ESCAPE.sub("", Path(log_path).read_text(errors="replace"))
+    except (OSError, TypeError):
+        return {}
+    fields = {}
+    for match in _BOOT_BANNER.finditer(text):
+        fields[match.group(1)] = match.group(2)
+    booted = {}
+    if fields.get("Project name"):
+        booted["booted_project"] = fields["Project name"]
+    if fields.get("App version"):
+        booted["booted_app_version"] = fields["App version"]
+    return booted
 
 
 def normalize_serial_port(port: str) -> str:
@@ -77,10 +97,19 @@ class _SerialCapture(threading.Thread):
         self._pending = ""
         self.open_error: Optional[str] = None
         self.bytes_received = 0
+        self._last_recovery = 0.0
+        self._in_download_mode = False
+        self._recovery_attempts = 0
 
     def _open_port(self) -> serial.Serial:
-        """Open UART for reading."""
-        return serial.Serial(self.port, self.baudrate, timeout=SERIAL_READ_TIMEOUT)
+        """Open UART for reading with the boot strap released: DTR/RTS drive GPIO9/EN on devkits, so an open that leaves them asserted can strand the chip in the ROM bootloader (the reuse path never resets, so it would stay there)."""
+        uart = serial.Serial(self.port, self.baudrate, timeout=SERIAL_READ_TIMEOUT)
+        try:
+            uart.dtr = False
+            uart.rts = False
+        except (OSError, serial.SerialException) as error:
+            logger.warning("Could not release DTR/RTS on %s: %s", self.port, error)
+        return uart
 
     def _append_text(self, text: str, log_handle) -> None:
         """Write decoded UART text to memory and the log file."""
@@ -96,6 +125,34 @@ class _SerialCapture(threading.Thread):
             clean = line.rstrip()
             if clean:
                 self.lines.append(clean)
+        if "waiting for download" in complete:
+            self._in_download_mode = True
+            self._recover_from_download_mode()
+        elif self._in_download_mode and "boot:" in complete and "DOWNLOAD" not in complete:
+            # An app-mode boot header means the recovery pulse worked; stop re-pulsing.
+            logger.info("Chip on %s recovered from download mode after %s reset(s)", self.port, self._recovery_attempts)
+            self._in_download_mode = False
+            self._recovery_attempts = 0
+
+    def _recover_from_download_mode(self) -> None:
+        """A failed external esptool contact (e.g. a sibling run's discovery probe) can strand the chip in the ROM bootloader; pulse EN via the already-open handle to boot it back into the app."""
+        if time.time() - self._last_recovery < DOWNLOAD_RECOVERY_INTERVAL_SECONDS:
+            return
+        if self._recovery_attempts >= DOWNLOAD_RECOVERY_MAX_ATTEMPTS:
+            return
+        self._last_recovery = time.time()
+        self._recovery_attempts += 1
+        uart = self._serial
+        if uart is None or not uart.is_open:
+            return
+        logger.warning("Chip on %s entered download mode mid-capture; issuing recovery reset", self.port)
+        try:
+            uart.setDTR(False)
+            uart.setRTS(True)
+            time.sleep(0.1)
+            uart.setRTS(False)
+        except serial.SerialException as error:
+            logger.warning("Download-mode recovery reset failed on %s: %s", self.port, error)
 
     def run(self) -> None:
         """Continuously read serial output into a log file."""
@@ -125,6 +182,10 @@ class _SerialCapture(threading.Thread):
                         if raw:
                             self._append_text(decode_serial_bytes(raw), log_handle)
                         else:
+                            # A chip stranded in the ROM bootloader stops printing, so retry the
+                            # recovery on a timer here rather than off the next (never-coming) line.
+                            if self._in_download_mode:
+                                self._recover_from_download_mode()
                             time.sleep(READ_POLL_SECONDS)
                 if self._pending.strip():
                     self.lines.append(self._pending.strip())

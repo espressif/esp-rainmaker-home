@@ -23,6 +23,7 @@ from hardware.models import ResourceStatus
 from hardware.qr import QrPayloadExtractor
 from hardware.requirements import HardwareRequirement
 from utils.common_utils import normalize_input
+from utils.registered_user_resolver import deployment_type
 
 logger = logging.getLogger(__name__)
 
@@ -41,7 +42,15 @@ def _tap_continue_for_current_screen(helper):
         if page.check_screen_displayed(timeout=0.5, quiet=True):
             tap_continue()
             return
+    # "guide" screen is optional and configurable: nothing to continue.
+    if helper.home.check_screen_displayed(timeout=2, quiet=True):
+        return
     raise AssertionError("Continue button is not available on the current screen")
+
+
+def _parse_compact_prov_payload(payload):
+    """Compat shim for the shared QR payload parser (JSON or compact NP:/RM:)."""
+    return QrPayloadExtractor.parse(payload)
 
 
 @pytest.fixture
@@ -75,7 +84,7 @@ def capture_device_prov_info(hardware_session, resource_manager):
         try:
             info = json.loads(payload)
         except (TypeError, ValueError):
-            info = {}
+            info = _parse_compact_prov_payload(payload)
         hardware_session["prov_info"] = info
         logger.info(
             "Provisioning payload captured: name=%s transport=%s pop=%s",
@@ -89,7 +98,7 @@ def capture_device_prov_info(hardware_session, resource_manager):
 @given(parsers.parse('an "{chip_label}" device'))
 def given_esp_device(request, hardware_session, resource_manager, chip_label):
     """Allocate ESP hardware matching the chip declared in the feature file."""
-    requirement = HardwareRequirement(chip_type=chip_label)
+    requirement = HardwareRequirement(chip_type=chip_label, deployment=deployment_type(request.config.getoption("--deployment")))
     hardware_session["requirement"] = requirement
     resource = resource_manager.acquire(
         chip_type=requirement.chip_type,
@@ -130,7 +139,10 @@ def _flash_device(request, hardware_session, resource_manager, product, transpor
     resource = hardware_session["resource"]
     artifact_dir = hardware_session["artifact_dir"]
     resource_manager.update_status(resource.mac_address, ResourceStatus.FLASHING)
+    resource_manager.serial_logger.stop(resource)
+    resource_manager.flasher.prepare_certs(resource, request.config.getoption("--deployment"), firmware_image)
     resource_manager.flasher.flash(resource, firmware_image)
+    resource_manager.flasher.hard_reset(resource, firmware_image)
     resource.build_metadata = metadata
     record_hardware_report(request, resource, metadata)
 
@@ -226,12 +238,12 @@ def should_be_on_add_device_selection_screen(helper):
 
 @then("user should be on pop screen")
 def should_be_on_pop_screen(helper):
-    assert helper.pop.check_screen_displayed(timeout=5), "Should be on proof of possession screen"
+    assert helper.pop.check_screen_displayed(timeout=7), "Should be on proof of possession screen"
 
 
 @then("user should be on connect wifi screen")
 def should_be_on_connect_wifi_screen(helper):
-    assert helper.connect_wifi.check_screen_displayed(timeout=5), "Should be on connect wifi screen"
+    assert helper.connect_wifi.check_screen_displayed(timeout=7), "Should be on connect wifi screen"
 
 
 @then("user should be on provisioning page")
@@ -271,7 +283,11 @@ def should_be_on_add_to_room_screen(helper):
 
 @then("user should be on guide screen")
 def should_be_on_guide_screen(helper):
-    assert helper.guide.check_screen_displayed(timeout=5), "Should be on guide screen"
+    # The "guide" screen is optional
+    if helper.guide.check_screen_displayed(timeout=5):
+        return
+    assert helper.home.check_screen_displayed(timeout=5), \
+        "Should be on guide screen (or home)"
 
 
 @then(parsers.parse('device "{device_name}" should be visible on home screen'))

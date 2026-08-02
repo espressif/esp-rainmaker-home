@@ -116,6 +116,7 @@ export const ActionDeviceSelectionScreen = observer(() => {
           selectedSectionTitle={selectedSectionTitle}
           availableSectionTitle={availableSectionTitle}
           renderDeviceItem={renderDeviceItem}
+          qaId="action_device_selection"
         />
 
         {devices.length > 0 && (

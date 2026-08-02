@@ -53,13 +53,14 @@ export const EventDeviceParamSelectionParamSheet: React.FC<
 
   return (
     <Modal
+      {...testProps("modal_event_device_param_selection")}
       visible={visible}
       transparent
       animationType="slide"
       onRequestClose={onClose}
     >
       <Pressable
-        {...testProps("modal_event_device_param_selection")}
+        {...testProps("button_event_device_param_selection")}
         style={styles.modalContainer}
         onPress={onClose}
       >

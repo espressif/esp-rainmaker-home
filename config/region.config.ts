@@ -132,16 +132,10 @@ export interface RegionRmSdkConfig {
   claimUrl?: string;
 }
 
-export interface RegionRmngSdkConfig {
+export interface RegionRmneoSdkConfig {
   baseUrl?: string;
-  apiPath?: string;
   userApiBase?: string;
-  userApiBaseUrl?: string;
-  userApiPath?: string;
-  identityId?: string;
   awsRegion?: string;
-  userPoolId?: string;
-  clientId?: string;
   iotEndpoint?: string;
 }
 
@@ -169,7 +163,7 @@ export interface RegionFeatures {
 export interface RegionConfig {
   activeSdk?: string;
   rmSdk: RegionRmSdkConfig;
-  rmngSdk: RegionRmngSdkConfig;
+  rmneoSdk: RegionRmneoSdkConfig;
   websiteLinks: RegionWebsiteLinks;
   features: RegionFeatures;
 }

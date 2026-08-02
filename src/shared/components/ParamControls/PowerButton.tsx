@@ -24,6 +24,8 @@ import { coerceParamValueToBoolean } from "@shared/utils/paramUtils";
  *
  * A realistic circular power button component that toggles between on/off states.
  * Provides visual feedback through color, shadows, and style changes to mimic real hardware.
+ * When disabled (e.g. offline), shadows/glow are cleared so Android elevation + parent
+ * opacity does not render a faceted halo around the circle.
  * @param param - The parameter object containing value and setValue function
  * @param disabled - Optional flag to disable the control
  * @returns Large circular power affordance with on/off styling and icon
@@ -32,7 +34,12 @@ const PowerButton = observer(
   ({ value, onValueChange, disabled }: ParamControlChildProps) => {
     const isOn = coerceParamValueToBoolean(value);
     const size = 120;
-    // Handlers
+    /** Offline / disabled: plain circle, no glow or elevation shadow. */
+    const showActiveChrome = isOn && !disabled;
+
+    /**
+     * Toggles power when the control is writable.
+     */
     const handlePress = async () => {
       if (disabled || !onValueChange) return;
       onValueChange(null, !isOn);
@@ -41,8 +48,8 @@ const PowerButton = observer(
     // Render
     return (
       <View style={styles.powerButtonWrapper}>
-        {/* Outer glow effect when ON */}
-        {isOn && (
+        {/* Outer glow only when ON and interactive — elevation under opacity looks faceted. */}
+        {showActiveChrome && (
           <View
             style={[
               styles.powerButtonGlow,
@@ -65,8 +72,8 @@ const PowerButton = observer(
               height: size,
               borderRadius: size / 2,
             },
-            isOn && styles.powerButtonActive,
-            disabled && styles.disabled,
+            showActiveChrome && styles.powerButtonActive,
+            disabled && styles.powerButtonDisabled,
           ]}
           onPress={handlePress}
           activeOpacity={0.8}
@@ -82,14 +89,17 @@ const PowerButton = observer(
                 height: size - 8,
                 borderRadius: (size - 8) / 2,
               },
-              isOn && styles.powerButtonInnerActive,
+              showActiveChrome && styles.powerButtonInnerActive,
+              disabled && styles.powerButtonInnerDisabled,
             ]}
           >
             {/* Power icon */}
             <Power
               {...testProps("icon_power_control")}
               size={size * 0.4}
-              color={isOn ? tokens.colors.white : tokens.colors.gray}
+              color={
+                showActiveChrome ? tokens.colors.white : tokens.colors.gray
+              }
               strokeWidth={3}
             />
           </View>

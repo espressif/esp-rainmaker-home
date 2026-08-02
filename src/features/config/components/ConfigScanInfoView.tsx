@@ -12,7 +12,7 @@ import {
   TouchableWithoutFeedback,
 } from "react-native";
 import { useTranslation } from "react-i18next";
-import { QrCode } from "lucide-react-native";
+import { Check, QrCode } from "lucide-react-native";
 import { getResolvedActiveSdk } from "@config/sdk.config";
 
 import { runtimeConfigManager } from "@config/runtime.config";
@@ -20,11 +20,16 @@ import { ScreenWrapper, Header } from "@shared/components";
 import { tokens } from "@shared/theme/tokens";
 import { globalStyles } from "@shared/theme/globalStyleSheet";
 import { formatConfigKey } from "@shared/utils/common";
+import { testProps } from "@shared/utils/testProps";
 
 export interface ConfigScanInfoViewProps {
   title: string;
   onUpdateConfig: () => void;
   onCancel: () => void;
+  /** Base URL of the remembered private deployment, if one was configured. */
+  savedDeploymentLabel?: string | null;
+  /** Continue with the remembered deployment instead of scanning again. */
+  onContinueWithSaved?: () => void;
 }
 
 /**
@@ -34,23 +39,27 @@ export function ConfigScanInfoView({
   title,
   onUpdateConfig,
   onCancel,
+  savedDeploymentLabel,
+  onContinueWithSaved,
 }: ConfigScanInfoViewProps) {
   const { t } = useTranslation();
   const activeSdk = getResolvedActiveSdk();
   const runtimeConfig = runtimeConfigManager.config;
+  const hasSavedDeployment = !!savedDeploymentLabel && !!onContinueWithSaved;
 
   return (
-    <ScreenWrapper style={globalStyles.configScanNoPadding}>
+    <ScreenWrapper {...testProps("screen_wrapper_active_sdk")} style={globalStyles.configScanNoPadding}>
       <Header label={title} showBack onBackPress={onCancel} />
       <ScrollView
+        {...testProps("scroll_view_active_sdk")}
         style={globalStyles.configScanScrollContent}
         contentContainerStyle={globalStyles.configScanScrollContentContainer}
       >
-        <View style={globalStyles.configScanSection}>
+        <View {...testProps("view_active_sdk")} style={globalStyles.configScanSection}>
           <Text style={globalStyles.configScanSectionTitle}>
             {t("config.scan.activeSdk")}
           </Text>
-          <Text style={globalStyles.configScanConfigValue}>{activeSdk}</Text>
+          <Text {...testProps("text_active_sdk")} style={globalStyles.configScanConfigValue}>{activeSdk}</Text>
         </View>
         <View style={globalStyles.configScanSection}>
           <Text style={globalStyles.configScanSectionTitle}>
@@ -121,18 +130,65 @@ export function ConfigScanInfoView({
             </Text>
           )}
         </View>
-        {/* Update Config Button */}
+        {/* Previously configured deployment — continue without re-scanning */}
+        {hasSavedDeployment && (
+          <View
+            {...testProps("view_saved_deployment")}
+            style={globalStyles.configScanSection}
+          >
+            <Text style={globalStyles.configScanSectionTitle}>
+              {t("config.scan.savedDeployment")}
+            </Text>
+            <Text
+              {...testProps("text_saved_deployment")}
+              style={globalStyles.configScanConfigValue}
+            >
+              {savedDeploymentLabel}
+            </Text>
+            <TouchableOpacity
+              {...testProps("button_continue_saved_config")}
+              style={globalStyles.configScanUpdateButton}
+              onPress={onContinueWithSaved}
+            >
+              <Check
+                size={24}
+                color={tokens.colors.white}
+                style={globalStyles.configScanUpdateButtonIcon}
+              />
+              <Text style={globalStyles.configScanButtonText}>
+                {t("config.scan.continueWithSaved")}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* Update Config Button — secondary once a saved deployment exists */}
         <TouchableOpacity
-          style={globalStyles.configScanUpdateButton}
+          {...testProps("button_update_config")}
+          style={
+            hasSavedDeployment
+              ? globalStyles.configScanSecondaryButton
+              : globalStyles.configScanUpdateButton
+          }
           onPress={onUpdateConfig}
         >
           <QrCode
             size={24}
-            color={tokens.colors.white}
+            color={
+              hasSavedDeployment ? tokens.colors.primary : tokens.colors.white
+            }
             style={globalStyles.configScanUpdateButtonIcon}
           />
-          <Text style={globalStyles.configScanButtonText}>
-            {t("config.scan.updateConfig")}
+          <Text
+            style={
+              hasSavedDeployment
+                ? globalStyles.configScanSecondaryButtonText
+                : globalStyles.configScanButtonText
+            }
+          >
+            {hasSavedDeployment
+              ? t("config.scan.scanNewConfig")
+              : t("config.scan.updateConfig")}
           </Text>
         </TouchableOpacity>
       </ScrollView>

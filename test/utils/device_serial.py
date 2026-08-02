@@ -54,9 +54,14 @@ class DeviceSerial:
         """True when the device logs <param> applied with <value> (numeric within ±tol for slider input)."""
         suffix = f" for {self.device_name} - {param}"
         if isinstance(value, bool) or not isinstance(value, int):
-            needles = [f"Received value = {_fmt(value)}{suffix}"]
+            candidates = [_fmt(value)]
         else:
-            needles = [f"Received value = {v}{suffix}" for v in range(value - tol, value + tol + 1)]
+            candidates = [_fmt(v) for v in range(value - tol, value + tol + 1)]
+        needles = []
+        for c in candidates:
+            needles.append(f"Received value = {c}{suffix}")
+            needles.append(f"{param} changed to {c}")
+            needles.append(f"for {param} -> {c}")
         deadline = time.time() + timeout
         while time.time() < deadline:
             buf = self.lines()
@@ -95,6 +100,8 @@ class DeviceSerial:
         (used to assert an "unchanged" param was NOT modified by the action)."""
         suffix = f" for {self.device_name} - {param}"
         for line in self.lines()[since:]:
-            if "Received value = " in line and suffix in line:
+            if (("Received value = " in line and suffix in line)
+                    or f"{param} changed to " in line
+                    or f"for {param} -> " in line):
                 return True
         return False

@@ -5,7 +5,7 @@
  */
 
 import type { ESPCDFNode } from "@store";
-import { isRmngMatterAutomationDeviceNode } from "./rmngMatterDeviceClassification";
+import { readMatterNodeIdFromCdfNode } from "./matterDeviceStateEvents";
 
 /**
  * Sorts items by connectivity: connected first, then disconnected.
@@ -25,7 +25,14 @@ export function sortByConnectivity<T>(
   });
 }
 
-/** RainMaker automation cannot use RMNG+Matter nodes as event/action triggers. */
+/**
+ * RainMaker automation cannot subscribe to local Matter-only triggers, so any
+ * Matter-backed node is ineligible as an event/action device. Delegates to the
+ * shared matter-node detector, which also checks the direct `node.matterNodeId`
+ * field — pure-Matter nodes carry the id there rather than as a flat
+ * `metadata.matter_node_id`, so the old metadata-only check missed them and
+ * they wrongly stayed selectable.
+ */
 export function isAutomationMatterIneligibleNode(node: ESPCDFNode): boolean {
-  return isRmngMatterAutomationDeviceNode(node);
+  return readMatterNodeIdFromCdfNode(node) != null;
 }

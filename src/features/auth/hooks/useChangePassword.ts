@@ -13,6 +13,7 @@ import {
   createPasswordValidator,
   createNewPasswordValidator,
   createConfirmPasswordValidator,
+  getAuthErrorDescription,
 } from "@features/auth/utils/authHelper";
 
 /**
@@ -83,10 +84,9 @@ export function useChangePassword() {
       toast.showSuccess(t("auth.changePassword.passwordChangedSuccessfully"));
       router.replace("/(auth)/Login");
     } catch (error: unknown) {
-      const err = error as { description?: string };
       toast.showError(
         t("auth.errors.changePasswordFailed"),
-        err.description || t("auth.errors.fallback")
+        getAuthErrorDescription(error) || t("auth.errors.fallback")
       );
     } finally {
       setIsLoading(false);

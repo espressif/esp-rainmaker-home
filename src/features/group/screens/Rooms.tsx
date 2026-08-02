@@ -34,6 +34,7 @@ const Rooms = observer(() => {
   const {
     home,
     rooms,
+    canAddRoom,
     refreshing,
     handleRefresh,
     handleAddRoom,
@@ -68,11 +69,13 @@ const Rooms = observer(() => {
         label={home?.name ?? ""}
         showBack={router.canGoBack()}
         rightSlot={
-          <Plus
-            size={24}
-            color={tokens.colors.primary}
-            onPress={handleAddRoom}
-          />
+          canAddRoom ? (
+            <Plus
+              size={24}
+              color={tokens.colors.primary}
+              onPress={handleAddRoom}
+            />
+          ) : undefined
         }
         qaId="header_rooms"
       />

@@ -5,7 +5,11 @@
  */
 
 import type { ProvisionStatus } from "@src/types/global";
-import { ESPCDFProvProgressMessages } from "@store";
+import {
+  ESPCDFOnNetworkProgressMessages,
+  ESPCDFProvProgressMessages,
+} from "@store";
+import { CHAL_RESP_PROGRESS_MESSAGES } from "@features/provision/constants";
 
 export type StageStatus = "pending" | "success" | "error";
 
@@ -128,14 +132,15 @@ export const getOnNetworkProvisionStages = (t: any): ProvisionStage[] => [
  * flow.
  */
 export const ON_NETWORK_MESSAGE_STAGE_MAP: Record<string, number> = {
-  "Initiating node association": 1,
-  "Sending challenge to device": 1,
-  "Verifying node association": 1,
-  "User node mapping succeed": 1,
+  [ESPCDFOnNetworkProgressMessages.INITIATING_NODE_ASSOCIATION]: 1,
+  [ESPCDFOnNetworkProgressMessages.SENDING_CHALLENGE_TO_DEVICE]: 1,
+  [ESPCDFOnNetworkProgressMessages.VERIFYING_NODE_ASSOCIATION]: 1,
+  [ESPCDFOnNetworkProgressMessages.USER_NODE_MAPPING_SUCCEED]: 1,
 };
 
 /**
- * Message to stage mapping for traditional flow
+ * Message to stage mapping for traditional MQTT association flow.
+ * Each message means that UI stage is complete (same pattern as native apps).
  */
 export const MESSAGE_STAGE_MAP: Record<string, number> = {
   [ESPCDFProvProgressMessages.DECODED_NODE_ID]: 1,
@@ -145,12 +150,30 @@ export const MESSAGE_STAGE_MAP: Record<string, number> = {
 };
 
 /**
- * Message to stage mapping for challenge-response flow
+ * Challenge-response (BLE / SoftAP) progress → UI stage completion.
+ *
+ * Mirrors MQTT `MESSAGE_STAGE_MAP`: only map milestones that mean a stage
+ * finished — not the in-progress strings that fire at the start of a step.
+ *
+ * | SDK progress | UI stage completed |
+ * |---|---|
+ * | SETTING_NETWORK_CREDENTIALS | 1 — cloud mapping verified; Wi-Fi about to apply |
+ * | WAITING_FOR_ONLINE (RainMaker Neo) | 2 — credentials applied; waiting for cloud online |
+ *
+ * Stage 2 also completes on `SUCCEED` (nodeId / DEVICE_PROVISIONED) in
+ * `useProvision` when WAITING_FOR_ONLINE is not emitted (RM base SDK).
+ * Stage 3 completes in `handleAddDeviceSuccess` (same as MQTT final step).
+ *
+ * INITIATING / SENDING / VERIFYING keep stage 1 pending (spinner) until
+ * association is confirmed.
  */
 export const CHAL_RESP_MESSAGE_STAGE_MAP: Record<string, number> = {
-  "Verifying node association...": 1,
-  "Setting network credentials...": 2,
+  [CHAL_RESP_PROGRESS_MESSAGES.SETTING_NETWORK_CREDENTIALS]: 1,
+  [CHAL_RESP_PROGRESS_MESSAGES.WAITING_FOR_ONLINE]: 2,
 };
+
+/** Chal-resp UI stage id for successful Wi-Fi / device provision (SUCCEED). */
+export const CHAL_RESP_WIFI_STAGE_ID = 2;
 
 /** Re-export for backward compatibility */
 export { extractErrorMessage } from "@shared/utils/common";

@@ -19,7 +19,7 @@ from hardware.firmware import FirmwareService
 from hardware.flashing import FlashingService
 from hardware.locking import SqliteResourceStore
 from hardware.models import EspResource, ResourceStatus
-from hardware.serial import SerialLogService
+from hardware.serial import SerialLogService, booted_firmware
 
 logger = logging.getLogger(__name__)
 
@@ -194,7 +194,7 @@ class ResourceManager:
         self.store.update_status(mac_address, status, error=error)
 
 
-def record_hardware_report(request, resource: EspResource, metadata) -> None:
+def record_hardware_report(request, resource: EspResource, metadata, extra=None) -> None:
     """
     Record hardware metadata for a test's HTML report.
 
@@ -208,6 +208,10 @@ def record_hardware_report(request, resource: EspResource, metadata) -> None:
             "usb_port": resource.port,
         }
     )
+    info.update(extra or {})
+    if getattr(resource, "serial_log_path", None):
+        for key, value in booted_firmware(resource.serial_log_path).items():
+            info.setdefault(key, value)
     store = getattr(request.session, _HARDWARE_REPORT_KEY, None)
     if store is None:
         store = {}

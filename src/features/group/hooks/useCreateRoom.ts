@@ -9,7 +9,11 @@ import type { TFunction } from "i18next";
 import type { ESPCDFGroup } from "@store";
 import { ESPCDFGroupSharingRequest } from "@store";
 import type { GroupSharedUser } from "@src/types/global";
-import { GROUP_TYPE_ROOM, ERROR_CODES_MAP } from "@shared/utils/constants";
+import {
+  GROUP_TYPE_ROOM,
+  ERROR_CODES_MAP,
+  GROUP_USER_ACCESS_PRIMARY,
+} from "@shared/utils/constants";
 import {
   getRemainingDays,
   isRequestExpired,
@@ -18,9 +22,7 @@ import {
 } from "@features/group/utils/dateUtils";
 import { generateRandomId } from "@shared/utils/common";
 import {
-  createGroupSharingInviteValidator,
-  getGroupSharingAllowedTypes,
-  isGroupSharingInviteAllowed,
+  validateGroupSharingInvite,
   normalizeGroupSharingInviteForApi,
 } from "@features/group/utils/settingsHelpers";
 import { getNodeDiff, mapNodeToDisplay } from "@features/group/utils/createRoomHelpers";
@@ -28,7 +30,7 @@ import { useCDF } from "@shared/hooks/useCDF";
 import { fetchNodesIfEmpty } from "@store";
 import type { Node } from "@src/types/global";
 import { getFeatures } from "@config/features.config";
-import { filterNodesForUserDeviceLists } from "@shared/utils/rmngMatterDeviceClassification";
+import { hasGroupLevelAccess } from "@shared/utils/groupAccess";
 
 export interface UseCreateRoomOptions {
   homeId: string | undefined;
@@ -72,6 +74,28 @@ export interface UseCreateRoomResult {
   handleUpdate: () => Promise<void>;
   handleDelete: () => void;
   confirmDelete: () => Promise<void>;
+  /**
+   * True when the viewer has group-level access to the home (primary/secondary).
+   * Gates room deletion — subgroup-only viewers cannot delete a room. Renaming
+   * is available to every viewer of the room (the backend grants
+   * `group:updatesubgroup` to all three access types).
+   */
+  canManageRoom: boolean;
+  /**
+   * True only for primary viewers — adding/removing a room's devices requires
+   * `group:editnodes`, which secondary and subgroup access do not carry.
+   */
+  canEditRoomDevices: boolean;
+  /**
+   * True for subgroup-only viewers on an existing room — their exit affordance
+   * is leaving the room. Primary/secondary users manage rooms via delete
+   * instead and never see leave.
+   */
+  canLeaveRoom: boolean;
+  showLeaveDialog: boolean;
+  setShowLeaveDialog: (show: boolean) => void;
+  isLeavingRoom: boolean;
+  confirmLeaveRoom: () => Promise<void>;
   /** Room (subgroup) sharing — only meaningful when `room` exists and `subGroupSharing` is enabled */
   isRoomSharePrimary: boolean;
   roomSharedUsers: GroupSharedUser[];
@@ -126,6 +150,8 @@ export function useCreateRoom(
     delete: false,
   });
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [showLeaveDialog, setShowLeaveDialog] = useState(false);
+  const [isLeavingRoom, setIsLeavingRoom] = useState(false);
 
   const [isRoomSharePrimary, setIsRoomSharePrimary] = useState(false);
   const [roomSharedUsers, setRoomSharedUsers] = useState<GroupSharedUser[]>(
@@ -146,13 +172,7 @@ export function useCreateRoom(
     useState(false);
   const [isRoomInviteValid, setIsRoomInviteValid] = useState(false);
 
-  const provisionSeedKeyRef = useRef<string | null>(null);
-
-  const roomInviteValidator = useMemo(
-    () =>
-      createGroupSharingInviteValidator(getGroupSharingAllowedTypes(), t),
-    [t]
-  );
+  const roomInviteValidator = validateGroupSharingInvite;
 
   const user = store?.userStore?.user;
 
@@ -166,13 +186,18 @@ export function useCreateRoom(
     [home?.subGroups, roomId]
   );
 
+  // Subgroup-only viewers get a read-only room screen (rename/devices/save/
+  // delete not allowed).
+  const canManageRoom = hasGroupLevelAccess(home?.accessType);
+  const canEditRoomDevices =
+    !home?.accessType || home.accessType === GROUP_USER_ACCESS_PRIMARY;
+  const canLeaveRoom = !!room && !canManageRoom;
+
   const nodes = useMemo(
     () =>
-      filterNodesForUserDeviceLists(
-        store?.nodeStore?.nodesList.filter((node) =>
-          home?.nodeIds?.includes(node.id),
-        ) ?? [],
-      ),
+      store?.nodeStore?.nodesList.filter((node) =>
+        home?.nodeIds?.includes(node.id),
+      ) ?? [],
     [store?.nodeStore?.nodesList, home?.nodeIds],
   );
 
@@ -196,15 +221,6 @@ export function useCreateRoom(
   useEffect(() => {
     if (home) fetchNodesIfEmpty(home);
   }, [home]);
-
-  useEffect(() => {
-    if (room) return;
-    if (showSelection) return;
-    if (!nodeId) return;
-    if (provisionSeedKeyRef.current === nodeId) return;
-    provisionSeedKeyRef.current = nodeId;
-    setSelectedNodesIds([nodeId]);
-  }, [room, showSelection, nodeId]);
 
   useEffect(() => {
     if (room) {
@@ -315,11 +331,14 @@ export function useCreateRoom(
     try {
       const existing = room.nodeIds ?? [];
       const { toAdd, toRemove } = getNodeDiff(existing, selectedNodesIds);
-      await Promise.allSettled([
-        room.updateGroupInfo({ groupName: roomName }),
-        toAdd.length > 0 ? room.addNodes(toAdd) : undefined,
-        toRemove.length > 0 ? room.removeNodes(toRemove) : undefined,
-      ]);
+      // Sequential — parallel add/remove raced MQTT shadow resync (same as CG edit).
+      await room.updateGroupInfo({ groupName: roomName });
+      if (toRemove.length > 0) {
+        await room.removeNodes(toRemove);
+      }
+      if (toAdd.length > 0) {
+        await room.addNodes(toAdd);
+      }
       toast.showSuccess(t("group.createRoom.roomUpdatedSuccessfully"));
       router.replace({
         pathname: "/(group)/CreateRoomSuccess",
@@ -350,6 +369,24 @@ export function useCreateRoom(
       setIsLoading((prev) => ({ ...prev, delete: false }));
     }
   }, [room, toast, t, router, homeId]);
+
+  const confirmLeaveRoom = useCallback(async () => {
+    if (!room) return;
+    setIsLeavingRoom(true);
+    try {
+      await room.leave();
+      toast.showSuccess(t("group.createRoom.roomLeftSuccessfully"));
+      // Leaving the only shared room removes the user's whole home association
+      // on the backend, so Rooms/Settings for this home may no longer exist —
+      // land on the Home screen, which re-syncs the home list on focus.
+      router.dismissTo("/(group)/Home");
+    } catch (error: any) {
+      toast.showError(error.description ?? t("group.errors.errorLeavingRoom"));
+    } finally {
+      setIsLeavingRoom(false);
+      setShowLeaveDialog(false);
+    }
+  }, [room, toast, t, router]);
 
   const getRoomSharedUsers = useCallback(async () => {
     if (!room) return;
@@ -434,9 +471,18 @@ export function useCreateRoom(
         setRoomSharedByUser(null);
       }
     } catch {
+      // Subgroup-only viewers may not be able to fetch the sharing list —
+      // degrade silently instead of toasting on every visit.
+      if (!canManageRoom) {
+        setIsRoomSharePrimary(false);
+        setRoomSharedUsers([]);
+        setRoomPendingUsers([]);
+        setRoomSharedByUser(null);
+        return;
+      }
       toast.showError(t("group.errors.errorGettingSharedUsers"));
     }
-  }, [room, user, t, toast]);
+  }, [room, user, t, toast, canManageRoom]);
 
   const getRoomSharedUsersRef = useRef(getRoomSharedUsers);
   getRoomSharedUsersRef.current = getRoomSharedUsers;
@@ -450,12 +496,8 @@ export function useCreateRoom(
 
   const handleAddRoomUser = useCallback(async () => {
     if (!room) return;
-    const allowed = getGroupSharingAllowedTypes();
-    if (!isGroupSharingInviteAllowed(newRoomUserInvite, allowed)) return;
-    const toUserName = normalizeGroupSharingInviteForApi(
-      newRoomUserInvite,
-      allowed
-    );
+    if (!validateGroupSharingInvite(newRoomUserInvite).isValid) return;
+    const toUserName = normalizeGroupSharingInviteForApi(newRoomUserInvite);
     setIsAddingRoomUserLoading(true);
     try {
       if (transferRoomAndAssignRole) {
@@ -593,6 +635,13 @@ export function useCreateRoom(
     roomName,
     setRoomName,
     room,
+    canManageRoom,
+    canEditRoomDevices,
+    canLeaveRoom,
+    showLeaveDialog,
+    setShowLeaveDialog,
+    isLeavingRoom,
+    confirmLeaveRoom,
     selectedNodes,
     availableNodes,
     isLoading,

@@ -14,7 +14,7 @@ import pytest
 from pytest_bdd import scenarios, then, when
 
 logger = logging.getLogger(__name__)
-pytestmark = [pytest.mark.regression, pytest.mark.provisioning]
+pytestmark = [pytest.mark.regression, pytest.mark.provisioning, pytest.mark.softap]
 
 scenarios("softap.feature")
 

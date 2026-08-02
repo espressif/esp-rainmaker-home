@@ -1,5 +1,5 @@
 /**
- * Initialize polyfills for RMNG SDK and Node-style modules.
+ * Initialize polyfills for RainMaker Neo SDK and Node-style modules.
  * Must be imported before any SDK or code that uses Buffer/crypto/URL.
  * Import this first in app/_layout.tsx.
  */

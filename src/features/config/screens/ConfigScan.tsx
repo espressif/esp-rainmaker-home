@@ -33,6 +33,8 @@ export function ConfigScanScreen() {
     handleUpdateConfig,
     handleCancel,
     handleBackFromScanner,
+    savedDeploymentLabel,
+    handleContinueWithSaved,
   } = useConfigScan();
 
   if (!showScanner) {
@@ -41,6 +43,8 @@ export function ConfigScanScreen() {
         title={title}
         onUpdateConfig={handleUpdateConfig}
         onCancel={handleCancel}
+        savedDeploymentLabel={savedDeploymentLabel}
+        onContinueWithSaved={handleContinueWithSaved}
       />
     );
   }

@@ -12,6 +12,10 @@ export const MATTER_PARAM_VALUE_UNKNOWN = "unknown";
 /** Idle UI value for write-only Matter command params. */
 export const MATTER_PARAM_COMMAND_IDLE = "idle";
 
+/** On/Off cluster (0x0006) command ids. */
+export const MATTER_ON_OFF_CMD_OFF = 0x00;
+export const MATTER_ON_OFF_CMD_ON = 0x01;
+
 /** Level Control cluster (0x0008) command ids. */
 export const MATTER_LEVEL_CMD_MOVE_TO_LEVEL_WITH_ON_OFF = 0x04;
 

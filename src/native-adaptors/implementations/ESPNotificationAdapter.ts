@@ -4,7 +4,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { DeviceEventEmitter, EmitterSubscription } from "react-native";
+import {
+  DeviceEventEmitter,
+  EmitterSubscription,
+} from "react-native";
 import ESPNotificationModule from "../interfaces/ESPNotificationInterface";
 import { normalizeNotificationPayload } from "@shared/utils/notificationHelper";
 
@@ -19,7 +22,7 @@ export const ESPNotificationAdapter = {
    * @returns A cleanup function to remove this listener.
    */
   addNotificationListener: async (
-    callback: (data: Record<string, any>) => void
+    callback: (data: Record<string, any>) => void,
   ): Promise<() => void> => {
     try {
       callbacks.add(callback);
@@ -28,9 +31,13 @@ export const ESPNotificationAdapter = {
         emitterSubscription = DeviceEventEmitter.addListener(
           "ESPNotificationModule",
           (data: Record<string, any>) => {
-            console.log("ESPNotificationAdapter", "notification received", data);
+            console.log(
+              "ESPNotificationAdapter",
+              "notification received",
+              data,
+            );
             const normalized = normalizeNotificationPayload(
-              data as Record<string, unknown>
+              data as Record<string, unknown>,
             ) as Record<string, any>;
             callbacks.forEach((cb) => {
               try {
@@ -39,7 +46,7 @@ export const ESPNotificationAdapter = {
                 console.error("[ESPNotificationAdapter] Listener error:", err);
               }
             });
-          }
+          },
         );
       }
 
@@ -51,7 +58,7 @@ export const ESPNotificationAdapter = {
         }
       };
     } catch {
-      return () => { };
+      return () => {};
     }
   },
 
@@ -73,6 +80,22 @@ export const ESPNotificationAdapter = {
     } catch (error) {
       console.error("Error getting notification platform:", error);
       throw error;
+    }
+  },
+
+  /**
+   * Returns the Firebase project id backing this build's FCM token (Android),
+   * used to select the correct RainMaker Neo `gcm` push integration. Resolves "" when
+   * the native method is unavailable (iOS / CN build / older native binary) so
+   * callers can fall back to build-time config.
+   */
+  getPushProjectId: async (): Promise<string> => {
+    try {
+      const projectId = await ESPNotificationModule.getPushProjectId?.();
+      return typeof projectId === "string" ? projectId : "";
+    } catch (error) {
+      console.warn("Error getting push project id:", error);
+      return "";
     }
   },
 };

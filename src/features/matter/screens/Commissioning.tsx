@@ -63,6 +63,7 @@ export function CommissioningScreen({
     phase,
     statusMessage,
     errorMessage,
+    matterUnsupported,
     activeHomeName,
     onConfirmConvert,
     onDeclineConvert,
@@ -123,7 +124,9 @@ export function CommissioningScreen({
               {...testProps("text_matter_commissioning_scan_again")}
               style={styles.scanAgainHint}
             >
-              {t("device.matter.commissioning.scanAgainHint")}
+              {matterUnsupported
+                ? t("device.matter.commissioning.notSupportedHint")
+                : t("device.matter.commissioning.scanAgainHint")}
             </Text>
           </View>
         )}

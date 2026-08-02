@@ -4,10 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-export { default as GenericChart } from "./GenericChart";
-export { default as TimeNavigator } from "./TimeNavigator";
-export { default as ChartHeader } from "./ChartHeader";
+export { default as GranularityTabs } from "./GranularityTabs";
+export { default as ChartSummaryHeader } from "./ChartSummaryHeader";
+export { default as TimeSeriesBarChart } from "./TimeSeriesBarChart";
+export { default as ChartFootnotes } from "./ChartFootnotes";
 export { default as ChartMessage } from "./ChartMessage";
-export { default as ChartPeriodSelector } from "./ChartPeriodSelector";
-export { default as ChartTypeToggle } from "./ChartTypeToggle";
-export { default as AggregationDropdown } from "./AggregationDropdown";

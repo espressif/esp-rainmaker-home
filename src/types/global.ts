@@ -802,6 +802,13 @@ export interface HomeRemoveProps {
   isPrimary: boolean;
 }
 
+export interface RoomLeaveProps {
+  onLeave: () => void;
+  isLoading: boolean;
+  showLeave: boolean;
+  setShowLeave: (show: boolean) => void;
+}
+
 export interface GroupSharingProps {
   sharedUsers: GroupSharedUser[];
   pendingUsers?: GroupSharedUser[];
@@ -834,6 +841,12 @@ export interface AddUserModalProps {
   onTransferChange?: (transfer: boolean) => void;
   transferAndAssignRole?: boolean;
   onTransferAndAssignRoleChange?: (transferAndAssignRole: boolean) => void;
+  /**
+   * Show the ownership/transfer role checkboxes (default true). Pass false when the
+   * share target has no role support — e.g. room shares always grant room-scoped
+   * access and any requested role is ignored.
+   */
+  showRoleOptions?: boolean;
   /** Merged with the modal card container (e.g. horizontal inset on small screens) */
   contentContainerStyle?: ViewStyleProp;
 }
@@ -1072,6 +1085,11 @@ export interface UseCommissioningResult {
   statusMessage: string;
   /** User-visible error when `phase` is `error`; otherwise `null`. */
   errorMessage: string | null;
+  /**
+   * The active stack has no Matter support, so `errorMessage` explains that
+   * rather than reporting a failure. Rescanning cannot help.
+   */
+  matterUnsupported: boolean;
   /** Display name of the active home (updated after fabric conversion). */
   activeHomeName: string;
   /** User accepted converting the active home to a Matter fabric. */
@@ -1152,65 +1170,13 @@ export type {
   FontSizeLevel,
   AgentTermsBottomSheetStyles, AgentConversationsSheetStyles
 } from "@features/agent/utils/types";
-// Time Series Types
+// Time Series Chart Types
 // ============================================================================
 
 /**
- * Time series period options for chart display
+ * Chart tab granularity: one calendar bucket size per tab (Daily / Weekly / Monthly).
  */
-export type TimeSeriesPeriod = "1H" | "1D" | "7D" | "4W" | "1Y" | null;
-
-/**
- * Aggregation method options for time series data
- */
-export type AggregationMethod = "raw" | "avg" | "min" | "max" | "count" | "latest";
-
-/**
- * Parameters for building time series data request
- */
-export interface TimeSeriesRequestParams {
-  /** Selected time period (1D, 7D, 4W, 1Y) - null when using custom range */
-  period: TimeSeriesPeriod | null;
-  /** Aggregation method (ignored for simple time series) */
-  aggregation?: AggregationMethod;
-  /** Optional start time (Unix timestamp in milliseconds). Will be converted to seconds for API */
-  startTime?: number;
-  /** Optional end time (Unix timestamp in milliseconds). Will be converted to seconds for API */
-  endTime?: number;
-  /** Optional result count limit */
-  resultCount?: number;
-  /** Optional flag to order results in descending order */
-  descOrder?: boolean;
-  /** Optional timezone string (e.g., "Asia/Kolkata") */
-  timezone?: string;
-  /** Flag indicating if this is a simple time series param (only start/end time, no aggregation/intervals) */
-  isSimpleTimeSeries?: boolean;
-  /** Optional dynamic aggregation interval (day, month, year) - overrides period-based interval */
-  aggregationInterval?: AggregationIntervalType;
-}
-
-/**
- * Aggregation interval types for time series data
- */
-export type AggregationIntervalType = "minute" | "hour" | "day" | "week" | "month" | "year";
-
-/**
- * Validation error class for time series operations
- */
-export class TimeSeriesValidationError extends Error {
-  /**
-   * TimeSeriesValidationError constructor
-   * @param message - The error message
-   */
-  constructor(message: string) {
-    super(message);
-    this.name = "TimeSeriesValidationError";
-  }
-}
-
-// ============================================================================
-// Chart Types
-// ============================================================================
+export type ChartGranularity = "daily" | "weekly" | "monthly";
 
 /**
  * High-level state of the chart view
@@ -1218,53 +1184,42 @@ export class TimeSeriesValidationError extends Error {
 export type ChartState = "loading" | "error" | "unsupported" | "empty" | "ready";
 
 /**
- * Props for TimeNavigator component
+ * Boundaries of a single chart bucket (one bar slot), before data is loaded.
  */
-export interface TimeNavigatorProps {
-  /** The selected time period */
-  period?: TimeSeriesPeriod;
-  /** The time offset from current time (0 = current period, 1 = previous period, etc.) */
-  offset?: number;
-  /** Whether data is currently loading */
-  loading?: boolean;
-  /** Callback when previous period button is pressed */
-  onPrevious: () => void;
-  /** Callback when next period button is pressed */
-  onNext: () => void;
-  /** Whether navigation to next period is allowed */
-  canNavigateNext: boolean;
-  /** Optional pre-formatted label to display instead of deriving from period/offset */
-  label?: string;
+export interface TimeSeriesBucketBoundary {
+  /** Bucket start (inclusive), Unix milliseconds */
+  start: number;
+  /** Bucket end (exclusive), Unix milliseconds */
+  end: number;
+  /** Short x-axis label for the bucket (e.g. "12 Jul", "07-13 Jul", "Jul'26"); also the tooltip's period line */
+  label: string;
 }
 
-/** Represents a single data point in a chart */
-export interface ChartDataPoint {
-  /** The numeric value of the data point (null for missing data) */
+/**
+ * A chart bucket with its aggregated value (null when the bucket has no data).
+ */
+export interface TimeSeriesBucket extends TimeSeriesBucketBoundary {
+  /** Aggregated value for the bucket, or null when no data was reported */
   value: number | null;
-  /** The label/timestamp for the data point */
-  label: string;
-  /** Optional timestamp in milliseconds */
-  timestamp?: number;
 }
 
-
-
 /**
- * Props interface for ChartHeader component
+ * How the window summary value relates to the buckets.
  */
-export interface ChartHeaderProps {
-  /** Label to show for the parameter */
-  label: string;
-  /** Parameter object that exposes current value and setValue */
-  param: any | null;
-  /** Whether the parameter is writeable */
-  isWriteable?: boolean;
-  /** Disable editing state (e.g. while loading chart data) */
-  disabled?: boolean;
+export type TimeSeriesSummaryKind = "average" | "total";
+
+/**
+ * Summary of the visible chart window (the big number above the chart).
+ */
+export interface TimeSeriesSummary {
+  /** Summary value across non-empty buckets, or null when the window is empty */
+  value: number | null;
+  /** Whether the value is an average or a total of the window */
+  kind: TimeSeriesSummaryKind;
 }
 
 /**
- * Props interface for ChartMessage component
+ * Props for ChartMessage component
  */
 export interface ChartMessageProps {
   /** Message text to display in the chart area */
@@ -1272,200 +1227,87 @@ export interface ChartMessageProps {
 }
 
 /**
- * Normalized chart data point with required timestamp and value.
- * Used internally by GenericChart after data normalization.
+ * Props for GranularityTabs component
  */
-export interface NormalizedChartDataPoint extends Record<string, unknown> {
-  /** Timestamp in milliseconds (required) */
-  timestamp: number;
-  /** Numeric value (required, non-null) */
-  value: number;
-}
-
-/** Props interface for GenericChart component */
-export interface GenericChartProps {
-  /** Chart data points with timestamp and value */
-  data: ChartDataPoint[];
-  /** Height of the chart */
-  height?: number;
-  /** Optional start time for the chart domain */
-  startTime?: number | null;
-  /** Optional end time for the chart domain */
-  endTime?: number | null;
-  /** Chart type: "line" or "bar" */
-  type?: "line" | "bar";
+export interface GranularityTabsProps {
+  /** Currently selected granularity */
+  selected: ChartGranularity;
+  /** Disables tab presses (e.g. while loading) */
+  disabled?: boolean;
+  /** Handler called with the granularity of the pressed tab */
+  onSelect: (granularity: ChartGranularity) => void;
 }
 
 /**
- * Props for AggregationDropdown component
+ * Props for ChartSummaryHeader component
  */
-export interface AggregationDropdownProps {
-  /** Currently selected aggregation method */
-  aggregation: AggregationMethod;
-  /** Available aggregation methods */
-  aggregations: AggregationMethod[];
-  /** Whether data is currently loading */
+export interface ChartSummaryHeaderProps {
+  /** Formatted summary value with unit (e.g. "76.4 kWh"), or a placeholder */
+  valueLabel: string;
+  /** Formatted window range label (e.g. "07-Jun-26 to 25-Jul-26") */
+  rangeLabel: string;
+  /** Whether paging forward (towards now) is possible */
+  canGoNext: boolean;
+  /** Disables both pagers (e.g. while loading) */
+  disabled?: boolean;
+  /** Handler for paging one window back in time */
+  onPrevious: () => void;
+  /** Handler for paging one window forward in time */
+  onNext: () => void;
+}
+
+/**
+ * Props for TimeSeriesBarChart component
+ */
+export interface TimeSeriesBarChartProps {
+  /** The buckets of the visible window, one bar per bucket */
+  buckets: TimeSeriesBucket[];
+  /** Unit suffix appended to the tooltip value (e.g. "°"), may be empty */
+  unit: string;
+  /** Index of the selected (highlighted) bucket, or null for no selection */
+  selectedIndex: number | null;
+  /** Handler called with the tapped bucket index */
+  onSelectBar: (index: number) => void;
+  /** Render an x-axis label only every Nth bucket (1 = every bucket) */
+  labelEveryNth?: number;
+}
+
+/**
+ * Return type for the useTimeSeriesChart hook
+ */
+export interface UseTimeSeriesChartResult {
+  /** Title for the screen header (param name) */
+  title: string;
+  /** Currently selected granularity tab */
+  granularity: ChartGranularity;
+  /** Buckets of the visible window (empty while loading/unsupported) */
+  buckets: TimeSeriesBucket[];
+  /** Window summary shown above the chart */
+  summary: TimeSeriesSummary;
+  /** Unit suffix for values (may be empty) */
+  unit: string;
+  /** Formatted range label for the visible window */
+  rangeLabel: string;
+  /** Overall view state driving chart vs message rendering */
+  chartState: ChartState;
+  /** Localized message for every non-ready chart state */
+  chartStateLabelMap: Record<Exclude<ChartState, "ready">, string>;
+  /** Whether a data request is in flight */
   loading: boolean;
-  /** Whether the aggregation tooltip is visible */
-  tooltipVisible: boolean;
-  /** Current tooltip anchor position */
-  tooltipPosition: { x: number; y: number };
-  /** Setter for tooltip visibility */
-  setTooltipVisible: (visible: boolean) => void;
-  /** Setter for tooltip position */
-  setTooltipPosition: (position: { x: number; y: number }) => void;
-  /** Ref to the aggregation button */
-  buttonRef: React.RefObject<any>;
-  /** Ref to the chart container */
-  chartContainerRef: React.RefObject<any>;
-  /** Handler when an aggregation is selected */
-  onSelectAggregation: (agg: string) => void;
-}
-
-// ============================================================================
-// Time Series Data Hook Types
-// ============================================================================
-
-/**
- * Return type for useTimeSeriesData hook
- */
-export interface UseTimeSeriesDataResult {
-  /** Array of chart data points */
-  data: ChartDataPoint[];
-  /** Whether data is currently being fetched */
-  loading: boolean;
-  /** Error object if fetch failed, null otherwise */
-  error: Error | null;
-  /** Function to fetch time series data for a given period and aggregation */
-  fetchData: (period: TimeSeriesPeriod | null, aggregation: AggregationMethod, startTime: number, endTime: number, aggregationInterval?: AggregationIntervalType) => Promise<void>;
-}
-
-// ============================================================================
-// Date Range Calendar Types
-// ============================================================================
-
-/**
- * Date range selection result
- */
-export interface DateRange {
-  /** Start timestamp in Unix milliseconds */
-  start: number;
-  /** End timestamp in Unix milliseconds */
-  end: number;
-  /** Suggested aggregation interval based on range duration */
-  aggregationInterval: AggregationIntervalType;
-}
-
-/**
- * Props for DateRangeCalendarBottomSheet component
- */
-export interface DateRangeCalendarBottomSheetProps {
-  /** Whether the bottom sheet is visible */
-  visible: boolean;
-  /** Callback when bottom sheet is closed */
-  onClose: () => void;
-  /** Callback when date range is selected */
-  onSelect: (range: DateRange) => void;
-  /** Initial selected range (optional) */
-  range?: DateRange;
-  /** Aggregation method - "raw" has 31 day limit */
-  aggregation?: "raw" | string;
-  /** Minimum date (timestamp in ms) - dates before this are disabled */
-  minDate?: number;
-  /** Maximum date (timestamp in ms) - dates after this are disabled */
-  maxDate?: number;
-  /** Week start day (0 = Sunday, 1 = Monday, etc.) - only for week interval */
-  weekStart?: number;
-  /** Flag to indicate simple time series (no interval restrictions) */
-  isSimpleTimeSeries?: boolean;
-  /** @deprecated Position to anchor (kept for backward compatibility) */
-  anchorPosition?: { x: number; y: number };
-}
-
-/**
- * Methods exposed via ref for DateRangeCalendarBottomSheet
- */
-export interface DateRangeCalendarBottomSheetRef {
-  /** Clears the current date selection */
-  clearSelection: () => void;
-}
-
-// ============================================================================
-// Aggregation Tooltip Types
-// ============================================================================
-
-/**
- * Props for AggregationTooltip component
- */
-export interface AggregationTooltipProps {
-  /** Whether the tooltip is visible */
-  visible: boolean;
-  /** Callback when tooltip is closed */
-  onClose: () => void;
-  /** Position to anchor the tooltip */
-  anchorPosition?: { x: number; y: number };
-  /** List of available aggregation types */
-  aggregations: string[];
-  /** Callback when an aggregation is selected */
-  onSelectAggregation: (agg: string) => void;
-  /** Currently selected aggregation */
-  selectedAggregation: string;
-}
-
-/**
- * Props for ChartPeriodSelector component
- */
-export interface ChartPeriodSelectorProps {
-  /** Available time series periods */
-  periods: TimeSeriesPeriod[];
-  /** Currently selected period (null when using custom range) */
-  selectedPeriod: TimeSeriesPeriod | null;
-  /** Currently selected custom date range, if any */
-  customDateRange: DateRange | null;
-  /** Whether data is currently loading */
-  loading: boolean;
-  /** Handler called when a period is selected */
-  onSelect: (period: TimeSeriesPeriod) => void;
-}
-
-/**
- * Props for PeriodTab component
- */
-export interface PeriodTabProps {
-  /** The time series period to display */
-  period: TimeSeriesPeriod;
-  /** Whether this period tab is currently active */
-  isActive: boolean;
-  /** Whether data is currently loading */
-  loading: boolean;
-  /** Handler called when the tab is pressed */
-  onPress: () => void;
-}
-
-/**
- * Props for ActiveValueIndicator component
- */
-export interface ActiveValueIndicatorProps {
-  xPosition: any;
-  yPosition: any;
-  bottom: number;
-  top: number;
-  lineColor: string;
-  indicatorColor: any;
-}
-
-/**
- * Props for ChartValueDisplayToolTip component
- */
-export interface ChartValueDisplayToolTipProps {
-  activeValue: any;
-  activeTimestamp: any;
-  xPosition: any;
-  yPosition: any;
-  chartLeft: number;
-  chartRight: number;
-  chartTop: number;
-  chartBottom: number;
+  /** Whether paging forward (towards now) is possible */
+  canGoNext: boolean;
+  /** Index of the selected bar, or null */
+  selectedIndex: number | null;
+  /** X-axis label density for the current granularity (1 = label every bucket) */
+  labelEveryNth: number;
+  /** Selects a granularity tab (resets paging and selection) */
+  onSelectGranularity: (granularity: ChartGranularity) => void;
+  /** Pages one window back in time */
+  onPreviousWindow: () => void;
+  /** Pages one window forward in time */
+  onNextWindow: () => void;
+  /** Selects (highlights) a bar by bucket index */
+  onSelectBar: (index: number) => void;
 }
 
 // ============================================================================

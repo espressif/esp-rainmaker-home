@@ -15,14 +15,14 @@ import {
 } from "@src/tasks/matterCommissioningTask";
 
 /**
- * Registers Android Headless JS tasks for Matter commissioning.
+ * Registers Android Headless JS tasks for RainMaker Matter commissioning.
  *
- * Native `MatterHeadlessTaskService` starts these by name (`AppConstants.TASK_*` in Kotlin).
- * Success paths:
- * - Issue NOC: SDK `issueNodeNoC` → `matterCommissioningAdaptor.postMessage(ISSUE_NODE_NOC_RESPONSE)` → ChipClient
- * - Confirm: `handleHeadlessTaskResult(CONFIRM_COMMISSION)` → `MatterCommissioningEvent` → UI hook
+ * Native `MatterHeadlessTaskService` starts these by name (`AppConstants.TASK_*` in Kotlin):
+ * - Issue NOC: forwards the device CSR to the RainMaker backend via SDK `issueNodeNoC`,
+ *   then the response is posted back to the native ChipClient.
+ * - Confirm: reports the commissioned node to the cloud and drives the UI hook.
  */
-export function registerHeadlessTasks() {
+export function registerHeadlessTasks(): void {
   AppRegistry.registerHeadlessTask(
     HEADLESS_JS_TASK_MATTER_ISSUE_NOC,
     () => async (taskData: any) => {

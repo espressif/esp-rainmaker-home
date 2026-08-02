@@ -24,6 +24,8 @@ import {
   MATTER_CLUSTER_ID_RVC_OPERATIONAL_STATE,
   MATTER_CLUSTER_ID_RVC_RUN_MODE,
   MATTER_CLUSTER_ID_TEMPERATURE_MEASUREMENT,
+  MATTER_CLUSTER_ID_USER_LABEL,
+  MATTER_USER_LABEL_LIST_ATTRIBUTE_ID,
 } from "./constants";
 import type { ClusterConfigMap } from "@espressif/rainmaker-matter-sdk";
 import { MATTER_PARAM_VALUE_UNKNOWN } from "@espressif/rainmaker-matter-sdk";
@@ -37,6 +39,9 @@ import {
   ESPRM_UI_SLIDER_PARAM_TYPE,
   ESPRM_UI_HUE_SLIDER_PARAM_TYPE,
   ESPRM_UI_CCT_SLIDER_PARAM_TYPE,
+  ESPRM_UI_HIDDEN_PARAM_TYPE,
+  ESPRM_NAME_PARAM_TYPE,
+  DATA_TYPE_STRING,
   ESPRM_TEMPERATURE_PARAM_TYPE,
   PARAM_CONTROL_INVOKE_VALUE,
 } from "@shared/utils/constants";
@@ -98,6 +103,7 @@ import {
   RVC_OPERATIONAL_STATE_CMD_START,
   RVC_OPERATIONAL_STATE_MAP,
 } from "./utils/rvcOperationalState";
+import { createUserLabelDeviceNameResolver } from "./utils/userLabel";
 
 /** RVC Run Mode cluster id (RvcRunMode, ModeBase derivative). */
 const RVC_RUN_MODE_CLUSTER_ID = MATTER_CLUSTER_ID_RVC_RUN_MODE;
@@ -613,6 +619,22 @@ export const matterClusterConfig: ClusterConfigMap = {
             return String(Math.round((Math.min(value, 200) / 200) * 100));
           },
         }),
+      },
+    ],
+  },
+  "0x41": {
+    clusterId: MATTER_CLUSTER_ID_USER_LABEL,
+    name: "User Label",
+    params: [
+      {
+        name: "Name",
+        type: ESPRM_NAME_PARAM_TYPE,
+        valueAttribute: MATTER_USER_LABEL_LIST_ATTRIBUTE_ID,
+        optionsAttribute: MATTER_USER_LABEL_LIST_ATTRIBUTE_ID,
+        uiType: ESPRM_UI_HIDDEN_PARAM_TYPE,
+        dataType: DATA_TYPE_STRING,
+        properties: ["read", "write"],
+        resolver: createUserLabelDeviceNameResolver(),
       },
     ],
   },

@@ -26,6 +26,7 @@ import { ESPRMFabric } from "@espressif/rainmaker-matter-sdk";
 import { ESPRMMatterBaseAdaptorIdentifier } from "./constants";
 import { transformToESPCDFGroup } from "./transformers/transformToESPCDFGroup";
 import { subscribeMatterControllerTransport } from "./matterControllerTransportHandler";
+import { getMatterNodeId } from "@shared/utils/matterLocalStorage";
 
 type MatterSdkGroupsPage = {
   groups?: ESPRMGroup[];
@@ -218,6 +219,42 @@ function runNodeSyncForAllGroups(
   }
 }
 
+/** SDK node shape enriched in place before CDF transform. */
+type MatterSdkNodeLike = {
+  id?: string;
+  matterNodeId?: string;
+  metadata?: Record<string, unknown>;
+};
+
+/**
+ * Re-attaches the operational Matter node id the cloud omitted for hybrid
+ * RainMaker+Matter nodes (persisted at commissioning by `setMatterNodeId`), so
+ * local discovery can target them. Stamps both the direct field and
+ * `metadata.matter_node_id`, which `transformToESPCDFNode` copies by reference.
+ * @param nodes - Raw SDK nodes from `getNodesWithDetails`, mutated in place.
+ */
+async function injectLocalMatterNodeIds(nodes: MatterSdkNodeLike[]): Promise<void> {
+  await Promise.all(
+    nodes.map(async (node) => {
+      const nodeId = node?.id;
+      if (!nodeId) return;
+      const meta = node.metadata as
+        | { matter_node_id?: string; matterNodeId?: string }
+        | undefined;
+      const existing =
+        node.matterNodeId ?? meta?.matter_node_id ?? meta?.matterNodeId;
+      if (typeof existing === "string" && existing.trim()) return;
+
+      const stored = await getMatterNodeId(nodeId);
+      if (!stored) return;
+
+      node.matterNodeId = stored;
+      const target = (node.metadata ??= {});
+      target.matter_node_id = stored;
+    }),
+  );
+}
+
 /**
  * Loads node details for a group via the Matter SDK raw group instance.
  * @param group - CDF group whose `_raw` SDK instance provides node details
@@ -235,6 +272,11 @@ async function fetchNodesForGroup(group: ESPCDFGroup, esprmUser: ESPRMUser): Pro
     : await (raw as ESPRMGroup & {
       getNodesWithDetails?: () => Promise<unknown[]>;
     }).getNodesWithDetails?.() ?? [];
+
+  // Re-attach locally-persisted matter_node_id the cloud omitted for hybrid nodes.
+  if (group.isMatter) {
+    await injectLocalMatterNodeIds(nodes as unknown as MatterSdkNodeLike[]);
+  }
 
   const cdfNodes = transformToESPCDFNodes(nodes, "matterGroupSync.fetchNodesForGroup");
 

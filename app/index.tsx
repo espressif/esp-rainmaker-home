@@ -19,6 +19,7 @@ import { executePostLoginPipeline } from "@features/auth/utils/postLoginPipeline
 import { isConsentAccepted } from "@features/consent";
 import { getFeatures } from "@config/features.config";
 import { isCnRegion } from "@config/region.config";
+import { getPreAuthRoute } from "@features/landing";
 // theme
 import { tokens } from "@shared/theme/tokens";
 
@@ -57,14 +58,20 @@ const Index = () => {
         return;
       }
 
-      const validRoutes = ["/ConfirmationCode", "/Forgot", "/Login", "/Signup"];
+      const validRoutes = [
+        "/Landing",
+        "/ConfirmationCode",
+        "/Forgot",
+        "/Login",
+        "/Signup",
+      ];
       const isAuthRoute = validRoutes.some((route) => pathname.includes(route));
       if (!isAuthRoute) {
-        router.replace("/(auth)/Login");
+        router.replace(getPreAuthRoute() as never);
       }
     } catch {
       await user?.logout();
-      router.replace("/(auth)/Login");
+      router.replace(getPreAuthRoute() as never);
     }
   };
 

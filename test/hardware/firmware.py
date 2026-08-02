@@ -20,7 +20,7 @@ from hardware.requirements import HardwareRequirement, normalize_chip
 
 logger = logging.getLogger(__name__)
 
-_COMMIT_PREFIX = re.compile(r"^(esp-idf|esp-rainmaker):\s*HEAD:\s*([0-9a-f]+)", re.I)
+_COMMIT_PREFIX = re.compile(r"^(esp-idf|esp-rainmaker|rmng-sdk):\s*(?:HEAD:\s*)?(?:[^:]+:\s*)*?([0-9a-f]{7,40})\s*$", re.I)
 _KV_PATTERN = re.compile(r"^([a-z_]+):\s*(.+)$", re.I)
 
 
@@ -32,10 +32,12 @@ class BuildMetadata:
     chip: Optional[str] = None
     prov_mode: Optional[str] = None
     chal_resp: bool = False
+    deployment: Optional[str] = None
     flash_size: Optional[str] = None
     firmware_type: Optional[str] = None
     esp_idf_commit: Optional[str] = None
     esp_rainmaker_commit: Optional[str] = None
+    rmneo_sdk_commit: Optional[str] = None
     ota_version_number: Optional[str] = None
     ota_version_string: Optional[str] = None
     source_path: Optional[str] = None
@@ -57,6 +59,8 @@ class BuildMetadata:
             "firmware_type": self.firmware_type or "",
             "esp_idf_commit": (self.esp_idf_commit or "")[:8],
             "esp_rainmaker_commit": (self.esp_rainmaker_commit or "")[:8],
+            "rmneo_sdk_commit": (self.rmneo_sdk_commit or "")[:8],
+            "firmware_build": Path(self.source_path).parent.name if self.source_path else "",
         }
 
 
@@ -135,6 +139,8 @@ class FirmwareService:
                 continue
             if requirement.chal_resp is not None and metadata.chal_resp != requirement.chal_resp:
                 continue
+            if requirement.deployment and metadata.deployment and requirement.deployment != metadata.deployment:
+                continue
             return metadata
         available = ", ".join(
             f"{meta.bundle_root.name} (chip={meta.chip}, product={meta.product}, prov_mode={meta.prov_mode})"
@@ -162,6 +168,8 @@ class FirmwareService:
                     metadata.esp_idf_commit = commit_match.group(2)
                 elif key == "esp-rainmaker":
                     metadata.esp_rainmaker_commit = commit_match.group(2)
+                elif key == "rmng-sdk":
+                    metadata.rmneo_sdk_commit = commit_match.group(2)
                 continue
 
             kv_match = _KV_PATTERN.match(stripped)
@@ -175,6 +183,8 @@ class FirmwareService:
                 metadata.chip = normalize_chip(value)
             elif key == "prov_mode":
                 metadata.prov_mode = value.lower()
+            elif key == "deployment":
+                metadata.deployment = value.lower()
             elif key == "flash_size":
                 metadata.flash_size = value
             elif key == "firmware_type" and not metadata.firmware_type:
@@ -188,6 +198,9 @@ class FirmwareService:
             ("CHAL_RESP" in upper or "CHALLENGE_RESPONSE" in upper) and upper.rstrip().endswith("=Y")
             for upper in (line.upper() for line in lines)
         )
+
+        if not metadata.deployment:
+            metadata.deployment = "rmneo" if any(line.strip().lower().startswith("rmng-sdk") for line in lines) else "rm"
 
         logger.info(
             "Loaded build metadata chip=%s product=%s prov_mode=%s chal_resp=%s from %s",

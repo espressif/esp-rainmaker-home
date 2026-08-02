@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { ComponentProps, useContext, useMemo, useRef } from "react";
+import { ComponentProps, useMemo, useRef } from "react";
 import {
   View,
   Text,
@@ -22,12 +22,14 @@ import { tokens } from "@shared/theme/tokens";
 
 import { useLogin } from "@features/auth/hooks";
 import { getAuthAllowedUsernameTypes } from "@features/auth/utils/authHelper";
-import { getEnabledOAuthProviders } from "@/config/features.config";
+import { getEnabledOAuthProviders, getFeatures } from "@/config/features.config";
 import { isCnRegion } from "@config/region.config";
-import { runtimeConfigManager } from "@config/runtime.config";
-import { cdfBootstrap } from "@integrations";
-import asyncStorageAdapter from "@native-adaptors/implementations/ESPAsyncStorage";
-import { AppRestartContext } from "@context/appRestart.context";
+import {
+  DEPLOYMENT_KIND,
+  getCurrentDeploymentKind,
+  getDeploymentLabelKey,
+  getDeploymentWordmark,
+} from "@features/landing";
 
 import {
   ScreenWrapper,
@@ -67,7 +69,7 @@ export function LoginScreen() {
   const { t } = useTranslation();
   const router = useRouter();
   const ENABLED_OAUTH_PROVIDERS = getEnabledOAuthProviders();
-  const { restartApp } = useContext(AppRestartContext);
+  const features = getFeatures();
 
   const {
     email,
@@ -82,7 +84,6 @@ export function LoginScreen() {
     showConfigResetDialog,
     isConfigResetting,
     setShowConfigResetDialog,
-    setIsConfigResetting,
     emailValidator,
     passwordValidator,
     handleEmailChange,
@@ -93,6 +94,7 @@ export function LoginScreen() {
     handleOAuthAppBecameActive,
     handleCancelOAuth,
     handleConfigReset,
+    confirmConfigReset,
     getCurrentFriendlyMessage,
   } = useLogin();
 
@@ -101,6 +103,31 @@ export function LoginScreen() {
   // CN-region builds omit the email / password credential login. Only the
   // remaining login options (e.g. OAuth / sign-up) are shown.
   const hideCredentialLogin = isCnRegion();
+
+  // Show the "Signing in to X — Change deployment" banner only when the user
+  // has actually picked a backend (i.e. Landing was passed) AND the build has
+  // the backend selector enabled. CN-region installs never pass Landing, so
+  // the kind lookup returns null and the banner naturally stays hidden.
+  const currentDeploymentKind = features.backendSelector
+    ? getCurrentDeploymentKind()
+    : null;
+
+  // Names the deployment under the house mark, replacing the generic app
+  // lockup: the official wordmark for ESP RainMaker Classic / ESP RainMaker
+  // Neo, its plain label for a private deployment. The label is passed either
+  // way — where a wordmark renders, it is that image's accessibility label, so
+  // screen readers still announce the deployment by name.
+  const { deploymentLabel, deploymentWordmark } = useMemo(
+    () => ({
+      deploymentLabel: currentDeploymentKind
+        ? t(getDeploymentLabelKey(currentDeploymentKind))
+        : undefined,
+      deploymentWordmark: currentDeploymentKind
+        ? getDeploymentWordmark(currentDeploymentKind)
+        : undefined,
+    }),
+    [currentDeploymentKind, t],
+  );
 
   const usernameFieldProps = useMemo(() => {
     const allowsPhone = getAuthAllowedUsernameTypes().includes("phone");
@@ -112,18 +139,6 @@ export function LoginScreen() {
       keyboardType: allowsPhone ? ("default" as const) : ("email-address" as const),
     };
   }, [t]);
-
-  const handleConfigResetConfirm = async () => {
-    setIsConfigResetting(true);
-    try {
-      await runtimeConfigManager.reset();
-      await asyncStorageAdapter.clear();
-      cdfBootstrap.reset();
-      restartApp();
-    } finally {
-      setIsConfigResetting(false);
-    }
-  };
 
   return (
     <ScreenWrapper style={globalStyles.screenWrapper} excludeTop={false}>
@@ -142,9 +157,46 @@ export function LoginScreen() {
         >
           <Logo
             qaId="logo_login"
+            caption={deploymentLabel}
+            captionSource={deploymentWordmark}
             onConfigTrigger={() => router.push("/(config)/ConfigScan" as never)}
             onConfigReset={handleConfigReset}
           />
+
+          {/* The wordmark above already names the deployment, so this carries
+              only the action. */}
+          {currentDeploymentKind && (
+            <TouchableOpacity
+              {...testProps("button_deployment_banner")}
+              onPress={() => router.push("/(landing)/Landing" as never)}
+              style={globalStyles.deploymentLink}
+              activeOpacity={0.7}
+            >
+              <Text
+                {...testProps("text_deployment_banner_change")}
+                style={[
+                  globalStyles.deploymentLinkText,
+                  globalStyles.deploymentLinkAction,
+                ]}
+              >
+                {t("auth.login.deploymentBanner.change")}
+              </Text>
+            </TouchableOpacity>
+          )}
+
+          {/* ESP RainMaker Neo accepts existing ESP RainMaker accounts; say so
+              before the user assumes they need to sign up again. Sits last so
+              it reads as help for the fields below rather than competing with
+              the brand lockup. */}
+          {currentDeploymentKind === DEPLOYMENT_KIND.RMNEO && (
+            <Text
+              {...testProps("text_neo_credentials_hint")}
+              style={globalStyles.deploymentHint}
+            >
+              {t("auth.login.neoCredentialsHint")}
+            </Text>
+          )}
+
           <View
             style={globalStyles.inputContainer}
             {...testProps("view_input_login")}
@@ -311,7 +363,7 @@ export function LoginScreen() {
         description={t("config.reset.message")}
         confirmText={t("config.reset.confirmButton")}
         cancelText={t("layout.shared.cancel")}
-        onConfirm={handleConfigResetConfirm}
+        onConfirm={confirmConfigReset}
         onCancel={() => setShowConfigResetDialog(false)}
         confirmColor={tokens.colors.red}
         isLoading={isConfigResetting}

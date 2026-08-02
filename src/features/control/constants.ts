@@ -23,3 +23,38 @@ export const SAVE_DEVICE_NAME_STATUS_FAILED = "failed";
 export const RMAKER_AUTH_TOAST_KIND_UPDATED = "updated";
 export const RMAKER_AUTH_TOAST_KIND_NO_REFRESH_TOKEN = "no_refresh_token";
 export const RMAKER_AUTH_TOAST_KIND_FAILED = "failed";
+
+// TIME SERIES CHART GRANULARITIES
+/** Chart tab granularity ids (Daily / Weekly / Monthly). */
+export const CHART_GRANULARITY_DAILY = "daily";
+export const CHART_GRANULARITY_WEEKLY = "weekly";
+export const CHART_GRANULARITY_MONTHLY = "monthly";
+/** Tab order shown on the chart screen. */
+export const CHART_GRANULARITIES = [
+  CHART_GRANULARITY_DAILY,
+  CHART_GRANULARITY_WEEKLY,
+  CHART_GRANULARITY_MONTHLY,
+] as const;
+
+// TIME SERIES CHART VIEW STATES
+/** Chart view states (see ChartState in @src/types/global). */
+export const CHART_STATE_LOADING = "loading";
+export const CHART_STATE_ERROR = "error";
+export const CHART_STATE_UNSUPPORTED = "unsupported";
+export const CHART_STATE_EMPTY = "empty";
+export const CHART_STATE_READY = "ready";
+
+// TIME SERIES SUMMARY KINDS
+/** Window summary semantics (see TimeSeriesSummaryKind). */
+export const TS_SUMMARY_KIND_AVERAGE = "average";
+export const TS_SUMMARY_KIND_TOTAL = "total";
+
+// TIME SERIES CHART DATA
+/** Number of buckets (bars) in one chart window, matching the revamp design. */
+export const CHART_WINDOW_BUCKET_COUNT = 7;
+/** Max records per simple_ts page (Base SDK `MAX_RESULT_COUNT`). */
+export const TS_PAGE_RESULT_COUNT = 200;
+/** Safety cap on simple_ts pagination fetches per window (memory guard). */
+export const TS_MAX_PAGE_FETCHES = 20;
+/** Week starts on Monday, matching the app-wide week alignment. */
+export const CHART_WEEK_START_DAY_INDEX = 1;

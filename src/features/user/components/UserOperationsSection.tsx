@@ -30,6 +30,7 @@ const UserOperationsSection: React.FC<UserOperationsSectionProps> = ({
       {operations.map((operation, index) => (
         <UserOperationItem
           key={operation.id}
+          qaId={`button_user_operation_${operation.id}`}
           icon={operation.icon}
           title={operation.title}
           onPress={() => onOperationPress(operation.action)}

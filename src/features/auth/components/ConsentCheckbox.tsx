@@ -10,7 +10,7 @@ import { useTranslation } from "react-i18next";
 import { Typo } from "@shared/components";
 import { tokens } from "@shared/theme/tokens";
 import { testProps } from "@shared/utils/testProps";
-import { getTermsOfUseLink, getPrivacyPolicyLink } from "@shared/utils/constants";
+import { getTermsOfUseLink, getPrivacyPolicyLink } from "@shared/utils/legalLinks";
 import * as WebBrowser from "expo-web-browser";
 
 interface ConsentCheckboxProps {

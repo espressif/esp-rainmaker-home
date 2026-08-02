@@ -22,8 +22,7 @@
 		8728E4922E9919D700DF9B82 /* ESPMatterExtensionEcoInfo.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8728E4902E9919D700DF9B82 /* ESPMatterExtensionEcoInfo.swift */; };
 		8728E4932E9919D700DF9B82 /* ESPMatterExtLocalStorage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8728E4912E9919D700DF9B82 /* ESPMatterExtLocalStorage.swift */; };
 		8790E65F2FF7C7AC0020344B /* Matter.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 8790E65E2FF7C7AC0020344B /* Matter.framework */; };
-		8790E6612FF7C82C0020344B /* Matter.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 8790E6602FF7C80F0020344B /* Matter.framework */; };
-		8790E6622FF7C82C0020344B /* Matter.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 8790E6602FF7C80F0020344B /* Matter.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		8790E6612FF7C82C0020344B /* Matter.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 8790E65E2FF7C7AC0020344B /* Matter.framework */; };
 		B18059E884C0ABDD17F3DC3D /* ExpoModulesProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = FAC715A2D49A985799AEE119 /* ExpoModulesProvider.swift */; };
 		BB2F792D24A3F905000567C9 /* Expo.plist in Resources */ = {isa = PBXBuildFile; fileRef = BB2F792C24A3F905000567C9 /* Expo.plist */; };
 		DA803ADE4C6C4736BAE299F2 /* noop-file.swift in Sources */ = {isa = PBXBuildFile; fileRef = E4690621EE5B4198A07FB6D0 /* noop-file.swift */; };
@@ -83,7 +82,6 @@
 			dstPath = "";
 			dstSubfolderSpec = 10;
 			files = (
-				8790E6622FF7C82C0020344B /* Matter.framework in Embed Frameworks */,
 			);
 			name = "Embed Frameworks";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -111,7 +109,6 @@
 		8728E4902E9919D700DF9B82 /* ESPMatterExtensionEcoInfo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ESPMatterExtensionEcoInfo.swift; sourceTree = "<group>"; };
 		8728E4912E9919D700DF9B82 /* ESPMatterExtLocalStorage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ESPMatterExtLocalStorage.swift; sourceTree = "<group>"; };
 		8790E65E2FF7C7AC0020344B /* Matter.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Matter.framework; path = System/Library/Frameworks/Matter.framework; sourceTree = SDKROOT; };
-		8790E6602FF7C80F0020344B /* Matter.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; path = Matter.framework; sourceTree = "<group>"; };
 		94D7943BDE76E78EC62286AA /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xml; name = PrivacyInfo.xcprivacy; path = APP/PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		A5F1B4F2E6D1CB5980F02DB0 /* libPods-APP.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = "libPods-APP.a"; sourceTree = BUILT_PRODUCTS_DIR; };
 		AA286B85B6C04FC6940260E9 /* SplashScreen.storyboard */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = file.storyboard; name = SplashScreen.storyboard; path = APP/SplashScreen.storyboard; sourceTree = "<group>"; };
@@ -238,7 +235,6 @@
 		83CBB9F61A601CBA00E9B192 = {
 			isa = PBXGroup;
 			children = (
-				8790E6602FF7C80F0020344B /* Matter.framework */,
 				F122E49F2F2C8FFC00DD5981 /* APP.xcconfig */,
 				F122E4A02F2C8FFC00DD5981 /* APP.debug.xcconfig */,
 				F122E4A12F2C8FFC00DD5981 /* APP.release.xcconfig */,

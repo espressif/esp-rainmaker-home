@@ -8,7 +8,7 @@ import Constants from "expo-constants";
 import asyncStorageAdapter from "@native-adaptors/implementations/ESPAsyncStorage";
 import {
   runtimeConfigManager,
-  type ESPRMNGRuntimeConfig,
+  type ESPRMNeoRuntimeConfig,
   type ESPRMRuntimeConfig,
 } from "@config/runtime.config";
 import { provisionAdapter } from "@native-adaptors/implementations/ESPProvAdapter";
@@ -24,31 +24,29 @@ import { ESPMatterSubscriptionAdapter } from "@native-adaptors/implementations/E
 import { ESPMQTTAdapter } from "@native-adaptors/implementations/ESPMQTTAdapter";
 import { ESPRMBaseConfig } from "@espressif/rainmaker-base-sdk";
 import type { ESPRMMatterBaseConfig } from "@espressif/rainmaker-matter-sdk";
-import type { ESPRMNGBaseConfig } from "@espressif/rmng-base-sdk";
-import type { ESPRMNGMatterBaseConfig } from "@espressif/rmng-matter-sdk";
+import type { ESPRMNeoBaseConfig } from "@espressif/rainmaker-neo-base-sdk";
 import { matterClusterConfig } from "@sdk-adaptors/ESPRMMatterBase/cluster.config";
 import {
   DEFAULT_ACTIVE_SDK_ID,
   ESPRM_BASE_SDK_ID,
   ESPRMMatter_BASE_SDK_ID,
-  ESPRMNG_BASE_SDK_ID,
-  ESPRMNGMatter_BASE_SDK_ID,
+  ESPRMNeo_BASE_SDK_ID,
   type SDKIdentifier,
-  isRmngStackSdkId,
+  isRmneoStackSdkId,
+  normalizeSdkIdentifier,
 } from "./sdk.identifiers";
 import { getRegionConfig } from "./region.config";
 
 export {
   DEFAULT_ACTIVE_SDK_ID,
   ESPRM_BASE_SDK_ID,
-  ESPRMNG_BASE_SDK_ID,
-  ESPRMNGMatter_BASE_SDK_ID,
-  ESPRMNGMatterBaseAdaptorIdentifier,
+  ESPRMNeo_BASE_SDK_ID,
   ESPRMMatterBaseAdaptorIdentifier,
   ESPRMBaseAdaptorIdentifier,
-  ESPRMNGBaseAdaptorIdentifier,
+  ESPRMNeoBaseAdaptorIdentifier,
   SUPPORTED_SDK_IDENTIFIERS,
-  isRmngStackSdkId,
+  isRmneoStackSdkId,
+  normalizeSdkIdentifier,
   type SDKIdentifier,
 } from "./sdk.identifiers";
 
@@ -104,54 +102,37 @@ export function getRMSDKConfig(): ESPRMBaseConfig {
     : base;
 }
 
-const rmngCompatibleProvisionAdapter = {
+const rmneoCompatibleProvisionAdapter = {
   ...provisionAdapter,
   getDeviceVersion: async (deviceName: string): Promise<Record<string, unknown>> => {
     return provisionAdapter.getDeviceVersionInfo(deviceName);
   },
 };
 
-export function getRMNGSDKConfig(): ESPRMNGBaseConfig {
+export function getRMNeoSDKConfig(): ESPRMNeoBaseConfig {
   const activeSdk = runtimeConfigManager.activeSdk;
   const override =
-    activeSdk != null && isRmngStackSdkId(activeSdk)
-      ? (runtimeConfigManager.config as ESPRMNGRuntimeConfig | null)
+    activeSdk != null && isRmneoStackSdkId(activeSdk)
+      ? (runtimeConfigManager.config as ESPRMNeoRuntimeConfig | null)
       : null;
 
-  // Region-scoped RMNG cloud config, resolved at call time. Cast matches the
+  // Region-scoped RMNeo cloud config, resolved at call time. Cast matches the
   // pre-regionConfigs typing (extra was Record<string, string>); blank env
   // values still surface as runtime config errors, not silent fallbacks.
-  const rmngSdk = getRegionConfig().rmngSdk as Record<string, string>;
+  const rmneoSdk = getRegionConfig().rmneoSdk as Record<string, string>;
 
   return {
-    baseUrl:
-      override?.baseUrl ??
-      rmngSdk.baseUrl,
-    apiPath: override?.apiPath ?? rmngSdk.apiPath,
-    userApiBase: override?.userApiBase ?? rmngSdk.userApiBase,
-    userApiBaseUrl:
-      override?.userApiBaseUrl ??
-      rmngSdk.userApiBaseUrl,
-    userApiPath: override?.userApiPath ?? rmngSdk.userApiPath,
-    identityId:
-      override?.identityId ??
-      rmngSdk.identityId,
-    awsRegion: override?.awsRegion ?? rmngSdk.awsRegion,
-    userPoolId:
-      override?.userPoolId ??
-      rmngSdk.userPoolId,
-    clientId:
-      override?.clientId ??
-      rmngSdk.clientId,
-    iotEndpoint:
-      override?.iotEndpoint ??
-      rmngSdk.iotEndpoint,
+    // RainMaker Neo expects two full URLs only (stage included in each value).
+    baseUrl: override?.baseUrl ?? rmneoSdk.baseUrl,
+    userApiBase: override?.userApiBase ?? rmneoSdk.userApiBase,
+    awsRegion: override?.awsRegion ?? rmneoSdk.awsRegion,
+    iotEndpoint: override?.iotEndpoint ?? rmneoSdk.iotEndpoint,
     customStorageAdapter: asyncStorageAdapter,
-    localControlAdapter: ESPLocalControlAdapter as ESPRMNGBaseConfig["localControlAdapter"],
-    // Native bridge uses async isConnected(); rmng-base-sdk MQTTTransport types are sync.
-    mqttAdapter: ESPMQTTAdapter as unknown as ESPRMNGBaseConfig["mqttAdapter"],
-    provisionAdapter: rmngCompatibleProvisionAdapter as ESPRMNGBaseConfig["provisionAdapter"],
-    localDiscoveryAdapter: EspLocalDiscoveryAdapter as ESPRMNGBaseConfig["localDiscoveryAdapter"],
+    localControlAdapter: ESPLocalControlAdapter as ESPRMNeoBaseConfig["localControlAdapter"],
+    // Native bridge uses async isConnected(); MQTTTransport types are sync.
+    mqttAdapter: ESPMQTTAdapter as unknown as ESPRMNeoBaseConfig["mqttAdapter"],
+    provisionAdapter: rmneoCompatibleProvisionAdapter as ESPRMNeoBaseConfig["provisionAdapter"],
+    localDiscoveryAdapter: EspLocalDiscoveryAdapter as ESPRMNeoBaseConfig["localDiscoveryAdapter"],
   };
 }
 
@@ -168,9 +149,16 @@ export const ActiveSDK = (getRegionConfig().activeSdk ||
 /**
  * Effective SDK after persisted runtime scan config (Config Scan).
  * Must be used after `runtimeConfigManager.loadFromStorage()` at startup.
+ *
+ * RainMaker Classic and RainMaker Neo base adaptors are all registered
+ * (see integrations/index.ts).
  */
 export function getResolvedActiveSdk(): SDKIdentifier {
-  return runtimeConfigManager.activeSdk ?? ActiveSDK;
+  return (
+    normalizeSdkIdentifier(runtimeConfigManager.activeSdk) ??
+    normalizeSdkIdentifier(ActiveSDK) ??
+    DEFAULT_ACTIVE_SDK_ID
+  );
 }
 
 // ─── CDF Config ───────────────────────────────────────────────────────────────
@@ -193,22 +181,6 @@ export function getMatterSDKConfig(): ESPRMMatterBaseConfig {
   };
 }
 
-export function getRMNGMatterSDKConfig(): ESPRMNGMatterBaseConfig & {
-  matterLocalDiscoveryAdapter: typeof matterLocalDiscoveryAdapter;
-  clusterConfig: typeof matterClusterConfig;
-} {
-  return {
-    ...getRMNGSDKConfig(),
-    matterCommissioningAdaptor: matterCommissioningAdaptor as unknown as ESPRMNGMatterBaseConfig["matterCommissioningAdaptor"],
-    matterControlAdapter: ESPMatterControlAdapter as unknown as ESPRMNGMatterBaseConfig["matterControlAdapter"],
-    matterSubscriptionAdapter:
-      ESPMatterSubscriptionAdapter as unknown as ESPRMNGMatterBaseConfig["matterSubscriptionAdapter"],
-    matterLocalDiscoveryAdapter,
-    clusterConfig: matterClusterConfig,
-    matterVendorId: matterSdk.vendorId ?? "0x131B",
-  };
-}
-
 
 // ─── SDK Feature Map (Level 2) ────────────────────────────────────────────────
 //
@@ -222,38 +194,61 @@ export const SDK_FEATURE_MAP: Record<
 > = {
   [ESPRM_BASE_SDK_ID]: {
     // All features fully supported
-    scenes: true, schedules: true, automations: true, localControl: true,
-    notifications: true, groupSharing: true, subGroupSharing: false, transferGroupSharing: true, ota: true,
+    scenes: true,
+    schedules: true,
+    automations: true,
+    localControl: true,
+    notifications: true,
+    groupSharing: true,
+    subGroupSharing: false,
+    transferGroupSharing: true,
+    ota: true,
     controlGroups: false,
+    secondaryGroupManagement: false,
     // API-only / env-controlled — always true at SDK level
-    aiAgent: true, thirdPartyAuth: true, voiceAssistants: true,
+    aiAgent: true,
+    thirdPartyAuth: true,
+    voiceAssistants: true,
     onNetworkProvisioning: true,
+    // Matter lives in the separate ESPRMMatterBase adaptor, not this one.
+    matterCommissioning: false,
   },
-  [ESPRMNG_BASE_SDK_ID]: {
-    scenes: false, schedules: true, automations: true, localControl: true,
-    notifications: true, groupSharing: true, subGroupSharing: true, transferGroupSharing: false, ota: false,
+  [ESPRMNeo_BASE_SDK_ID]: {
+    scenes: false,
+    schedules: true,
+    automations: true,
+    localControl: true,
+    notifications: true,
+    groupSharing: true,
+    subGroupSharing: true,
+    transferGroupSharing: false,
+    ota: false,
     controlGroups: true,
-    aiAgent: false, thirdPartyAuth: false, voiceAssistants: false,
+    secondaryGroupManagement: true,
+    aiAgent: false,
+    thirdPartyAuth: false,
+    voiceAssistants: false,
     authAllowedUsernameTypes: ["email", "phone"],
-    groupSharingAllowedTypes: ["userCode"],
     onNetworkProvisioning: false,
-    matterCommissioning: true,
-  },
-  [ESPRMNGMatter_BASE_SDK_ID]: {
-    scenes: false, schedules: true, automations: true, localControl: true,
-    notifications: true, groupSharing: true, subGroupSharing: true, transferGroupSharing: false, ota: false,
-    controlGroups: true,
-    aiAgent: false, thirdPartyAuth: false, voiceAssistants: false,
-    authAllowedUsernameTypes: ["email", "phone"],
-    groupSharingAllowedTypes: ["userCode"],
-    onNetworkProvisioning: false,
-    matterCommissioning: true,
+    // The RMNeo stack has no Matter support: its CDF group exposes no
+    // `convertToMatterFabric` / `issueUserNoC`, so commissioning cannot run.
+    matterCommissioning: false,
   },
   [ESPRMMatter_BASE_SDK_ID]: {
-    scenes: true, schedules: true, automations: true, localControl: true,
-    notifications: true, groupSharing: true, subGroupSharing: false, transferGroupSharing: true, ota: true,
+    scenes: true,
+    schedules: true,
+    automations: true,
+    localControl: true,
+    notifications: true,
+    groupSharing: true,
+    subGroupSharing: false,
+    transferGroupSharing: true,
+    ota: true,
     controlGroups: false,
-    aiAgent: true, thirdPartyAuth: true, voiceAssistants: true,
+    secondaryGroupManagement: false,
+    aiAgent: true,
+    thirdPartyAuth: true,
+    voiceAssistants: true,
     matterCommissioning: true,
     onNetworkProvisioning: true,
   },

@@ -66,6 +66,10 @@ import {
   MATTER_ROUTE_PARAM_FABRIC_CONVERSION_CONSENT_REQUIRED,
   MATTER_ROUTE_PARAM_VALUE_FALSE,
 } from "@features/matter/constants";
+import {
+  getMatterUnsupportedMessage,
+  isMatterCommissioningSupported,
+} from "@features/matter/utils/matterSupport";
 
 const { width, height } = Dimensions.get("window");
 const SCANNER_WIDTH = width * 0.8;
@@ -617,6 +621,11 @@ const ScanQR = () => {
    */
   const handleMatterCommissioning = async (qrData: string) => {
     try {
+      if (!isMatterCommissioningSupported()) {
+        toast.showError(getMatterUnsupportedMessage(t));
+        return resetScanState();
+      }
+
       // Check if user is authenticated
       if (!user) {
         toast.showError(t("device.scan.qr.matterAuthRequired"));

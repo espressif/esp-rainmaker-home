@@ -49,7 +49,7 @@ export interface UseHomeScreenResult {
  */
 export function useHomeScreen(): UseHomeScreenResult {
   const { t } = useTranslation();
-  const { store, isInitialized: isStoreInitialized } = useCDF();
+  const { store, isInitialized: isStoreInitialized, syncHomeWithNodes } = useCDF();
   const { groupStore: unifiedGroupStore, userStore: unifiedUserStore } = store;
   const unifiedUser = unifiedUserStore?.user;
   const router = useRouter();
@@ -119,7 +119,7 @@ export function useHomeScreen(): UseHomeScreenResult {
       // simply dropped and re-matched against the next periodic announcement
       // (mDNS responders re-announce every 1-2s). Doing this in parallel
       // shaves the cloud-sync round-trip off the time-to-"available on WLAN".
-      const syncPromise = unifiedUser?.syncHomeWithNodes?.();
+      const syncPromise = syncHomeWithNodes(true);
       startNodeLocalDiscovery(store);
       startMatterLocalDiscovery(store);
       await syncPromise;
@@ -134,7 +134,7 @@ export function useHomeScreen(): UseHomeScreenResult {
       setIsLoading(false);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional hook deps
-  }, [isStoreInitialized, unifiedGroupStore, unifiedUser, toast, t]);
+  }, [isStoreInitialized, unifiedGroupStore, syncHomeWithNodes, toast, t]);
 
   initializeHomeRef.current = initializeHome;
 
@@ -147,7 +147,7 @@ export function useHomeScreen(): UseHomeScreenResult {
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     try {
-      const syncPromise = unifiedUser?.syncHomeWithNodes?.();
+      const syncPromise = syncHomeWithNodes(true);
       startNodeLocalDiscovery(store);
       startMatterLocalDiscovery(store);
       await syncPromise;
@@ -156,19 +156,19 @@ export function useHomeScreen(): UseHomeScreenResult {
     } finally {
       setRefreshing(false);
     }
-  }, [unifiedUser, store]);
+  }, [syncHomeWithNodes, store]);
 
   const handleHomeSelect = useCallback(
     async (home: ESPCDFGroup) => {
       if (home?.id) {
         await unifiedUser?.setCurrentHome?.(home);
-        await unifiedUser?.syncHomeWithNodes?.();
+        await syncHomeWithNodes(true);
         startNodeLocalDiscovery(store);
         startMatterLocalDiscovery(store);
         setTooltipVisible(false);
       }
     },
-    [unifiedUser, store]
+    [unifiedUser, syncHomeWithNodes, store]
   );
 
   const handleDropdownPress = useCallback(

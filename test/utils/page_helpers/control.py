@@ -90,12 +90,14 @@ class Control(BasePage):
     def set_slider(self, param, target, tol=3):
         """Drag a param slider to target and return the applied readback (retries around the iOS local-control dialog)."""
         target = int(target)
-        max_v = self._param_slider_max(param)
+        min_v, max_v = self._param_slider_range(param)
+        if param == "CCT":
+            tol = max(tol, 200)
         applied = None
         for attempt in range(3):
             self.dismiss_join_wifi_dialog()
             try:
-                self.set_param_slider(param, target, max_v=max_v)
+                self.set_param_slider(param, target, min_v=min_v, max_v=max_v, tol=tol)
             except RuntimeError as error:
                 logger.info("Slider '%s' interaction failed (%s, attempt %s); re-checking dialog", param, error, attempt + 1)
                 self.dismiss_join_wifi_dialog()

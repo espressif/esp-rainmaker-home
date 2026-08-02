@@ -53,11 +53,6 @@ class ESPMatterCommissioningService : Service(), CommissioningService.Callback {
                 fabricInfo.groupCatIdAdmin ?: ""
             )
             fabricInfo.requestId?.let { chipClient.requestId = it }
-            fabricInfo.csrNonce?.let { chipClient.csrNonce = it }
-            Log.d(
-                TAG,
-                "[NONCE-TRACE] onCreate: csrNonce=${fabricInfo.csrNonce?.take(16)}... (len=${fabricInfo.csrNonce?.length}), requestId=${fabricInfo.requestId}"
-            )
             FabricSessionManager.setCurrentChipClient(chipClient)
         } else {
             chipClient = ChipClient(applicationContext, "", "", "", "", "", "")

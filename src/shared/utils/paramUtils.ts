@@ -88,7 +88,7 @@ export const defaultValueBasedOnParamDataType = (type: string) => {
 
 /**
  * Uses {@link defaultValueBasedOnParamDataType}, then infers boolean defaults when
- * RMNG/cloud config omits or mislabels `dataType` (e.g. Power ends up as "string").
+ * RainMaker Neo/cloud config omits or mislabels `dataType` (e.g. Power ends up as "string").
  * Used for schedule/scene/automation pickers so toggle params don't save as "".
  */
 /** `type` / `uiType` fields used to detect Power, toggle, and push-button controls. */

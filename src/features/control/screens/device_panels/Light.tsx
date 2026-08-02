@@ -191,6 +191,14 @@ const Light: React.FC<ControlPanelProps> = ({ node, device }) => {
   ]);
 
   const setLightModeForTab = async (tab: Tab) => {
+    // Firmware now auto-switches to white mode on its own once it receives a
+    // CCT/temperature update, so the app must not explicitly write
+    // light-mode when switching to the White tab (and the old CCT/temperature
+    // resend workaround for that case is no longer needed either).
+    if (tab === WHITE_TAB) {
+      return;
+    }
+
     const nextVal = lightModeValueForTab(tab);
     if (
       nextVal === null ||
@@ -255,7 +263,6 @@ const Light: React.FC<ControlPanelProps> = ({ node, device }) => {
     <View
       style={[
         styles.container,
-        { opacity: isConnected ? 1 : 0.5 },
         { backgroundColor: tokens.colors.bg5 },
       ]}
       {...testProps("view_light")}

@@ -306,11 +306,10 @@ class SqliteResourceStore:
             return dict(row)
 
     def active_reserved_ports(self) -> list:
-        """Ports held by a LIVE reservation — discovery must not probe these (esptool chip-id resets the board mid-use)."""
+        """Ports held by ANY live owner — discovery must not probe these (esptool chip-id resets the board mid-use). Status is deliberately ignored: provisioning flows flip owned rows to FLASHING/PROVISIONING/IN_USE, and a status filter left those ports probe-able while still owned."""
         with self._thread_lock, self._connect() as connection:
             rows = connection.execute(
-                "SELECT port, owner_pid FROM resources WHERE status = ? AND owner_pid IS NOT NULL",
-                (ResourceStatus.RESERVED.value,),
+                "SELECT port, owner_pid FROM resources WHERE owner_pid IS NOT NULL",
             ).fetchall()
         return [row["port"] for row in rows if row["port"] and row["owner_pid"] and _pid_alive(row["owner_pid"])]
 

@@ -17,7 +17,6 @@ export { default as LogoutButton } from "./LogoutButton";
 export { default as SettingsSection } from "./SettingsSection";
 export { default as SettingsItem } from "./SettingsItem";
 export { default as ProfileSection } from "./ProfileSection";
-export { UserClientCodeSection } from "./UserClientCodeSection";
 export { default as InfoItem } from "./InfoItem";
 export { default as NotificationItem } from "./NotificationItem";
 export { default as PhonePair } from "./PhonePair";

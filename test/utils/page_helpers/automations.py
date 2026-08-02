@@ -49,7 +49,7 @@ class Automations(BasePage):
 
     def select_event_param(self, param_name, value):
         """Open a named event trigger param, set its value/condition, finish the event."""
-        self.click("id", f"button_event_device_param_{param_name}_selection", timeout=10)
+        self.open_param_editor(f"button_event_device_param_{param_name}_selection", "event_param_save_button")
         actual = self.set_modal_param_value(param_name, value)
         self.click("event_param_save_button", timeout=10)
         self.click("event_done_button", timeout=10)
@@ -57,7 +57,7 @@ class Automations(BasePage):
 
     def select_action_param(self, param_name, value):
         """Open a named action param, set its value, finish the action and device selection."""
-        self.click("id", f"button_action_device_param_{param_name}_selection", timeout=10)
+        self.open_param_editor(f"button_action_device_param_{param_name}_selection", "action_param_save_button")
         actual = self.set_modal_param_value(param_name, value)
         self.click("action_param_save_button", timeout=10)
         self.click("action_done_button", timeout=10)

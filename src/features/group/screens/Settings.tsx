@@ -34,6 +34,10 @@ const Setting = () => {
     homeName,
     setHomeName,
     isPrimary,
+    isSubgroupOnlyViewer,
+    showRoomManagement,
+    showGroupSharing,
+    canRenameHome,
     isLoading,
     showDelete,
     setShowDelete,
@@ -85,28 +89,26 @@ const Setting = () => {
           setHomeName={setHomeName}
           onSave={handleHomeNameUpdate}
           isSaving={isLoading}
-          isPrimary={isPrimary}
-          disabled={!isPrimary}
+          isPrimary={canRenameHome}
+          disabled={!canRenameHome}
         />
 
-        {isPrimary && (
-          <>
-            <SettingsRoomSection
-              title={t("group.settings.roomManagement")}
-              onPress={handleRoom}
-              qaId="section_room_management"
-            />
-            {controlGroupsEnabled && (
-              <SettingsRoomSection
-                title={t("group.settings.groupManagement")}
-                onPress={handleControlGroups}
-                qaId="section_group_management"
-              />
-            )}
-          </>
+        {showRoomManagement && (
+          <SettingsRoomSection
+            title={t("group.settings.roomManagement")}
+            onPress={handleRoom}
+            qaId="section_room_management"
+          />
+        )}
+        {isPrimary && controlGroupsEnabled && (
+          <SettingsRoomSection
+            title={t("group.settings.groupManagement")}
+            onPress={handleControlGroups}
+            qaId="section_group_management"
+          />
         )}
 
-        {groupSharingEnabled && (
+        {groupSharingEnabled && showGroupSharing && (
           <GroupSharing
             sharedUsers={sharedUsers}
             pendingUsers={pendingUsers}
@@ -119,13 +121,15 @@ const Setting = () => {
           />
         )}
 
-        <HomeRemove
-          onRemove={handleRemoveHome}
-          isLoading={isLoading}
-          showDelete={showDelete}
-          setShowDelete={setShowDelete}
-          isPrimary={isPrimary}
-        />
+        {!isSubgroupOnlyViewer && (
+          <HomeRemove
+            onRemove={handleRemoveHome}
+            isLoading={isLoading}
+            showDelete={showDelete}
+            setShowDelete={setShowDelete}
+            isPrimary={isPrimary}
+          />
+        )}
 
         {groupSharingEnabled && (
           <AddUserModal

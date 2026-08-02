@@ -565,7 +565,9 @@ export const setNodeTimeZone = async (
   node: ESPCDFNode | null,
   timeZone: string
 ): Promise<boolean> => {
-  if (!node) return false;
+  if (!node) {
+    return false;
+  }
 
   const { hasWritePermission } = getNodeTimezoneConfig(node);
   if (!hasWritePermission) {
@@ -614,51 +616,46 @@ export function ianaTzToEspPosixTz(iana: string): string {
   }
 }
 
-type RMNGRawNodeWithGetParams = {
-  getParams?: (options?: {
-    forceRefresh?: boolean;
-    timeout?: number;
-  }) => Promise<Record<string, any>>;
-};
-
+/**
+ * Neo live verify: Time service getParams (MQTT). Not used for classic RM.
+ */
 async function getReportedIanaTzFromNodeParams(
   node: ESPCDFNode | null
 ): Promise<string> {
-  if (!node) return "";
+  if (!node) {
+    return "";
+  }
 
-  const { timezoneParam } = getNodeTimezoneConfig(node);
-  const fromNodeSnapshot =
-    typeof timezoneParam?.value === "string" ? timezoneParam.value.trim() : "";
-  if (fromNodeSnapshot) return fromNodeSnapshot;
-
-  const rawNode = node._raw as RMNGRawNodeWithGetParams | undefined;
-  if (typeof rawNode?.getParams !== "function") return "";
+  const { timeService } = getNodeTimezoneConfig(node);
+  if (!timeService || typeof timeService.getParams !== "function") {
+    return "";
+  }
 
   try {
-    const params = await rawNode.getParams({
-      forceRefresh: true,
-      timeout: 5000,
-    });
-    const fromMqttParams = params?.Time?.TZ;
-    return typeof fromMqttParams === "string" ? fromMqttParams.trim() : "";
+    const latest = await timeService.getParams();
+    const tzParam = latest?.find(
+      (param) => param.type === ESPCDFServiceParamType.TIME.TIMEZONE
+    );
+    const value = tzParam?.value;
+    return typeof value === "string" ? value.trim() : "";
   } catch {
     return "";
   }
 }
 
-/** Retries for post-provision node timezone: config (writable Time/TZ) then params API. */
+/** Retries for post-provision node timezone: config (writable Time/TZ) then write. */
 const PROVISION_TZ_MAX_ATTEMPTS = 8;
 const PROVISION_TZ_RETRY_DELAY_MS = 300;
-/** Let IoT named shadow / device first report settle before first TZ write (reduces 404 / ignored writes). */
-const PROVISION_TZ_SETTLE_MS = 2000;
-/** Brief pause so getNodeDetails reflects shadow after setParams. */
+/** Wait after node first reported online before first TZ write. */
+const PROVISION_TZ_SETTLE_MS = 5000;
+/** Brief pause so MQTT shadow can accept the TZ write before getParams verify (Neo). */
 const PROVISION_TZ_VERIFY_DELAY_MS = 750;
 
 /**
  * Resolves an IANA timezone string for applying to a node right after provision.
  * Prefers user custom data; falls back to device timezone (same idea as setUserTimeZone).
  */
-async function resolveTimeZoneStringForProvision(
+export async function resolveTimeZoneStringForProvision(
   user: ESPCDFUser
 ): Promise<string | undefined> {
   const fromCustom = await getUserTimeZone(user);
@@ -691,23 +688,115 @@ async function safeGetNodeDetails(
   }
 }
 
+type RawTransportNode = {
+  addTransport?: (
+    mode: string,
+    config: { type: string; metadata: Record<string, unknown> }
+  ) => void;
+  availableTransports?: Record<string, unknown>;
+};
+
 /**
- * Handles apply provision node timezone with retries logic for this module.
+ * Seeds mqtt on the raw SDK node when REST config omitted connectivity_status.
+ * Safe after waitForOnline: shadow already reported online; setParams only
+ * routes when availableTransports is non-empty.
+ */
+function ensureMqttTransport(node: ESPCDFNode): void {
+  const raw = (node as { _raw?: RawTransportNode })._raw;
+  if (!raw) return;
+  if (raw.availableTransports?.mqtt) return;
+
+  const mqttConfig = { type: "mqtt", metadata: {} as Record<string, unknown> };
+  if (typeof raw.addTransport === "function") {
+    raw.addTransport("mqtt", mqttConfig);
+  } else {
+    raw.availableTransports = {
+      ...(raw.availableTransports ?? {}),
+      mqtt: mqttConfig,
+    };
+  }
+
+  const cdfTransports = (node as { availableTransports?: Record<string, unknown> })
+    .availableTransports;
+  if (cdfTransports && !cdfTransports.mqtt) {
+    cdfTransports.mqtt = mqttConfig;
+  }
+}
+
+export type ApplyProvisionTimezoneResult = {
+  node: ESPCDFNode;
+  /**
+   * Neo (`neoLiveVerify`): true only when Time service getParams reports expected TZ.
+   * RainMaker Classic: true when setTimeZone is accepted (original workflow).
+   */
+  timezoneApplied: boolean;
+};
+
+export type ApplyProvisionTimezoneOptions = {
+  /**
+   * RMNeo: seed mqtt + confirm via Time service getParams.
+   * RainMaker Classic leaves unset: success = setTimeZone accepted.
+   */
+  neoLiveVerify?: boolean;
+};
+
+/** Last provision TZ outcome by node id — consumed once by the provision UI. */
+const provisionTimezoneOutcomeByNodeId = new Map<string, boolean>();
+
+function recordProvisionTimezoneOutcome(
+  nodeId: string,
+  timezoneApplied: boolean
+): void {
+  provisionTimezoneOutcomeByNodeId.set(nodeId, timezoneApplied);
+}
+
+/**
+ * Returns and clears the latest post-provision TZ verify result for this node.
+ * `false` means set/verify failed — UI should show the soft warning.
+ */
+export function takeProvisionTimezoneOutcome(
+  nodeId: string
+): boolean | undefined {
+  const value = provisionTimezoneOutcomeByNodeId.get(nodeId);
+  provisionTimezoneOutcomeByNodeId.delete(nodeId);
+  return value;
+}
+
+/** Records a failed TZ apply when the helper throws before returning a result. */
+export function markProvisionTimezoneFailed(nodeId: string): void {
+  recordProvisionTimezoneOutcome(nodeId, false);
+}
+
+/**
+ * Post-provision TZ apply with retries.
+ * - Shared: settle, config permission gate, setTimeZone retries.
+ * - Neo (`neoLiveVerify`): seed mqtt; success = Time service getParams match.
+ * - RM (default): success = setTimeZone accepted; optional getNodeDetails refresh.
  */
 export async function applyProvisionNodeTimezoneWithRetries(
   user: ESPCDFUser,
   nodeId: string,
   initialNode: ESPCDFNode,
-  getNodeDetails: (id: string) => Promise<ESPCDFNode | null | undefined>
-): Promise<ESPCDFNode> {
+  getNodeDetails: (id: string) => Promise<ESPCDFNode | null | undefined>,
+  options?: ApplyProvisionTimezoneOptions
+): Promise<ApplyProvisionTimezoneResult> {
   let node = initialNode;
+  const neoLiveVerify = options?.neoLiveVerify === true;
+
+  const finish = (
+    next: ESPCDFNode,
+    timezoneApplied: boolean
+  ): ApplyProvisionTimezoneResult => {
+    recordProvisionTimezoneOutcome(nodeId, timezoneApplied);
+    return { node: next, timezoneApplied };
+  };
 
   const timeZoneStr = await resolveTimeZoneStringForProvision(user);
   if (!timeZoneStr) {
     console.warn(
       "[applyProvisionNodeTimezoneWithRetries] No timezone string; skipping node TZ apply"
     );
-    return node;
+    return finish(node, true);
   }
 
   await delay(PROVISION_TZ_SETTLE_MS);
@@ -730,36 +819,52 @@ export async function applyProvisionNodeTimezoneWithRetries(
       "[applyProvisionNodeTimezoneWithRetries] No timezone write permission after config retries; nodeId=",
       nodeId
     );
-    return node;
+    return finish(node, false);
   }
 
   for (let attempt = 0; attempt < PROVISION_TZ_MAX_ATTEMPTS; attempt++) {
+    if (neoLiveVerify) {
+      ensureMqttTransport(node);
+    }
     const ok = await setNodeTimeZone(node, timeZoneStr);
-    if (ok) {
-      await delay(PROVISION_TZ_VERIFY_DELAY_MS);
+    if (!ok) {
+      if (attempt < PROVISION_TZ_MAX_ATTEMPTS - 1) {
+        await delay(PROVISION_TZ_RETRY_DELAY_MS);
+        if (!neoLiveVerify) {
+          const next = await safeGetNodeDetails(nodeId, getNodeDetails);
+          if (next) {
+            node = next;
+          }
+        }
+      }
+      continue;
+    }
+
+    // RainMaker Classic: setTimeZone accepted → success (no service getParams verify).
+    if (!neoLiveVerify) {
       const fresh = await safeGetNodeDetails(nodeId, getNodeDetails);
       if (fresh) {
         node = fresh;
       }
-      const reportedTimeZone = await getReportedIanaTzFromNodeParams(node);
-      if (reportedTimeZone === timeZoneStr.trim()) {
-        return node;
-      }
-      console.warn(
-        "[applyProvisionNodeTimezoneWithRetries] TZ write did not match reported param; retrying. nodeId=",
-        nodeId,
-        "expected=",
-        timeZoneStr,
-        "reported=",
-        reportedTimeZone
-      );
+      return finish(node, true);
     }
+
+    // Neo: confirm via Time service getParams (MQTT).
+    await delay(PROVISION_TZ_VERIFY_DELAY_MS);
+    const reportedTimeZone = await getReportedIanaTzFromNodeParams(node);
+    if (reportedTimeZone === timeZoneStr.trim()) {
+      return finish(node, true);
+    }
+    console.warn(
+      "[applyProvisionNodeTimezoneWithRetries] TZ write did not match reported param; retrying. nodeId=",
+      nodeId,
+      "expected=",
+      timeZoneStr,
+      "reported=",
+      reportedTimeZone
+    );
     if (attempt < PROVISION_TZ_MAX_ATTEMPTS - 1) {
       await delay(PROVISION_TZ_RETRY_DELAY_MS);
-      const next = await safeGetNodeDetails(nodeId, getNodeDetails);
-      if (next) {
-        node = next;
-      }
     }
   }
 
@@ -767,5 +872,30 @@ export async function applyProvisionNodeTimezoneWithRetries(
     "[applyProvisionNodeTimezoneWithRetries] setNodeTimeZone did not succeed or reported TZ mismatch after param retries; nodeId=",
     nodeId
   );
-  return node;
+  return finish(node, false);
+}
+
+/**
+ * Applies the device/user timezone to a freshly Matter-commissioned hybrid node.
+ */
+export async function applyMatterCommissionedNodeTimezone(
+  user: ESPCDFUser | null,
+  rainmakerNodeId: string | undefined
+): Promise<void> {
+  const nodeId = typeof rainmakerNodeId === "string" ? rainmakerNodeId.trim() : "";
+  if (!user || !nodeId) return;
+
+  try {
+    const node = await user.getNodeDetails(nodeId);
+    if (!node) return;
+    await applyProvisionNodeTimezoneWithRetries(user, nodeId, node, (id) =>
+      user.getNodeDetails(id)
+    );
+  } catch (error) {
+    console.warn(
+      "[applyMatterCommissionedNodeTimezone] non-blocking TZ apply failed; nodeId=",
+      nodeId,
+      error instanceof Error ? error.message : error
+    );
+  }
 }

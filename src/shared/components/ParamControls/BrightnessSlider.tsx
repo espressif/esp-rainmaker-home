@@ -14,8 +14,8 @@ import { observer } from "mobx-react-lite";
 // Types & Styles
 import {
   ParamControlChildProps,
-  clampValue,
   comparableRoundedParamNumber,
+  snapSliderValue,
 } from "./lib/types";
 import { paramControlStyles as styles } from "./lib/styles";
 import { useDragBubble } from "./lib/useDragBubble";
@@ -62,7 +62,7 @@ const BrightnessSlider = observer(
 
     const n = Number(value);
     const clamped = Number.isFinite(n)
-      ? clampValue(Math.round(n), min, max)
+      ? snapSliderValue(n, min, max, step)
       : min;
     const sliderValue = useMemo(() => [clamped], [clamped]);
 
@@ -75,12 +75,10 @@ const BrightnessSlider = observer(
     ) => {
       onSlideTick();
       if (disabled) return;
-      const roundedValue = Math.round(newValue);
+      const snappedValue = snapSliderValue(newValue, min, max, step);
       const cur = comparableRoundedParamNumber(value);
-      if (cur !== null && roundedValue === cur) return;
-      if (roundedValue < min) return;
-      if (roundedValue > max) return;
-      onValueChange(event, roundedValue);
+      if (cur !== null && snappedValue === cur) return;
+      onValueChange(event, snappedValue);
     };
 
     const thumbPercent = max > min ? ((clamped - min) / (max - min)) * 100 : 0;
@@ -101,7 +99,7 @@ const BrightnessSlider = observer(
             >
               {label}
             </Text>
-            <Text style={styles.compactValue}>{clamped}%</Text>
+            <Text {...testProps(`slider_${label}_value`)} style={styles.compactValue}>{clamped}%</Text>
           </View>
         ) : (
           <>
@@ -130,7 +128,7 @@ const BrightnessSlider = observer(
               ]}
             >
               <View style={styles.bubble}>
-                <Text style={styles.bubbleText}>{clamped}%</Text>
+                <Text style={styles.bubbleText}>{clamped}</Text>
               </View>
               <View style={styles.bubbleArrow} />
             </View>
@@ -168,7 +166,7 @@ const BrightnessSlider = observer(
                 style={[
                   styles.thumb,
                   styles.thumbSmall,
-                  disabled && styles.disabled,
+                  disabled && styles.thumbDisabled,
                 ]}
                 size="$1.5"
                 borderWidth={1}
@@ -190,7 +188,7 @@ const BrightnessSlider = observer(
                 },
               ]}
             >
-              {clamped}%
+              {clamped}
             </Text>
           </View>
         )}

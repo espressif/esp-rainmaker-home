@@ -30,9 +30,12 @@ class HardwareRequirement:
     security: Optional[str] = None
     firmware_type: str = "Evaluation"
     chal_resp: Optional[bool] = None
+    deployment: Optional[str] = None
 
     def __post_init__(self):
         """Automatically normalizes fields right after the object is created."""
         self.chip_type = normalize_chip(self.chip_type)
         if self.prov_mode:
             self.prov_mode = self.prov_mode.strip().lower()
+        if self.deployment:
+            self.deployment = self.deployment.strip().lower()

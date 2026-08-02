@@ -129,6 +129,8 @@ object AppConstants {
     const val KEY_IS_RAINMAKER = "isRainmaker"
     const val KEY_MATTER = "Matter"
     const val KEY_DEVICE_TYPE = "deviceType"
+    const val KEY_SOFTWARE_VERSION = "softwareVersion"
+    const val KEY_SOFTWARE_VERSION_STRING = "softwareVersionString"
     /** Cloud Matter metadata: nested endpoints.{0xEP}.clusters.{servers|clients}.{0xCID}.attributes */
     const val KEY_ENDPOINTS = "endpoints"
     const val KEY_CLUSTERS = "clusters"

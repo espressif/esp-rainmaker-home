@@ -7,8 +7,8 @@
 import type { ESPCDFTransportConfig } from "@store";
 
 /**
- * Minimal shape of a raw SDK node this helper touches. Both the RMNG
- * (`ESPRMNGNode`) and RM (`ESPRMNode`) raw nodes expose a mutable
+ * Minimal shape of a raw SDK node this helper touches. Both the RMNeo
+ * (`ESPRMNeoNode`) and RM (`ESPRMNode`) raw nodes expose a mutable
  * `availableTransports` map keyed by transport mode.
  */
 interface RawTransportNode {
@@ -26,7 +26,7 @@ interface RawTransportNode {
  * `availableTransports` does NOT: every fresh transform (from a home sync or a
  * config / ncfg-version refresh) seeds only the cloud transport. The SDK routes
  * param set/get on this raw node's `availableTransports` via
- * `delegatedTransportHandler` (RMNG `node.setParams`; RM
+ * `delegatedTransportHandler` (RMNeo `node.setParams`; RM
  * `ESPRMDeviceParam.setValue` → `nodeRef.deref()`), NOT on the CDF copy — so
  * without re-projecting, a new node instance silently routes over the cloud
  * (despite the badge) until a discovery "found" re-fires onto it, which
@@ -38,7 +38,7 @@ interface RawTransportNode {
  * the node's `addTransport` per entry — that method is itself just this
  * assignment — and works for RM's `ESPRMNode`, which exposes no `addTransport`.
  *
- * Routing is only affected for modes in the node's `transportOrder` (RMNG / RM
+ * Routing is only affected for modes in the node's `transportOrder` (RMNeo / RM
  * `local`). For Matter nodes the registered `matter_local` key is not in the
  * transport order (`[local, cloud]`) and matter param writes use a separate
  * controller invoke, so this is inert there — harmless, not a fix.

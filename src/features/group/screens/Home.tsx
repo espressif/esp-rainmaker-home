@@ -24,18 +24,18 @@ import {
   FloatingChatButton,
   HomeDeviceList,
   HomeGroupControlList,
-  HomeEmptyState,
   HomeTooltip,
   MigrationPromptModal,
   DeviceTypeFilterTabs,
   RoomControlSwitch,
+  AddYourFirstDeviceBanner,
 } from "@features/group/components";
 import { testProps } from "@shared/utils/testProps";
 
 /**
  * Home Screen – first screen after login.
- * Shows header, home banner, room tabs, device list or empty state, and migration prompt.
- * Thin orchestration: uses useHomeScreen and Group UI components.
+ * Banner, tabs, filters, and lists share one FlatList so pull-to-refresh works
+ * from anywhere on the scroll surface (not only over device cards).
  */
 const HomeScreen = () => {
   const { t } = useTranslation();
@@ -69,13 +69,73 @@ const HomeScreen = () => {
 
   const isRoomSelected = useMemo(
     () => selectedRoom.id !== ALL_DEVICES_TAB_ID,
-    [selectedRoom.id]
+    [selectedRoom.id],
   );
 
   const showGroupControlOnHome =
     controlGroupsEnabled &&
     controlGroups.length > 0 &&
     !isRoomSelected;
+
+  const listDevices = isLoading
+    ? []
+    : isRoomSelected
+      ? filteredRoomDevices
+      : roomDevices;
+
+  const listHeader = (
+    <>
+      <Banner
+        activeGroup={selectedHome}
+        onDropdownPress={handleDropdownPress}
+        image={require("@assets/images/home.png")}
+      />
+      <Tabs
+        tabs={roomTabs}
+        activeTab={selectedRoom}
+        onSelectTab={(tab) => setSelectedRoom(tab)}
+      />
+      {isRoomSelected && (
+        <DeviceTypeFilterTabs
+          roomDevices={roomDevices}
+          activeFilter={selectedDeviceTypeFilter}
+          onSelectFilter={setSelectedDeviceTypeFilter}
+        />
+      )}
+      {showGroupControlOnHome && (
+        <HomeGroupControlList
+          groups={controlGroups}
+          homeId={selectedHome?.id ?? ""}
+        />
+      )}
+      {isRoomSelected && (
+        <RoomControlSwitch
+          filteredDevices={filteredRoomDevices}
+          roomGroup={selectedRoomGroup}
+        />
+      )}
+    </>
+  );
+
+  const showEmptyCta =
+    !isLoading &&
+    (roomDevices?.length ?? 0) === 0 &&
+    !showGroupControlOnHome;
+
+  /** Loading spinner or empty CTA — always inside the refreshed FlatList. */
+  const listEmpty = isLoading ? (
+    <ActivityIndicator
+      {...testProps("activity_indicator_home")}
+      style={globalStyles.homeActivityIndicator}
+      size="large"
+      color={tokens.colors.primary}
+    />
+  ) : showEmptyCta ? (
+    <AddYourFirstDeviceBanner
+      redirectOperations={redirectOperations}
+      qaId="banner_add_first_device"
+    />
+  ) : null;
 
   return (
     <>
@@ -96,64 +156,20 @@ const HomeScreen = () => {
         style={globalStyles.homeScreenContainer}
         qaId="screen_wrapper_home"
         excludeTop={true}
+        dismissKeyboard={false}
       >
-        <Banner
-          activeGroup={selectedHome}
-          onDropdownPress={handleDropdownPress}
-          image={require("@assets/images/home.png")}
-        />
-        <Tabs
-          tabs={roomTabs}
-          activeTab={selectedRoom}
-          onSelectTab={(tab) => setSelectedRoom(tab)}
-        />
-        {isRoomSelected && (
-          <DeviceTypeFilterTabs
-            roomDevices={roomDevices}
-            activeFilter={selectedDeviceTypeFilter}
-            onSelectFilter={setSelectedDeviceTypeFilter}
-          />
-        )}
-        {isLoading ? (
-          <View {...testProps("activity_indicator_home")}>
-          <ActivityIndicator
-            style={globalStyles.homeActivityIndicator}
-            size="large"
-            color={tokens.colors.primary}
-          />
-          </View>
-        ) : roomDevices?.length > 0 || showGroupControlOnHome ? (
-          <View
-            {...testProps("view_home_devices_and_groups")}
-            style={globalStyles.flex1}
-          >
-            {showGroupControlOnHome && (
-              <HomeGroupControlList
-                groups={controlGroups}
-                homeId={selectedHome?.id ?? ""}
-              />
-            )}
-            {isRoomSelected && (
-              <RoomControlSwitch
-                filteredDevices={filteredRoomDevices}
-                roomGroup={selectedRoomGroup}
-              />
-            )}
-            <View style={globalStyles.flex1}>
-              <HomeDeviceList
-                roomDevices={isRoomSelected ? filteredRoomDevices : roomDevices}
-                refreshing={refreshing}
-                onRefresh={onRefresh}
-              />
-            </View>
-          </View>
-        ) : (
-          <HomeEmptyState
-            onRedirect={redirectOperations}
+        <View
+          {...testProps("view_home_devices_and_groups")}
+          style={globalStyles.flex1}
+        >
+          <HomeDeviceList
+            roomDevices={listDevices}
             refreshing={refreshing}
             onRefresh={onRefresh}
+            listHeader={listHeader}
+            listEmpty={listEmpty}
           />
-        )}
+        </View>
       </ScreenWrapper>
 
       {aiAgentEnabled && <FloatingChatButton />}

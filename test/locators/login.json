@@ -69,5 +69,36 @@
   "app_version_text": {
     "by": "id",
     "value": "text_app_version_login"
+  },
+  "landing_view": {
+    "by": "id",
+    "value": "view_landing"
+  },
+  "classic_platform_button": {
+    "by": "id",
+    "value": "button_landing_option_classic",
+    "text": "ESP RainMaker Classic"
+  },
+  "neo_platform_button": {
+    "by": "id",
+    "value": "button_landing_option_neo",
+    "text": "ESP RainMaker Neo"
+  },
+  "own_platform_button": {
+    "by": "id",
+    "value": "landing_option_own_deployment",
+    "text": "Private deployment"
+  },
+  "landing_back_button": {
+    "by": "id",
+    "value": "button_landing_back"
+  },
+  "deployment_banner_button": {
+    "by": "id",
+    "value": "button_deployment_banner"
+  },
+  "deployment_banner_change": {
+    "by": "id",
+    "value": "text_deployment_banner_change"
   }
 }

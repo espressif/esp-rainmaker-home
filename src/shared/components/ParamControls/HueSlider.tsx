@@ -18,6 +18,7 @@ import { tokens } from "@shared/theme/tokens";
 import {
   ParamControlChildProps,
   comparableRoundedParamNumber,
+  snapSliderValue,
 } from "./lib/types";
 import { paramControlStyles as styles } from "./lib/styles";
 import { useDragBubble } from "./lib/useDragBubble";
@@ -44,11 +45,11 @@ const HueSlider = observer(
   }: ParamControlChildProps) => {
     const { min = 0, max = 360, step = 1 } = meta;
 
-    /**
-     * This function is used to handle the value change
-     * @param event - The event object
-     * @param newValue - The new value
-     */
+    const n = Number(value);
+    const displayValue = Number.isFinite(n)
+      ? snapSliderValue(n, min, max, step)
+      : min;
+
     const { isDragging, onSlideStart, onSlideTick, onSlideEnd } =
       useDragBubble();
 
@@ -58,15 +59,14 @@ const HueSlider = observer(
     ) => {
       onSlideTick();
       if (disabled) return;
-      const roundedValue = Math.round(newValue);
+      const snappedValue = snapSliderValue(newValue, min, max, step);
       const cur = comparableRoundedParamNumber(value);
-      if (cur !== null && roundedValue === cur) return;
-      if (roundedValue < min) return;
-      if (roundedValue > max) return;
-      onValueChange(event, roundedValue);
+      if (cur !== null && snappedValue === cur) return;
+      onValueChange(event, snappedValue);
     };
 
-    const thumbPercent = max > min ? ((value - min) / (max - min)) * 100 : 0;
+    const thumbPercent =
+      max > min ? ((displayValue - min) / (max - min)) * 100 : 0;
 
     return (
       <View
@@ -113,7 +113,7 @@ const HueSlider = observer(
               ]}
             >
               <View style={styles.bubble}>
-                <Text style={styles.bubbleText}>{value}°</Text>
+                <Text style={styles.bubbleText}>{value}</Text>
               </View>
               <View style={styles.bubbleArrow} />
             </View>
@@ -121,7 +121,7 @@ const HueSlider = observer(
 
           <View style={styles.sliderContainer} {...testProps(`slider_${label}`)}>
             <Slider
-              value={[value]}
+              value={[displayValue]}
               min={min}
               max={max}
               step={step}
@@ -144,7 +144,7 @@ const HueSlider = observer(
                   styles.thumb,
                   styles.thumbSmall,
                   { zIndex: 10 },
-                  disabled && styles.disabled,
+                  disabled && styles.thumbDisabled,
                 ]}
                 size="$1.5"
                 borderWidth={1}
@@ -196,7 +196,7 @@ const HueSlider = observer(
                 },
               ]}
             >
-              {value}°
+              {value}
             </Text>
           </View>
         )}
