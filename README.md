@@ -9,8 +9,10 @@
 <div align="center">
 
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache_2.0-yellow.svg)](https://opensource.org/licenses/Apache-2.0)
-[![React Native](https://img.shields.io/badge/React%20Native-v0.76.9-blue.svg)](https://reactnative.dev/)
-[![Expo](https://img.shields.io/badge/Expo-SDK%2052-black.svg)](https://expo.dev/)
+[![React Native](https://img.shields.io/badge/React%20Native-v0.83-blue.svg)](https://reactnative.dev/)
+[![Expo](https://img.shields.io/badge/Expo-SDK%2055-black.svg)](https://expo.dev/)
+[![Download iOS App](https://img.shields.io/badge/Download-iOS_App-0066CC?logo=appstore)](https://apps.apple.com/us/app/esp-rainmaker-home/id1563728960)
+[![Download Android App](https://img.shields.io/badge/Download-Android_App-0066CC?logo=googleplay)](https://play.google.com/store/apps/details?id=com.espressif.novahome)
 
 </div>
 
@@ -21,6 +23,12 @@
 </p>
 </div>
 
+## Integrated support for
+
+|  | Website | Docs | Firmware |
+| :---: | :---: | :---: | :---: |
+| <img src="src/assets/images/esp-rainmaker-neo-horizontal.svg" alt="ESP RainMaker Neo" height="40"/> | [![Website](https://img.shields.io/badge/Website-0066CC?logo=espressif&logoColor=white)](https://neo.rainmaker.espressif.com) | [![Docs](https://img.shields.io/badge/Docs-6F42C1?logo=readthedocs&logoColor=white)](https://docs.neo.rainmaker.espressif.com/) | [![Firmware](https://img.shields.io/badge/Firmware-24292F?logo=github&logoColor=white)](https://github.com/espressif/esp-rainmaker-neo-firmware) |
+| <img src="src/assets/images/esp-rainmaker-classic-horizontal.svg" alt="ESP RainMaker Classic" height="40"/> | [![Website](https://img.shields.io/badge/Website-0066CC?logo=espressif&logoColor=white)](https://rainmaker.espressif.com) | [![Docs](https://img.shields.io/badge/Docs-6F42C1?logo=readthedocs&logoColor=white)](https://docs.rainmaker.espressif.com/) | [![Firmware](https://img.shields.io/badge/Firmware-24292F?logo=github&logoColor=white)](https://github.com/espressif/esp-rainmaker) |
 
 ## ⚡ Quick Start
 
@@ -324,7 +332,9 @@ esp-rainmaker-home/
 │   │   └── interfaces/           # TypeScript interfaces for each adaptor
 │   ├── proto-ts/                 # Protobuf TypeScript definitions
 │   ├── sdk-adaptors/             # CDF SDK adaptor implementations
-│   │   └── ESPRMBase/            # ESP RainMaker Base SDK adaptor + transformers
+│   │   ├── ESPRMBase/            # @espressif/rainmaker-base-sdk adaptor + transformers
+│   │   ├── ESPRMNeoBase/         # @espressif/rainmaker-neo-base-sdk adaptor + transformers
+│   │   └── ESPRMMatterBase/      # @espressif/rainmaker-matter-sdk adaptor + transformers
 │   ├── shared/                   # Cross-feature shared code
 │   │   ├── components/           # Reusable UI components & param controls
 │   │   ├── hooks/                # Shared hooks (CDF, debounce, toast…)
@@ -356,6 +366,12 @@ esp-rainmaker-home/
 └── tsconfig.json                 # TypeScript config with path aliases
 ```
 
+SDK packages used by `src/sdk-adaptors/`:
+
+- [`@espressif/rainmaker-base-sdk`](https://www.npmjs.com/package/@espressif/rainmaker-base-sdk)
+- [`@espressif/rainmaker-neo-base-sdk`](https://www.npmjs.com/package/@espressif/rainmaker-neo-base-sdk)
+- [`@espressif/rainmaker-matter-sdk`](https://www.npmjs.com/package/@espressif/rainmaker-matter-sdk)
+
 ### Feature Module Structure
 
 Each feature under `src/features/` follows a consistent internal structure:
@@ -374,7 +390,7 @@ Screens in `app/` are thin wrappers — they import and render the screen compon
 
 ### CDF & SDK Adaptor Architecture
 
-The app is built on top of the **ESP Common Data Framework (CDF)**, a platform-agnostic data layer that abstracts all SDK-specific operations.
+The app is built on top of the **ESP Central Data Framework (CDF)**, a platform-agnostic data layer that abstracts all SDK-specific operations.
 
 ```
 ┌──────────────────────────────────────────────────────┐

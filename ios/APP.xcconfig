@@ -41,7 +41,7 @@ APP_GROUP_ID = group.com.espressif.novahome
 APP_MATTER_EXTENSION = com.espressif.nova.MatterExtension
 
 // App Version (marketing version)
-APP_VERSION = 5.4.0
+APP_VERSION = 6.0.0
 
 // App URL Scheme (used in Info.plist)
 APP_SCHEMA = rainmaker
