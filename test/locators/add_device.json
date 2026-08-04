@@ -4,11 +4,6 @@
     "value": "title",
     "text": "Add Device"
   },
-  "qr_code_option": {
-    "by": "id",
-    "value": "text_add_device_selection_scan_qr_code",
-    "text": "Scan QR Code"
-  },
   "bluetooth_option": {
     "by": "id",
     "value": "text_add_device_selection_bluetooth",

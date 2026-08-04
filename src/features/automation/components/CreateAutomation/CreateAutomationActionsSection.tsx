@@ -6,9 +6,8 @@
 
 import React from "react";
 import { View, Text, Pressable, ScrollView } from "react-native";
-import { Plus, Settings } from "lucide-react-native";
+import { Plus } from "lucide-react-native";
 import { tokens } from "@shared/theme/tokens";
-import { globalStyles } from "@shared/theme/globalStyleSheet";
 import AutomationDeviceCard from "../AutomationDeviceCard";
 import { testProps } from "@shared/utils/testProps";
 import { createAutomationStyles as styles } from "../../theme/createAutomationStyles";
@@ -17,29 +16,25 @@ import type { CreateAutomationActionCard } from "@features/automation/utils/auto
 export interface CreateAutomationActionsSectionProps {
   sectionLabel: string;
   hasActions: boolean;
-  emptyTitle: string;
-  emptyDescription: string;
   actionCards: CreateAutomationActionCard[];
   disabled?: boolean;
   onAddAction: () => void;
 }
 
 /**
- * Renders the create automation actions section UI section.
+ * Renders the create automation actions section header and action cards when present.
  */
 export const CreateAutomationActionsSection: React.FC<
   CreateAutomationActionsSectionProps
 > = ({
   sectionLabel,
   hasActions,
-  emptyTitle,
-  emptyDescription,
   actionCards,
   disabled = false,
   onAddAction,
 }) => {
   return (
-    <View style={[styles.section, styles.actionsSection]}>
+    <View style={[styles.section, hasActions && styles.actionsSection]}>
       <View style={styles.sectionHeader}>
         <Text {...testProps("text_label_actions")} style={styles.sectionLabel}>
           {sectionLabel}
@@ -60,28 +55,7 @@ export const CreateAutomationActionsSection: React.FC<
           />
         </Pressable>
       </View>
-      {!hasActions ? (
-        <View
-          {...testProps("view_empty_actions")}
-          style={styles.emptyStateContainer}
-        >
-          <View style={styles.emptyStateIconContainer}>
-            <Settings size={35} color={tokens.colors.primary} />
-          </View>
-          <Text
-            {...testProps("text_title_empty_automations")}
-            style={globalStyles.emptyStateTitle}
-          >
-            {emptyTitle}
-          </Text>
-          <Text
-            {...testProps("text_description_empty_automations")}
-            style={globalStyles.emptyStateDescription}
-          >
-            {emptyDescription}
-          </Text>
-        </View>
-      ) : (
+      {hasActions && (
         <ScrollView
           {...testProps("scroll_actions_automations")}
           style={styles.actionScrollView}

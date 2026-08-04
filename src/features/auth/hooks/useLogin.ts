@@ -18,6 +18,7 @@ import { useTranslation } from "react-i18next";
 import { useToast } from "@shared/hooks/useToast";
 import {
   executePostLoginPipeline,
+  navigateToHomeAfterAuth,
   withPostLoginPipelineHooks,
 } from "@features/auth/utils/postLoginPipeline";
 import {
@@ -42,7 +43,7 @@ import {
   isCurrentOAuthAttempt,
   isOAuthLoadingStatus,
   mapOAuthErrorToMessage,
-  OAUTH_PIPELINE_STEP_GET_USER_PROFILE_AND_ROUTE,
+  OAUTH_PIPELINE_STEP_GET_USER_PROFILE,
   shouldMonitorOAuthAppLifecycle,
   startOAuthAttempt,
   type OAuthFlowState,
@@ -150,15 +151,18 @@ export function useLogin() {
 
         if (!store?.userStore.user) return;
 
-        const postLoginOptions = withPostLoginPipelineHooks({
-          store,
-          router,
-          syncHomeWithNodes,
-          initUserCustomData,
-        });
-
         setESPCDFUser(store.userStore.user ?? null);
-        await executePostLoginPipeline(postLoginOptions);
+        // Leave Login immediately — hydrate CDF in the background on Home.
+        navigateToHomeAfterAuth(router);
+        void executePostLoginPipeline(
+          withPostLoginPipelineHooks({
+            store,
+            syncHomeWithNodes,
+            initUserCustomData,
+          })
+        ).catch((error: unknown) => {
+          console.warn("[useLogin] post-login pipeline failed:", error);
+        });
       } catch (error: unknown) {
         console.error("[useLogin] credential login failed:", error);
         toast.showError(
@@ -312,16 +316,21 @@ export function useLogin() {
         store!.userStore[CDF_EXTERNAL_PROPERTIES.IS_OAUTH_LOGIN] = true;
         setESPCDFUser(store!.userStore.user ?? null);
         setPipelineProgress(initPipelineProgress());
+        // Leave auth immediately; do not await hydrate (sync locks).
+        navigateToHomeAfterAuth(router);
         const postLoginOptions = withPostLoginPipelineHooks(
           {
             store: store!,
-            router,
             syncHomeWithNodes,
             initUserCustomData,
           },
           createOAuthPostLoginPipelineHooks(setPipelineProgress)
         );
-        await executePostLoginPipeline(postLoginOptions);
+        void executePostLoginPipeline(postLoginOptions).catch(
+          (error: unknown) => {
+            console.warn("[useLogin] OAuth post-login pipeline failed:", error);
+          }
+        );
 
         const completedState = completeOAuthAttempt(
           oauthFlowStateRef.current,
@@ -452,8 +461,7 @@ export function useLogin() {
       return t("auth.login.settingUpAccount") || "Setting up account";
     }
     if (
-      pipelineProgress.currentStep ===
-      OAUTH_PIPELINE_STEP_GET_USER_PROFILE_AND_ROUTE
+      pipelineProgress.currentStep === OAUTH_PIPELINE_STEP_GET_USER_PROFILE
     ) {
       return t("auth.login.finishingUp") || "Finishing up";
     }

@@ -305,6 +305,14 @@ async function ensureNocReadyForFabric(
   }
 }
 
+/**
+ * Ensures the given Matter fabric has fabric details and a ready user NOC.
+ * @param fabric - Matter home / fabric group from the store
+ * @param user - Current CDF user used for NOC issuance when needed
+ * @param messages - Localized error copy for commissioning failures
+ * @param progress - Optional callbacks (e.g. certificate issuance UI)
+ * @returns Fabric details after NOC readiness is ensured
+ */
 export async function prepareFabric(
   fabric: ESPCDFGroup,
   user: ESPCDFUser,

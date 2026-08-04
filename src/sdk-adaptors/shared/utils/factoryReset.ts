@@ -29,8 +29,6 @@ interface ResettableService {
  *
  * Failures are swallowed by design: an offline or unreachable device must still be
  * removable from the account, so a reset failure must never block the delete.
- *
- * @param services - Raw SDK services of the node (RM: `node.nodeConfig.services`, RMNeo: `node.services`).
  */
 export async function tryFactoryResetBeforeDelete(
     services: ResettableService[] | undefined,

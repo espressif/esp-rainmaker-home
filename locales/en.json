@@ -124,7 +124,12 @@
       "cancel": "Cancel",
       "save": "Save",
       "delete": "Delete",
+      "unsavedChangesTitle": "Unsaved Changes",
+      "unsavedChangesDescription": "You have unsaved changes. Leaving this page will discard them.",
+      "discardChanges": "Discard",
+      "keepEditing": "Keep Editing",
       "offline": "Offline",
+      "unreachable": "Unreachable",
       "offlineLastSeen": "Offline - {{timeAgo}}",
       "lastSeen": {
         "seconds": "{{count}}s ago",
@@ -133,6 +138,9 @@
         "days": "{{count}}d ago"
       },
       "confirm": "Confirm",
+      "exitAppTitle": "Exit app?",
+      "exitAppMessage": "Are you sure you want to close the app?",
+      "exitAppConfirm": "Exit",
       "edit": "Edit",
       "next": "Next",
       "update": "Update",
@@ -169,7 +177,7 @@
       "deploymentBanner": {
         "change": "Change deployment"
       },
-      "neoCredentialsHint": "You can sign in using your existing RainMaker credentials"
+      "neoCredentialsHint": "You can sign in using your existing RainMaker Classic credentials"
     },
     "signup": {
       "title": "Sign Up",
@@ -210,7 +218,9 @@
       "invalidPhoneE164": "Enter a valid international phone: +, country code, then number (up to 15 digits).",
       "passwordsDoNotMatch": "Passwords do not match",
       "invalidCode": "Please enter a valid 6-digit code",
-      "newPasswordSameAsCurrent": "New password cannot be the same as the current password"
+      "newPasswordSameAsCurrent": "New password cannot be the same as the current password",
+      "nameMinLength": "Name must be at least 2 characters",
+      "nameMaxLength": "Name cannot exceed 30 characters"
     },
     "agentTerms": {
       "title": "Would you like to add a nickname for your account?",
@@ -280,6 +290,10 @@
       "notSet": "Not set",
       "nickname": "Nickname",
       "nicknamePlaceholder": "Enter your nickname",
+      "email": "Email",
+      "emailPlaceholder": "Email",
+      "phone": "Phone",
+      "phonePlaceholder": "Phone",
       "userId": "User ID",
       "userIdPlaceholder": "User ID"
     },
@@ -591,6 +605,16 @@
       "title": "Connecting Device",
       "success": "Device provisioned successfully",
       "timezoneNotSet": "Current TimeZone is not set. Schedules may be unreliable. Set it in Device Settings.",
+      "wifiResetTitle": "Wi-Fi reset",
+      "wifiResetMessage": "Wi-Fi has been reset on the device. Re-enter the password to try again?",
+      "wifiResetFailedMessage": "Could not reset Wi-Fi on the device. Factory reset it before adding it again.",
+      "wifiResetRetryConfirm": "Try again",
+      "wifiResetPasswordMessage": "Enter the password for this network.",
+      "wifiResetPasswordPlaceholder": "Wi-Fi password",
+      "wifiResetPasswordSubmit": "Connect",
+      "exitSetupTitle": "Stop setting up?",
+      "exitSetupMessage": "Your device is still being set up. If you leave now, setup will not finish and you will need to start again.",
+      "exitSetupConfirm": "Stop setup",
       "sendingCredentialsTitle": "Sending Wi-Fi Credentials",
       "sendingCredentialsDescription": "Sending network credentials to device...",
       "confirmingConnectionTitle": "Confirming Wi-Fi Connection",
@@ -600,19 +624,25 @@
       "verifyingDeviceAssociation": "Verifying Device Association",
       "settingUpNode": "Setting Up Node",
       "settingUpNodeDescription": "Finalizing device setup...",
+      "setup": {
+        "checkingNodeOnline": "Waiting for your device to come online…",
+        "tryingReconnect": "Reconnecting MQTT ({{attempt}})…",
+        "updatingNodeTimezone": "Applying your timezone to the device…",
+        "complete": "Almost done…"
+      },
       "challengeResponse": {
         "confirmingNodeAssociationTitle": "Confirming Node Association",
         "confirmingNodeAssociationDescription": "Confirming Node association with user",
         "confirmingWifiConnectionTitle": "Confirming Wi-Fi Connection",
         "confirmingWifiConnectionDescription": "Confirming Wi-Fi Connection with the device",
         "settingUpNodeTitle": "Setting up the Node",
-        "settingUpNodeDescription": "Setting up the Node with the user's timezone"
+        "settingUpNodeDescription": "Waiting for your device to come online…"
       },
       "onNetwork": {
         "confirmingNodeAssociationTitle": "Confirming Node Association",
         "confirmingNodeAssociationDescription": "Verifying device association with your account over the local network",
         "settingUpNodeTitle": "Setting up the Node",
-        "settingUpNodeDescription": "Setting up the Node with the user's timezone"
+        "settingUpNodeDescription": "Waiting for your device to come online…"
       }
     },
     "claiming": {
@@ -672,6 +702,7 @@
         "platformNotSupported": "Platform not supported for QR scanning",
         "sessionInitFailed": "Failed to initialize session. Please try again.",
         "scanAgain": "Scan Again",
+        "noQrCode": "I don't have a QR code",
         "bluetoothPermissionRequired": "Bluetooth permission required. Please grant permission and try again.",
         "matterAuthRequired": "Authentication required for Matter device commissioning.",
         "matterCommissioningFailed": "Matter commissioning failed: {{error}}"
@@ -840,9 +871,17 @@
       "noDeviceSelected": "No device selected",
       "sessionInitFailed": "Session initialization failed",
       "provisioningFailed": "Provisioning failed",
+      "nodeOnlineTimeout": "Your device didn't come online in time. Check that it's powered on and connected to Wi-Fi, then try again.",
+      "noProvisionStateToResume": "Could not resume setup. Please start adding the device again.",
       "wifiAuthFailed": "Wi-Fi Authentication failed.",
       "networkNotFound": "Network not found. Please check the network name.",
       "deviceDisconnected": "Device disconnected. Please try again.",
+      "wifiStatusUnknown": "Wi-Fi status unknown. Please try again.",
+      "sessionFailed": "Session initialization failed. Please try again.",
+      "configurationFailed": "Failed to apply network configuration. Please try again.",
+      "wifiStatusFetchFailed": "Unable to fetch Wi-Fi status. Please try again.",
+      "missingProvisionData": "Missing provision data",
+      "nodeNotFound": "Device not found after provisioning",
       "failedToScanNetworks": "Failed to scan for networks",
       "invalidCredentials": "Please enter valid credentials",
       "fallback": "Something went wrong. Please try again later.",
@@ -932,7 +971,7 @@
       "favourites": "Favourites",
       "allScenes": "Scenes",
       "noScenesYet": "No Scenes Added Yet",
-      "noScenesYetDescription": "Create your first scene to automate your devices",
+      "noScenesYetDescription": "Create your first scene\n to automate your devices",
       "allScenesFavorites": "All your scenes are favorites!",
       "allScenesFavoritesDescription": "Add more scenes to see them here, or remove some from favorites.",
       "sceneTriggeredSuccessfully": "Scene activated successfully",
@@ -980,6 +1019,7 @@
       "sceneTriggerFailed": "Scene trigger failed",
       "someSceneTriggerFailed": "Some scene trigger failed",
       "sceneCreationFailed": "Scene creation failed",
+      "sceneUpdateFailed": "Scene update failed",
       "someSceneDeletionFailed": "Some scene deletion failed",
       "sceneDeletionFailed": "Scene deletion failed",
       "noScenes": "No scenes found",
@@ -998,6 +1038,7 @@
       "automationMenuBottomSheetEnabled": "Enabled",
       "automationMenuBottomSheetDisabled": "Disabled",
       "edit": "Edit",
+      "done": "Done",
       "delete": "Delete",
       "createAutomation": "Create Automation",
       "automationNamePlaceholder": "Automation Name",
@@ -1034,7 +1075,8 @@
       "title": "Select Device",
       "selectDevice": "Select a device to create an event trigger",
       "selectedDevice": "Selected Device",
-      "selectDifferentDevice": "Select a different device"
+      "selectDifferentDevice": "Select a different device",
+      "singleConditionNote": "An automation event can be triggered by only one condition. Selecting a different condition will replace the current selection."
     },
     "eventParamSelection": {
       "title": "Configure Event",
@@ -1058,7 +1100,7 @@
       "incompatibleParamsTitle": "No compatible parameters \nfound on {{deviceName}}"
     },
     "card": {
-      "if": "If",
+      "when": "When",
       "set": "Set",
       "on": "ON",
       "off": "OFF",
@@ -1102,11 +1144,12 @@
       "disable": "Disable",
       "delete": "Delete",
       "noSchedulesYet": "No Schedules Added Yet",
-      "noSchedulesYetDescription": "Create your first schedule to automate your devices",
+      "noSchedulesYetDescription": "Create your first schedule\n to automate your devices",
       "scheduleEnabledSuccessfully": "Schedule enabled successfully",
       "scheduleDisabledSuccessfully": "Schedule disabled successfully",
       "scheduleDeletedSuccessfully": "Schedule deleted successfully",
       "someDevicesFailedUpdate": "Some devices failed to update schedule",
+      "someDevicesFailedDelete": "Some devices failed to delete schedule",
       "someDevicesNotConnected": "Some devices are offline",
       "createSchedule": "Create Schedule",
       "scheduleNamePlaceholder": "Schedule Name",
@@ -1135,6 +1178,7 @@
       "scheduleDisableFailed": "Failed to disable schedule",
       "scheduleCreationFailed": "Failed to create schedule",
       "scheduleDeletionFailed": "Failed to delete schedule",
+      "scheduleNotFound": "Schedule not found",
       "noSchedules": "No schedules found",
       "scheduleSyncFailed": "Schedule sync failed",
       "fallback": "Something went wrong. Please try again later."
@@ -1257,9 +1301,13 @@
       "deleteErrorTitle": "Failed to delete",
       "deleteErrorMessage": "Failed to delete the conversation. Please try again.",
       "activateErrorTitle": "Failed to open conversation",
-      "activateErrorMessage": "Something went wrong while opening the conversation."
+      "activateErrorMessage": "Something went wrong while opening the conversation.",
+      "invalidParams": "Missing agent or conversation information.",
+      "loadError": "Failed to load conversation.",
+      "viewTitle": "Conversation"
     },
     "welcomeMessage": "How can I help you today?",
+    "retry": "Retry",
     "suggestions": {
       "showDevices": "Can you show all my devices?",
       "turnOnFan": "Please turn on the Bedroom Fan",

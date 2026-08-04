@@ -97,7 +97,7 @@ export function useRoomControl(
 
       setTimeout(() => setActiveAction(null), LOADER_VISIBLE_DURATION_MS);
     },
-    [canToggle, allOn, allOff, devicesWithPower, roomGroup, toast, t]
+    [devicesWithPower, roomGroup, toast, t]
   );
 
   return { devicesWithPower, canToggle, allOn, allOff, activeAction, handlePower };

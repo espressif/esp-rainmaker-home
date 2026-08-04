@@ -4,11 +4,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { TouchableOpacity, Text, View } from "react-native";
+import { TouchableOpacity, Text } from "react-native";
 import { useTranslation } from "react-i18next";
-import { RefreshCw } from "lucide-react-native";
 import { Header } from "@shared/components";
-import { tokens } from "@shared/theme/tokens";
 import { testProps } from "@shared/utils/testProps";
 import { styles } from "./ScenesHeader.styles";
 
@@ -16,18 +14,17 @@ interface ScenesHeaderProps {
   hasScenes: boolean;
   isEditing: boolean;
   onEditToggle: () => void;
-  onRefresh: () => void;
 }
 
 /**
- * Header component for scenes screen
- * Shows edit/done button when scenes exist, or refresh button when no scenes
+ * Header for the scenes screen.
+ * Shows edit/done when scenes exist. Refresh is via pull-to-refresh only.
+ * @param props - Scenes presence, edit mode, and edit toggle
  */
 export const ScenesHeader = ({
   hasScenes,
   isEditing,
   onEditToggle,
-  onRefresh,
 }: ScenesHeaderProps) => {
   const { t } = useTranslation();
 
@@ -36,24 +33,17 @@ export const ScenesHeader = ({
       label={t("scene.scenes.title")}
       showBack={false}
       rightSlot={
-        <View style={styles.rightSlot}>
-          {hasScenes ? (
-            <TouchableOpacity
-              {...testProps("button_edit_scenes")}
-              onPress={onEditToggle}
-            >
-              <Text {...testProps("text_edit_scenes")} style={styles.editButton}>
-                {isEditing ? t("scene.scenes.done") : t("scene.scenes.edit")}
-              </Text>
-            </TouchableOpacity>
-          ) : null}
+        hasScenes ? (
           <TouchableOpacity
-            {...testProps("button_refresh_scenes")}
-            onPress={onRefresh}
+            {...testProps("button_edit_scenes")}
+            onPress={onEditToggle}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
           >
-            <RefreshCw size={20} color={tokens.colors.primary} />
+            <Text {...testProps("text_edit_scenes")} style={styles.editButton}>
+              {isEditing ? t("scene.scenes.done") : t("scene.scenes.edit")}
+            </Text>
           </TouchableOpacity>
-        </View>
+        ) : null
       }
     />
   );

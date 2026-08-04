@@ -144,6 +144,16 @@ export const provisionAdapter: ESPProvisionAdapterInterface = {
   },
 
   /**
+   * Clears the device's Wi-Fi state over the open session, leaving the
+   * user-node association intact so a corrected password can be re-sent.
+   * @param deviceName - The name of the connected ESP device.
+   * @returns A promise resolving to `true` when the device acknowledged the reset.
+   */
+  resetWifiStatus: async (deviceName: string): Promise<boolean> => {
+    return ESPProvModule.resetWifiStatus!(deviceName);
+  },
+
+  /**
    * Creates an ESP device instance with the specified parameters.
    * @param deviceName - The name of the ESP device.
    * @param transport - The transport type (BLE or Wi-Fi).

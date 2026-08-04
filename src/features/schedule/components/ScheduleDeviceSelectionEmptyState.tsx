@@ -5,9 +5,9 @@
  */
 
 import { View, Text, Pressable } from "react-native";
-import { useRouter } from "expo-router";
 import { useTranslation } from "react-i18next";
 import { Plus } from "lucide-react-native";
+import { useAddDeviceNavigation } from "@features/provision/hooks";
 import { tokens } from "@shared/theme/tokens";
 import { globalStyles } from "@shared/theme/globalStyleSheet";
 
@@ -17,7 +17,7 @@ import { globalStyles } from "@shared/theme/globalStyleSheet";
  * Displays empty state when no devices are available for schedule selection.
  */
 export const ScheduleDeviceSelectionEmptyState = () => {
-  const router = useRouter();
+  const goToAddDevice = useAddDeviceNavigation();
   const { t } = useTranslation();
 
   return (
@@ -30,9 +30,7 @@ export const ScheduleDeviceSelectionEmptyState = () => {
       ]}
     >
       <View style={globalStyles.sceneEmptyStateIconContainer}>
-        <Pressable
-          onPress={() => router.push("/(provision)/AddDeviceSelection")}
-        >
+        <Pressable onPress={goToAddDevice}>
           <Plus size={35} color={tokens.colors.primary} />
         </Pressable>
       </View>

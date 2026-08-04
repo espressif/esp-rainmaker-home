@@ -11,6 +11,7 @@ import { Header, ScreenWrapper, ConfirmationDialog } from "@shared/components";
 import {
   LogoutButton,
   ProfileSection,
+  ProfileLoadingSkeleton,
   UserIntegrationSection,
   UserOperationsSection,
   UserHeaderRight,
@@ -23,6 +24,10 @@ import { globalStyles } from "@shared/theme/globalStyleSheet";
 import { userStyles } from "@features/user/theme/userStyleSheet";
 import { testProps } from "@shared/utils/testProps";
 
+/**
+ * My Profile tab — profile card (with hydration skeleton), integrations,
+ * operations, and logout. Logout dialog loading is separate from profile load.
+ */
 const User: React.FC = observer(() => {
   const { t } = useTranslation();
   const {
@@ -31,6 +36,7 @@ const User: React.FC = observer(() => {
     userOperations,
     integrations,
     isLoading,
+    isProfileLoading,
     showLogoutDialog,
     setShowLogoutDialog,
     logoutMessage,
@@ -67,11 +73,15 @@ const User: React.FC = observer(() => {
           showsVerticalScrollIndicator={false}
           {...testProps("scroll_view_user_profile")}
         >
-          <ProfileSection
-            userInfo={user?.userInfo || undefined}
-            onPress={() => handleNavigation("handleSettings")}
-            qaId="button_profile_section_user"
-          />
+          {isProfileLoading ? (
+            <ProfileLoadingSkeleton />
+          ) : (
+            <ProfileSection
+              userInfo={user?.userInfo || undefined}
+              onPress={() => handleNavigation("handleSettings")}
+              qaId="button_profile_section_user"
+            />
+          )}
 
           {features.voiceAssistants && (
             <UserIntegrationSection

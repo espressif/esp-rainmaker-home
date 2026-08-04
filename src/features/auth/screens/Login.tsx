@@ -12,6 +12,9 @@ import {
   TouchableOpacity,
   ImageSourcePropType,
   TextInput,
+  ScrollView,
+  KeyboardAvoidingView,
+  Platform,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
@@ -22,14 +25,9 @@ import { tokens } from "@shared/theme/tokens";
 
 import { useLogin } from "@features/auth/hooks";
 import { getAuthAllowedUsernameTypes } from "@features/auth/utils/authHelper";
-import { getEnabledOAuthProviders, getFeatures } from "@/config/features.config";
+import { getEnabledOAuthProviders } from "@/config/features.config";
 import { isCnRegion } from "@config/region.config";
-import {
-  DEPLOYMENT_KIND,
-  getCurrentDeploymentKind,
-  getDeploymentLabelKey,
-  getDeploymentWordmark,
-} from "@features/landing";
+import { DEPLOYMENT_KIND, useDeploymentBranding } from "@features/landing";
 
 import {
   ScreenWrapper,
@@ -40,6 +38,13 @@ import {
 } from "@shared/components";
 import { OAuthLoadingOverlay, AppVersionText } from "@features/auth/components";
 import { testProps } from "@shared/utils/testProps";
+import {
+  AUTO_COMPLETE_PASSWORD,
+  AUTO_COMPLETE_USERNAME,
+  IMPORTANT_FOR_AUTOFILL_YES,
+  TEXT_CONTENT_TYPE_PASSWORD,
+  TEXT_CONTENT_TYPE_USERNAME,
+} from "@shared/utils/constants";
 
 import google from "@assets/images/google.png";
 import signinwithapple from "@assets/images/apple.png";
@@ -69,7 +74,6 @@ export function LoginScreen() {
   const { t } = useTranslation();
   const router = useRouter();
   const ENABLED_OAUTH_PROVIDERS = getEnabledOAuthProviders();
-  const features = getFeatures();
 
   const {
     email,
@@ -104,30 +108,15 @@ export function LoginScreen() {
   // remaining login options (e.g. OAuth / sign-up) are shown.
   const hideCredentialLogin = isCnRegion();
 
-  // Show the "Signing in to X — Change deployment" banner only when the user
-  // has actually picked a backend (i.e. Landing was passed) AND the build has
-  // the backend selector enabled. CN-region installs never pass Landing, so
-  // the kind lookup returns null and the banner naturally stays hidden.
-  const currentDeploymentKind = features.backendSelector
-    ? getCurrentDeploymentKind()
-    : null;
-
   // Names the deployment under the house mark, replacing the generic app
   // lockup: the official wordmark for ESP RainMaker Classic / ESP RainMaker
   // Neo, its plain label for a private deployment. The label is passed either
   // way — where a wordmark renders, it is that image's accessibility label, so
-  // screen readers still announce the deployment by name.
-  const { deploymentLabel, deploymentWordmark } = useMemo(
-    () => ({
-      deploymentLabel: currentDeploymentKind
-        ? t(getDeploymentLabelKey(currentDeploymentKind))
-        : undefined,
-      deploymentWordmark: currentDeploymentKind
-        ? getDeploymentWordmark(currentDeploymentKind)
-        : undefined,
-    }),
-    [currentDeploymentKind, t],
-  );
+  // screen readers still announce the deployment by name. The kind also gates
+  // the "Change deployment" banner: null (no backend picked yet, or selector
+  // disabled) hides it.
+  const { currentDeploymentKind, deploymentLabel, deploymentWordmark } =
+    useDeploymentBranding();
 
   const usernameFieldProps = useMemo(() => {
     const allowsPhone = getAuthAllowedUsernameTypes().includes("phone");
@@ -151,17 +140,29 @@ export function LoginScreen() {
           onAppBecameActive={handleOAuthAppBecameActive}
         />
       ) : (
-        <View
-          style={globalStyles.scrollViewContent}
-          {...testProps("view_login")}
-        >
-          <Logo
-            qaId="logo_login"
-            caption={deploymentLabel}
-            captionSource={deploymentWordmark}
-            onConfigTrigger={() => router.push("/(config)/ConfigScan" as never)}
-            onConfigReset={handleConfigReset}
-          />
+        <>
+          <KeyboardAvoidingView
+            behavior={Platform.OS === "ios" ? "padding" : "height"}
+            style={globalStyles.authKeyboardView}
+            keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 20}
+          >
+            <ScrollView
+              {...testProps("view_login")}
+              contentContainerStyle={[
+                globalStyles.scrollViewContent,
+                globalStyles.authScrollViewContentWithPadding,
+              ]}
+              keyboardShouldPersistTaps="handled"
+            >
+              <Logo
+                qaId="logo_login"
+                caption={deploymentLabel}
+                captionSource={deploymentWordmark}
+                onConfigTrigger={() =>
+                  router.push("/(config)/ConfigScan" as never)
+                }
+                onConfigReset={handleConfigReset}
+              />
 
           {/* The wordmark above already names the deployment, so this carries
               only the action. */}
@@ -213,6 +214,11 @@ export function LoginScreen() {
                   validateOnBlur={true}
                   inputMode={usernameFieldProps.inputMode}
                   keyboardType={usernameFieldProps.keyboardType}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  textContentType={TEXT_CONTENT_TYPE_USERNAME}
+                  autoComplete={AUTO_COMPLETE_USERNAME}
+                  importantForAutofill={IMPORTANT_FOR_AUTOFILL_YES}
                   returnKeyType="next"
                   onSubmitEditing={() => {
                     if (isEmailValid) {
@@ -232,6 +238,11 @@ export function LoginScreen() {
                   onFieldChange={handlePasswordChange}
                   validator={passwordValidator}
                   validateOnBlur={true}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  textContentType={TEXT_CONTENT_TYPE_PASSWORD}
+                  autoComplete={AUTO_COMPLETE_PASSWORD}
+                  importantForAutofill={IMPORTANT_FOR_AUTOFILL_YES}
                   returnKeyType="go"
                   onSubmitEditing={() => {
                     if (isEmailValid && isPasswordValid && !isLoading) {
@@ -342,19 +353,24 @@ export function LoginScreen() {
               </>
             ))}
 
-          {!hideCredentialLogin && (
-            <TouchableOpacity
-              {...testProps("button_signup")}
-              onPress={() => router.push("/(auth)/Signup")}
-            >
-              <Text {...testProps("text_signup")} style={globalStyles.linkText}>
-                {t("auth.login.navigateToSignUp")}
-              </Text>
-            </TouchableOpacity>
-          )}
+              {!hideCredentialLogin && (
+                <TouchableOpacity
+                  {...testProps("button_signup")}
+                  onPress={() => router.push("/(auth)/Signup")}
+                >
+                  <Text
+                    {...testProps("text_signup")}
+                    style={globalStyles.linkText}
+                  >
+                    {t("auth.login.navigateToSignUp")}
+                  </Text>
+                </TouchableOpacity>
+              )}
+            </ScrollView>
+          </KeyboardAvoidingView>
 
           <AppVersionText testId="text_app_version_login" />
-        </View>
+        </>
       )}
 
       <ConfirmationDialog

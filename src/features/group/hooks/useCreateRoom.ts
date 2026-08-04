@@ -26,6 +26,10 @@ import {
   normalizeGroupSharingInviteForApi,
 } from "@features/group/utils/settingsHelpers";
 import { getNodeDiff, mapNodeToDisplay } from "@features/group/utils/createRoomHelpers";
+import {
+  reconcilePendingCreatedRoom,
+  rememberPendingCreatedRoom,
+} from "@features/group/utils/pendingCreatedRoom";
 import { useCDF } from "@shared/hooks/useCDF";
 import { fetchNodesIfEmpty } from "@store";
 import type { Node } from "@src/types/global";
@@ -141,7 +145,7 @@ export function useCreateRoom(
     t,
     router,
   } = options;
-  const { store } = useCDF();
+  const { store, syncHomeWithNodes } = useCDF();
 
   const [roomName, setRoomName] = useState(paramRoomName || "");
   const [selectedNodesIds, setSelectedNodesIds] = useState<string[]>([]);
@@ -288,7 +292,19 @@ export function useCreateRoom(
       })
       .then(async (group) => {
         if (group) {
+          // Rooms focus-sync can return a pre-create getGroups snapshot and wipe
+          // this subgroup from the store — remember it until cloud lists it.
+          if (homeId) {
+            rememberPendingCreatedRoom(homeId, group);
+          }
           toast.showSuccess(t("group.createRoom.roomCreatedSuccessfully"));
+          try {
+            await syncHomeWithNodes(true);
+            reconcilePendingCreatedRoom(homeId, store?.groupStore);
+          } catch (error) {
+            console.warn("[CreateRoom] sync after create failed:", error);
+            reconcilePendingCreatedRoom(homeId, store?.groupStore);
+          }
           await new Promise((r) => setTimeout(r, 500));
           const params: Record<string, string> = {
             id: homeId as string,
@@ -324,6 +340,8 @@ export function useCreateRoom(
     homeId,
     dismissTo,
     nodeId,
+    syncHomeWithNodes,
+    store,
   ]);
 
   const handleUpdate = useCallback(async () => {

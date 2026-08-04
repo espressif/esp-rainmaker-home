@@ -15,7 +15,7 @@ import { observer } from "mobx-react-lite";
 import { tokens } from "@shared/theme/tokens";
 
 // Types & Styles
-import { ParamControlChildProps } from "./lib/types";
+import { ParamControlChildProps, snapSliderValue } from "./lib/types";
 import { paramControlStyles as styles } from "./lib/styles";
 import { useDragBubble } from "./lib/useDragBubble";
 
@@ -41,6 +41,11 @@ const TemperatureSlider = observer(
     // 1. Computed Values
     const { min = 10, max = 35, step = 0.5 } = meta;
 
+    const n = Number(value);
+    const displayValue = Number.isFinite(n)
+      ? snapSliderValue(n, min, max, step)
+      : min;
+
     /**
      * This function is used to handle the value change
      * @param event - The event object
@@ -49,19 +54,25 @@ const TemperatureSlider = observer(
     const { isDragging, onSlideStart, onSlideTick, onSlideEnd } =
       useDragBubble();
 
+    /**
+     * Commits a snapped slider value so near-edge drags can reach min/max.
+     * Uses display snap (not Math.round) so fractional steps like 0.5 stay valid.
+     * @param event - Gesture event from Tamagui Slider
+     * @param newValue - Raw slider reading
+     */
     const commitValue = (
       event: GestureResponderEvent | null,
       newValue: number,
     ) => {
       onSlideTick();
       if (disabled) return;
-      if (newValue === value) return;
-      if (newValue < min) return;
-      if (newValue > max) return;
-      onValueChange(event, newValue);
+      const snappedValue = snapSliderValue(newValue, min, max, step);
+      if (snappedValue === displayValue) return;
+      onValueChange(event, snappedValue);
     };
 
-    const thumbPercent = max > min ? ((value - min) / (max - min)) * 100 : 0;
+    const thumbPercent =
+      max > min ? ((displayValue - min) / (max - min)) * 100 : 0;
 
     return (
       <View
@@ -79,7 +90,7 @@ const TemperatureSlider = observer(
             >
               {label}
             </Text>
-            <Text style={styles.compactValue}>{value}°C</Text>
+            <Text style={styles.compactValue}>{displayValue}°C</Text>
           </View>
         ) : (
           <>
@@ -108,7 +119,7 @@ const TemperatureSlider = observer(
               ]}
             >
               <View style={styles.bubble}>
-                <Text style={styles.bubbleText}>{value}°C</Text>
+                <Text style={styles.bubbleText}>{displayValue}°C</Text>
               </View>
               <View style={styles.bubbleArrow} />
             </View>
@@ -143,7 +154,7 @@ const TemperatureSlider = observer(
               </Svg>
             </View>
             <Slider
-              value={[value]}
+              value={[displayValue]}
               min={min}
               max={max}
               step={step}
@@ -195,7 +206,7 @@ const TemperatureSlider = observer(
                 },
               ]}
             >
-              {value}°C
+              {displayValue}°C
             </Text>
           </View>
         )}

@@ -9,6 +9,7 @@ import { useCDF } from "@shared/hooks/useCDF";
 import { useRouter } from "expo-router";
 import { useTranslation } from "react-i18next";
 import { useToast } from "@shared/hooks/useToast";
+import { resetStackTo } from "@shared/utils/navigation";
 import {
   createPasswordValidator,
   createNewPasswordValidator,
@@ -51,16 +52,15 @@ export function useChangePassword() {
   };
 
   const handleNewPasswordChange = (value: string, isValid: boolean) => {
-    const newPwd = value.trim();
-    setNewPassword(newPwd);
+    setNewPassword(value);
     setIsNewPasswordValid(isValid);
     if (confirmPassword.trim()) {
-      setIsConfirmPasswordValid(confirmPassword.trim() === newPwd);
+      setIsConfirmPasswordValid(confirmPassword === value);
     }
   };
 
   const handleConfirmPasswordChange = (value: string, isValid: boolean) => {
-    setConfirmPassword(value.trim());
+    setConfirmPassword(value);
     setIsConfirmPasswordValid(isValid);
   };
 
@@ -79,10 +79,13 @@ export function useChangePassword() {
     setIsLoading(true);
     try {
       const user = store?.userStore.user;
-      await user?.changePassword(oldPassword, newPassword);
+      const res = await user?.changePassword(oldPassword, newPassword);
       await user?.logout();
-      toast.showSuccess(t("auth.changePassword.passwordChangedSuccessfully"));
-      router.replace("/(auth)/Login");
+      toast.showSuccess(t("auth.changePassword.passwordChangedSuccessfully"), res?.description || undefined);
+      // Changing the password signs the user out, so reset the stack — a plain
+      // `replace` would leave the signed-in screens this was opened from
+      // (User → Change Password) reachable with back.
+      resetStackTo(router, "/(auth)/Login");
     } catch (error: unknown) {
       toast.showError(
         t("auth.errors.changePasswordFailed"),

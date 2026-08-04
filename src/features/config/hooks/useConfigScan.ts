@@ -13,6 +13,7 @@ import asyncStorageAdapter from "@native-adaptors/implementations/ESPAsyncStorag
 import { AppRestartContext } from "@context/appRestart.context";
 import { resolveConfigFromScan } from "@features/config/utils/configScan";
 import { getPreAuthRoute } from "@features/landing/utils/currentDeployment";
+import { resetStackTo } from "@shared/utils/navigation";
 import type { ConfigScanPhase } from "@src/types/global";
 
 export interface UseConfigScanReturn {
@@ -61,7 +62,9 @@ export function useConfigScan(): UseConfigScanReturn {
   const applyDeploymentSwitch = useCallback(async () => {
     try {
       await reinitializeSdk();
-      router.replace("/(auth)/Login");
+      // Reset: ConfigScan is pushed from Landing / Login, and the deployment is
+      // now committed, so nothing beneath it should stay reachable with back.
+      resetStackTo(router, "/(auth)/Login");
     } catch (error) {
       console.error(
         "[ConfigScan] In-place SDK switch failed, relaunching:",
@@ -168,7 +171,7 @@ export function useConfigScan(): UseConfigScanReturn {
     await runtimeConfigManager.applyAndPersist(saved.sdk, saved.config);
 
     if (isAlreadyActive) {
-      router.replace("/(auth)/Login");
+      resetStackTo(router, "/(auth)/Login");
       return;
     }
 

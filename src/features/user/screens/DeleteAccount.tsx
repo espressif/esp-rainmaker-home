@@ -4,7 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React from "react";
+import React, { useEffect } from "react";
+import { useRouter } from "expo-router";
 
 import { Header, ScreenWrapper } from "@shared/components";
 import {
@@ -14,12 +15,16 @@ import {
 import { useDeleteAccount } from "@features/user/hooks";
 import { useTranslation } from "react-i18next";
 import { globalStyles } from "@shared/theme/globalStyleSheet";
+import { getFeatures } from "@config/features.config";
 
 /**
  * Renders the delete account UI section.
+ * Exits immediately when account deletion is unavailable for the active SDK.
  */
 const DeleteAccount: React.FC = () => {
   const { t } = useTranslation();
+  const router = useRouter();
+  const { accountDeletion } = getFeatures();
   const {
     showVerification,
     code,
@@ -32,6 +37,16 @@ const DeleteAccount: React.FC = () => {
     handleProceed,
     handleVerify,
   } = useDeleteAccount();
+
+  useEffect(() => {
+    if (!accountDeletion) {
+      router.back();
+    }
+  }, [accountDeletion, router]);
+
+  if (!accountDeletion) {
+    return null;
+  }
 
   return (
     <>

@@ -9,8 +9,6 @@ import React, { useState, useEffect } from "react";
 import {
   View,
   StyleSheet,
-  ScrollView,
-  RefreshControl,
   TouchableOpacity,
   Text,
   Image,
@@ -78,12 +76,18 @@ const aiAnimationGif = require("@assets/images/devices/ai-anitmation.gif");
  *
  * A control panel for AI Assistant devices that supports:
  * - Agent ID selection and update
- * - Refresh token functionality
- * @param node - The ESPRMNode representing the AI assistant device
- * @param device - The ESPRMDevice representing the AI assistant device
+ * - Refresh token functionality (explicit button; pull-to-refresh on Control
+ * refreshes device params via the shared scroll surface)
+ *
+ * Content-only (no nested ScrollView): Control owns the shared scroll + pull-to-refresh.
+ * @param props - Node, device, and optional parent scroll lock callback
  * @returns Agent branding, agent-id editor, and entry points to chat/configure
  */
-const AiAgent: React.FC<ControlPanelProps> = ({ node, device }) => {
+const AiAgent: React.FC<ControlPanelProps> = ({
+  node,
+  device,
+  setScrollEnabled,
+}) => {
   // Hooks
   const toast = useToast();
   const { t } = useTranslation();
@@ -95,7 +99,6 @@ const AiAgent: React.FC<ControlPanelProps> = ({ node, device }) => {
   const [isAgentSheetVisible, setIsAgentSheetVisible] = useState(false);
   const [isUpdatingAgent, setIsUpdatingAgent] = useState(false);
   const [agentName, setAgentName] = useState<string | null>(null);
-  const [scrollEnabled, setScrollEnabled] = useState(true);
   const [isConversationsSheetVisible, setIsConversationsSheetVisible] =
     useState(false);
 
@@ -214,6 +217,10 @@ const AiAgent: React.FC<ControlPanelProps> = ({ node, device }) => {
     }
   };
 
+  /**
+   * Refreshes the agent auth token (explicit button action).
+   * Pull-to-refresh on Control uses `device.getParams` instead.
+   */
   const handleRefresh = async () => {
     setRefreshing(true);
     try {
@@ -290,13 +297,7 @@ const AiAgent: React.FC<ControlPanelProps> = ({ node, device }) => {
 
   // Render
   return (
-    <View
-      style={[
-        globalStyles.flex1,
-        styles.container,
-        { opacity: isConnected ? 1 : 0.5 },
-      ]}
-    >
+    <View style={styles.container}>
       {/* Floating Conversations Button (top-right) */}
       <TouchableOpacity
         style={styles.conversationsFab}
@@ -308,28 +309,15 @@ const AiAgent: React.FC<ControlPanelProps> = ({ node, device }) => {
           {t("chatSettings.conversations")}
         </Text>
       </TouchableOpacity>
-      <ScrollView
-        style={styles.content}
-        contentContainerStyle={styles.contentContainer}
-        scrollEnabled={scrollEnabled}
-        showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={handleRefresh}
-            enabled={isConnected}
-          />
-        }
-      >
-        {/* AI Animation GIF */}
-        <View style={styles.animationContainer}>
-          <Image
-            source={aiAnimationGif}
-            style={styles.animationGif}
-            resizeMode="contain"
-          />
-        </View>
-      </ScrollView>
+
+      {/* AI Animation GIF */}
+      <View style={styles.animationContainer}>
+        <Image
+          source={aiAnimationGif}
+          style={styles.animationGif}
+          resizeMode="contain"
+        />
+      </View>
 
       {/* Agent ID Parameter Display - Positioned above refresh button */}
       {agentIdParam && (
@@ -367,7 +355,7 @@ const AiAgent: React.FC<ControlPanelProps> = ({ node, device }) => {
             param={volumeParam}
             disabled={!isConnected}
             setUpdating={(s) => {
-              setScrollEnabled(!s);
+              setScrollEnabled?.(!s);
             }}
             style={styles.volumeControlWrap}
           >
@@ -426,19 +414,7 @@ const AiAgent: React.FC<ControlPanelProps> = ({ node, device }) => {
 const styles = StyleSheet.create({
   container: {
     backgroundColor: tokens.colors.bg5,
-  },
-  content: {
-    ...globalStyles.flex1,
-    padding: tokens.spacing._20,
-    ...globalStyles.radiusMd,
-  },
-  contentContainer: {
-    flexDirection: "column",
-    ...globalStyles.alignCenter,
-    ...globalStyles.justifyCenter,
-    flexGrow: 1,
-    paddingBottom: 280, // Space for Volume slider, Agent ID input and refresh button at bottom
-    paddingVertical: tokens.spacing._30,
+    minHeight: 520,
   },
   volumeContainer: {
     position: "absolute",
@@ -466,12 +442,11 @@ const styles = StyleSheet.create({
     borderRadius: tokens.radius.md,
   },
   animationContainer: {
-    ...globalStyles.flex1,
     ...globalStyles.justifyCenter,
     ...globalStyles.alignCenter,
     width: "100%",
     paddingVertical: tokens.spacing._20,
-    marginTop: -200,
+    paddingBottom: 280,
   },
   animationGif: {
     width: 700,

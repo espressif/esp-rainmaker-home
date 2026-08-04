@@ -23,6 +23,8 @@ import {
   ESPRMNEO_PROVISION_LOG_DISCONNECT,
   ESPRMNEO_PROVISION_LOG_VERSION_INFO_SKIP,
   ESPRMNEO_PROVISION_LOG_WIFI_OK,
+  ESPRMNEO_PROVISION_LOG_WIFI_RESET,
+  ESPRMNEO_PROVISION_LOG_WIFI_RETRY,
   ESPRMNEO_PROVISION_TRANSPORT_BLE,
 } from "../utils/constants";
 import { Logger } from "../utils/logger";
@@ -172,6 +174,41 @@ export function createCDFProvisioningDevice(
         options,
       );
       Logger.log(ESPRMNEO_PROVISION_LOG_WIFI_OK, { name: device.name });
+    },
+
+    /**
+     * Clears the device's Wi-Fi state over the open provisioning session.
+     * @returns `true` when the device acknowledged the reset.
+     */
+    async resetWifiStatus(): Promise<boolean> {
+      Logger.log(ESPRMNEO_PROVISION_LOG_WIFI_RESET, { name: device.name });
+      return device.resetWifiStatus();
+    },
+
+    /**
+     * Re-sends Wi-Fi credentials after a reset, resuming the association the
+     * first attempt established. SSID is logged; the password never is.
+     * @param ssid - SSID, unchanged from the first attempt.
+     * @param password - The corrected Wi-Fi password.
+     * @param onProgress - Progress callback; emits the same messages as provision.
+     */
+    async retryNetworkCredentials(
+      ssid: string,
+      password: string,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- CDF progress callback
+      onProgress?: (response: any) => void,
+    ): Promise<void> {
+      Logger.log(ESPRMNEO_PROVISION_LOG_WIFI_RETRY, {
+        name: device.name,
+        ssid,
+      });
+      const nodeId = await device.retryNetworkCredentials(
+        ssid,
+        password,
+        onProgress ?? (() => {}),
+      );
+      // The SDK returns the node id; re-emit it in the shape the flow reads.
+      onProgress?.({ status: "succeed", description: nodeId, data: { nodeId } });
     },
 
     /**

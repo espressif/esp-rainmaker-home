@@ -197,6 +197,7 @@ export const SDK_FEATURE_MAP: Record<
     scenes: true,
     schedules: true,
     automations: true,
+    automationRetrigger: true,
     localControl: true,
     notifications: true,
     groupSharing: true,
@@ -212,11 +213,14 @@ export const SDK_FEATURE_MAP: Record<
     onNetworkProvisioning: true,
     // Matter lives in the separate ESPRMMatterBase adaptor, not this one.
     matterCommissioning: false,
+    accountDeletion: true,
   },
   [ESPRMNeo_BASE_SDK_ID]: {
     scenes: false,
     schedules: true,
     automations: true,
+    // Neo automations do not expose Allow retrigger in the product UI.
+    automationRetrigger: false,
     localControl: true,
     notifications: true,
     groupSharing: true,
@@ -233,11 +237,14 @@ export const SDK_FEATURE_MAP: Record<
     // The RMNeo stack has no Matter support: its CDF group exposes no
     // `convertToMatterFabric` / `issueUserNoC`, so commissioning cannot run.
     matterCommissioning: false,
+    // Neo has no account-deletion API.
+    accountDeletion: false,
   },
   [ESPRMMatter_BASE_SDK_ID]: {
     scenes: true,
     schedules: true,
     automations: true,
+    automationRetrigger: true,
     localControl: true,
     notifications: true,
     groupSharing: true,
@@ -251,5 +258,6 @@ export const SDK_FEATURE_MAP: Record<
     voiceAssistants: true,
     matterCommissioning: true,
     onNetworkProvisioning: true,
+    accountDeletion: true,
   },
 };

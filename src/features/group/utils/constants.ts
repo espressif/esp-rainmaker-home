@@ -18,6 +18,9 @@ import {
 /** The tab ID representing "All Devices" (no specific room selected). */
 export const ALL_DEVICES_TAB_ID = "common";
 
+/** Placeholder device-card rows shown while Home initializes. */
+export const HOME_DEVICE_SKELETON_COUNT = 4;
+
 /** The filter key representing all device types. */
 export const FILTER_ALL = "all";
 

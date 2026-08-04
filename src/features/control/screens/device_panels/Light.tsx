@@ -4,22 +4,13 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  ScrollView,
-  RefreshControl,
-} from "react-native";
+import { View, Text, StyleSheet, TouchableOpacity } from "react-native";
 
 // Styles
 import { tokens } from "@shared/theme/tokens";
 
 // Hooks
-import { useToast } from "@shared/hooks/useToast";
 import { useDeviceConnected } from "@shared/hooks/useDeviceConnected";
 import { useTranslation } from "react-i18next";
 
@@ -70,13 +61,25 @@ import {
  * - White: brightness + temperature (esp.param.temperature) and/or CCT (esp.param.cct)
  * - Light mode (esp.param.light-mode) synced with White / Color tab when present
  * - Scene presets (coming soon)
- * @param node - The ESPRMNode representing the light device
+ *
+ * Content-only (no nested ScrollView): Control owns the shared scroll + pull-to-refresh.
+ * @param props - Node, device, and optional parent scroll lock callback
  * @returns Tabbed light UI (white/color) with ParamControls for power, level, and color
  */
-const Light: React.FC<ControlPanelProps> = ({ node, device }) => {
-  // Hooks
-  const toast = useToast();
+const Light: React.FC<ControlPanelProps> = ({
+  node,
+  device,
+  setScrollEnabled,
+}) => {
   const { t } = useTranslation();
+
+  /**
+   * Locks Control's shared ScrollView while a slider/gesture is active.
+   * @param updating - True while the param control is being dragged
+   */
+  const onSetUpdating = (updating: boolean) => {
+    setScrollEnabled?.(!updating);
+  };
 
   // Device Parameters
   const powerParam = device?.params?.find(
@@ -112,15 +115,22 @@ const Light: React.FC<ControlPanelProps> = ({ node, device }) => {
   // Check if device supports color (has both hue and saturation)
   const supportsColor = !!(hueParam && saturationParam);
 
-  const lightModeBounds = lightModeParam?.bounds as {
-    min?: number;
-    max?: number;
-  } | undefined;
+  const lightModeBounds = lightModeParam?.bounds as
+    | {
+        min?: number;
+        max?: number;
+      }
+    | undefined;
   const lightModeMin =
     typeof lightModeBounds?.min === "number" ? lightModeBounds.min : undefined;
   const lightModeMax =
     typeof lightModeBounds?.max === "number" ? lightModeBounds.max : undefined;
 
+  /**
+   * Maps White / Color tab to the light-mode param value from device bounds.
+   * @param tab - Active light mode tab
+   * @returns Bound value for the tab, or null when bounds are missing
+   */
   const lightModeValueForTab = (tab: Tab): number | null => {
     if (lightModeMin === undefined || lightModeMax === undefined) return null;
     return tab === WHITE_TAB ? lightModeMax : lightModeMin;
@@ -143,6 +153,10 @@ const Light: React.FC<ControlPanelProps> = ({ node, device }) => {
     cct: cctParam,
   });
 
+  /**
+   * Initial tab from light-mode when available, else Color when HSV exists.
+   * @returns Default White or Color tab
+   */
   const defaultTab = (): Tab => {
     if (!supportsColor) return WHITE_TAB;
     if (
@@ -161,8 +175,6 @@ const Light: React.FC<ControlPanelProps> = ({ node, device }) => {
 
   // State - default tab from light mode when available, else color if HSV exists
   const [activeTab, setActiveTab] = useState<Tab>(defaultTab);
-  const [refreshing, setRefreshing] = useState(false);
-  const [scrollEnabled, setScrollEnabled] = useState(true);
   const didSyncTabFromDevice = useRef(false);
 
   /** One-time sync when params first expose light mode (e.g. after navigation). */
@@ -190,6 +202,10 @@ const Light: React.FC<ControlPanelProps> = ({ node, device }) => {
     lightModeMax,
   ]);
 
+  /**
+   * Writes light-mode when switching to Color (White is firmware-driven).
+   * @param tab - Tab the user selected
+   */
   const setLightModeForTab = async (tab: Tab) => {
     // Firmware now auto-switches to white mode on its own once it receives a
     // CCT/temperature update, so the app must not explicitly write
@@ -216,29 +232,20 @@ const Light: React.FC<ControlPanelProps> = ({ node, device }) => {
     }
   };
 
+  /**
+   * Updates local tab state and syncs light-mode when needed.
+   * @param tab - Selected White or Color tab
+   */
   const handleTabChange = (tab: Tab) => {
     setActiveTab(tab);
     void setLightModeForTab(tab);
   };
 
-  // Handlers
-  const handleRefresh = async () => {
-    setRefreshing(true);
-    try {
-      const params = await device?.getParams();
-      if (device && params) {
-        device.params = params;
-      }
-    } catch {
-      toast.showError(
-        t("layout.shared.errorHeader"),
-        t("device.errors.failedToRefreshDeviceState"),
-      );
-    } finally {
-      setRefreshing(false);
-    }
-  };
-
+  /**
+   * Renders one White / Color tab button.
+   * @param tab - Tab id
+   * @returns Tab touchable
+   */
   const renderTab = (tab: Tab) => (
     <TouchableOpacity
       key={tab}
@@ -253,7 +260,7 @@ const Light: React.FC<ControlPanelProps> = ({ node, device }) => {
       </Text>
     </TouchableOpacity>
   );
-  
+
   if (device?.params?.length === 0) {
     return <DevicePanelNoParamsEmptyState />;
   }
@@ -261,10 +268,7 @@ const Light: React.FC<ControlPanelProps> = ({ node, device }) => {
   // Render
   return (
     <View
-      style={[
-        styles.container,
-        { backgroundColor: tokens.colors.bg5 },
-      ]}
+      style={[styles.container, { backgroundColor: tokens.colors.bg5 }]}
       {...testProps("view_light")}
     >
       {/* Only show tabs if there are multiple modes available */}
@@ -274,20 +278,7 @@ const Light: React.FC<ControlPanelProps> = ({ node, device }) => {
         </View>
       )}
 
-      <ScrollView
-        style={styles.content}
-        contentContainerStyle={styles.contentContainer}
-        scrollEnabled={scrollEnabled}
-        showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={handleRefresh}
-            enabled={isConnected}
-          />
-        }
-        {...testProps("scroll_light")}
-      >
+      <View style={styles.content} {...testProps("scroll_light")}>
         {/* Power Control */}
         {powerParam && (
           <View
@@ -298,9 +289,7 @@ const Light: React.FC<ControlPanelProps> = ({ node, device }) => {
               key={powerParam.name}
               param={powerParam}
               disabled={!isConnected}
-              setUpdating={(s) => {
-                setScrollEnabled(!s);
-              }}
+              setUpdating={onSetUpdating}
             >
               <PowerButton />
             </ParamControlWrap>
@@ -315,9 +304,7 @@ const Light: React.FC<ControlPanelProps> = ({ node, device }) => {
                 key={brightnessParam.name}
                 param={brightnessParam}
                 disabled={!isConnected}
-                setUpdating={(s) => {
-                  setScrollEnabled(!s);
-                }}
+                setUpdating={onSetUpdating}
                 style={styles.paramControlWrap}
               >
                 <BrightnessSlider />
@@ -328,9 +315,7 @@ const Light: React.FC<ControlPanelProps> = ({ node, device }) => {
                 key={temperatureParam.name}
                 param={temperatureParam}
                 disabled={!isConnected}
-                setUpdating={(s) => {
-                  setScrollEnabled(!s);
-                }}
+                setUpdating={onSetUpdating}
                 style={styles.paramControlWrap}
               >
                 <ColorTemperatureSlider />
@@ -341,9 +326,7 @@ const Light: React.FC<ControlPanelProps> = ({ node, device }) => {
                 key={cctParam.name}
                 param={cctParam}
                 disabled={!isConnected}
-                setUpdating={(s) => {
-                  setScrollEnabled(!s);
-                }}
+                setUpdating={onSetUpdating}
                 style={styles.paramControlWrap}
               >
                 <ColorTemperatureSlider />
@@ -360,9 +343,7 @@ const Light: React.FC<ControlPanelProps> = ({ node, device }) => {
                 key={brightnessParam.name}
                 param={brightnessParam}
                 disabled={!isConnected}
-                setUpdating={(s) => {
-                  setScrollEnabled(!s);
-                }}
+                setUpdating={onSetUpdating}
                 style={styles.paramControlWrap}
               >
                 <BrightnessSlider />
@@ -373,9 +354,7 @@ const Light: React.FC<ControlPanelProps> = ({ node, device }) => {
                 key={hueParam.name}
                 param={hueParam}
                 disabled={!isConnected}
-                setUpdating={(s) => {
-                  setScrollEnabled(!s);
-                }}
+                setUpdating={onSetUpdating}
                 style={styles.paramControlWrap}
               >
                 <HueSlider />
@@ -386,9 +365,7 @@ const Light: React.FC<ControlPanelProps> = ({ node, device }) => {
                 key={saturationParam.name}
                 param={saturationParam}
                 disabled={!isConnected}
-                setUpdating={(s) => {
-                  setScrollEnabled(!s);
-                }}
+                setUpdating={onSetUpdating}
                 style={styles.paramControlWrap}
               >
                 <SaturationSlider />
@@ -396,7 +373,7 @@ const Light: React.FC<ControlPanelProps> = ({ node, device }) => {
             )}
           </>
         )}
-      </ScrollView>
+      </View>
     </View>
   );
 };
@@ -406,7 +383,6 @@ const styles = StyleSheet.create({
     width: "100%",
   },
   container: {
-    flex: 1,
     backgroundColor: tokens.colors.bg1,
   },
   tabContainer: {
@@ -430,21 +406,12 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   content: {
-    flex: 1,
     backgroundColor: tokens.colors.white,
     padding: tokens.spacing._10,
     borderRadius: tokens.radius.md,
-  },
-  contentContainer: {
-    display: "flex",
-    flexDirection: "column",
     alignItems: "center",
-    gap: 0,
-    justifyContent: "center",
-    height: "100%",
   },
   powerButtonContainer: {
-    flex: 1,
     maxHeight: 200,
     justifyContent: "center",
     alignItems: "center",

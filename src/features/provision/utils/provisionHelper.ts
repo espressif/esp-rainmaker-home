@@ -9,7 +9,27 @@ import {
   ESPCDFOnNetworkProgressMessages,
   ESPCDFProvProgressMessages,
 } from "@store";
+import {
+  PROVISION_NODE_ONLINE_TIMEOUT_ERROR,
+  PROVISION_SETUP_PROGRESS_MESSAGES,
+  SDK_NODE_ONLINE_TIMEOUT_ERROR,
+  SDK_NO_PROVISION_STATE_TO_RESUME_ERROR,
+} from "@shared/utils/constants";
 import { CHAL_RESP_PROGRESS_MESSAGES } from "@features/provision/constants";
+
+/** Technical setup-progress descriptions emitted by RMNeo `provisionHelpers`. */
+const PROVISION_SETUP_PROGRESS_VALUES: readonly string[] = Object.values(
+  PROVISION_SETUP_PROGRESS_MESSAGES,
+);
+
+/**
+ * Returns true when `message` is a post-provision setup progress key
+ * (checking online / MQTT reconnect / timezone / complete).
+ * @param message - Progress `description` from an ON_PROGRESS callback.
+ * @returns Whether the message should update the setting-up stage detail.
+ */
+export const isProvisionSetupProgressMessage = (message: string): boolean =>
+  PROVISION_SETUP_PROGRESS_VALUES.includes(message);
 
 export type StageStatus = "pending" | "success" | "error";
 
@@ -178,6 +198,15 @@ export const CHAL_RESP_WIFI_STAGE_ID = 2;
 /** Re-export for backward compatibility */
 export { extractErrorMessage } from "@shared/utils/common";
 
+/** Android code / iOS description fragments meaning rejected Wi-Fi credentials. */
+const WIFI_AUTH_FAILURE_SIGNATURES = ["auth_failed", "authentication error"];
+
+/** Whether the Wi-Fi password was rejected; matched raw so it holds in every language. */
+export const isWifiAuthFailure = (rawError: string): boolean => {
+  const normalized = rawError.toLowerCase();
+  return WIFI_AUTH_FAILURE_SIGNATURES.some((sig) => normalized.includes(sig));
+};
+
 /**
  * Get localized error message from raw error
  */
@@ -187,46 +216,60 @@ export const getLocalizedErrorMessage = (
 ): string => {
   const normalizedError = rawError.toLowerCase();
 
-  // Android error codes (uppercase constants)
+  // Android / app error codes (uppercase constants)
   const androidErrorMap: Record<string, string> = {
-    AUTH_FAILED: t("device.errors.wifiAuthFailed") || "Wi-Fi Authentication failed.",
-    NETWORK_NOT_FOUND: t("device.errors.networkNotFound") || "Network not found. Please check the network name.",
-    DEVICE_DISCONNECTED: t("device.errors.deviceDisconnected") || "Device disconnected. Please try again.",
+    AUTH_FAILED: t("device.errors.wifiAuthFailed"),
+    NETWORK_NOT_FOUND: t("device.errors.networkNotFound"),
+    DEVICE_DISCONNECTED: t("device.errors.deviceDisconnected"),
+    [PROVISION_NODE_ONLINE_TIMEOUT_ERROR]: t("device.errors.nodeOnlineTimeout"),
+    [SDK_NODE_ONLINE_TIMEOUT_ERROR]: t("device.errors.nodeOnlineTimeout"),
+    [SDK_NO_PROVISION_STATE_TO_RESUME_ERROR]: t(
+      "device.errors.noProvisionStateToResume",
+    ),
   };
 
   if (androidErrorMap[rawError]) {
     return androidErrorMap[rawError];
   }
 
-  // iOS ESPProvisionError descriptions (case-insensitive keyword matching)
+  // iOS ESPProvisionError / Neo online-wait descriptions (case-insensitive)
   const iosErrorPatterns: { keywords: string[]; message: string }[] = [
     {
+      keywords: [
+        "node online",
+        "node_online_timeout",
+        "provision_node_online_timeout",
+        "timed out waiting for node",
+      ],
+      message: t("device.errors.nodeOnlineTimeout"),
+    },
+    {
       keywords: ["wi-fi status: authentication error", "authentication error"],
-      message: t("device.errors.wifiAuthFailed") || "Wi-Fi Authentication failed.",
+      message: t("device.errors.wifiAuthFailed"),
     },
     {
       keywords: ["wi-fi status: network not found", "network not found"],
-      message: t("device.errors.networkNotFound") || "Network not found. Please check the network name.",
+      message: t("device.errors.networkNotFound"),
     },
     {
       keywords: ["wi-fi status: disconnected"],
-      message: t("device.errors.deviceDisconnected") || "Device disconnected. Please try again.",
+      message: t("device.errors.deviceDisconnected"),
     },
     {
       keywords: ["wi-fi status: unknown error"],
-      message: t("device.errors.wifiStatusUnknown") || "Wi-Fi status unknown. Please try again.",
+      message: t("device.errors.wifiStatusUnknown"),
     },
     {
       keywords: ["session is not established", "error while initialising session"],
-      message: t("device.errors.sessionFailed") || "Session initialization failed. Please try again.",
+      message: t("device.errors.sessionFailed"),
     },
     {
       keywords: ["failed to apply network configuration"],
-      message: t("device.errors.configurationFailed") || "Failed to apply network configuration. Please try again.",
+      message: t("device.errors.configurationFailed"),
     },
     {
       keywords: ["unable to fetch wifi status"],
-      message: t("device.errors.wifiStatusFetchFailed") || "Unable to fetch Wi-Fi status. Please try again.",
+      message: t("device.errors.wifiStatusFetchFailed"),
     },
   ];
 
@@ -239,7 +282,7 @@ export const getLocalizedErrorMessage = (
   // Filter out generic error codes that aren't user-friendly
   const genericCodes = ["provisioning_failed", "error", "unknown error"];
   if (genericCodes.includes(normalizedError)) {
-    return t("device.errors.provisioningFailed") || "Provisioning failed";
+    return t("device.errors.provisioningFailed");
   }
 
   // Return the original message if it's descriptive enough

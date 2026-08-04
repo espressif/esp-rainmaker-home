@@ -464,6 +464,10 @@ export const ESPRMNEO_PROVISION_LOG_VERSION_INFO_SKIP =
 export const ESPRMNEO_PROVISION_LOG_CHAL_RESP_FLOW =
   "Running challenge-response flow";
 export const ESPRMNEO_PROVISION_LOG_WIFI_OK = "WiFi provision OK";
+export const ESPRMNEO_PROVISION_LOG_WIFI_RESET =
+  "Wi-Fi reset requested on provisioning session";
+export const ESPRMNEO_PROVISION_LOG_WIFI_RETRY =
+  "Re-sending Wi-Fi credentials after reset";
 export const ESPRMNEO_PROVISION_LOG_CONNECT = "Provisioning device connect";
 export const ESPRMNEO_PROVISION_LOG_DISCONNECT =
   "Provisioning device disconnect";

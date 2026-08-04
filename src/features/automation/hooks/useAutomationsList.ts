@@ -73,6 +73,9 @@ export interface UseAutomationsListResult {
   setActionLoadingStates: React.Dispatch<
     React.SetStateAction<Record<string, string>>
   >;
+  /** List edit mode (delete affordance on cards, like schedules/scenes) */
+  isEditing: boolean;
+  setIsEditing: React.Dispatch<React.SetStateAction<boolean>>;
   /** Create automation name dialog visibility */
   isAutomationNameDialogVisible: boolean;
   setIsAutomationNameDialogVisible: React.Dispatch<React.SetStateAction<boolean>>;
@@ -164,6 +167,7 @@ export function useAutomationsList(
   const [actionLoadingStates, setActionLoadingStates] = useState<
     Record<string, string>
   >({});
+  const [isEditing, setIsEditing] = useState(false);
   const [isAutomationNameDialogVisible, setIsAutomationNameDialogVisible] =
     useState(false);
   const [automationName, setAutomationName] = useState("");
@@ -402,6 +406,8 @@ export function useAutomationsList(
     setIsBottomSheetVisible,
     actionLoadingStates,
     setActionLoadingStates,
+    isEditing,
+    setIsEditing,
     isAutomationNameDialogVisible,
     setIsAutomationNameDialogVisible,
     automationName,

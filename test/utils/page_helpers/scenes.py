@@ -16,14 +16,14 @@ class Scenes(BasePage):
 
     def refresh_scenes(self):
         """Refresh the scenes list so cloud-side changes are reflected."""
-        return self.refresh_list("refresh_scenes_button")
+        return self.refresh_list()
 
     def delete_all_scenes(self):
         """Remove every scene via its menu (leave edit mode first so the card tap opens the menu, then tap card -> menu -> delete)."""
         self.set_editing("text_edit_scenes", "edit_scenes_button", False)
         return self.delete_all_via_card_menu(
             "scene_card", "button_delete_scene_menu",
-            refresh_button="refresh_scenes_button", dismiss_id="button_close_scene_menu",
+            dismiss_id="button_close_scene_menu",
         )
 
     def tap_add_scene(self):
@@ -75,4 +75,4 @@ class Scenes(BasePage):
 
     def is_scene_visible(self, name, timeout=10, attempts=1):
         """True when a scene card with the given name is listed."""
-        return self.is_named_item_visible(f"card_scene_{name}", "refresh_scenes_button", timeout, attempts)
+        return self.is_named_item_visible(f"card_scene_{name}", timeout, attempts)

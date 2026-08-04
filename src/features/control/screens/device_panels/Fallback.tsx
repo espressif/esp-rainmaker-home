@@ -5,20 +5,16 @@
  */
 
 import { useMemo } from "react";
-import {
-  ScrollView,
-  RefreshControl,
-} from "react-native";
+import { View } from "react-native";
 
 // Styles
-import { globalStyles } from "@shared/theme/globalStyleSheet";
 import { tokens } from "@shared/theme/tokens";
 
 // config
 import { PARAM_CONTROLS } from "@/config/params.config";
 
 // CDF
-import { observer, useLocalObservable } from "mobx-react-lite";
+import { observer } from "mobx-react-lite";
 
 // components
 import { DevicePanelNoParamsEmptyState } from "@features/control/components";
@@ -50,17 +46,20 @@ import { ESPCDFDevice, ESPCDFDeviceParam } from "@store";
  * and a list of all available parameters. Writable controls stay enabled when the node is
  * cloud-connected or locally discovered (RainMaker local / Matter operational transport).
  * When there are no parameters, shows a centered empty state.
- * @param props - `node` and `device` for generic param list rendering
- * @returns Scrollable list of device fields and supported param controls
+ *
+ * Content-only (no nested ScrollView): Control owns the shared scroll + pull-to-refresh.
+ * @param props - `node`, `device`, and optional parent scroll lock callback
+ * @returns List of device fields and supported param controls
  */
 const DeviceFallback = observer(
-  ({ node, device: deviceProp }: DeviceFallbackProps) => {
-    const state = useLocalObservable(() => ({
-      updating: false,
-      setUpdating: (updating: boolean) => {
-        state.updating = updating;
-      },
-    }));
+  ({ node, device: deviceProp, setScrollEnabled }: DeviceFallbackProps) => {
+    /**
+     * Locks Control's shared ScrollView while a param gesture is active.
+     * @param updating - True while the control is being interacted with
+     */
+    const handleSetUpdating = (updating: boolean) => {
+      setScrollEnabled?.(!updating);
+    };
 
     const { store } = useCDF();
     const storeNode = store.nodeStore.nodesByIDMap[node.id] ?? node;
@@ -100,7 +99,10 @@ const DeviceFallback = observer(
       device?.params || [],
     );
 
-    // Handler to open chart for time series params
+    /**
+     * Opens the time-series chart screen for a param.
+     * @param param - Device param to chart
+     */
     const handleOpenChart = (param: ESPCDFDeviceParam) => {
       router.push({
         pathname: "/(control)/Chart",
@@ -112,32 +114,14 @@ const DeviceFallback = observer(
       } as any);
     };
 
-
     if (params.length === 0) {
       return <DevicePanelNoParamsEmptyState />;
     }
+
     // 2. Render
     return (
-      <ScrollView
-        style={[
-          globalStyles.flex1,
-          { backgroundColor: tokens.colors.bg5 },
-          { opacity: deviceConnected ? 1 : 0.5 },
-        ]}
-        contentContainerStyle={{
-          flexGrow: 1,
-          paddingBottom: tokens.spacing._15,
-        }}
-        scrollEnabled={!state.updating}
-        showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl
-            refreshing={false}
-            colors={[tokens.colors.primary]}
-            tintColor={tokens.colors.primary}
-            onRefresh={() => device.getParams()}
-          />
-        }
+      <View
+        style={{ backgroundColor: tokens.colors.bg5 }}
         {...testProps("scroll_fallback")}
       >
         {params.map((param) => {
@@ -177,19 +161,19 @@ const DeviceFallback = observer(
               key={param.name}
               param={param}
               disabled={(canWrite && !deviceConnected) || disabledBySibling}
-              setUpdating={state.setUpdating}
+              setUpdating={handleSetUpdating}
               onOpenChart={handleOpenChart}
               style={{
                 marginBottom: 10,
-                ...globalStyles.shadowElevationForLightTheme,
                 backgroundColor: tokens.colors.white,
+                borderRadius: tokens.radius.md,
               }}
             >
               <ControlComponent compact />
             </ParamControlWrap>
           );
         })}
-      </ScrollView>
+      </View>
     );
   },
 );

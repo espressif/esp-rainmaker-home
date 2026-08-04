@@ -36,7 +36,6 @@ function readNonEmptyString(
 
 /**
  * Strips scheme from IoT endpoint host strings.
- *
  * @param raw - Endpoint from client-outputs (may include https://)
  * @returns Host-only IoT endpoint
  */
@@ -80,7 +79,6 @@ function pickUserApiUrl(userBase: Record<string, unknown>): string | undefined {
  * Reads the deployment's dashboard origin from a client-outputs document — its own
  * top-level stack, not part of the base stack. Optional: without it the region's
  * default legal links apply.
- *
  * @param doc - Top-level client-outputs JSON
  * @returns Dashboard origin without a trailing slash, or undefined
  */
@@ -97,7 +95,6 @@ export function readDashboardUrlFromClientOutputs(
 
 /**
  * Resolves the RainMaker Neo stack object from a client-outputs document.
- *
  * @param doc - Top-level client-outputs JSON
  * @returns Stack record, or undefined when `rmng-base` is missing
  */
@@ -114,7 +111,6 @@ function getNeoStackFromClientOutputs(
 /**
  * True when JSON looks like a RainMaker Neo client-outputs file
  * (`rmng-base` at the top level).
- *
  * @param value - Parsed scan / fetch payload
  * @returns Whether the value can be mapped via {@link mapRmneoClientOutputsToScannedPayload}
  */
@@ -128,7 +124,6 @@ export function isRmneoClientOutputsDoc(value: unknown): boolean {
 /**
  * Maps client-outputs.json (S3 / QR) into a scanned RMNeo runtime config.
  * Emits `sdk: rainmaker-neo-base-sdk` and two full URLs (`baseUrl`, `userApiBase`).
- *
  * @param value - Parsed client-outputs document
  * @returns Validatable {@link ScannedConfigPayload} for Config Scan
  */

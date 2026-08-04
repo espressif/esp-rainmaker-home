@@ -33,6 +33,7 @@ import { tokens } from "@shared/theme/tokens";
  */
 export const useScenes = (): {
   isLoading: boolean;
+  isRefreshing: boolean;
   isEditing: boolean;
   setIsEditing: (value: boolean) => void;
   favoriteSceneIds: string[];
@@ -54,7 +55,8 @@ export const useScenes = (): {
     destructive?: boolean;
   }[];
   getConnectionWarning: string | undefined;
-  fetchScenes: () => Promise<void>;
+  loadScenes: () => Promise<void>;
+  refreshScenes: () => Promise<void>;
   handleAddScene: () => void;
   handleSceneNameConfirm: (name: string) => void;
   handleScenePress: (scene: ESPCDFScene) => void;
@@ -77,6 +79,7 @@ export const useScenes = (): {
 
   // State
   const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const isFetchingRef = useRef(false);
   const [isEditing, setIsEditing] = useState(false);
   const [favoriteSceneIds, setFavoriteSceneIds] = useState<string[]>([]);
@@ -102,30 +105,23 @@ export const useScenes = (): {
   tRef.current = t;
 
   /**
-   * Fetches latest scene data from ESPCDFGroup instance
-   * Uses group.getScenes() which reads from the group's nodeDetails to get latest data.
-   * The operation uses the ESPCDFGroup instance directly, ensuring we always get the latest data.
-   * Follows the same pattern as getSceneCapableDevices — reads directly from the ESPCDFGroup instance.
-   * Stable callback (no deps) to avoid useFocusEffect recursion; reads store at call time.
-   * MobX stores are stable references, so we can access them via closure.
+   * Loads scenes for initial / focus fetch (shows full-screen loader).
+   * Clears the store first so UI does not briefly show stale items.
+   * Stable callback (no deps) to avoid useFocusEffect recursion.
    */
-  const fetchScenes = useCallback(async () => {
+  const loadScenes = useCallback(async () => {
     if (isFetchingRef.current) return;
     isFetchingRef.current = true;
     try {
       setIsLoading(true);
-      // Clear existing scenes before fetching new ones
       sceneStore.clear();
 
-      // Get current home group - this is an ESPCDFGroup instance
       const currentHome = store.getCurrentHome();
       if (currentHome && currentHome.operations.getScenes) {
         await currentHome.getScenes();
       }
     } catch (error) {
       console.error("Error fetching scenes:", error);
-      // Use refs for toast and t since they might change
-      // Safety check to ensure refs are initialized
       if (toastRef.current && tRef.current) {
         toastRef.current.showError(tRef.current("scene.errors.fallback"));
       }
@@ -134,23 +130,48 @@ export const useScenes = (): {
       setIsLoading(false);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional hook deps
-  }, []); // Empty deps - MobX stores are stable and accessed via closure
+  }, []);
 
-  // Update refs when values change (after fetchScenes is defined)
+  /**
+   * Soft refresh for pull-to-refresh (RefreshControl only).
+   * Does not clear the list or toggle isLoading (same as automations).
+   */
+  const refreshScenes = useCallback(async () => {
+    if (isFetchingRef.current) return;
+    isFetchingRef.current = true;
+    try {
+      setIsRefreshing(true);
+      const currentHome = store.getCurrentHome();
+      if (currentHome && currentHome.operations.getScenes) {
+        await currentHome.getScenes();
+      }
+    } catch (error) {
+      console.error("Error refreshing scenes:", error);
+      if (toastRef.current && tRef.current) {
+        toastRef.current.showError(tRef.current("scene.errors.fallback"));
+      }
+    } finally {
+      isFetchingRef.current = false;
+      setIsRefreshing(false);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional hook deps
+  }, []);
+
+  // Update refs when values change (after load/refresh are defined)
   useEffect(() => {
     toastRef.current = toast;
     tRef.current = t;
   }, [toast, t]);
 
   /**
-   * Effect: Updates scenes when screen comes into focus.
-   * Empty deps so this runs only on focus change, not when fetchScenes identity changes (avoids recursion).
+   * Effect: Loads scenes when screen comes into focus.
+   * Empty deps so this runs only on focus change.
    */
   useFocusEffect(
     useCallback(() => {
-      fetchScenes();
+      loadScenes();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional hook deps
-    }, []), // Empty deps - only run on focus change
+    }, []),
   );
 
   /**
@@ -374,6 +395,7 @@ export const useScenes = (): {
   return {
     // State
     isLoading,
+    isRefreshing,
     isEditing,
     setIsEditing,
     favoriteSceneIds,
@@ -390,7 +412,8 @@ export const useScenes = (): {
     getConnectionWarning,
 
     // Handlers
-    fetchScenes,
+    loadScenes,
+    refreshScenes,
     handleAddScene,
     handleSceneNameConfirm,
     handleScenePress,

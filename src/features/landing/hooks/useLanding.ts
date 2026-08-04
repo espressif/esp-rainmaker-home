@@ -20,6 +20,7 @@ import {
 import { getRegionConfig } from "@config/region.config";
 import asyncStorageAdapter from "@native-adaptors/implementations/ESPAsyncStorage";
 import { AppRestartContext } from "@context/appRestart.context";
+import { resetStackTo } from "@shared/utils/navigation";
 
 import type { PlatformKind, PlatformOption } from "../config/platformOptions";
 
@@ -115,7 +116,11 @@ export function useLanding(): UseLandingReturn {
         if (router.canGoBack()) {
           router.back();
         } else {
-          router.push("/(auth)/Login");
+          // `replace`, not `push`: Landing is the root here (first launch), and
+          // the choice was just persisted so Landing is skipped from now on.
+          // Pushing would strand it under Login — and then under Home, since
+          // login replaces only the top entry.
+          router.replace("/(auth)/Login");
         }
         return;
       }
@@ -131,7 +136,11 @@ export function useLanding(): UseLandingReturn {
       // fresh process comes up on the requested backend either way.
       try {
         await reinitializeSdk();
-        router.replace("/(auth)/Login");
+        // Reset, not replace: this screen is usually reached by pushing Landing
+        // on top of Login ("Change deployment"), so replacing only swaps
+        // Landing for a second Login. Cycling through deployments would stack
+        // one more each time, and back would walk the user through all of them.
+        resetStackTo(router, "/(auth)/Login");
       } catch (error) {
         console.error("[Landing] In-place SDK switch failed, relaunching:", error);
         restartApp();

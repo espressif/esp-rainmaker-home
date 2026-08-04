@@ -45,7 +45,6 @@ export function hasReceivedWeChatAuthCode(): boolean {
  * Runs WeChat login: native returns the authorization code, then the Base SDK
  * exchanges it for RainMaker tokens and persists them (so a subsequent
  * `restoreSession()` establishes the session).
- *
  * @throws Error tagged `WECHAT_*` on native failure (e.g. `WECHAT_CANCELLED`,
  *   `WECHAT_NOT_INSTALLED`, `WECHAT_AUTH_DENIED`), or an SDK error if the token
  *   exchange fails.

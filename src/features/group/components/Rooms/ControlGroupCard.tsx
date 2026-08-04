@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useMemo } from "react";
+import { useMemo, useEffect, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -16,7 +16,7 @@ import { observer } from "mobx-react-lite";
 import { useTranslation } from "react-i18next";
 import { router } from "expo-router";
 import { Switch } from "tamagui";
-import { LayoutDashboard, WifiOff } from "lucide-react-native";
+import { LayoutDashboard } from "lucide-react-native";
 import type { ESPCDFDevice, ESPCDFGroup, ESPCDFNode } from "@store";
 import { useCDF } from "@shared/hooks/useCDF";
 import { useToast } from "@shared/hooks/useToast";
@@ -27,7 +27,11 @@ import {
   resolveHomogeneousDeviceType,
   stripGroupControlSubgroupDisplayName,
 } from "@features/group/utils/controlGroupHelpers";
-import { ESPRM_POWER_PARAM_TYPE, ERROR_CODES } from "@shared/utils/constants";
+import {
+  ESPRM_POWER_PARAM_TYPE,
+  ERROR_CODES,
+  PARAM_INCOMING_UPDATE_DEBOUNCE_MS,
+} from "@shared/utils/constants";
 import { globalStyles } from "@shared/theme/globalStyleSheet";
 import { tokens } from "@shared/theme/tokens";
 import { testProps } from "@shared/utils/testProps";
@@ -63,7 +67,7 @@ function buildGroupDevices(
 /**
  * Home / list card for a group-control subgroup: same footprint as DeviceCard
  * (see `globalStyles.controlGroupCard*`), stacked avatars, name row, optional
- * group power switch, status.
+ * group power switch, and member device count.
  */
 const ControlGroupCard = observer(
   ({ group, homeId, onPress, qaId }: ControlGroupCardProps) => {
@@ -87,10 +91,6 @@ const ControlGroupCard = observer(
     const displayName = stripGroupControlSubgroupDisplayName(group.name);
     const total = entries.length;
 
-    const allOnline =
-      total === 0 ||
-      entries.every((e) => e.node.connectivityStatus?.isConnected);
-
     const entriesWithPower = useMemo(
       () =>
         entries.filter((e) =>
@@ -101,7 +101,7 @@ const ControlGroupCard = observer(
 
     const hasPower = entriesWithPower.length > 0;
 
-    const powerAllOn =
+    const storePowerAllOn =
       hasPower &&
       entriesWithPower.every((e) => {
         const p = e.device.params?.find(
@@ -109,6 +109,39 @@ const ControlGroupCard = observer(
         );
         return Boolean(p?.value);
       });
+
+    const [powerAllOn, setPowerAllOn] = useState(storePowerAllOn);
+    const powerUpdateDelayTimeoutRef = useRef<ReturnType<
+      typeof setTimeout
+    > | null>(null);
+
+    /**
+     * Debounces adopting store/MQTT member power into the card Switch so
+     * broadcast lag does not snap the optimistic toggle (DeviceCard pattern).
+     */
+    useEffect(() => {
+      if (!hasPower) {
+        return;
+      }
+
+      if (powerUpdateDelayTimeoutRef.current === null) {
+        setPowerAllOn(storePowerAllOn);
+      }
+
+      if (powerUpdateDelayTimeoutRef.current !== null) {
+        clearTimeout(powerUpdateDelayTimeoutRef.current);
+      }
+      powerUpdateDelayTimeoutRef.current = setTimeout(() => {
+        setPowerAllOn(storePowerAllOn);
+        powerUpdateDelayTimeoutRef.current = null;
+      }, PARAM_INCOMING_UPDATE_DEBOUNCE_MS);
+
+      return () => {
+        if (powerUpdateDelayTimeoutRef.current !== null) {
+          clearTimeout(powerUpdateDelayTimeoutRef.current);
+        }
+      };
+    }, [hasPower, storePowerAllOn, powerAllOn]);
 
     const canTogglePower =
       hasPower &&
@@ -131,7 +164,10 @@ const ControlGroupCard = observer(
     };
 
     /**
-     * Toggles power for all members via {@link broadcastGroupParam} (same transport as ControlGroupPanel).
+     * Optimistically updates local power UI, then broadcasts to members.
+     * Arms incoming-update debounce first so stale member values do not
+     * immediately overwrite the toggle after a quiet period.
+     * @param value - Target power state for all members with power
      */
     const handleGroupPower = (value: boolean) => {
       const broadcastTargets = entriesWithPower
@@ -143,8 +179,35 @@ const ControlGroupCard = observer(
         })
         .filter((row): row is NonNullable<typeof row> => row != null);
       if (broadcastTargets.length === 0) return;
+
+      if (powerUpdateDelayTimeoutRef.current !== null) {
+        clearTimeout(powerUpdateDelayTimeoutRef.current);
+      }
+      powerUpdateDelayTimeoutRef.current = setTimeout(() => {
+        const settled =
+          hasPower &&
+          entriesWithPower.every((e) => {
+            const p = e.device.params?.find(
+              (pr) => pr.type === ESPRM_POWER_PARAM_TYPE
+            );
+            return Boolean(p?.value);
+          });
+        setPowerAllOn(settled);
+        powerUpdateDelayTimeoutRef.current = null;
+      }, PARAM_INCOMING_UPDATE_DEBOUNCE_MS);
+
+      setPowerAllOn(value);
       broadcastGroupParam(group, broadcastTargets, value, {
         onSetParamsError: (err: unknown) => {
+          const settled =
+            hasPower &&
+            entriesWithPower.every((e) => {
+              const p = e.device.params?.find(
+                (pr) => pr.type === ESPRM_POWER_PARAM_TYPE
+              );
+              return Boolean(p?.value);
+            });
+          setPowerAllOn(settled);
           const code = (err as { code?: string })?.code;
           const key =
             code && ERROR_CODES[code as keyof typeof ERROR_CODES];
@@ -162,12 +225,8 @@ const ControlGroupCard = observer(
           {
             padding: 10,
             width: cardWidth,
-            opacity: allOnline ? 1 : 0.7,
-            backgroundColor: !allOnline
-              ? tokens.colors.bg2
-              : tokens.colors.white,
+            backgroundColor: tokens.colors.white,
           },
-          !allOnline && globalStyles.offlineCardNoShadow,
         ]}
         onPress={handlePress}
         activeOpacity={0.7}
@@ -268,17 +327,7 @@ const ControlGroupCard = observer(
             {displayName.trim() || group.name}
           </Text>
           <View style={globalStyles.controlGroupCardStatusContainer}>
-            {!allOnline ? (
-              <View style={globalStyles.controlGroupCardOfflineRow}>
-                <WifiOff size={11} color={tokens.colors.gray} />
-                <Text
-                  {...testProps("text_control_group_offline")}
-                  style={globalStyles.controlGroupCardStatus}
-                >
-                  {t("layout.shared.offline")}
-                </Text>
-              </View>
-            ) : total > 0 ? (
+            {total > 0 ? (
               <Text style={globalStyles.controlGroupCardStatus}>
                 {total}{" "}
                 {total !== 1

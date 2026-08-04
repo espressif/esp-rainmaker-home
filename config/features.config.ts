@@ -13,10 +13,10 @@ import { getRegionConfig } from '@config/region.config';
  * All controllable feature keys in the application.
  *
  * Essential (always enabled, not configurable):
- *   provisioning, deviceManagement, accountDeletion
+ *   provisioning, deviceManagement
  *
  * SDK-gated (RMNeo = false):
- *   scenes, schedules, localControl, notifications, groupSharing, subGroupSharing, transferGroupSharing, ota
+ *   scenes, transferGroupSharing, ota, automationRetrigger, accountDeletion
  *
  * Both SDKs supported (env-only control):
  *   automations, aiAgent, thirdPartyAuth, voiceAssistants
@@ -32,6 +32,7 @@ export type FeatureKey =
   | 'scenes'
   | 'schedules'
   | 'automations'
+  | 'automationRetrigger'
   | 'localControl'
   | 'notifications'
   | 'groupSharing'
@@ -45,7 +46,8 @@ export type FeatureKey =
   | 'secondaryGroupManagement'
   | 'onNetworkProvisioning'
   | 'matterCommissioning'
-  | 'backendSelector';
+  | 'backendSelector'
+  | 'accountDeletion';
 
 /**
  * Maps each FeatureKey to its corresponding key in the features block
@@ -55,6 +57,7 @@ const ENV_KEY_MAP: Record<FeatureKey, string> = {
   scenes:                 'enableScenes',
   schedules:              'enableSchedules',
   automations:            'enableAutomations',
+  automationRetrigger:    'enableAutomationRetrigger',
   localControl:           'enableLocalControl',
   notifications:          'enableNotifications',
   groupSharing:           'enableGroupSharing',
@@ -70,6 +73,8 @@ const ENV_KEY_MAP: Record<FeatureKey, string> = {
   // SDK-capability only: no region/binary env switch, so the SDK map decides.
   matterCommissioning:    'enableMatterCommissioning',
   backendSelector:        'enableBackendSelector',
+  // SDK-capability only: Neo has no account-deletion API; RM / Matter support it.
+  accountDeletion:        'enableAccountDeletion',
 };
 
 /**
@@ -120,6 +125,7 @@ export function getFeatures(): Record<FeatureKey, boolean> {
     scenes:                 resolve('scenes'),
     schedules:              resolve('schedules'),
     automations:            resolve('automations'),
+    automationRetrigger:    resolve('automationRetrigger'),
     localControl:           resolve('localControl'),
     notifications:          resolve('notifications'),
     groupSharing:           resolve('groupSharing'),
@@ -134,6 +140,7 @@ export function getFeatures(): Record<FeatureKey, boolean> {
     onNetworkProvisioning:  resolve('onNetworkProvisioning'),
     matterCommissioning:    resolve('matterCommissioning'),
     backendSelector:        resolve('backendSelector'),
+    accountDeletion:        resolve('accountDeletion'),
   };
 }
 

@@ -14,6 +14,8 @@ import {
   type CreateAutomationActionCard,
 } from "@features/automation/utils/automationManagement";
 import { useCDF } from "@shared/hooks/useCDF";
+import { stableStringify } from "@shared/utils/common";
+import { useDraftBaseline } from "@shared/hooks/useUnsavedChangesGuard";
 import { useAutomation } from "@context/automation.context";
 
 // --- Result types (structured outcomes for UI to interpret) ---
@@ -36,6 +38,39 @@ export interface UseCreateAutomationParams {
   isEditing?: string;
 }
 
+type AutomationDraftState = ReturnType<typeof useAutomation>["state"];
+
+/**
+ * Serializes the fields the user can edit on the Create Automation screen,
+ * for unsaved-changes comparison against a baseline snapshot.
+ */
+function serializeAutomationDraft(state: AutomationDraftState): string {
+  return stableStringify({
+    name: (state.automationName ?? "").trim(),
+    retrigger: state.retrigger,
+    events: state.events,
+    actions: state.actions,
+  });
+}
+
+/**
+ * Create mode: the flow starts from a reset state with only the name passed
+ * as a route param, so any deviation from that means the user has edits to
+ * lose.
+ */
+function hasUnsavedCreateModeChanges(
+  state: AutomationDraftState,
+  paramAutomationName?: string
+): boolean {
+  return (
+    (state.automationName ?? "").trim() !==
+      (paramAutomationName ?? "").trim() ||
+    state.retrigger ||
+    state.events.length > 0 ||
+    Object.keys(state.actions).length > 0
+  );
+}
+
 export interface UseCreateAutomationResult {
   /** Context state */
   state: ReturnType<typeof useAutomation>["state"];
@@ -46,6 +81,8 @@ export interface UseCreateAutomationResult {
   loading: { save: boolean; delete: boolean };
   /** Whether form is valid to submit */
   isValidAutomation: boolean;
+  /** Whether the user has edits that are not persisted yet */
+  hasUnsavedChanges: boolean;
   /** First event info for UI (device param event) */
   eventInfo: CreateAutomationEventInfo | null;
   /** Device for event (from store) for display */
@@ -84,6 +121,9 @@ export function useCreateAutomation(
   const automationLoadedRef = useRef(false);
 
   const [loading, setLoading] = useState({ save: false, delete: false });
+  // Flips in the same batch as the edit-load dispatches, so the baseline in
+  // useDraftBaseline never captures a half-loaded draft.
+  const [isEditLoaded, setIsEditLoaded] = useState(false);
 
   const currentHome = store.getCurrentHome();
   const currentHomeNodeList = useMemo(
@@ -109,9 +149,15 @@ export function useCreateAutomation(
       if (automation) {
         setAutomationInfo(automation);
         automationLoadedRef.current = true;
+        setIsEditLoaded(true);
       }
     }
   }, [isEditing, automationId, automationStore, setAutomationInfo]);
+
+  const isEditDraftDirty = useDraftBaseline(
+    serializeAutomationDraft(state),
+    isEditLoaded
+  );
 
   const eventInfo = useMemo(
     () => getEventInfoFromEvents(state.events),
@@ -149,6 +195,11 @@ export function useCreateAutomation(
       ),
     [state.automationName, state.events.length, state.actions]
   );
+
+  const hasUnsavedChanges =
+    isEditing === "true"
+      ? isEditDraftDirty
+      : hasUnsavedCreateModeChanges(state, paramAutomationName);
 
   const createAutomation = useCallback(async (): Promise<CreateAutomationResult> => {
     setLoading((prev) => ({ ...prev, save: true }));
@@ -195,6 +246,7 @@ export function useCreateAutomation(
     setRetrigger,
     loading,
     isValidAutomation,
+    hasUnsavedChanges,
     eventInfo,
     eventDevice,
     actionCards,

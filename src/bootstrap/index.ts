@@ -19,9 +19,13 @@ import "@src/polyfills/init";
 import { Platform } from "react-native";
 import { configure } from "mobx";
 import { registerHeadlessTasks } from "@src/tasks/registerHeadless";
+import { installRouterPushThrottle } from "@shared/utils/navigation";
 
 // Global MobX config — must be set before any observable is accessed
 configure({ enforceActions: "never" });
+
+// Prevent rapid duplicate `router.push` from stacking the same screen
+installRouterPushThrottle();
 
 // HeadlessJS tasks are Android specific
 if (Platform.OS === "android") {

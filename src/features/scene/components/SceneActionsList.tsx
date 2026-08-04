@@ -5,9 +5,8 @@
  */
 
 import { View, Text, Pressable, ScrollView, StyleSheet } from "react-native";
-import { Plus, Settings } from "lucide-react-native";
+import { Plus } from "lucide-react-native";
 import { tokens } from "@shared/theme/tokens";
-import { globalStyles } from "@shared/theme/globalStyleSheet";
 import { testProps } from "@shared/utils/testProps";
 import SceneActions from "./SceneActions";
 
@@ -15,27 +14,23 @@ type SceneActionsListProps = {
   actions: any[];
   onAddPress: () => void;
   title: string;
-  emptyStateTitle: string;
-  emptyStateDescription: string;
 };
 
 /**
  * SceneActionsList Component
  *
- * Reusable component for displaying scene actions list
- * Shows list of device actions or empty state
- * Used in Create Scene, Edit Scene, and other scene-related screens
+ * Renders the actions section header and a scrollable list of selected
+ * device actions. Empty state is owned by the create-scene screen stack.
  */
 export default function SceneActionsList({
   actions,
   onAddPress,
   title,
-  emptyStateTitle,
-  emptyStateDescription,
 }: SceneActionsListProps) {
+  const hasActions = actions.length > 0;
+
   return (
-    <View style={styles.container}>
-      {/* Header with title and add button */}
+    <View style={[styles.container, hasActions && styles.containerWithList]}>
       <View style={styles.header}>
         <Text {...testProps("text_label_actions")} style={styles.title}>
           {title}
@@ -49,15 +44,14 @@ export default function SceneActionsList({
         </Pressable>
       </View>
 
-      {/* Device actions list */}
-      <ScrollView
-        {...testProps("scroll_actions_scenes")}
-        style={styles.list}
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.listContent}
-      >
-        {actions.length > 0 ? (
-          actions.map((action: any) => (
+      {hasActions && (
+        <ScrollView
+          {...testProps("scroll_actions_scenes")}
+          style={styles.list}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.listContent}
+        >
+          {actions.map((action: any) => (
             <SceneActions
               qaId={`scene_action_${action.device.name}`}
               key={action.nodeId + action.device.name}
@@ -66,33 +60,20 @@ export default function SceneActionsList({
               action={action.action}
               onActionPress={onAddPress}
             />
-          ))
-        ) : (
-          <View {...testProps("view_empty_actions_scenes")} style={styles.emptyState}>
-            <View style={styles.emptyStateIconContainer}>
-              <Settings size={35} color={tokens.colors.primary} />
-            </View>
-            <Text {...testProps("text_title_empty_scenes")} style={globalStyles.emptyStateTitle}>
-              {emptyStateTitle}
-            </Text>
-            <Text
-              {...testProps("text_description_empty_scenes")}
-              style={globalStyles.emptyStateDescription}
-            >
-              {emptyStateDescription}
-            </Text>
-          </View>
-        )}
-      </ScrollView>
+          ))}
+        </ScrollView>
+      )}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
-    flex: 1,
     marginTop: tokens.spacing._15,
     marginBottom: tokens.spacing._15,
+  },
+  containerWithList: {
+    flex: 1,
   },
   header: {
     flexDirection: "row",
@@ -112,18 +93,5 @@ const styles = StyleSheet.create({
   },
   listContent: {
     gap: tokens.spacing._10,
-  },
-  emptyState: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    padding: 32,
-    marginTop: "35%",
-  },
-  emptyStateIconContainer: {
-    backgroundColor: tokens.colors.white,
-    borderRadius: 48,
-    padding: 20,
-    marginBottom: 24,
   },
 });

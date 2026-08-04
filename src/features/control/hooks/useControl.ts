@@ -4,12 +4,14 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useEffect, useRef, useMemo, useCallback } from "react";
+import { useEffect, useRef, useCallback, useState } from "react";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { useTranslation } from "react-i18next";
 import { useCDF } from "@shared/hooks/useCDF";
+import { useDeviceConnected } from "@shared/hooks/useDeviceConnected";
+import { useToast } from "@shared/hooks/useToast";
 import { ESPCDFDevice, ESPCDFNode } from "@store";
-import { ESPRM_NAME_PARAM_TYPE } from "@shared/utils/constants";
+import { extractErrorMessage } from "@shared/utils/common";
 import {
   extractDeviceType,
   findDeviceConfig,
@@ -23,6 +25,9 @@ interface UseControlReturn {
   displayName: string;
   deviceType: string;
   deviceConfig: DeviceConfig | null | undefined;
+  isConnected: boolean;
+  refreshing: boolean;
+  handleRefresh: () => Promise<void>;
   handleMorePress: () => void;
 }
 
@@ -30,31 +35,35 @@ interface UseControlReturn {
  * Resolves Control screen state from route params and the live node-store entry.
  * Reads `nodesByIDMap` so param, metadata, and connectivity updates on the
  * target node stay in sync with the store (used inside an `observer` screen).
- *
- * @returns Node, device, derived display metadata, and settings navigation handler
+ * Owns pull-to-refresh (`device.getParams`) so Control can use one scroll
+ * surface like Home / ControlGroupPanel.
+ * @returns Node, device, derived display metadata, refresh, and settings navigation
  */
 export const useControl = (): UseControlReturn => {
   const { store } = useCDF();
   const router = useRouter();
   const { t } = useTranslation();
+  const toast = useToast();
   const { id, device: _device } = useLocalSearchParams<{
     id?: string;
     device?: string;
   }>();
+  const [refreshing, setRefreshing] = useState(false);
 
   const nodesByIDMap = store?.nodeStore?.nodesByIDMap;
 
-  const node = useMemo(
-    () => (id ? nodesByIDMap?.[id] : undefined),
-    [id, nodesByIDMap],
-  );
+  // Derive during render (Control is an `observer`): useMemo on node/device
+  // object identity would stale when MobX mutates nested fields in place.
+  const node = id ? nodesByIDMap?.[id] : undefined;
 
-  const device = useMemo(() => {
-    if (!_device || !node?.devices) return undefined;
-    return node.devices.find((d) => d.name === _device) as
-      | ESPCDFDevice
-      | undefined;
-  }, [node, _device, node?.devices]);
+  const device =
+    _device && node?.devices
+      ? (node.devices.find((d) => d.name === _device) as
+          | ESPCDFDevice
+          | undefined)
+      : undefined;
+
+  const isConnected = useDeviceConnected(node);
 
   const deviceWasFoundRef = useRef(false);
   if (device) {
@@ -71,34 +80,38 @@ export const useControl = (): UseControlReturn => {
     router.push(`/(control)/Settings?id=${id}&device=${_device}`);
   }, [router, id, _device]);
 
-  const deviceType = useMemo(
-    () => (device ? extractDeviceType(device.type) : ""),
-    [device, device?.type],
-  );
+  /**
+   * Pull-to-refresh: fetch latest params for the active device (same idea as
+   * Light / Switch panels and ControlGroupPanel member refresh).
+   * Allowed while offline so the user can retry reachability / param sync.
+   */
+  const handleRefresh = useCallback(async () => {
+    if (refreshing || !device) return;
+    setRefreshing(true);
+    try {
+      const params = await device.getParams();
+      if (params) {
+        device.params = params;
+      }
+    } catch (error) {
+      console.error("Error refreshing device params:", error);
+      toast.showError(
+        t("layout.shared.errorHeader"),
+        extractErrorMessage(error) ||
+          t("device.errors.failedToRefreshDeviceState"),
+      );
+    } finally {
+      setRefreshing(false);
+    }
+  }, [refreshing, device, toast, t]);
 
-  const deviceConfig = useMemo(
-    () => (deviceType ? findDeviceConfig(deviceType) : null),
-    [deviceType],
-  );
+  const deviceType = device ? extractDeviceType(device.type) : "";
+  const deviceConfig = deviceType ? findDeviceConfig(deviceType) : null;
 
-  const nameParamValue = device?.params?.find(
-    (param) => param.type === ESPRM_NAME_PARAM_TYPE,
-  )?.value as string | undefined;
-
-  const displayName = useMemo(() => {
-    if (!device || !node) return t("device.control.title");
-    return (
-      getSubDeviceInitialDisplayName(device, node) || t("device.control.title")
-    );
-  }, [
-    device,
-    node,
-    nameParamValue,
-    device?.displayName,
-    device?.name,
-    node?.nodeConfig?.info?.name,
-    t,
-  ]);
+  const displayName =
+    device && node
+      ? getSubDeviceInitialDisplayName(device, node) || t("device.control.title")
+      : t("device.control.title");
 
   return {
     node,
@@ -106,6 +119,9 @@ export const useControl = (): UseControlReturn => {
     displayName,
     deviceType,
     deviceConfig,
+    isConnected,
+    refreshing,
+    handleRefresh,
     handleMorePress,
   };
 };

@@ -5,12 +5,14 @@
  */
 
 import { useCallback } from "react";
+import { StyleSheet } from "react-native";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { useTranslation } from "react-i18next";
 import { observer } from "mobx-react-lite";
 import { globalStyles } from "@shared/theme/globalStyleSheet";
+import { tokens } from "@shared/theme/tokens";
 import { useEventDeviceSelection } from "@features/automation/hooks";
-import { Header, ScreenWrapper } from "@shared/components";
+import { Header, InfoBanner, ScreenWrapper } from "@shared/components";
 import {
   EventDeviceSelectionDeviceItem,
   EventDeviceSelectionContent,
@@ -85,6 +87,11 @@ export const EventDeviceSelectionScreen = observer(() => {
         style={globalStyles.automationScreenContainer}
         qaId="screen_wrapper_event_device_selection"
       >
+        <InfoBanner
+          message={t("automation.eventDeviceSelection.singleConditionNote")}
+          containerStyle={styles.singleConditionNoteBanner}
+          qaId="banner_event_device_selection_note"
+        />
         <EventDeviceSelectionContent
           selectedDevices={selectedDevices}
           nonSelectedDevices={nonSelectedDevices}
@@ -96,4 +103,11 @@ export const EventDeviceSelectionScreen = observer(() => {
       </ScreenWrapper>
     </>
   );
+});
+
+const styles = StyleSheet.create({
+  singleConditionNoteBanner: {
+    marginHorizontal: tokens.spacing._15,
+    marginTop: tokens.spacing._15,
+  },
 });

@@ -50,6 +50,8 @@ import { parseRMakerCapabilities } from "@features/provision/utils/rmakerCapabil
 import {
   connectWithTimeout,
   isConnectTimeout,
+  safeDisconnect,
+  withTimeout,
 } from "@features/provision/utils/scanBLEHelper";
 import { getMissingPermission, getQRScanErrorType } from "@shared/utils/device";
 
@@ -61,6 +63,10 @@ import {
   CAMERA_TYPE_BACK,
   RM_QR_CODE_PREFIX,
   RM_QR_TRANSPORT_MAP,
+  QR_PROVISION_CONNECT_TIMEOUT_ERROR,
+  QR_PROVISION_CREATE_ATTEMPTS,
+  QR_PROVISION_DISCONNECT_TIMEOUT_MS,
+  QR_PROVISION_STEP_TIMEOUT_MS,
 } from "@shared/utils/constants";
 import {
   MATTER_ROUTE_PARAM_FABRIC_CONVERSION_CONSENT_REQUIRED,
@@ -71,7 +77,7 @@ import {
   isMatterCommissioningSupported,
 } from "@features/matter/utils/matterSupport";
 
-const { width, height } = Dimensions.get("window");
+const { width } = Dimensions.get("window");
 const SCANNER_WIDTH = width * 0.8;
 
 /**
@@ -106,7 +112,8 @@ const AnimatedGuide = ({ scanned }: { scanned: boolean }) => {
       {...testProps("view_scan_qr")}
       style={[
         globalStyles.guideContainer,
-        { opacity: fadeAnim, position: "absolute", top: height * 0.15 },
+        styles.guideSpacing,
+        { opacity: fadeAnim },
       ]}
     >
       <QrCode
@@ -192,6 +199,7 @@ const ScannerOverlay = ({
       {...testProps("view_scanner_overlay")}
       style={globalStyles.scannerOverlay}
     >
+      <AnimatedGuide scanned={scanned} />
       <View
         {...testProps("view_scanner_frame_container")}
         style={globalStyles.scannerFrameContainer}
@@ -253,7 +261,6 @@ const ScannerOverlay = ({
           {t("device.scan.qr.alignQRCode")}
         </Text>
       </View>
-      <AnimatedGuide scanned={scanned} />
     </View>
   );
 };
@@ -420,7 +427,7 @@ const ScanQR = () => {
     const device = store?.nodeStore?.connectedDevice;
 
     if (device) {
-      device.disconnect();
+      safeDisconnect(device);
       store.nodeStore.connectedDevice = null;
     }
   };
@@ -454,7 +461,11 @@ const ScanQR = () => {
     let provCapabilities: string[];
 
     try {
-      versionInfo = await espDevice.getDeviceVersionInfo();
+      versionInfo = await withTimeout(
+        espDevice.getDeviceVersionInfo(),
+        QR_PROVISION_STEP_TIMEOUT_MS,
+        QR_PROVISION_CONNECT_TIMEOUT_ERROR,
+      );
     } catch (error: any) {
       console.error(
         "[QR Provisioning] Error fetching version info:",
@@ -464,7 +475,11 @@ const ScanQR = () => {
     }
 
     try {
-      provCapabilities = await espDevice.getDeviceCapabilities();
+      provCapabilities = await withTimeout(
+        espDevice.getDeviceCapabilities(),
+        QR_PROVISION_STEP_TIMEOUT_MS,
+        QR_PROVISION_CONNECT_TIMEOUT_ERROR,
+      );
     } catch (error: any) {
       console.error(
         "[QR Provisioning] Error fetching capabilities:",
@@ -480,13 +495,19 @@ const ScanQR = () => {
     // Check if device needs PoP
     if (rmakerCaps.requiresPop && pop) {
       try {
-        const popSet = await espDevice.setProofOfPossession(pop);
+        const popSet = await withTimeout(
+          espDevice.setProofOfPossession(pop),
+          QR_PROVISION_STEP_TIMEOUT_MS,
+          QR_PROVISION_CONNECT_TIMEOUT_ERROR,
+        );
         if (!popSet) {
           resetScanState();
           return toast.showError(t("device.scan.qr.invalidQRCode"));
         }
       } catch (error: any) {
         console.error("[QR Provisioning] POP set error:", error?.message);
+        // A timeout means the device stopped responding, not a bad QR code.
+        if (isConnectTimeout(error)) throw error;
         resetScanState();
         return toast.showError(t("device.scan.qr.invalidQRCode"));
       }
@@ -505,7 +526,11 @@ const ScanQR = () => {
 
     // Initialize session
     try {
-      const isSessionInitialized = await espDevice.initializeSession();
+      const isSessionInitialized = await withTimeout(
+        espDevice.initializeSession(),
+        QR_PROVISION_STEP_TIMEOUT_MS,
+        QR_PROVISION_CONNECT_TIMEOUT_ERROR,
+      );
       if (!isSessionInitialized) {
         resetScanState();
         return toast.showError(t("device.scan.qr.sessionInitFailed"));
@@ -700,13 +725,45 @@ const ScanQR = () => {
     // Extract and set default values
     let { security = 2, name, pop, transport } = qrData;
 
-    // Create provisioning device
-    const cdfDevice = await user?.createProvisioningDevice(
-      name,
-      transport,
-      security,
-      pop,
-    );
+    // Tear down any device still connected from a previous scan (e.g. the user
+    // navigated back and rescanned the same QR). Reconnecting on top of a
+    // stale native session makes the post-connect steps hang indefinitely.
+    const previousDevice = store?.nodeStore?.connectedDevice;
+    if (previousDevice) {
+      try {
+        await withTimeout(
+          previousDevice.disconnect(),
+          QR_PROVISION_DISCONNECT_TIMEOUT_MS,
+          QR_PROVISION_CONNECT_TIMEOUT_ERROR,
+        );
+      } catch {
+        // Best-effort teardown; the fresh connect below supersedes it.
+      }
+      store.nodeStore.connectedDevice = null;
+    }
+
+    // Create the provisioning device. The native create runs a BLE scan for
+    // the device's advertisement; a device that was just disconnected can miss
+    // the first scan window, so bound each attempt and retry once.
+    let cdfDevice: ESPCDFProvisioningDevice | null | undefined;
+    for (let attempt = 1; attempt <= QR_PROVISION_CREATE_ATTEMPTS; attempt++) {
+      try {
+        cdfDevice = await withTimeout(
+          Promise.resolve(
+            user?.createProvisioningDevice(name, transport, security, pop),
+          ),
+          QR_PROVISION_STEP_TIMEOUT_MS,
+          QR_PROVISION_CONNECT_TIMEOUT_ERROR,
+        );
+      } catch (error: unknown) {
+        console.error(
+          `[QR Scan] Create device attempt ${attempt} failed:`,
+          error instanceof Error ? error.message : error,
+        );
+        cdfDevice = null;
+      }
+      if (cdfDevice?.name) break;
+    }
 
     if (!cdfDevice?.name) {
       resetScanState();
@@ -724,7 +781,15 @@ const ScanQR = () => {
     store.nodeStore.connectedDevice = cdfDevice;
 
     // Handle QR provisioning (same flow for both iOS and Android)
-    await handleQRProvisioning(cdfDevice, pop);
+    try {
+      await handleQRProvisioning(cdfDevice, pop);
+    } catch (error: unknown) {
+      // Don't leave a half-provisioned device connected in the store —
+      // it would wedge the next scan attempt.
+      safeDisconnect(cdfDevice);
+      store.nodeStore.connectedDevice = null;
+      throw error;
+    }
   };
 
   /**
@@ -877,7 +942,10 @@ const ScanQR = () => {
 
               <View
                 {...testProps("view_camera_controls")}
-                style={globalStyles.cameraControlsContainer}
+                style={[
+                  globalStyles.cameraControlsContainer,
+                  styles.cameraControlsAboveNoQr,
+                ]}
               >
                 <TouchableOpacity
                   {...testProps("button_camera_toggle")}
@@ -918,10 +986,25 @@ const ScanQR = () => {
             </View>
           )}
         </View>
+
+        {/* Outside the permission branches so a denied camera still shows it. */}
+        <View style={styles.noQrCodeRow} pointerEvents="box-none">
+          <TouchableOpacity
+            {...testProps("button_no_qr_code")}
+            style={styles.noQrCodeButton}
+            onPress={() => router.push("/(provision)/AddDeviceSelection")}
+          >
+            <Text {...testProps("text_no_qr_code")} style={styles.noQrCodeText}>
+              {t("device.scan.qr.noQrCode")}
+            </Text>
+          </TouchableOpacity>
+        </View>
       </View>
     </ScreenWrapper>
   );
 };
+
+const NO_QR_BUTTON_HEIGHT = tokens.spacing._20 * 3;
 
 const styles = StyleSheet.create({
   container: {
@@ -941,6 +1024,34 @@ const styles = StyleSheet.create({
   },
   buttonIcon: {
     marginRight: tokens.spacing._10,
+  },
+  // Absolute: taking layout height shrinks the scanner and shifts the centred frame.
+  guideSpacing: {
+    marginBottom: tokens.spacing._30,
+  },
+  // box-none: only the label takes touches, not the whole band.
+  noQrCodeRow: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: NO_QR_BUTTON_HEIGHT,
+    zIndex: 20,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  noQrCodeButton: {
+    paddingVertical: tokens.spacing._15,
+    paddingHorizontal: tokens.spacing._20,
+  },
+  cameraControlsAboveNoQr: {
+    bottom: NO_QR_BUTTON_HEIGHT + tokens.spacing._10,
+  },
+  noQrCodeText: {
+    color: tokens.colors.white,
+    fontSize: tokens.fontSize.md,
+    fontFamily: tokens.fonts.medium,
+    textDecorationLine: "underline",
   },
   buttonDisabled: {
     opacity: 0.5,

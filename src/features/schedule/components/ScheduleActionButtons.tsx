@@ -10,6 +10,7 @@ import { Check, Trash2 } from "lucide-react-native";
 import { tokens } from "@shared/theme/tokens";
 import { globalStyles } from "@shared/theme/globalStyleSheet";
 import { ActionButton } from "@shared/components";
+import { useKeyboardVisible } from "@shared/hooks/useKeyboardVisible";
 import { testProps } from "@shared/utils/testProps";
 
 interface ScheduleActionButtonsProps {
@@ -27,6 +28,7 @@ interface ScheduleActionButtonsProps {
  * ScheduleActionButtons Component
  *
  * Displays save and delete action buttons for schedule creation/editing.
+ * Hidden while the keyboard is open so the footer does not ride up over inputs.
  */
 export const ScheduleActionButtons = ({
   isEditing,
@@ -36,6 +38,11 @@ export const ScheduleActionButtons = ({
   onDelete,
 }: ScheduleActionButtonsProps) => {
   const { t } = useTranslation();
+  const isKeyboardVisible = useKeyboardVisible();
+
+  if (isKeyboardVisible) {
+    return null;
+  }
 
   return (
     <View

@@ -492,12 +492,11 @@ class BasePage:
         title, _ = self.get_toast_title_and_message(timeout=timeout, require_message=False)
         return title
 
-    def delete_all_via_card_menu(self, card_locator, delete_option_id, refresh_button=None,
+    def delete_all_via_card_menu(self, card_locator, delete_option_id,
                                  dismiss_id=None, max_rounds=10):
         """Delete every list card via its menu (tap card -> menu -> delete), re-tapping if a tap missed the menu."""
         for round_index in range(max_rounds):
-            if refresh_button:
-                self.refresh_list(refresh_button)
+            self.refresh_list()
             cards = self.find_all(card_locator)
             if not cards:
                 if round_index == 0:
@@ -524,22 +523,24 @@ class BasePage:
             time.sleep(0.5)
         return self
 
-    def is_named_item_visible(self, name_id, refresh_button=None, timeout=8, attempts=1):
+    def is_named_item_visible(self, name_id, timeout=8, attempts=1):
         """True if a per-name list card is visible; attempts>1 (refresh between tries) is for presence checks only."""
         for attempt in range(attempts):
             if self.is_id_visible(name_id, timeout):
                 return True
-            if refresh_button and attempt < attempts - 1:
-                self.refresh_list(refresh_button)
+            if attempt < attempts - 1:
+                self.refresh_list()
         return False
 
-    def refresh_list(self, refresh_button, settle=2):
-        """Pull fresh cloud state into a list via its refresh control (best-effort)."""
+    def refresh_list(self, settle=2):
+        """Pull fresh cloud state into a list by dragging it down; the lists carry RefreshControl only."""
         try:
-            self.click(refresh_button, timeout=3)
+            size = self.driver.get_window_size()
+            x = size["width"] // 2
+            self._drag(x, int(size["height"] * 0.35), x, int(size["height"] * 0.75))
             time.sleep(settle)
-        except Exception:
-            pass
+        except Exception as error:
+            logger.warning("Pull-to-refresh failed: %s", error)
         return self
 
     def _is_editing(self, edit_text_locator):
@@ -557,11 +558,10 @@ class BasePage:
         return self
 
     def delete_all_in_edit_mode(self, edit_button, delete_item, edit_text_locator,
-                                refresh_button=None, max_rounds=4, max_items=30):
+                                max_rounds=4, max_items=30):
         """Delete every list row via edit-mode trash buttons, retrying until the list is clean."""
         for _ in range(max_rounds):
-            if refresh_button:
-                self.refresh_list(refresh_button)
+            self.refresh_list()
             if not self.is_visible(edit_button, timeout=4):
                 return self
             self.set_editing(edit_text_locator, edit_button, True)

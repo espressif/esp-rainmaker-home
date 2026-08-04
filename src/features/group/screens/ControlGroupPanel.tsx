@@ -4,9 +4,16 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useState } from "react";
-import { Pressable, ScrollView, StyleSheet, View, Text } from "react-native";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { useCallback, useState } from "react";
+import {
+  FlatList,
+  Pressable,
+  RefreshControl,
+  StyleSheet,
+  View,
+  Text,
+} from "react-native";
+import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import { useTranslation } from "react-i18next";
 import { observer } from "mobx-react-lite";
 import { Settings } from "lucide-react-native";
@@ -21,8 +28,18 @@ import { globalStyles } from "@shared/theme/globalStyleSheet";
 import { tokens } from "@shared/theme/tokens";
 import { testProps } from "@shared/utils/testProps";
 import { useToast } from "@shared/hooks/useToast";
-import { useGroupControl } from "@features/group/hooks";
+import { resolveNodeUnavailableMessage } from "@shared/utils/connectivity";
+import {
+  useGroupControl,
+  type GroupControlParamBroadcastRow,
+} from "@features/group/hooks";
 
+/**
+ * Control panel for a homogeneous device group: FlatList of shared params with
+ * pull-to-refresh (same scroll surface pattern as Home). `dismissKeyboard={false}`
+ * avoids ScreenWrapper TouchableWithoutFeedback stealing list gestures.
+ * @returns Header + param list (or empty / unavailable state)
+ */
 const ControlGroupPanel = observer(() => {
   const { t } = useTranslation();
   const toast = useToast();
@@ -31,14 +48,17 @@ const ControlGroupPanel = observer(() => {
     id?: string;
     groupId?: string;
   }>();
-  const [updating, setUpdating] = useState(false);
+  const [scrollEnabled, setScrollEnabled] = useState(true);
 
   const {
     deviceGroup,
     groupTitle,
     homogeneousDeviceType,
+    referenceNode,
     isConnected,
     paramBroadcastRows,
+    refreshing,
+    handleRefresh,
     handleEditGroup,
     handleBroadcastParam,
   } = useGroupControl({
@@ -47,11 +67,77 @@ const ControlGroupPanel = observer(() => {
     router: router as Parameters<typeof useGroupControl>[0]["router"],
   });
 
+  const unavailableMessage = resolveNodeUnavailableMessage(
+    referenceNode?.connectivityStatus?.isConnected,
+    referenceNode?.connectivityStatus?.lastConnectionTimestamp,
+    t,
+  );
+
   const invalid =
     !deviceGroup || !homogeneousDeviceType || paramBroadcastRows.length === 0;
 
+  /**
+   * Renders one broadcast param card (ParamWrap + ParameterControl).
+   * @param item - Reference param and per-member broadcast targets
+   * @returns Param card view
+   */
+  const renderItem = useCallback(
+    ({ item }: { item: GroupControlParamBroadcastRow }) => {
+      const { referenceParam, broadcastTargets } = item;
+      return (
+        <View style={styles.paramCard}>
+          <ParamWrap
+            param={referenceParam}
+            disabled={!isConnected}
+            setUpdating={(updating) => {
+              setScrollEnabled(!updating);
+            }}
+            onValueChange={(value: unknown) =>
+              handleBroadcastParam(broadcastTargets, value, {
+                onSetParamsError: () => {
+                  toast.showError(t("group.errors.fallback"));
+                },
+              })
+            }
+            compact={true}
+            qaId={`control_group_panel_param_${referenceParam.name}`}
+          >
+            <ParameterControl param={referenceParam} />
+          </ParamWrap>
+        </View>
+      );
+    },
+    [handleBroadcastParam, isConnected, t, toast],
+  );
+
+  /**
+   * Stable list key from the reference param name.
+   * @param item - Broadcast row
+   * @returns Param name key
+   */
+  const keyExtractor = useCallback(
+    (item: GroupControlParamBroadcastRow) => item.referenceParam.name,
+    [],
+  );
+
+  /**
+   * Offline banner above the param list (scrolls with FlatList like Home header).
+   * @returns Warning banner or null when connected
+   */
+  const listHeader = useCallback(() => {
+    if (isConnected) return null;
+    return (
+      <WarningBanner
+        message={unavailableMessage}
+        qaId="control_group_panel_offline"
+        containerStyle={styles.offlineBannerInScroll}
+      />
+    );
+  }, [isConnected, unavailableMessage]);
+
   return (
     <>
+      <Stack.Screen options={{ gestureEnabled: false }} />
       <Header
         label={groupTitle || t("group.deviceGroups.groupControl")}
         showBack={true}
@@ -70,6 +156,7 @@ const ControlGroupPanel = observer(() => {
       <ScreenWrapper
         style={StyleSheet.flatten([globalStyles.container, styles.screenRoot])}
         qaId="screen_wrapper_control_group_panel"
+        dismissKeyboard={false}
       >
         {invalid ? (
           <View
@@ -78,7 +165,7 @@ const ControlGroupPanel = observer(() => {
           >
             {!isConnected ? (
               <WarningBanner
-                message={t("layout.shared.offline")}
+                message={unavailableMessage}
                 qaId="control_group_panel_offline"
                 containerStyle={styles.offlineBannerInEmpty}
               />
@@ -90,44 +177,37 @@ const ControlGroupPanel = observer(() => {
             ) : null}
           </View>
         ) : (
-          <ScrollView
-            style={[
-              globalStyles.flex1,
-              { backgroundColor: tokens.colors.bg5 },
-              { opacity: isConnected ? 1 : 0.5 },
-            ]}
-            contentContainerStyle={styles.scrollContent}
-            scrollEnabled={!updating}
-            showsVerticalScrollIndicator={false}
-            {...testProps("scroll_control_group_panel")}
-          >
-            {!isConnected ? (
-              <WarningBanner
-                message={t("layout.shared.offline")}
-                qaId="control_group_panel_offline"
-                containerStyle={styles.offlineBannerInScroll}
-              />
-            ) : null}
-            {paramBroadcastRows.map(({ referenceParam, broadcastTargets }) => (
-              <View key={referenceParam.name} style={styles.paramCard}>
-                <ParamWrap
-                  param={referenceParam}
-                  disabled={!isConnected}
-                  setUpdating={setUpdating}
-                  onValueChange={(value: unknown) =>
-                    handleBroadcastParam(broadcastTargets, value, {
-                      onSetParamsError: () => {
-                        toast.showError(t("group.errors.fallback"));
-                      },
-                    })
-                  }
-                  qaId={`control_group_panel_param_${referenceParam.name}`}
-                >
-                  <ParameterControl param={referenceParam} />
-                </ParamWrap>
-              </View>
-            ))}
-          </ScrollView>
+          <View style={globalStyles.flex1} {...testProps("view_control_group_panel_list")}>
+            <FlatList
+              {...testProps("list_control_group_panel")}
+              data={paramBroadcastRows}
+              keyExtractor={keyExtractor}
+              renderItem={renderItem}
+              ListHeaderComponent={listHeader}
+              style={[
+                globalStyles.flex1,
+                { backgroundColor: tokens.colors.bg5 },
+                { opacity: isConnected ? 1 : 0.5 },
+              ]}
+              contentContainerStyle={styles.scrollContent}
+              scrollEnabled={scrollEnabled}
+              showsVerticalScrollIndicator={false}
+              bounces
+              alwaysBounceVertical
+              keyboardShouldPersistTaps="handled"
+              removeClippedSubviews={false}
+              refreshControl={
+                <RefreshControl
+                  refreshing={refreshing}
+                  onRefresh={handleRefresh}
+                  colors={[tokens.colors.primary]}
+                  tintColor={tokens.colors.primary}
+                  progressViewOffset={10}
+                  enabled={isConnected && scrollEnabled}
+                />
+              }
+            />
+          </View>
         )}
       </ScreenWrapper>
     </>
@@ -147,20 +227,6 @@ const styles = StyleSheet.create({
   /** Same as device_panels/Fallback ParamControlWrap wrapper. */
   paramCard: {
     marginBottom: 10,
-    paddingVertical: tokens.spacing._10,
-    ...globalStyles.shadowElevationForLightTheme,
-    backgroundColor: tokens.colors.white,
-  },
-  updatingBanner: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: tokens.spacing._10,
-    paddingVertical: tokens.spacing._10,
-  },
-  updatingText: {
-    ...globalStyles.fontRegular,
-    fontSize: tokens.fontSize.sm,
-    color: tokens.colors.bg3,
   },
   empty: {
     flex: 1,

@@ -14,6 +14,43 @@ interface WifiCredential {
 }
 
 const STORAGE_KEY = '@wifi_credentials';
+const MAX_SAVED_NETWORKS = 10;
+
+/**
+ * Writes a network's credentials, merging storage directly so callers that
+ * never mounted the hook can use it.
+ * @param ssid Network SSID
+ * @param password Password the device accepted
+ * @returns Promise<boolean> Success status
+ */
+export const persistWifiCredential = async (
+  ssid: string,
+  password: string
+): Promise<boolean> => {
+  try {
+    const stored = await AsyncStorage.getItem(STORAGE_KEY);
+    const networks: WifiCredential[] = stored ? JSON.parse(stored) : [];
+    const entry: WifiCredential = { ssid, password, timestamp: Date.now() };
+    const index = networks.findIndex((n) => n.ssid === ssid);
+
+    if (index >= 0) {
+      networks[index] = entry;
+    } else {
+      networks.push(entry);
+    }
+
+    // Most recently used first, capped.
+    networks.sort((a, b) => b.timestamp - a.timestamp);
+    await AsyncStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify(networks.slice(0, MAX_SAVED_NETWORKS))
+    );
+    return true;
+  } catch (error) {
+    console.error('Error saving network:', error);
+    return false;
+  }
+};
 
 /**
  * Hook for managing WiFi credentials in storage
@@ -57,38 +94,11 @@ export const useWifiStorage = () => {
    * @returns Promise<boolean> Success status
    */
   const saveNetwork = async (ssid: string, password: string): Promise<boolean> => {
-    try {
-      const newNetwork: WifiCredential = {
-        ssid,
-        password,
-        timestamp: Date.now()
-      };
-
-      const updatedNetworks = [...savedNetworks];
-      const existingIndex = updatedNetworks.findIndex(n => n.ssid === ssid);
-
-      if (existingIndex >= 0) {
-        // Update existing network
-        updatedNetworks[existingIndex] = newNetwork;
-      } else {
-        // Add new network
-        updatedNetworks.push(newNetwork);
-      }
-
-      // Sort by most recently used
-      updatedNetworks.sort((a, b) => b.timestamp - a.timestamp);
-
-      // Keep only the last 10 networks
-      const trimmedNetworks = updatedNetworks.slice(0, 10);
-
-      // Save to storage
-      await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(trimmedNetworks));
-      setSavedNetworks(trimmedNetworks);
-      return true;
-    } catch (error) {
-      console.error('Error saving network:', error);
-      return false;
+    const saved = await persistWifiCredential(ssid, password);
+    if (saved) {
+      await loadSavedNetworks();
     }
+    return saved;
   };
 
   /**

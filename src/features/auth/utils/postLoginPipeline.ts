@@ -4,19 +4,28 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { Router } from "expo-router";
+import type { useRouter } from "expo-router";
 import { pipelineTask, PipelineStep } from "@shared/utils/pipelineTask";
 import { registerForNotification } from "@shared/utils/notifications";
 import { setUserTimeZone } from "@shared/utils/timezone";
 import { RAINMAKER_MCP_CONNECTOR_ID } from "@features/agent/utils";
-import { getUserProfile, getAgentConfig, getConnectedConnectors } from "@features/agent/utils/apiHelper";
+import {
+  getUserProfile,
+  getAgentConfig,
+  getConnectedConnectors,
+} from "@features/agent/utils/apiHelper";
 import { getSelectedAgentId } from "@features/agent/utils/storage";
 import { connectToolWithTokens } from "@features/agent/utils/oauth";
-import { DEFAULT_AGENT_ID, RAINMAKER_MCP_CONNECTOR_URL } from "@/config/agent.config";
+import {
+  DEFAULT_AGENT_ID,
+  RAINMAKER_MCP_CONNECTOR_URL,
+} from "@/config/agent.config";
 import { CDFConfig } from "@config/sdk.config";
 import { ESPCDF } from "@store";
 import { startNodeLocalDiscovery } from "@features/group/utils/localDiscovery";
 import { startMatterLocalDiscovery } from "@features/matter/utils/matterLocalDiscovery";
+
+type AppRouter = ReturnType<typeof useRouter>;
 
 export type PostLoginPipelineProgressState = {
   completed: number;
@@ -34,7 +43,6 @@ export interface PostLoginPipelineHooks {
 }
 
 export interface PostLoginPipelineBaseOptions {
-  router: Router;
   syncHomeWithNodes: (shouldFetchFirstPage?: boolean) => Promise<void>;
   initUserCustomData: () => Promise<void>;
   shouldFetchFirstPage?: boolean;
@@ -44,6 +52,17 @@ export interface PostLoginPipelineBaseOptions {
 
 export type PostLoginPipelineOptions = PostLoginPipelineBaseOptions &
   PostLoginPipelineHooks;
+
+/**
+ * Enters Home immediately after auth — does not wait on CDF hydration.
+ *
+ * Uses `dismissTo` so we never pop through the Index splash (whose focus
+ * effect used to delay navigation by 2s via `dismissAll` + replace).
+ * @param router - Expo Router instance
+ */
+export function navigateToHomeAfterAuth(router: AppRouter): void {
+  router.dismissTo("/(group)/Home");
+}
 
 /**
  * Composes shared post-login pipeline options with caller-provided lifecycle hooks.
@@ -62,15 +81,9 @@ export function withPostLoginPipelineHooks(
 }
 
 /**
- * Executes the post-login pipeline with all necessary steps.
- * Caller must ensure React state (espCDFUser) is synced from store after login
- * (e.g. setESPCDFUser(store.userStore.user)) before calling this.
- *
- * This pipeline handles:
- * - Setting user timezone
- * - Creating platform endpoint for notifications
- * - Initializing user custom data
- * - Syncing homes and nodes
+ * Background post-login hydration (custom data, homes/nodes, discovery, MCP).
+ * Does **not** navigate — callers must {@link navigateToHomeAfterAuth} first
+ * (or in parallel) so Login/Index never wait on sync to leave the auth screen.
  * @param options - Configuration options for the pipeline
  */
 export async function executePostLoginPipeline(
@@ -78,7 +91,6 @@ export async function executePostLoginPipeline(
 ): Promise<void> {
   const {
     store,
-    router,
     syncHomeWithNodes,
     initUserCustomData,
     shouldFetchFirstPage = CDFConfig.autoSync,
@@ -107,133 +119,115 @@ export async function executePostLoginPipeline(
       background: true,
       run: () => registerForNotification(store),
     },
-  ];
-
-  // Flow: initUserCustomData first (so lastSelectedHomeId is available), then sync via syncHomeWithNodes
-  postLoginSteps.push(
     {
-      name: "initUserCustomData",
-      run: initUserCustomData,
-    },
-    {
+      // Single background hydrate: custom data then homes/nodes. Must not be a
+      // blocking step — callers (and OAuth overlay) must not await sync locks.
       name: "syncHomeWithNodes",
-      dependsOn: ["initUserCustomData"],
-      optional: false,
-      background: false,
+      optional: true,
+      background: true,
       run: async () => {
+        await initUserCustomData();
         await syncHomeWithNodes(shouldFetchFirstPage);
+        try {
+          startNodeLocalDiscovery(store);
+          startMatterLocalDiscovery(store);
+        } catch (error) {
+          console.warn(
+            "[Post-Login] startLocalDiscovery failed (non-blocking):",
+            error
+          );
+        }
       },
-    }
-  );
-
-  // Keep old flow for backward compatibility if skipNodesFetch is false
-  // But we won't use it in the new flow
-  if (!skipNodesFetch) {
-    // Note: Nodes will be fetched on home page for selected group
-    // This step is kept for any legacy code that might depend on it
-    // but it won't be executed in the normal flow
-  }
-
-  // Warm up local-network discovery (RainMaker local control + Matter operational).
-  postLoginSteps.push({
-    name: "startLocalDiscovery",
-    dependsOn: ["syncHomeWithNodes"],
-    optional: true,
-    background: true,
-    run: async () => {
-      try {
-        startNodeLocalDiscovery(store);
-        startMatterLocalDiscovery(store);
-      } catch (error) {
-        console.warn(
-          "[Post-Login] startLocalDiscovery failed (non-blocking):",
-          error,
-        );
-      }
     },
-  });
-
-  // Auto-connect MCP RainMaker connector for default agent
-  postLoginSteps.push({
-    name: "autoConnectMCPConnector",
-    dependsOn: ["initUserCustomData"],
-    optional: true,
-    background: true,
-    run: async () => {
-      try {
-        // Check if default agent is selected
-        const user = store?.userStore.user;
-        if (!user) {
-          return;
+    {
+      name: "getUserProfile",
+      optional: true,
+      background: true,
+      run: async () => {
+        try {
+          getUserProfile();
+        } catch {
+          // Profile setup is shown when needed; never block hydration.
         }
-        const selectedAgentId = await getSelectedAgentId(user);
-        if (selectedAgentId !== DEFAULT_AGENT_ID) {
-          return;
-        }
+      },
+    },
+    {
+      name: "autoConnectMCPConnector",
+      optional: true,
+      background: true,
+      run: async () => {
+        try {
+          // Custom data may still be in flight via syncHomeWithNodes; MCP is
+          // best-effort and must not serialize behind a blocking await.
+          await initUserCustomData();
+          const user = store?.userStore.user;
+          if (!user) {
+            return;
+          }
+          const selectedAgentId = await getSelectedAgentId(user);
+          if (selectedAgentId !== DEFAULT_AGENT_ID) {
+            return;
+          }
 
-        // Get default agent config
-        const agentConfig = await getAgentConfig(DEFAULT_AGENT_ID);
-        if (!agentConfig?.tools) {
-          return;
-        }
+          const agentConfig = await getAgentConfig(DEFAULT_AGENT_ID);
+          if (!agentConfig?.tools) {
+            return;
+          }
 
-        // Find MCP RainMaker tool
-        const mcpTool = agentConfig.tools.find(
-          (tool: any) => tool.url === RAINMAKER_MCP_CONNECTOR_URL
-        );
+          const mcpTool = agentConfig.tools.find(
+            (tool: { url?: string }) => tool.url === RAINMAKER_MCP_CONNECTOR_URL
+          );
 
-        if (!mcpTool) {
-          return;
-        }
+          if (!mcpTool) {
+            return;
+          }
 
-        // Check if already connected (match by specific connectorId or connectorUrl)
-        const connectedConnectors = await getConnectedConnectors();
-        const isConnected = connectedConnectors.some(
-          (connector) => {
-            const hasConnectorId = connector.connectorId === RAINMAKER_MCP_CONNECTOR_ID;
-            const hasConnectorUrl = connector.connectorUrl === RAINMAKER_MCP_CONNECTOR_URL; 
+          const connectedConnectors = await getConnectedConnectors();
+          const isConnected = connectedConnectors.some((connector) => {
+            const hasConnectorId =
+              connector.connectorId === RAINMAKER_MCP_CONNECTOR_ID;
+            const hasConnectorUrl =
+              connector.connectorUrl === RAINMAKER_MCP_CONNECTOR_URL;
             const hasToken = connector.hasToken || false;
             const isExpired = connector.isExpired || false;
-            return (hasConnectorId || hasConnectorUrl) && hasToken && !isExpired;
-          }
-        );
+            return (
+              (hasConnectorId || hasConnectorUrl) && hasToken && !isExpired
+            );
+          });
 
-        if (isConnected) {
-          return;
+          if (isConnected) {
+            return;
+          }
+
+          const oauthMetadata = mcpTool.oauthMetadata
+            ? {
+                tokenEndpoint: mcpTool.oauthMetadata.tokenEndpoint,
+                clientId: mcpTool.oauthMetadata.clientId,
+                resource: mcpTool.oauthMetadata.resource,
+              }
+            : undefined;
+
+          await connectToolWithTokens(
+            store,
+            RAINMAKER_MCP_CONNECTOR_URL,
+            oauthMetadata
+          );
+        } catch (error: unknown) {
+          const message =
+            error instanceof Error ? error.message : String(error);
+          console.error(
+            "[Post-Login] Failed to auto-connect MCP connector:",
+            message
+          );
         }
-
-        // Auto-connect using tokens
-        const oauthMetadata = mcpTool.oauthMetadata
-          ? {
-            tokenEndpoint: mcpTool.oauthMetadata.tokenEndpoint,
-            clientId: mcpTool.oauthMetadata.clientId,
-            resource: mcpTool.oauthMetadata.resource,
-          }
-          : undefined;
-
-        await connectToolWithTokens(store, RAINMAKER_MCP_CONNECTOR_URL, oauthMetadata);
-      } catch (error: any) {
-        // Silent error - don't block login flow
-        console.error("[Post-Login] Failed to auto-connect MCP connector:", error?.message);
-      }
+      },
     },
-  });
+  ];
 
-  // Add the final routing step
-  postLoginSteps.push({
-    name: "getUserProfileAndRoute",
-    dependsOn: ["initUserCustomData"],
-    run: async () => {
-      try {
-        await getUserProfile();
-        router.replace("/(group)/Home");
-      } catch {
-        // Always route to Home, profile setup will be shown when needed
-        router.replace("/(group)/Home");
-      }
-    },
-  });
+  // Legacy flag retained for callers; nodes load via background sync + Home.
+  void skipNodesFetch;
 
+  // All steps are background — resolve as soon as they are kicked off.
   await pipelineTask(postLoginSteps, {
     onStart: (stepName) => {
       console.log(`[post-login pipeline] start: ${stepName}`);

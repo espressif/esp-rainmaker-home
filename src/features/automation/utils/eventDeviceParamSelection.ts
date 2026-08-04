@@ -19,15 +19,25 @@ export interface EventConditionOption {
 
 /**
  * Returns the first draft event when it is a node-params trigger for the given device.
+ *
+ * Events carry no node id of their own — the automation's event node lives
+ * alongside them in context (`state.nodeId`). Since different nodes can expose
+ * same-named devices, a name match alone would leak one device's trigger onto
+ * another, so the device's node must also match the event's node.
  * @param events - Automation context `state.events`
  * @param deviceName - Logical device name on the event node
+ * @param deviceNodeId - Node id of the device being configured
+ * @param eventNodeId - Node id the stored event belongs to (`state.nodeId`)
  * @returns The node-params event or null
  */
 export function getNodeParamsEventForDevice(
   events: readonly unknown[] | undefined,
   deviceName: string | undefined,
+  deviceNodeId: string | undefined,
+  eventNodeId: string | undefined,
 ): ESPCDFAutomationNodeParamsEvent | null {
   if (!deviceName || !events?.length) return null;
+  if (!deviceNodeId || deviceNodeId !== eventNodeId) return null;
   const event = events[0];
   if (typeof event !== "object" || event === null) return null;
   if (

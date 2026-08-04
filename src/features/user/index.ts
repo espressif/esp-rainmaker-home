@@ -10,7 +10,6 @@ export {
   usePersonalInfo,
   useDeleteAccount,
   useNotificationCenter,
-  PERSONAL_INFO_FIELDS,
   type RouteMap,
   type RouteAction,
 } from "./hooks";

@@ -63,7 +63,7 @@ export function useConfirmationCode() {
         password: password as string,
       });
       if (res) {
-        toast.showSuccess(t("auth.verification.heading"));
+        toast.showSuccess(t("auth.verification.heading"), res.description || undefined);
         setCountdown(60);
       }
     } catch (error: unknown) {
@@ -86,7 +86,7 @@ export function useConfirmationCode() {
         verificationCode: code,
       });
       if (res) {
-        toast.showSuccess(t("auth.signup.registrationSuccess"), undefined, { duration: 4000 });
+        toast.showSuccess(t("auth.signup.registrationSuccess"), res.description || undefined, { duration: 4000 });
         setPendingPostSignupLogin({
           username: email as string,
           password: password as string,

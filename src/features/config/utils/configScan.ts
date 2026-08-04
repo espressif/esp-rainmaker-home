@@ -59,7 +59,6 @@ const CONFIG_SCHEMA = Joi.object({
 
 /**
  * Trims a value when it is a string; otherwise returns "".
- *
  * @param value - Unknown field from scanned config JSON
  * @returns Trimmed string, or empty when not a string
  */
@@ -69,7 +68,6 @@ function readTrimmedString(value: unknown): string {
 
 /**
  * Joins an origin URL with an optional path without a double slash.
- *
  * @param origin - Base origin (may have a trailing slash)
  * @param path - Optional path segment
  * @returns Origin alone when path is empty; otherwise origin + path
@@ -86,7 +84,6 @@ function joinOriginAndPath(origin: string, path: string): string {
 
 /**
  * Resolves RMNeo device API `baseUrl` from `baseUrl` + optional `apiPath`.
- *
  * @param config - Raw RMNeo config fields
  * @returns Full device API base URL
  */
@@ -100,7 +97,6 @@ function resolveNeoBaseUrl(config: Record<string, unknown>): string {
 /**
  * Resolves RMNeo `userApiBase`: prefers a full `userApiBase`, else
  * `userApiBaseUrl` + optional `userApiPath`.
- *
  * @param config - Raw RMNeo config fields
  * @returns Full user/auth API base URL
  */
@@ -119,7 +115,6 @@ function resolveNeoUserApiBase(config: Record<string, unknown>): string {
 /**
  * Normalizes a scanned RMNeo config object to the two-URL shape used by
  * {@link ESPRMNeoRuntimeConfig} (joins origin + path fields when present).
- *
  * @param config - Raw config from QR / fetch (may still use apiPath / userApiBaseUrl)
  * @returns Config with full `baseUrl` and `userApiBase` only
  */
@@ -138,7 +133,6 @@ function normalizeScannedNeoConfig(
 
 /**
  * Prepares a raw scanned payload for Joi (SDK id normalization + RMNeo URL shape).
- *
  * @param payload - Parsed scan / fetch JSON
  * @returns Payload ready for {@link validateConfig}
  */
@@ -188,7 +182,6 @@ function isHttpOrHttpsUrl(trimmed: string): boolean {
 
 /**
  * Fetches JSON from URL.
- *
  * @param url - Remote config URL
  * @returns Parsed JSON body
  */
@@ -222,7 +215,6 @@ async function fetchJsonFromUrl(url: string): Promise<unknown> {
 
 /**
  * Validates config payload. Returns validated payload or throws with message.
- *
  * @param payload - Candidate scanned config
  * @returns Validated {@link ScannedConfigPayload}
  */
@@ -245,7 +237,6 @@ export function validateConfig(
 
 /**
  * Maps client-outputs JSON to a scanned payload, or null.
- *
  * @param value - Parsed scan / fetch JSON
  * @returns Mapped payload, or null when not a client-outputs document
  */
@@ -259,7 +250,6 @@ function tryMapClientOutputsDoc(value: unknown): ScannedConfigPayload | null {
 /**
  * Resolves config from scanned value (JSON string, client-outputs JSON, or URL).
  * Client-outputs (`rmng-base`) map to `rainmaker-neo-base-sdk`.
- *
  * @param scannedValue - QR payload or pasted string
  * @returns Validated {@link ScannedConfigPayload}
  */

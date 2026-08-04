@@ -4,7 +4,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { View, StyleSheet } from "react-native";
+import { useRef } from "react";
+import { View, StyleSheet, Pressable, TextInput } from "react-native";
+import { useTranslation } from "react-i18next";
 import { Edit3 } from "lucide-react-native";
 import { Input, ContentWrapper } from "@shared/components";
 import { tokens } from "@shared/theme/tokens";
@@ -19,10 +21,13 @@ type SceneNameInputProps = {
 };
 
 /**
- * SceneNameInput Component
- *
- * Reusable component for scene name input with edit icon
- * Used in Create Scene, Edit Scene, and other scene-related screens
+ * Scene name field with a pencil that focuses the input when pressed.
+ * Used on Create Scene, Edit Scene, and related screens.
+ * @param value - Current scene name
+ * @param onChange - Called when the name text changes
+ * @param placeholder - Placeholder for the name input
+ * @param title - Section title shown above the field
+ * @param qaId - Optional QA id for the section and input
  */
 export default function SceneNameInput({
   value,
@@ -31,10 +36,21 @@ export default function SceneNameInput({
   title,
   qaId = "scene_name",
 }: SceneNameInputProps) {
+  const { t } = useTranslation();
+  const inputRef = useRef<TextInput>(null);
+
+  /**
+   * Focuses the scene name input so the pencil acts as an edit affordance.
+   */
+  const focusNameInput = () => {
+    inputRef.current?.focus();
+  };
+
   return (
     <ContentWrapper qaId={qaId} title={title} style={styles.contentWrapper}>
       <View style={styles.inputContainer}>
         <Input
+          ref={inputRef}
           qaId={qaId}
           placeholder={placeholder}
           value={value}
@@ -44,13 +60,16 @@ export default function SceneNameInput({
           paddingHorizontal={false}
           marginBottom={false}
         />
-        <View style={styles.editIcon}>
-          <Edit3
-            {...testProps("icon_edit_scene_name")}
-            size={20}
-            color={tokens.colors.text_secondary}
-          />
-        </View>
+        <Pressable
+          style={styles.editIcon}
+          onPress={focusNameInput}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          accessibilityRole="button"
+          accessibilityLabel={t("layout.shared.edit")}
+          {...testProps("icon_edit_scene_name")}
+        >
+          <Edit3 size={20} color={tokens.colors.text_secondary} />
+        </Pressable>
       </View>
     </ContentWrapper>
   );

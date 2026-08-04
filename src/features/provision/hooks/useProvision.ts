@@ -4,9 +4,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { ScrollView, unstable_batchedUpdates } from "react-native";
 import { useRouter, useLocalSearchParams } from "expo-router";
+import { usePreventRemove } from "@react-navigation/native";
 import { useTranslation } from "react-i18next";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
@@ -26,6 +27,7 @@ import {
 import {
   ESPRM_AGENT_AUTH_SERVICE,
   ESPRM_REFRESH_TOKEN_PARAM_TYPE,
+  PROVISION_SETUP_PROGRESS_MESSAGES,
 } from "@shared/utils/constants";
 import { setUserAuthForNode } from "@features/agent/utils/device";
 import { TOKEN_STORAGE_KEYS } from "@features/agent/utils";
@@ -40,15 +42,53 @@ import {
   ON_NETWORK_MESSAGE_STAGE_MAP,
   extractErrorMessage,
   getLocalizedErrorMessage,
+  isWifiAuthFailure,
+  isProvisionSetupProgressMessage,
 } from "@features/provision/utils/provisionHelper";
 import { takeProvisionTimezoneOutcome } from "@shared/utils/timezone";
+import {
+  captureProvisionNodeId,
+  finalizeProvisionedNode,
+} from "@shared/utils/provisionNode";
+import { persistWifiCredential } from "./useWifiStorage";
+import { isRmneoStackSdkId } from "@config/sdk.identifiers";
 
 interface UseProvisionReturn {
   stages: ProvisionStage[];
   isComplete: boolean;
   stepsScrollViewRef: React.RefObject<ScrollView | null>;
   handleContinue: () => void;
+  /** Whether the "stop setting up?" confirmation is showing. */
+  isExitSetupDialogOpen: boolean;
+  /** Abandon setup and return to Home. */
+  handleConfirmExitSetup: () => void;
+  /** Dismiss the confirmation and stay on this screen. */
+  handleCancelExitSetup: () => void;
+  /** Wi-Fi was reset on the device; asks whether to retry at all. */
+  isWifiResetPromptOpen: boolean;
+  /** Failure that triggered the reset, shown above the prompt's own message. */
+  wifiResetErrorMessage: string;
+  /** Accept the retry and move on to the password step. */
+  handleConfirmWifiReset: () => void;
+  /** Decline the retry and stay on the failed screen. */
+  handleDismissWifiResetPrompt: () => void;
+  /** Whether the corrected-password step is showing. */
+  isWifiResetPasswordPromptOpen: boolean;
+  /** SSID being retried, shown as the password step's title. */
+  retrySsid: string;
+  /** Re-send credentials with the corrected password. */
+  handleRetryWithPassword: (password: string) => Promise<void>;
+  /** Back out of the password step without retrying. */
+  handleCancelWifiResetPassword: () => void;
+  /** A retry is in flight. */
+  isRetrying: boolean;
 }
+
+/** Destination this screen is leaving to, once an exit has been requested. */
+type PendingExit =
+  | { kind: "addDevice" }
+  | { kind: "home" }
+  | { kind: "deviceName"; nodeId: string };
 
 /** Same as Home pull-to-refresh: fresh node list + connectivity from cloud, then local discovery. */
 async function syncHomeAfterProvision(
@@ -79,9 +119,11 @@ export const useProvision = (): UseProvisionReturn => {
   const toast = useToast();
   const { t } = useTranslation();
   const { store, syncHomeWithNodes } = useCDF();
-  const { ssid, password } = useLocalSearchParams<{
+  const { ssid, password, shouldSave } = useLocalSearchParams<{
     ssid?: string;
     password?: string;
+    /** "1" when the Wi-Fi screen's "Save network" box was ticked. */
+    shouldSave?: string;
   }>();
 
   // State — always start with the default 5-stage list. The actual flow
@@ -93,6 +135,14 @@ export const useProvision = (): UseProvisionReturn => {
     getProvisionStages(t)
   );
   const [isComplete, setIsComplete] = useState(false);
+  // Non-null once an exit is requested; releases the back guard below.
+  const [pendingExit, setPendingExit] = useState<PendingExit | null>(null);
+  const [isExitSetupDialogOpen, setIsExitSetupDialogOpen] = useState(false);
+  const [isWifiResetPromptOpen, setIsWifiResetPromptOpen] = useState(false);
+  const [wifiResetErrorMessage, setWifiResetErrorMessage] = useState("");
+  const [isWifiResetPasswordPromptOpen, setIsWifiResetPasswordPromptOpen] =
+    useState(false);
+  const [isRetrying, setIsRetrying] = useState(false);
 
   // Refs
   const stepsScrollViewRef = useRef<ScrollView>(null);
@@ -101,6 +151,8 @@ export const useProvision = (): UseProvisionReturn => {
   const isOnNetworkFlowRef = useRef(false);
   const provisionedNodeRef = useRef<ESPCDFNode | null>(null);
   const hasStartedProvisioningRef = useRef(false);
+  // Password currently in play; a retry replaces the one we arrived with.
+  const attemptedPasswordRef = useRef<string>((password as string) ?? "");
 
   // Data
   const device: ESPCDFProvisioningDevice = store?.nodeStore?.connectedDevice as ESPCDFProvisioningDevice;
@@ -124,15 +176,20 @@ export const useProvision = (): UseProvisionReturn => {
     errorMessage?: string
   ): ProvisionStage[] => {
     const newStages = [...stages];
+    const lastIdx = newStages.length - 1;
     for (let i = stageId - 1; i < newStages.length; i++) {
       const stage = newStages[i];
       if (stage) {
         stage.status = "error";
         stage.error = i === stageId - 1 ? (errorMessage || "An error occurred") : undefined;
+        // Clear live Neo sub-status so only the error line remains.
+        if (i === lastIdx) {
+          stage.description = t("device.provision.setup.checkingNodeOnline");
+        }
       }
     }
     return newStages;
-  }, []);
+  }, [t]);
 
   // Update challenge response stage
   const updateChallengeResponseStage = useCallback((stageId: number, isError?: boolean, errorMessage?: string) => {
@@ -148,10 +205,19 @@ export const useProvision = (): UseProvisionReturn => {
           currentStage.error = undefined;
         }
 
-        if (stageId < 3) {
+        // Activate the next step when one exists (chal-resp or on-network).
+        if (stageId < newStages.length) {
           const nextStage = newStages[stageId];
           if (nextStage) {
             nextStage.status = "pending";
+            // Completing the second-to-last step activates setting-up —
+            // reset Neo sub-status so stale reconnect/timezone text is gone.
+            if (stageId === newStages.length - 1) {
+              nextStage.description = t(
+                "device.provision.setup.checkingNodeOnline"
+              );
+              nextStage.error = undefined;
+            }
           }
         }
       }
@@ -161,7 +227,7 @@ export const useProvision = (): UseProvisionReturn => {
     });
 
     scrollToBottom();
-  }, [markStagesAsError, scrollToBottom]);
+  }, [markStagesAsError, scrollToBottom, t]);
 
   // Update stage status
   const updateStageStatus = useCallback((message: string, isError?: boolean, errorMessage?: string) => {
@@ -257,6 +323,7 @@ export const useProvision = (): UseProvisionReturn => {
         const lastIdx = newStages.length - 1;
         const lastStage = newStages[lastIdx];
         if (lastStage) {
+          lastStage.description = t("device.provision.setup.complete");
           if (timezoneSoftWarning) {
             lastStage.status = "error";
             lastStage.error = timezoneSoftWarning;
@@ -270,7 +337,59 @@ export const useProvision = (): UseProvisionReturn => {
       });
       scrollToBottom();
     },
-    [scrollToBottom]
+    [scrollToBottom, t]
+  );
+
+  /**
+   * Updates the last ("Setting up") stage description from RMNeo setup progress.
+   * @param message - Technical progress key from {@link PROVISION_SETUP_PROGRESS_MESSAGES}.
+   * @param data - Optional progress payload (reconnect attempt index).
+   */
+  const updateSettingUpStageDescription = useCallback(
+    (message: string, data?: Record<string, unknown>) => {
+      let description: string;
+      switch (message) {
+        case PROVISION_SETUP_PROGRESS_MESSAGES.CHECKING_NODE_ONLINE:
+          description = t("device.provision.setup.checkingNodeOnline");
+          break;
+        case PROVISION_SETUP_PROGRESS_MESSAGES.TRYING_RECONNECT: {
+          const rawAttempt = data?.reconnectAttempt;
+          const attempt =
+            typeof rawAttempt === "number" ? rawAttempt : undefined;
+          description = t("device.provision.setup.tryingReconnect", {
+            attempt: attempt ?? "",
+          });
+          break;
+        }
+        case PROVISION_SETUP_PROGRESS_MESSAGES.UPDATING_NODE_TIMEZONE:
+          description = t("device.provision.setup.updatingNodeTimezone");
+          break;
+        case PROVISION_SETUP_PROGRESS_MESSAGES.COMPLETE:
+          description = t("device.provision.setup.complete");
+          break;
+        default:
+          return;
+      }
+
+      setStages((prevStages) => {
+        const newStages = [...prevStages];
+        const lastIdx = newStages.length - 1;
+        const lastStage = newStages[lastIdx];
+        if (!lastStage) {
+          return prevStages;
+        }
+        // Keep the stage pending with a live detail line until success/error.
+        if (lastStage.status !== "pending") {
+          lastStage.status = "pending";
+        }
+        lastStage.description = description;
+        lastStage.error = undefined;
+        stagesRef.current = newStages;
+        return newStages;
+      });
+      scrollToBottom();
+    },
+    [scrollToBottom, t]
   );
 
   // Handle add device success
@@ -288,6 +407,11 @@ export const useProvision = (): UseProvisionReturn => {
       });
       toast.showSuccess(t("device.provision.success"), undefined, { duration: 4000 });
     };
+
+    // Only a password the device accepted is worth remembering.
+    if (shouldSave === "1" && ssid && attemptedPasswordRef.current) {
+      await persistWifiCredential(ssid as string, attemptedPasswordRef.current);
+    }
 
     try {
       provisionedNodeRef.current = provisionedNode;
@@ -324,6 +448,8 @@ export const useProvision = (): UseProvisionReturn => {
     syncHomeWithNodes,
     toast,
     t,
+    ssid,
+    shouldSave,
   ]);
 
   /**
@@ -364,6 +490,10 @@ export const useProvision = (): UseProvisionReturn => {
         break;
 
       case ESPCDFProvisionResponseStatus.ON_PROGRESS:
+        if (isProvisionSetupProgressMessage(message)) {
+          updateSettingUpStageDescription(message, response.data);
+          break;
+        }
         if (
           isOnNetworkFlowRef.current &&
           ON_NETWORK_MESSAGE_STAGE_MAP[message] !== undefined
@@ -395,7 +525,13 @@ export const useProvision = (): UseProvisionReturn => {
         break;
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional hook deps
-  }, [updateChallengeResponseStage, updateStageStatus, markStage3AsComplete, scrollToBottom]);
+  }, [
+    updateChallengeResponseStage,
+    updateStageStatus,
+    updateSettingUpStageDescription,
+    markStage3AsComplete,
+    scrollToBottom,
+  ]);
 
   // Mark current stage as error
   const markCurrentStageAsError = useCallback((errorMessage: string) => {
@@ -430,7 +566,28 @@ export const useProvision = (): UseProvisionReturn => {
     const localizedMessage = getLocalizedErrorMessage(rawErrorMessage, t);
     markCurrentStageAsError(localizedMessage);
     setIsComplete(true);
-  }, [t, markCurrentStageAsError]);
+
+    // Wrong password: the association survived, so reset Wi-Fi and correct it in place.
+    if (!isWifiAuthFailure(rawErrorMessage) || !device) {
+      return;
+    }
+
+    void (async () => {
+      try {
+        const acknowledged = await device.resetWifiStatus();
+        if (acknowledged) {
+          // Same as native: the prompt leads with why the first attempt failed.
+          setWifiResetErrorMessage(localizedMessage);
+          setIsWifiResetPromptOpen(true);
+          return;
+        }
+        toast.showError(t("device.provision.wifiResetFailedMessage"));
+      } catch (resetError) {
+        console.error("[Provision] Wi-Fi reset failed:", resetError);
+        toast.showError(t("device.provision.wifiResetFailedMessage"));
+      }
+    })();
+  }, [t, markCurrentStageAsError, device, toast]);
 
   // Start provisioning
   const startProvisioning = useCallback(async () => {
@@ -443,7 +600,7 @@ export const useProvision = (): UseProvisionReturn => {
     try {
       if (!user || !device || !currentHomeId) {
         hasStartedProvisioningRef.current = false; // Reset on error so it can retry
-        handleProvisionError(new Error(t("device.errors.missingProvisionData") || "Missing provision data"));
+        handleProvisionError(new Error(t("device.errors.missingProvisionData")));
         return;
       }
 
@@ -467,8 +624,7 @@ export const useProvision = (): UseProvisionReturn => {
           hasStartedProvisioningRef.current = false;
           handleProvisionError(
             new Error(
-              t("device.errors.missingProvisionData") ||
-                "Missing provision data"
+              t("device.errors.missingProvisionData")
             )
           );
           return;
@@ -493,8 +649,7 @@ export const useProvision = (): UseProvisionReturn => {
         } else {
           hasStartedProvisioningRef.current = false;
           toast.showError(
-            t("device.errors.nodeNotFound") ||
-              "Device not found after provisioning"
+            t("device.errors.nodeNotFound")
           );
         }
         return;
@@ -523,7 +678,7 @@ export const useProvision = (): UseProvisionReturn => {
         await handleAddDeviceSuccess(node);
       } else {
         hasStartedProvisioningRef.current = false; // Reset on error
-        toast.showError(t("device.errors.nodeNotFound") || "Device not found after provisioning");
+        toast.showError(t("device.errors.nodeNotFound"));
       }
     } catch (error) {
       console.error("[Provision] startProvisioning caught error:", error);
@@ -532,20 +687,148 @@ export const useProvision = (): UseProvisionReturn => {
     }
   }, [user, device, onNetworkDeviceInfo, onNetworkDevicePop, store, currentHomeId, ssid, password, t, handleProvisionUpdate, handleAddDeviceSuccess, handleProvisionError, toast]);
 
+  // A stage that errored out means provisioning stopped part-way.
+  const hasFailure = useMemo(
+    () => stages.some((stage) => stage.status === "error"),
+    [stages]
+  );
+
+  /** Intercepts every back so it never falls through to the Wi-Fi screen; exits route via `pendingExit`. */
+  usePreventRemove(pendingExit === null, () => {
+    if (hasFailure) {
+      setPendingExit({ kind: "addDevice" });
+      return;
+    }
+    setIsExitSetupDialogOpen(true);
+  });
+
+  const handleConfirmExitSetup = useCallback(() => {
+    setIsExitSetupDialogOpen(false);
+    setPendingExit({ kind: "home" });
+  }, []);
+
+  const handleCancelExitSetup = useCallback(() => {
+    setIsExitSetupDialogOpen(false);
+  }, []);
+
+  /** Native's OK: close the ask and collect the corrected password. */
+  const handleConfirmWifiReset = useCallback(() => {
+    setIsWifiResetPromptOpen(false);
+    setIsWifiResetPasswordPromptOpen(true);
+  }, []);
+
+  /** Native's Cancel: dismiss only, leaving the failure on screen. */
+  const handleDismissWifiResetPrompt = useCallback(() => {
+    setIsWifiResetPromptOpen(false);
+  }, []);
+
+  const handleCancelWifiResetPassword = useCallback(() => {
+    setIsWifiResetPasswordPromptOpen(false);
+  }, []);
+
+  /**
+   * Re-sends credentials over the still-open session; the SDK resumes rather
+   * than repeating association, so the post-provision tail is replayed here.
+   * @param retryPassword - Corrected Wi-Fi password.
+   */
+  const handleRetryWithPassword = useCallback(
+    async (retryPassword: string) => {
+      if (!device || isRetrying) {
+        return;
+      }
+
+      setIsWifiResetPasswordPromptOpen(false);
+      setIsRetrying(true);
+      attemptedPasswordRef.current = retryPassword;
+
+      const freshStages = isOnNetworkFlowRef.current
+        ? getOnNetworkProvisionStages(t)
+        : isChallengeResponseFlowRef.current
+          ? getChallengeResponseStages(t)
+          : getProvisionStages(t);
+
+      unstable_batchedUpdates(() => {
+        setStages(freshStages);
+        setIsComplete(false);
+      });
+      stagesRef.current = freshStages;
+
+      const retriedNodeIdRef: { current: string | null } = { current: null };
+      const captureThenUpdate = (response: ESPCDFProvisionResponse) => {
+        retriedNodeIdRef.current =
+          captureProvisionNodeId(response) ?? retriedNodeIdRef.current;
+        handleProvisionUpdate(response);
+      };
+
+      try {
+        await device.retryNetworkCredentials(
+          ssid as string,
+          retryPassword,
+          captureThenUpdate
+        );
+
+        const retriedNodeId = retriedNodeIdRef.current;
+        // Neo's timezone write needs its MQTT transport attached first.
+        const isNeoStack = isRmneoStackSdkId(store?.getActiveAdaptorIdentifier());
+        const node =
+          user && retriedNodeId
+            ? await finalizeProvisionedNode(user, retriedNodeId, isNeoStack)
+            : null;
+        if (!node) {
+          throw new Error(t("device.errors.nodeNotFound"));
+        }
+        await handleAddDeviceSuccess(node);
+      } catch (error) {
+        console.error("[Provision] Retry failed:", error);
+        handleProvisionError(error);
+      } finally {
+        setIsRetrying(false);
+      }
+    },
+    [
+      device,
+      isRetrying,
+      t,
+      ssid,
+      user,
+      store,
+      handleProvisionUpdate,
+      handleProvisionError,
+      handleAddDeviceSuccess,
+    ]
+  );
+
+  useEffect(() => {
+    if (!pendingExit) return;
+
+    switch (pendingExit.kind) {
+      case "addDevice":
+        router.dismissTo("/(provision)/ScanQR" as any);
+        break;
+      case "home":
+        router.dismissTo("/(group)/Home");
+        break;
+      case "deviceName":
+        router.replace({
+          pathname: "/(provision)/UpdateDeviceName" as any,
+          params: { nodeId: pendingExit.nodeId },
+        });
+        break;
+    }
+  }, [pendingExit, router]);
+
   // Handle continue
   const handleContinue = useCallback(() => {
     const provisionedNode = provisionedNodeRef.current;
 
-    if (provisionedNode) {
-      router.replace({
-        pathname: "/(provision)/UpdateDeviceName" as any,
-        params: { nodeId: provisionedNode.id },
-      });
-      return;
-    }
-
-    router.dismissTo("/(group)/Home");
-  }, [router]);
+    // A node exists even when a later stage (e.g. timezone setup) errored, so
+    // naming still has to win over the failure exit.
+    setPendingExit(
+      provisionedNode
+        ? { kind: "deviceName", nodeId: provisionedNode.id }
+        : { kind: "home" }
+    );
+  }, []);
 
   // Start provisioning on mount - only once
   useEffect(() => {
@@ -566,5 +849,17 @@ export const useProvision = (): UseProvisionReturn => {
     isComplete,
     stepsScrollViewRef,
     handleContinue,
+    isExitSetupDialogOpen,
+    handleConfirmExitSetup,
+    handleCancelExitSetup,
+    isWifiResetPromptOpen,
+    wifiResetErrorMessage,
+    handleConfirmWifiReset,
+    handleDismissWifiResetPrompt,
+    isWifiResetPasswordPromptOpen,
+    retrySsid: (ssid as string) ?? "",
+    handleRetryWithPassword,
+    handleCancelWifiResetPassword,
+    isRetrying,
   };
 };

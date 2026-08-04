@@ -16,7 +16,6 @@ import {
  * Resolves the user-visible label for a CDF device.
  * Precedence: name param → Matter metadata deviceName → device id → node label.
  * Name param wins so remote renames via `esp.param.name` are not masked by stale metadata.
- *
  * @param cdfDevice - Device on the CDF node
  * @param nodeLabel - Optional node info name fallback
  * @param matterDeviceName - Optional Matter metadata `deviceName`
@@ -44,7 +43,6 @@ export function resolveCdfDeviceDisplayName(
 
 /**
  * Reads Matter metadata device name from a CDF node, when present.
- *
  * @param cdfNode - Parent CDF node
  * @returns Metadata device name or `undefined`
  */
@@ -61,7 +59,6 @@ export function readMatterMetadataDeviceName(
 
 /**
  * Writes `displayName` on one CDF device from current params, Matter metadata, and node label.
- *
  * @param cdfNode - Parent CDF node
  * @param deviceName - Internal device name on the node
  */
@@ -88,7 +85,6 @@ export function syncCdfDeviceDisplayName(
  * Marks each device/service param's `value` field as MobX-observable so
  * in-place mutations from live shadow pushes trigger observer re-renders.
  * Idempotent — safe to call again on a re-transformed node.
- *
  * @param cdfNode - CDF node to instrument.
  */
 export function makeCdfNodeParamsObservable(cdfNode: ESPCDFNode): void {

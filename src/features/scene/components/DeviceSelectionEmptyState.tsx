@@ -6,8 +6,8 @@
 
 import { View, Text, Pressable } from "react-native";
 import { Plus } from "lucide-react-native";
-import { useRouter } from "expo-router";
 import { useTranslation } from "react-i18next";
+import { useAddDeviceNavigation } from "@features/provision/hooks";
 import { tokens } from "@shared/theme/tokens";
 import { globalStyles } from "@shared/theme/globalStyleSheet";
 import { testProps } from "@shared/utils/testProps";
@@ -19,7 +19,7 @@ import { testProps } from "@shared/utils/testProps";
  * Shows an add device button to navigate to device addition screen
  */
 export default function DeviceSelectionEmptyState() {
-  const router = useRouter();
+  const goToAddDevice = useAddDeviceNavigation();
   const { t } = useTranslation();
 
   return (
@@ -32,7 +32,7 @@ export default function DeviceSelectionEmptyState() {
       ]}
     >
       <View {...testProps("view_empty_devices_selection")} style={globalStyles.sceneEmptyStateIconContainer}>
-        <Pressable {...testProps("button_add_device_selection")} onPress={() => router.push("/(provision)/AddDeviceSelection")}>
+        <Pressable {...testProps("button_add_device_selection")} onPress={goToAddDevice}>
           <Plus size={35} color={tokens.colors.primary} />
         </Pressable>
       </View>

@@ -169,8 +169,7 @@ export function transformToESPCDFNode(
             return node.setMultipleParams(params);
         },
         delete: async () => {
-            // Tell the firmware to forget its provisioning before unassociating
-            // from the cloud, so the device can be re-onboarded. Best-effort.
+            // Factory reset before cloud unassociation.
             await tryFactoryResetBeforeDelete(node.nodeConfig?.services);
             return node.delete();
         },

@@ -12,6 +12,7 @@ import { globalStyles } from "@shared/theme/globalStyleSheet";
 
 import { useForgotPassword } from "@features/auth/hooks";
 import { getAuthAllowedUsernameTypes } from "@features/auth/utils/authHelper";
+import { useDeploymentBranding } from "@features/landing";
 
 import {
   Input,
@@ -22,6 +23,11 @@ import {
 } from "@shared/components";
 import { AppVersionText } from "@features/auth/components";
 import { testProps } from "@shared/utils/testProps";
+import {
+  AUTO_COMPLETE_USERNAME,
+  IMPORTANT_FOR_AUTOFILL_YES,
+  TEXT_CONTENT_TYPE_USERNAME,
+} from "@shared/utils/constants";
 
 /**
  * Renders the forgot password screen UI section.
@@ -36,6 +42,11 @@ export function ForgotPasswordScreen() {
     handleEmailChange,
     sendVerificationCode,
   } = useForgotPassword();
+
+  // Same deployment mark as Login, so resetting an ESP RainMaker Classic /
+  // Neo password shows that deployment's logo rather than the generic app
+  // lockup.
+  const { deploymentLabel, deploymentWordmark } = useDeploymentBranding();
 
   const usernameFieldProps = useMemo(() => {
     const allowsPhone = getAuthAllowedUsernameTypes().includes("phone");
@@ -74,7 +85,11 @@ export function ForgotPasswordScreen() {
               globalStyles.authScrollViewContentWithPadding,
             ]}
           >
-            <Logo qaId="logo_forgot_password" />
+            <Logo
+              qaId="logo_forgot_password"
+              caption={deploymentLabel}
+              captionSource={deploymentWordmark}
+            />
 
             <Text
               {...testProps("text_forgot_heading")}
@@ -103,6 +118,11 @@ export function ForgotPasswordScreen() {
                 validateOnBlur={true}
                 inputMode={usernameFieldProps.inputMode}
                 keyboardType={usernameFieldProps.keyboardType}
+                autoCapitalize="none"
+                autoCorrect={false}
+                textContentType={TEXT_CONTENT_TYPE_USERNAME}
+                autoComplete={AUTO_COMPLETE_USERNAME}
+                importantForAutofill={IMPORTANT_FOR_AUTOFILL_YES}
                 returnKeyType="go"
                 onSubmitEditing={() => {
                   if (isEmailValid && email && !isLoading) {

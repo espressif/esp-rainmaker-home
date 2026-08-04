@@ -89,7 +89,7 @@ const Header: React.FC<HeaderProps> = ({
 
     // Default back behavior
     if (customBackUrl) {
-      router.replace(customBackUrl as any);
+      router.dismissTo(customBackUrl as any);
     } else {
       router.back();
     }

@@ -49,8 +49,7 @@ const Settings = observer(() => {
     isPrimary,
     settingsDisabled,
     deviceName,
-    setDeviceName,
-    isEditingName,
+    handleDeviceNameChange,
     setIsEditingName,
     isSavingName,
     validSection,
@@ -120,14 +119,14 @@ const Settings = observer(() => {
           {...testProps("scroll_settings")}
           style={{ flex: 1 }}
           showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
         >
           {/* Device Name Section */}
           {validSection.includes(SETTINGS_SECTION_NAME) && (
             <DeviceName
               initialDeviceName={displayName}
               deviceName={deviceName}
-              setDeviceName={setDeviceName}
-              isEditingName={isEditingName}
+              setDeviceName={handleDeviceNameChange}
               setIsEditingName={setIsEditingName}
               onSave={handleSaveDeviceName}
               isSaving={isSavingName}

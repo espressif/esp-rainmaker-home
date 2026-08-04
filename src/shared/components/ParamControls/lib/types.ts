@@ -19,6 +19,7 @@ export interface ParamControlProps {
   onOpenChart?: (param: ESPCDFDeviceParam) => void;
   children: React.ReactNode;
   style?: StyleProp<ViewStyle>;
+  compact?: boolean;
 }
 
 export interface ParamControlChildProps {
@@ -49,7 +50,9 @@ export const clampValue = (value: number, min: number, max: number): number => {
 /**
  * Snaps a raw slider reading to the nearest valid step and maps near-edge
  * drags to exact min/max. Tamagui thumb inset prevents reaching track ends,
- * so edge tolerance compensates without changing the slider component itself.
+ * so the nearest reachable discrete value is often one full step inward
+ * (e.g. CCT 2800 / 6400 instead of 2700 / 6500). Edge tolerance must cover
+ * at least one step, not half a step.
  * @param value - Raw slider value (may be fractional)
  * @param min - Lower bound
  * @param max - Upper bound
@@ -69,7 +72,9 @@ export const snapSliderValue = (
   const safeStep =
     typeof step === "number" && Number.isFinite(step) && step > 0 ? step : 1;
   const range = max - min;
-  const edgeTolerance = Math.max(safeStep / 2, range * 0.01);
+  // Full step covers Tamagui's unreachable end neighbors; range fraction
+  // covers fine-step sliders where thumb inset spans more than one step.
+  const edgeTolerance = Math.max(safeStep, range * 0.02);
   const clamped = clampValue(value, min, max);
 
   if (clamped - min <= edgeTolerance) {

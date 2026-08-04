@@ -67,6 +67,8 @@ import com.app.utils.ESPAppUtilityModule
  
      companion object {
          private const val TAG = "ESPProvModule"
+         /** Greppable prefix for the Wi-Fi reset path. Never carries the passphrase. */
+         private const val WIFI_RESET_LOG = "[wifi-reset]"
          private const val DEVICE_CONNECT_TIMEOUT = 20000L // Connection timeout duration
          const val KEY_SEC_VER = "sec_ver"
          const val SEC_TYPE_0 = 0
@@ -960,6 +962,48 @@ import com.app.utils.ESPAppUtilityModule
              }
          })
      }
+
+     /**
+      * Clears the device's Wi-Fi state over the open session, leaving the
+      * user-node association intact so a corrected password can be re-sent.
+      */
+     @ReactMethod
+     fun resetWifiStatus(deviceName: String, promise: Promise) {
+         val espDevice = when {
+             bleDevices.containsKey(deviceName) || deviceList.isNotEmpty() -> {
+                 espProvisionManager?.espDevice
+             }
+
+             softAPDevices.containsKey(deviceName) -> {
+                 softAPDevices[deviceName]
+             }
+
+             else -> null
+         }
+
+         if (espDevice == null || espDevice.deviceName != deviceName) {
+             Log.e(TAG, "$WIFI_RESET_LOG device not found or mismatched: $deviceName")
+             promise.reject("DEVICE_NOT_FOUND", "Device not found or mismatched")
+             return
+         }
+
+         Log.d(TAG, "$WIFI_RESET_LOG -> $deviceName: sending Wi-Fi reset")
+         espDevice.resetWifiStatus(object : ResponseListener {
+             override fun onSuccess(returnData: ByteArray?) {
+                 Log.d(TAG, "$WIFI_RESET_LOG <- $deviceName: reset acknowledged")
+                 promise.resolve(true)
+             }
+
+             override fun onFailure(e: Exception?) {
+                 Log.e(TAG, "$WIFI_RESET_LOG <- $deviceName: reset failed: ${e?.message}")
+                 promise.reject(
+                     "WIFI_RESET_FAILED",
+                     e?.message ?: "Failed to send Wi-Fi reset command"
+                 )
+             }
+         })
+     }
+
  
      @ReactMethod
      @RequiresPermission(
@@ -1157,16 +1201,23 @@ import com.app.utils.ESPAppUtilityModule
 
                 Log.d(TAG, "Entering BLE Transport Logic")
 
+                // The promise must settle exactly once: duplicate advertisements
+                // for the target name would double-resolve it (bridge crash), and
+                // a scan that ends without a match must reject instead of leaving
+                // the JS side awaiting forever.
+                var deviceFound = false
+
                 espProvisionManager?.searchBleEspDevices("PROV_", object : BleScanListener {
                      override fun scanStartFailed() {
                          promise.reject("SCAN_FAILED", "BLE scan could not be started.")
                      }
- 
+
                      override fun onPeripheralFound(
                          device: BluetoothDevice?,
                          scanResult: ScanResult?
                      ) {
                          if (device == null || scanResult == null) return
+                         if (deviceFound) return
  
                          val scannedDeviceName = scanResult.scanRecord?.deviceName ?: "Unknown"
                          val serviceUuid =
@@ -1181,6 +1232,7 @@ import com.app.utils.ESPAppUtilityModule
                          }
  
                         if (scannedDeviceName == deviceName) {
+                            deviceFound = true
                             espProvisionManager?.stopBleScan()
                             // Store scanResult for advertisement data
                             deviceList.add(BleDevice(scannedDeviceName, device, scanResult))
@@ -1244,10 +1296,19 @@ import com.app.utils.ESPAppUtilityModule
                     }
  
                      override fun scanCompleted() {
-                         // BLE scan completed
+                         if (!deviceFound) {
+                             // Device is not advertising (e.g. it still holds the
+                             // previous BLE connection). Reject so the JS side can
+                             // recover instead of awaiting a promise that never settles.
+                             promise.reject(
+                                 "DEVICE_NOT_FOUND",
+                                 "BLE scan completed without finding device: $deviceName"
+                             )
+                         }
                      }
- 
+
                      override fun onFailure(e: Exception?) {
+                         if (deviceFound) return
                          promise.reject("SCAN_ERROR", e?.message ?: "Error during BLE scan.")
                      }
                  })

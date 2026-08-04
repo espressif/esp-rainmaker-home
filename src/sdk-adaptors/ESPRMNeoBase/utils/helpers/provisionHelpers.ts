@@ -4,14 +4,31 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { ProvisionType } from "@espressif/rainmaker-neo-base-sdk";
 import {
+  ESPRMNeoBase,
+  ProvisionType,
+  collectSubgroupIdsForNode,
+  waitForNodeOnline,
+  type ESPRMNeoGroup,
+  type ESPRMNeoUser,
+} from "@espressif/rainmaker-neo-base-sdk";
+import {
+  ESPCDFProvisionResponseStatus,
   type AddDeviceParams,
   type ESPCDFNode,
   type ESPCDFUser,
   type GroupStoreCallbacks,
 } from "@store";
-import { ESP_CHALLENGE_RESPONSE_CONSTANTS } from "@shared/utils/constants";
+import { delay } from "@shared/utils/common";
+import {
+  ESP_CHALLENGE_RESPONSE_CONSTANTS,
+  PROVISION_NODE_ONLINE_TIMEOUT_ERROR,
+  PROVISION_SETUP_PROGRESS_MESSAGES,
+  PROVISION_WAIT_FOR_ONLINE_ATTEMPT_TIMEOUT_MS,
+  PROVISION_WAIT_FOR_ONLINE_MAX_ATTEMPTS,
+  PROVISION_WAIT_FOR_ONLINE_RETRY_DELAY_MS,
+  PROVISION_WAIT_FOR_ONLINE_TIMEOUT_MS,
+} from "@shared/utils/constants";
 import {
   applyProvisionNodeTimezoneWithRetries,
   markProvisionTimezoneFailed,
@@ -20,6 +37,7 @@ import {
   ESPRMNEO_RMAKER_EXTRA_CAP_KEY,
   ESPRMNEO_VERSION_INFO_RMAKER_EXTRA_KEY,
 } from "../constants";
+import { forceRmneoMqttReconnectOnResume } from "./mqttConnectionHelpers";
 
 const LOG_PREFIX = "[provisionDevice]";
 
@@ -129,6 +147,16 @@ class ProvisionFlow {
    */
   invokeProvisionOperation(): this {
     this.chain = this.chain.then(() => this.doInvokeProvisionOperation());
+    return this;
+  }
+
+  /**
+   * Queues wait-for-online after fetching group membership and clearing any
+   * stale MQTT shadow registration.
+   * @returns This flow for chaining.
+   */
+  waitForOnline(): this {
+    this.chain = this.chain.then(() => this.doWaitForOnline());
     return this;
   }
 
@@ -247,8 +275,10 @@ class ProvisionFlow {
         groupId,
         ProvisionType.CHAL_RESP,
         {
-          // SDK waitForOnline is enabled; registration still follows via later steps.
-          waitForOnline: true,
+          // App runs waitForOnline after nodeId is known so we can purge any
+          // stale NodeMQTTOrchestrator binding first (same nodeId after
+          // factory-reset kept a subgroup shadow and skipped rebind).
+          waitForOnline: false,
           user: this.user._raw,
         },
       );
@@ -261,6 +291,239 @@ class ProvisionFlow {
           : error,
       );
       throw error;
+    }
+  }
+
+  /**
+   * Emits an ON_PROGRESS event for the post-provision setup stage UI.
+   * @param description - Technical progress key from {@link PROVISION_SETUP_PROGRESS_MESSAGES}.
+   * @param data - Optional payload (e.g. reconnect attempt index).
+   */
+  private emitSetupProgress(
+    description: string,
+    data?: Record<string, unknown>,
+  ): void {
+    this.progressHandler?.({
+      status: ESPCDFProvisionResponseStatus.ON_PROGRESS,
+      description,
+      data,
+    });
+  }
+
+  /**
+   * Clears any existing MQTT node registration so the next wait can bind a
+   * fresh membership shadow (avoids stale post-factory-reset subgroup maps).
+   * @param nodeId - Provisioned node id to unsubscribe.
+   */
+  private async clearMqttRegistrationForNode(nodeId: string): Promise<void> {
+    await ESPRMNeoBase.subscriptionManager
+      .unsubscribeFromNode(nodeId)
+      .catch((error) => {
+        console.warn(
+          `${LOG_PREFIX} Failed to clear MQTT registration for ${nodeId}:`,
+          error,
+        );
+      });
+  }
+
+  /**
+   * Races SDK {@link waitForNodeOnline} with an app-side timer.
+   *
+   * The SDK starts its timeout only after MQTT connect + subscribe succeed; if
+   * either hangs, that timer never fires. This race always settles.
+   * @param neoUser - Authenticated RMNeo user.
+   * @param membership - Home + subgroup ids for the membership shadow.
+   * @param timeoutMs - Max wait for this single attempt.
+   */
+  private async waitForNodeOnlineWithAppTimeout(
+    neoUser: ESPRMNeoUser,
+    membership: { groupId: string; subgroupIds: string[] },
+    timeoutMs: number,
+  ): Promise<void> {
+    if (!this.nodeId) {
+      return;
+    }
+
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const timeoutError = new Error(PROVISION_NODE_ONLINE_TIMEOUT_ERROR);
+
+    try {
+      await Promise.race([
+        waitForNodeOnline({
+          nodeId: this.nodeId,
+          groupId: membership.groupId,
+          subgroupIds: membership.subgroupIds,
+          user: neoUser,
+          // Keep SDK timer ≤ app timer so either path can settle.
+          timeoutMs,
+        }),
+        new Promise<never>((_, reject) => {
+          timer = setTimeout(() => {
+            console.error(
+              `${LOG_PREFIX} App-side node online wait timed out after ${timeoutMs}ms`,
+            );
+            reject(timeoutError);
+          }, timeoutMs);
+        }),
+      ]);
+    } finally {
+      if (timer !== undefined) {
+        clearTimeout(timer);
+      }
+    }
+  }
+
+  /**
+   * Fetches latest groups, derives home + subgroup membership for this nodeId,
+   * then waits until the membership shadow reports online.
+   *
+   * Retries up to {@link PROVISION_WAIT_FOR_ONLINE_MAX_ATTEMPTS} times inside a
+   * hard {@link PROVISION_WAIT_FOR_ONLINE_TIMEOUT_MS} (1 minute) budget. Between
+   * failures, forces an MQTT reconnect (attempts 1–4) and only surfaces the
+   * error after attempts are exhausted or the budget elapses.
+   */
+  private async doWaitForOnline(): Promise<void> {
+    if (!this.nodeId) {
+      return;
+    }
+
+    const neoUser = this.user._raw as ESPRMNeoUser;
+    const membership = await this.resolveProvisionMembership(
+      neoUser,
+      this.nodeId,
+      this.targetGroupId,
+    );
+
+    const deadlineMs = Date.now() + PROVISION_WAIT_FOR_ONLINE_TIMEOUT_MS;
+    let lastError: unknown = new Error(PROVISION_NODE_ONLINE_TIMEOUT_ERROR);
+
+    for (
+      let attempt = 1;
+      attempt <= PROVISION_WAIT_FOR_ONLINE_MAX_ATTEMPTS;
+      attempt++
+    ) {
+      const remainingMs = deadlineMs - Date.now();
+      if (remainingMs <= 0) {
+        console.error(
+          `${LOG_PREFIX} Overall node-online budget exhausted before attempt ${attempt}`,
+        );
+        break;
+      }
+
+      const attemptTimeoutMs = Math.min(
+        PROVISION_WAIT_FOR_ONLINE_ATTEMPT_TIMEOUT_MS,
+        remainingMs,
+      );
+
+      this.emitSetupProgress(
+        PROVISION_SETUP_PROGRESS_MESSAGES.CHECKING_NODE_ONLINE,
+      );
+
+      await this.clearMqttRegistrationForNode(this.nodeId);
+
+      try {
+        await this.waitForNodeOnlineWithAppTimeout(
+          neoUser,
+          membership,
+          attemptTimeoutMs,
+        );
+        return;
+      } catch (error) {
+        lastError = error;
+        console.error(
+          `${LOG_PREFIX} waitForNodeOnline attempt ${attempt}/${PROVISION_WAIT_FOR_ONLINE_MAX_ATTEMPTS} failed:`,
+          error,
+        );
+        console.error(
+          `${LOG_PREFIX} Error details:`,
+          error instanceof Error
+            ? { message: error.message, stack: error.stack }
+            : error,
+        );
+
+        if (attempt >= PROVISION_WAIT_FOR_ONLINE_MAX_ATTEMPTS) {
+          break;
+        }
+
+        const remainingAfterFailMs = deadlineMs - Date.now();
+        if (remainingAfterFailMs <= PROVISION_WAIT_FOR_ONLINE_RETRY_DELAY_MS) {
+          console.error(
+            `${LOG_PREFIX} Overall node-online budget exhausted after attempt ${attempt}; skipping further reconnects`,
+          );
+          break;
+        }
+
+        // Reconnect labels are 1–4 between the five wait attempts.
+        const reconnectAttempt = attempt;
+        this.emitSetupProgress(
+          PROVISION_SETUP_PROGRESS_MESSAGES.TRYING_RECONNECT,
+          { reconnectAttempt },
+        );
+        console.warn(
+          `${LOG_PREFIX} Forcing MQTT reconnect (${reconnectAttempt}) before retry`,
+        );
+        try {
+          await forceRmneoMqttReconnectOnResume(neoUser);
+        } catch (reconnectError) {
+          console.error(
+            `${LOG_PREFIX} MQTT reconnect ${reconnectAttempt} failed:`,
+            reconnectError,
+          );
+        }
+        await delay(PROVISION_WAIT_FOR_ONLINE_RETRY_DELAY_MS);
+      }
+    }
+
+    // Always surface the stable timeout tag so the UI can localize it —
+    // intermediate SDK errors are already logged above.
+    console.error(
+      `${LOG_PREFIX} Node online wait failed after retries; lastError=`,
+      lastError,
+    );
+    throw new Error(PROVISION_NODE_ONLINE_TIMEOUT_ERROR);
+  }
+
+  /**
+   * Resolves home + subgroup membership for a newly provisioned node via
+   * `getGroups`. Falls back to home-only when fetch fails or the home is
+   * missing.
+   */
+  private async resolveProvisionMembership(
+    neoUser: ESPRMNeoUser,
+    nodeId: string,
+    preferredGroupId: string,
+  ): Promise<{ groupId: string; subgroupIds: string[] }> {
+    try {
+      const homes = await neoUser.getGroups();
+      const home =
+        homes.find((h: ESPRMNeoGroup) => h.groupId === preferredGroupId) ??
+        homes.find(
+          (h: ESPRMNeoGroup) =>
+            h.nodeIds.includes(nodeId) ||
+            h.subgroups.some((sg) => sg.nodeIds.includes(nodeId)),
+        );
+
+      if (!home) {
+        console.warn(
+          `${LOG_PREFIX} getGroups ok but home not found; using home-only shadow`,
+          { preferredGroupId, nodeId },
+        );
+        return { groupId: preferredGroupId, subgroupIds: [] };
+      }
+
+      const subgroupIds = collectSubgroupIdsForNode(home, nodeId);
+      console.log(`${LOG_PREFIX} membership from getGroups`, {
+        nodeId,
+        groupId: home.groupId,
+        subgroupIds,
+      });
+      return { groupId: home.groupId, subgroupIds };
+    } catch (error) {
+      console.warn(
+        `${LOG_PREFIX} getGroups failed; falling back to home-only shadow`,
+        error,
+      );
+      return { groupId: preferredGroupId, subgroupIds: [] };
     }
   }
 
@@ -284,6 +547,10 @@ class ProvisionFlow {
       return;
     }
 
+    this.emitSetupProgress(
+      PROVISION_SETUP_PROGRESS_MESSAGES.UPDATING_NODE_TIMEZONE,
+    );
+
     try {
       const result = await applyProvisionNodeTimezoneWithRetries(
         this.user,
@@ -303,6 +570,8 @@ class ProvisionFlow {
       markProvisionTimezoneFailed(this.nodeId);
       console.error(`${LOG_PREFIX} Timezone setup failed (non-blocking):`, error);
     }
+
+    this.emitSetupProgress(PROVISION_SETUP_PROGRESS_MESSAGES.COMPLETE);
   }
 
   /**
@@ -334,6 +603,7 @@ export async function provisionDevice(
     .requireChallengeResponseSupport()
     .createProvisionProgressHandler()
     .invokeProvisionOperation()
+    .waitForOnline()
     .fetchNode()
     .applyTimezone()
     .store(callbacks)
