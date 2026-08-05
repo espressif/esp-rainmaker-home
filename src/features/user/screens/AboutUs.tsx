@@ -20,14 +20,14 @@ import {
 } from "@shared/components";
 import { InfoItem } from "@features/user/components";
 import { getActiveRegionLabelKey } from "@config/region.config";
-import Constants from "expo-constants";
+import { getDisplayVersion } from "@shared/utils/appVersion";
 
 /**
  * Renders the about us UI section.
  */
 const AboutUs: React.FC = () => {
   const { t } = useTranslation();
-  const appVersion = Constants.expoConfig?.version;
+  const appVersion = getDisplayVersion();
 
   const handleWebsiteClick = async () => {
     try {

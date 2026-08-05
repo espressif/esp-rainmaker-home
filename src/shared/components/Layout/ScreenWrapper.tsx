@@ -65,6 +65,7 @@ const ScreenWrapper: React.FC<ScreenWrapperProps> = ({
       {dismissKeyboard ? (
         <TouchableWithoutFeedback
           {...(qaId ? testProps(qaId) : {})}
+          accessible={false}
           onPress={handleDismissKeyboard}
         >
           <View style={{ flex: 1 }}>{children}</View>

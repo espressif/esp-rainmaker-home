@@ -1,7 +1,7 @@
 {
   "name": "NOVA",
   "main": "expo-router/entry",
-  "version": "5.4.0",
+  "version": "6.0.0",
   "scripts": {
     "start": "expo start",
     "start:dev": "APP_ENV=development expo start -c",
@@ -32,11 +32,10 @@
   "dependencies": {
     "@aws-sdk/client-kinesis-video": "^3.700.0",
     "@aws-sdk/client-kinesis-video-signaling": "^3.700.0",
-    "@espressif/rainmaker-base-cdf": "2.1.1",
-    "@espressif/rainmaker-base-sdk": "3.2.1",
+    "@espressif/rainmaker-base-cdf": "2.2.0",
+    "@espressif/rainmaker-base-sdk": "3.3.0",
     "@espressif/rainmaker-matter-sdk": "3.1.0",
-    "@espressif/rmng-base-sdk": "1.5.0",
-    "@espressif/rmng-matter-sdk": "1.1.0",
+    "@espressif/rainmaker-neo-base-sdk": "1.0.0",
     "@expo/vector-icons": "^14.0.2",
     "@react-native-async-storage/async-storage": "^2.1.2",
     "@react-native-community/checkbox": "^0.5.17",
@@ -66,6 +65,7 @@
     "expo-localization": "~55.0.16",
     "expo-navigation-bar": "~55.0.12",
     "expo-network": "~55.0.13",
+    "expo-react-native-restart": "^0.1.1",
     "expo-router": "~55.0.13",
     "expo-screen-orientation": "~55.0.13",
     "expo-splash-screen": "~55.0.19",

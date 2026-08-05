@@ -13,6 +13,7 @@ import { useNotificationCenter } from "@features/user/hooks";
 import { useTranslation } from "react-i18next";
 import { Header, ScreenWrapper, EmptyState } from "@shared/components";
 import { NotificationItem } from "@features/user/components";
+import { testProps } from "@shared/utils/testProps";
 import { SharingItem } from "@src/types/global";
 
 /**
@@ -74,6 +75,7 @@ const NotificationCenter: React.FC = () => {
         {!isLoading &&
           (sharingList?.length ? (
             <FlatList
+              {...testProps("list_notification_center")}
               data={sharingList}
               renderItem={renderNotificationItem}
               keyExtractor={(item) => String(item.id)}

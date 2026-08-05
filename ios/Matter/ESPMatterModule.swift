@@ -10,7 +10,7 @@ import Matter
 import MatterSupport
 import Security
 
-// MARK: - Data Hex Encoding (RMNG API expects hex, not base64)
+// MARK: - Data Hex Encoding
 public extension Data {
     var hexadecimalString: String {
         map { String(format: "%02hhX", $0) }.joined()
@@ -63,14 +63,6 @@ class ESPMatterModule: RCTEventEmitter {
   private var currentMatterNodeId: UInt64?
   private var currentRequestId: String?
   private var currentNOCCompletion: ((MTROperationalCertificateChain?, Error?) -> Void)?
-  
-  // RMNG Matter commissioning state
-  private var csrNonce: Data?
-  private var rmngRequestId: String?
-  private var attestationChallenge: Data?
-  private var attestationSignature: Data?
-  private var csrElementsTLV: Data?
-  private var isRMNGWorkflow: Bool = false
   
   // RainMaker device properties
   private var rainmakerNodeId: String?
@@ -171,7 +163,6 @@ class ESPMatterModule: RCTEventEmitter {
   
   /// Start Matter ecosystem commissioning
   /// This method starts the native commissioning process for Matter devices
-  /// For RMNG workflow, csrNonce and requestId should be provided
   @objc func startEcosystemCommissioning(_ onboardingPayload: String,
                                          fabric: [String: Any],
                                          resolver resolve: @escaping RCTPromiseResolveBlock,
@@ -181,18 +172,7 @@ class ESPMatterModule: RCTEventEmitter {
     currentFabricInfo = fabric
     currentCommissioningCompletion = resolve
     currentCommissioningReject = reject
-    
-    // Check if RMNG workflow (has csrNonce and requestId)
-    if let csrNonceHex = fabric[ESPMatterConstants.csrNonce] as? String,
-       let requestId = fabric[ESPMatterConstants.requestId] as? String {
-      csrNonce = dataFromHexString(csrNonceHex)
-      rmngRequestId = requestId
-      isRMNGWorkflow = true
-      print("[MatterCommission] iOS: csrNonce from JS hex=\(csrNonceHex)")
-    } else {
-      isRMNGWorkflow = false
-    }
-    
+
     matterQueue.async {
       do {
         // Step 1: Apple Fabric Commissioning (using MatterSupport)
@@ -206,33 +186,6 @@ class ESPMatterModule: RCTEventEmitter {
         }
       }
     }
-  }
-  
-  /// Helper to convert hex string to Data
-  func dataFromHexString(_ hex: String) -> Data? {
-    var hex = hex
-    if hex.hasPrefix("0x") || hex.hasPrefix("0X") {
-      hex = String(hex.dropFirst(2))
-    }
-
-    guard hex.count % 2 == 0 else { return nil }
-
-    var data = Data()
-    var index = hex.startIndex
-
-    while index < hex.endIndex {
-      let next = hex.index(index, offsetBy: 2)
-      let byteString = hex[index..<next]
-
-      guard let byte = UInt8(byteString, radix: 16) else {
-        return nil
-      }
-
-      data.append(byte)
-      index = next
-    }
-
-    return data
   }
   
   // MARK: - Post Message Method (Unified Message Router)
@@ -1686,16 +1639,7 @@ extension ESPMatterModule: MTRDevicePairingDelegate {
     
     let params = MTRCommissioningParameters()
     params.deviceAttestationDelegate = self
-    
-    // Set CSR nonce for RMNG workflow
-    if let csrNonce = csrNonce {
-      params.csrNonce = csrNonce
-      print("[MatterCommission] iOS: CSR Nonce being sent to device (onPairingComplete): \(csrNonce.hexadecimalString)")
-    } else {
-      print("[MatterCommission] iOS: WARNING - csrNonce is nil in onPairingComplete")
-    }
-    let nonceInParams = params.csrNonce?.hexadecimalString ?? "nil"
-    print("[MatterCommission] iOS: commissionNode called (onPairingComplete) deviceId=\(deviceId), params.csrNonce=\(nonceInParams)")
+
     do {
       try controller.commissionNode(withID: NSNumber(value: deviceId), commissioningParams: params)
     } catch {
@@ -1746,23 +1690,6 @@ extension ESPMatterModule: MTRDeviceAttestationDelegate {
   ///   - attestationDeviceInfo: attestation device info
   ///   - error: error
   func deviceAttestationCompleted(for controller: MTRDeviceController, opaqueDeviceHandle: UnsafeMutableRawPointer, attestationDeviceInfo: MTRDeviceAttestationDeviceInfo, error: Error?) {
-    // Extract attestationChallenge for RMNG workflow
-    if isRMNGWorkflow {
-      if #available(iOS 26.1, *) {
-        attestationChallenge = attestationDeviceInfo.attestationChallenge
-      }
-      print("[MatterCommission] iOS: deviceAttestationCompleted, attestationChallenge=\(attestationChallenge != nil ? "present" : "nil (iOS<26.1?)")")
-      if let challenge = attestationChallenge {
-        print("[MatterCommission] iOS: emitting RMNG_ATTESTATION_CHALLENGE event")
-        emitMatterEvent(eventType: ESPMatterConstants.rmngAttestationChallenge, data: [
-          ESPMatterConstants.attestationChallenge: challenge.hexadecimalString,
-          ESPMatterConstants.requestId: rmngRequestId ?? ""
-        ])
-      } else {
-        print("[MatterCommission] iOS: attestationChallenge is nil, NOT emitting RMNG_ATTESTATION_CHALLENGE")
-      }
-    }
-    
     print("[MatterCommission] iOS: continueCommissioning called (deviceAttestationCompleted)")
     do {
       try controller.continueCommissioningDevice(opaqueDeviceHandle, ignoreAttestationFailure: true)
@@ -1832,16 +1759,8 @@ extension ESPMatterModule: MTRDeviceControllerDelegate {
     if let deviceId = currentDeviceId {
       let params = MTRCommissioningParameters()
       params.deviceAttestationDelegate = self
-      if let csrNonce = csrNonce {
-        params.csrNonce = csrNonce
-        print("[MatterCommission] iOS: CSR Nonce being sent to device: \(csrNonce.hexadecimalString)")
-      } else {
-        print("[MatterCommission] iOS: WARNING - csrNonce is nil, commissionNode will NOT use our getCSRNonce challenge")
-      }
       if let controller = currentMatterController {
         do {
-          let nonceInParams = params.csrNonce?.hexadecimalString ?? "nil"
-          print("[MatterCommission] iOS: commissionNode called with deviceId=\(deviceId), params.csrNonce=\(nonceInParams)")
           try controller.commissionNode(withID: NSNumber(value: deviceId), commissioningParams: params)
         } catch {
           DispatchQueue.main.async {
@@ -1872,53 +1791,28 @@ extension ESPMatterModule: MTROperationalCertificateIssuer {
                                    controller: MTRDeviceController,
                                    completion: @escaping (MTROperationalCertificateChain?, Error?) -> Void) {
     
-    if isRMNGWorkflow {
-      let deviceCSRNonce = csrInfo.csrNonce.hexadecimalString
-      let ourExpectedNonce = csrNonce?.hexadecimalString ?? "nil"
-      print("[MatterCommission] iOS: CSRNonce mismatch check: ourNonce(from getCSRNonce)=\(ourExpectedNonce) vs deviceReturned=\(deviceCSRNonce)")
-      attestationSignature = csrInfo.attestationSignature
-      csrElementsTLV = csrInfo.csrElementsTLV
-      
-      var rmngData: [String: Any] = [
-        ESPMatterConstants.requestId: rmngRequestId ?? "",
-        ESPMatterConstants.attestationSignature: attestationSignature?.hexadecimalString ?? "",
-        ESPMatterConstants.nocsrElements: csrElementsTLV?.hexadecimalString ?? "",
-      ]
-      
-      if attestationChallenge == nil {
-        attestationChallenge = attestationInfo.challenge
-        if let challenge = attestationChallenge {
-          rmngData[ESPMatterConstants.attestationChallenge] = challenge.hexadecimalString
-        }
-      }
-      print("[MatterCommission] iOS: emitting RMNG_MATTER_ATTESTATION_DATA")
-      emitMatterEvent(eventType: ESPMatterConstants.rmngMatterAttestationData, data: rmngData)
-      
-      currentNOCCompletion = completion
-    } else {
-      // Legacy RM workflow: Extract CSR and emit NOC request event
-      let csrData = csrInfo.csr
-      let csrString = csrData.base64EncodedString()
-      let csrPEM = "\(ESPMatterConstants.beginCertificateRequest)\n\(csrString)\n\(ESPMatterConstants.endCertificateRequest)"
-      
-      let groupId = currentFabricInfo?[ESPMatterConstants.id] as? String ?? ""
-      let fabricId = currentFabricInfo?[ESPMatterConstants.fabricId] as? String ?? ""
-      let deviceIdString = currentDeviceId?.description ?? ""
-      
-      var requestData: [String: Any] = [
-        ESPMatterConstants.csr: csrPEM,
-        ESPMatterConstants.groupId: groupId,
-        ESPMatterConstants.fabricId: fabricId
-      ]
-      
-      if !deviceIdString.isEmpty {
-        requestData[ESPMatterConstants.deviceId] = deviceIdString
-      }
-      
-      emitMatterEvent(eventType: ESPMatterConstants.nodeNocRequest, data: requestData)
-      
-      currentNOCCompletion = completion
+    // Extract CSR and emit NOC request event.
+    let csrData = csrInfo.csr
+    let csrString = csrData.base64EncodedString()
+    let csrPEM = "\(ESPMatterConstants.beginCertificateRequest)\n\(csrString)\n\(ESPMatterConstants.endCertificateRequest)"
+
+    let groupId = currentFabricInfo?[ESPMatterConstants.id] as? String ?? ""
+    let fabricId = currentFabricInfo?[ESPMatterConstants.fabricId] as? String ?? ""
+    let deviceIdString = currentDeviceId?.description ?? ""
+
+    var requestData: [String: Any] = [
+      ESPMatterConstants.csr: csrPEM,
+      ESPMatterConstants.groupId: groupId,
+      ESPMatterConstants.fabricId: fabricId
+    ]
+
+    if !deviceIdString.isEmpty {
+      requestData[ESPMatterConstants.deviceId] = deviceIdString
     }
+
+    emitMatterEvent(eventType: ESPMatterConstants.nodeNocRequest, data: requestData)
+
+    currentNOCCompletion = completion
   }
 }
 

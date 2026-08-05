@@ -1,0 +1,38 @@
+{
+  "home_banner_dropdown": {
+    "by": "id",
+    "value": "button_dropdown_home_banner"
+  },
+  "home_management_option": {
+    "by": "id",
+    "value": "button_home_management"
+  },
+  "home_management_header": {
+    "by": "id",
+    "value": "header_home_management"
+  },
+  "add_home_button": {
+    "by": "id",
+    "value": "button_add_home"
+  },
+  "home_name_text": {
+    "by": "id",
+    "value": "text_name_home"
+  },
+  "home_description_text": {
+    "by": "id",
+    "value": "text_description_home"
+  },
+  "edit_home_name_button": {
+    "by": "id",
+    "value": "button_edit_home_name"
+  },
+  "home_name_input": {
+    "by": "id",
+    "value": "input_home_name"
+  },
+  "leave_home_button": {
+    "by": "id",
+    "value": "button_danger_remove_home"
+  }
+}

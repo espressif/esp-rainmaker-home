@@ -37,7 +37,7 @@ export interface GroupParamBroadcastOptions {
 
 /**
  * Returns the param type string used when keying control payloads, falling back to the param name
- * when type is unset (matches RMNG-style `params` maps).
+ * when type is unset (matches RainMaker Neo-style `params` maps).
  * @param param The concrete param row (member device or template)
  * @returns Stable key for adaptor lookups on the wire
  */

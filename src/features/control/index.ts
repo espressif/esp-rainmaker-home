@@ -7,8 +7,7 @@
 export * from "./screens";
 export {
   useControl,
-  useChart,
+  useTimeSeriesChart,
   useGuide,
   useGuideSteps,
-  useTimeSeriesData,
 } from "./hooks";

@@ -48,6 +48,21 @@ class OnNetwork(BasePage):
         self.click("device_card", timeout=5)
         return self
 
+    def select_device_by_node_id(self, node_id):
+        """Select the discovered card whose node id matches, so a parallel run's other node is never picked."""
+        id_by = self.get_element_locator("node_id_text")
+        for _ in range(3):
+            self.wait_for_devices()
+            for card in self.find_all("device_card"):
+                try:
+                    nid = (card.find_element(*id_by).text or "").strip()
+                    if nid and node_id and (node_id in nid or nid in node_id):
+                        card.click()
+                        return self
+                except Exception:
+                    continue
+        raise RuntimeError(f"On-network device with node id '{node_id}' not discovered")
+
     def validate_screen_elements(self):
         """Validate expected elements on the Discover Devices screen."""
         logger.info("Validating on-network discovery screen elements")

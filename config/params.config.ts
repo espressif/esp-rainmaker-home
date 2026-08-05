@@ -57,6 +57,9 @@ import {
   ESPRM_UI_TEXT_PARAM_TYPE,
   ESPRM_UI_TOGGLE_PARAM_TYPE,
   ESPRM_UI_TRIGGER_PARAM_TYPE,
+  CCT_KELVIN_MIN,
+  CCT_KELVIN_MAX,
+  CCT_KELVIN_STEP,
 } from "@shared/utils/constants";
 
 export const PARAM_CONTROLS = [
@@ -109,6 +112,13 @@ export const PARAM_CONTROLS = [
     control: ColorTemperatureSlider,
     dataTypes: DATA_TYPE_INT,
     paramType: ESPRM_CCT_PARAM_TYPE,
+    // Kelvin defaults; ColorTemperatureSlider also floors device `bounds.min` at CCT_KELVIN_MIN.
+    defaults: {
+      min: CCT_KELVIN_MIN,
+      max: CCT_KELVIN_MAX,
+      step: CCT_KELVIN_STEP,
+    },
+    requirements: `Kelvin bounds (min ≥ ${CCT_KELVIN_MIN})`,
   },
   {
     name: "Saturation",

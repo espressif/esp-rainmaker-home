@@ -142,15 +142,16 @@ const CollapsibleCard: React.FC<CollapsibleCardProps> = ({
   return (
     <View {...(qaId ? testProps(qaId) : {})} style={[styles.card, style]}>
       <TouchableOpacity
+        {...(qaId ? testProps(`button_expand_${qaId}`) : {})}
         style={[styles.header, headerStyle]}
         onPress={toggleExpanded}
         activeOpacity={0.7}
       >
-        <View style={styles.headerContent}>
+        <View style={styles.headerContent} {...testProps("view_header_content")}>
           <View style={styles.headerText}>
-            <Text style={styles.title}>{title}</Text>
+            <Text style={styles.title} {...testProps("text_title")}>{title}</Text>
             {(description || showItemCount) && (
-              <Text style={styles.subtitle}>
+              <Text style={styles.subtitle} {...testProps("text_subtitle")}>
                 {description || getItemCountText()}
               </Text>
             )}

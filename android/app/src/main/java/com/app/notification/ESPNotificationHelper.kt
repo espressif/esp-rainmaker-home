@@ -34,8 +34,12 @@ object ESPNotificationHelper {
     private const val CHANNEL_NODE_OFFLINE = "node_offline"
     private const val CHANNEL_NODE_ADDED = "node_added"
     private const val CHANNEL_NODE_REMOVED = "node_removed"
+    private const val CHANNEL_NODE_ALERT = "node_alert"
 
     private const val NOTIFICATION_COLOR = "#CA1627"
+
+    /** Bumped so an old CLEAR_TASK content-intent (requestCode 0) is not reused. */
+    private const val MAIN_ACTIVITY_REQUEST_CODE = 1001
 
     /**
      * Creates notification channels for different types of ESP RainMaker events.
@@ -77,6 +81,13 @@ object ESPNotificationHelper {
                     CHANNEL_NODE_REMOVED,
                     "Device Removed",
                     "Notifications when devices are removed",
+                    defaultSoundUri,
+                    audioAttributes
+                ),
+                createNotificationChannel(
+                    CHANNEL_NODE_ALERT,
+                    "Device Alerts",
+                    "Alerts and warnings from your devices",
                     defaultSoundUri,
                     audioAttributes
                 )
@@ -137,25 +148,29 @@ object ESPNotificationHelper {
             "node_removed" -> CHANNEL_NODE_REMOVED
             "node_online" -> CHANNEL_NODE_ONLINE
             "node_offline" -> CHANNEL_NODE_OFFLINE
+            "node_alert" -> CHANNEL_NODE_ALERT
             else -> null
         }
     }
 
     /**
      * Creates a PendingIntent that opens the main activity.
+     * Avoid CLEAR_TASK — it remounts JS and races StoreProvider (groupStore-of-null crash).
+     * Use CANCEL_CURRENT (not UPDATE_CURRENT): UPDATE_CURRENT only replaces extras, so an
+     * older immutable PI can keep stale activity flags like CLEAR_TASK.
      */
     private fun createMainActivityPendingIntent(context: Context): PendingIntent {
         val intent = Intent(context, MainActivity::class.java).apply {
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
         }
 
-        val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         } else {
             PendingIntent.FLAG_UPDATE_CURRENT
         }
 
-        return PendingIntent.getActivity(context, 0, intent, flags)
+        return PendingIntent.getActivity(context, MAIN_ACTIVITY_REQUEST_CODE, intent, flags)
     }
 
     /**

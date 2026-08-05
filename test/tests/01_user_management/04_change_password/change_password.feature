@@ -14,7 +14,7 @@ Feature: Change Password
     And user should be on login screen
     Examples:
       | test_case              | login_user        | old_password                | new_password | confirm_password | title                          | message |
-      | Valid change password  | registered user 1 | registered user 1 password | Welcome02    | Welcome02        | Password changed successfully | ""     |
+      | Valid change password  | registered user 1 | registered user 1 password | Welcome02!   | Welcome02!       | Password changed successfully | ""     |
 
   @regression
   Scenario Outline: Password policy failures

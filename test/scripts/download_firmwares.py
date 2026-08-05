@@ -34,8 +34,10 @@ Usage:
 """
 import argparse
 import base64
+import hashlib
 import io
 import json
+import logging
 import os
 import re
 import shutil
@@ -48,6 +50,8 @@ import urllib.request
 import zipfile
 from pathlib import Path
 
+logger = logging.getLogger(__name__)
+
 # Internal firmware-build host/job — supplied via env (CI variables / secrets
 # file), never hard-coded, so they don't leak into the public repo.
 JENKINS_URL = os.environ.get("JENKINS_URL", "").rstrip("/")
@@ -59,53 +63,212 @@ JENKINS_TRIGGER_TOKEN = os.environ.get("JENKINS_TRIGGER_TOKEN", "")
 _FIRMWARE_ROOT = os.environ.get("FIRMWARE_ROOT", "firmwares")
 FIRMWARES_DIR = Path(_FIRMWARE_ROOT) if os.path.isabs(_FIRMWARE_ROOT) else Path(__file__).resolve().parents[1] / _FIRMWARE_ROOT
 
-# Matter test image: auto-updated launchpad artifact, no Jenkins involved.
+# Matter test images: auto-updated launchpad artifacts.
 MATTER_FW_URL = os.environ.get(
     "MATTER_FW_URL",
     "https://espressif.github.io/esp-matter/esp32c3_wifi_matter_light.bin",
 )
+RMNEO_MATTER_FW_URL = os.environ.get("RMNEO_MATTER_FW_URL", "")
+
+# Deployment -> firmware family (rm|rmneo) via deployment.yaml
+try:
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+    from utils.registered_user_resolver import deployment_type as _deployment_type
+except Exception as error:
+    logger.warning("deployment_type import failed (%s); using name-only fallback", error)
+    def _deployment_type(dep: str) -> str:
+        return "rmneo" if (dep or "").strip().lower() == "rmneo" else "rm"
 
 
-def download_matter_image(url: str = MATTER_FW_URL, dest_dir: Path = None) -> Path:
-    """Fetch the auto-updated esp-matter merged image into <firmwares>/matter/; skip when upstream is unchanged (ETag/Last-Modified) and fall back to the cached copy when offline."""
-    dest_dir = dest_dir or FIRMWARES_DIR / "matter"
+def _read_app_desc(bin_path: Path) -> dict:
+    """Version fields from the esp_app_desc_t embedded in a merged ESP-IDF app image (magic 0xABCD5432): app version, project name, idf version, build date/time. {} if not found."""
+    try:
+        data = Path(bin_path).read_bytes()
+    except Exception:
+        return {}
+    magic = b"\x32\x54\xcd\xab"
+    index = data.find(magic)
+    while index >= 0:
+        blob = data[index:index + 256]
+        if len(blob) >= 144:
+            def _field(offset: int, length: int) -> str:
+                return blob[offset:offset + length].split(b"\x00", 1)[0].decode("latin1", "replace").strip()
+            project, version = _field(48, 32), _field(16, 32)
+            if project and project.isprintable() and version.isprintable():
+                return {
+                    "app_version": version,
+                    "project_name": project,
+                    "build_time": _field(80, 16),
+                    "build_date": " ".join(_field(96, 16).split()),
+                    "idf_ver": _field(112, 32),
+                }
+        index = data.find(magic, index + 4)
+    return {}
+
+
+def _load_sidecar(path: Path) -> dict:
+    """Read a JSON sidecar; return {} if missing or unreadable."""
+    try:
+        return json.loads(path.read_text()) if path.exists() else {}
+    except Exception:
+        return {}
+
+
+def _record_image_version(dest: Path, meta: Path) -> None:
+    """Merge the image's embedded app-desc version into its .httpmeta so the report can show a real firmware version instead of only the HTTP Last-Modified. Best-effort; upgrades older sidecars in place."""
+    desc = _read_app_desc(dest)
+    if not desc:
+        return
+    current = _load_sidecar(meta)
+    if all(current.get(key) == value for key, value in desc.items()):
+        return
+    current.update(desc)
+    try:
+        meta.write_text(json.dumps(current))
+    except Exception:
+        pass
+
+
+def _ensure_meta_sha(dest: Path, meta: Path) -> None:
+    current = _load_sidecar(meta)
+    if not current.get("sha256"):
+        current["sha256"] = hashlib.sha256(dest.read_bytes()).hexdigest()
+        meta.write_text(json.dumps(current))
+
+
+def _download_cached_image(url: str, dest_dir: Path) -> Path:
+    """Fetch a merged image into dest_dir with conditional-GET caching (ETag/Last-Modified in a sidecar .httpmeta); reuse the cached copy on 304 or when offline."""
     dest_dir.mkdir(parents=True, exist_ok=True)
     dest = dest_dir / url.rsplit("/", 1)[-1]
     meta = dest.with_suffix(dest.suffix + ".httpmeta")
 
     request = urllib.request.Request(url)
     if dest.exists() and meta.exists():
-        try:
-            cached = json.loads(meta.read_text())
-            if cached.get("etag"):
-                request.add_header("If-None-Match", cached["etag"])
-            if cached.get("last_modified"):
-                request.add_header("If-Modified-Since", cached["last_modified"])
-        except Exception:
-            pass
+        cached = _load_sidecar(meta)
+        if cached.get("etag"):
+            request.add_header("If-None-Match", cached["etag"])
+        if cached.get("last_modified"):
+            request.add_header("If-Modified-Since", cached["last_modified"])
     try:
         with urllib.request.urlopen(request, timeout=120) as response:
             data = response.read()
             if not data or len(data) < 0x10000:
                 raise RuntimeError(f"Downloaded image suspiciously small ({len(data)} bytes)")
             dest.write_bytes(data)
+            sha256 = hashlib.sha256(data).hexdigest()
             meta.write_text(json.dumps({
                 "etag": response.headers.get("ETag"),
                 "last_modified": response.headers.get("Last-Modified"),
                 "url": url,
+                "sha256": sha256,
             }))
+            logger.info("Downloaded %s (%s bytes, sha256=%s) from %s",
+                        dest.name, len(data), sha256[:12], url)
             print(f"  downloaded {dest.name} ({len(data)} bytes)")
     except urllib.error.HTTPError as error:
         if error.code == 304 and dest.exists():
+            logger.info("Upstream unchanged (304); reusing cached %s", dest.name)
             print(f"  upstream unchanged (304); reusing {dest.name}")
         else:
             raise
     except Exception as error:
         if dest.exists():
-            print(f"  matter image download failed ({error}); reusing cached {dest.name}")
+            logger.warning("Image download failed (%s); reusing cached %s", error, dest.name)
+            print(f"Image download failed ({error}); reusing cached {dest.name}")
         else:
             raise
+    if dest.exists():
+        _record_image_version(dest, meta)
+        _ensure_meta_sha(dest, meta)
     return dest
+
+
+def _record_build_cfg(dest_dir: Path, image_url: str) -> None:
+    """Fetch esp-matter's build_cfg.md (repo commit pins) beside the image and publish them to matter_versions.json for the report."""
+    cfg_url = image_url.rsplit("/", 1)[0] + "/build_cfg.md"
+    cfg_path = dest_dir / "build_cfg.md"
+    try:
+        with urllib.request.urlopen(cfg_url, timeout=30) as response:
+            cfg_path.write_bytes(response.read())
+    except Exception as error:
+        if not cfg_path.exists():
+            logger.warning("build_cfg.md fetch failed (%s); firmware commits unavailable", error)
+            return
+    commits = dict(re.findall(r"^[-*\s]*(esp-idf|esp-matter|connectedhomeip):\s*\[([0-9a-fA-F]+)\]",
+                              cfg_path.read_text(errors="replace"), re.M))
+    if not commits.get("esp-matter"):
+        return
+    label = f"esp-matter@{commits['esp-matter']}"
+    extras = [f"chip {commits[k]}" if k == "connectedhomeip" else f"idf {commits[k]}"
+              for k in ("connectedhomeip", "esp-idf") if commits.get(k)]
+    if extras:
+        label += f" ({', '.join(extras)})"
+    versions_path = dest_dir / "matter_versions.json"
+    current = _load_sidecar(versions_path)
+    current["esp_matter_commit"] = label
+    current["build_cfg"] = commits
+    versions_path.write_text(json.dumps(current, indent=2))
+    logger.info("Matter build pins: %s", label)
+
+
+def download_matter_image(url: str = MATTER_FW_URL, dest_dir: Path = None) -> Path:
+    """Fetch the auto-updated esp-matter (Matter-only) merged image into <firmwares>/matter/."""
+    dest_dir = dest_dir or FIRMWARES_DIR / "matter"
+    dest = _download_cached_image(url, dest_dir)
+    _record_build_cfg(dest_dir, url)
+    return dest
+
+
+def download_rmneo_matter_image(url: str = None, dest_dir: Path = None) -> Path:
+    """Fetch the RMNEO+Matter (rmneo matter-light) merged app image into <firmwares>/matter/rmneo/; the per-node fctry + QR come from factory_autoreg.py --matter, not this image."""
+    url = url or RMNEO_MATTER_FW_URL
+    if not url:
+        raise RuntimeError("RMNEO_MATTER_FW_URL not set (no RMNEO+Matter image URL to download)")
+    return _download_cached_image(url, dest_dir or FIRMWARES_DIR / "matter" / "rmneo")
+
+
+def download_rmneo_light(chip: str = "esp32c3", dest_root: str = None) -> Path:
+    """Fetch the latest successful esp-rmneo-firmware `light` bundle for `chip` and relabel it
+    to look like a rainmaker led_light bundle (product led_light + prov_mode ble) so the firmware
+    manager resolves it with the existing scan_qr/bluetooth scenarios. Reuses `_request`."""
+    job = os.environ.get("RMNEO_FIRMWARE_JOB", "job/rainmaker_firmware/job/esp-rmng-firmware").strip("/")
+    dest_root = Path(dest_root or FIRMWARES_DIR)
+
+    builds = json.loads(_request(f"{job}/api/json?tree=builds[number,result,actions[parameters[name,value]]]{{0,60}}"))
+    number = next(
+        (b["number"] for b in builds.get("builds", [])
+         if b.get("result") == "SUCCESS"
+         and _build_params(b).get("product") == "light"
+         and _build_params(b).get("chip") == chip),
+        0,
+    )
+    if not number:
+        raise RuntimeError(f"No successful esp-rmng-firmware light/{chip} build found")
+    arts = json.loads(_request(f"{job}/{number}/api/json?tree=artifacts[relativePath]"))
+    tgz = next((a["relativePath"] for a in arts.get("artifacts", []) if a["relativePath"].endswith(".tar.gz")), None)
+    if not tgz:
+        raise RuntimeError(f"esp-rmng-firmware build #{number} has no .tar.gz artifact")
+
+    bundle_dir = dest_root / f"rmneo_light_{chip}"
+    tmp = dest_root / "_extract"
+    for path in (bundle_dir, tmp):
+        if path.exists():
+            shutil.rmtree(path)
+    dest_root.mkdir(parents=True, exist_ok=True)
+    with tarfile.open(fileobj=io.BytesIO(_request(f"{job}/{number}/artifact/{tgz}")), mode="r:gz") as archive:
+        archive.extractall(tmp)
+    next(tmp.iterdir()).rename(bundle_dir)
+    shutil.rmtree(tmp, ignore_errors=True)
+
+    bd = bundle_dir / "build_details.txt"
+    text = re.sub(r"(?m)^product:\s*light\s*$", "product: led_light", bd.read_text())
+    if "prov_mode:" not in text:
+        text += "\nprov_mode: ble\n"
+    if "deployment:" not in text:
+        text += "deployment: rmneo\n"
+    bd.write_text(text)
+    print(f"RMNEO light bundle ready: {bundle_dir} (build #{number}); relabeled led_light + prov_mode ble + deployment rmneo")
+    return bundle_dir
 
 
 def prune_superseded(keep: set) -> None:
@@ -191,6 +354,12 @@ def _job_api(tree: str) -> dict:
     return json.loads(_request(f"{JENKINS_FIRMWARE_JOB}/api/json?tree={urllib.parse.quote(tree)}"))
 
 
+def _build_params(build: dict) -> dict:
+    """Flatten a Jenkins build's parameter actions into {name: str(value)}."""
+    return {p.get("name"): str(p.get("value", ""))
+            for a in build.get("actions", []) for p in a.get("parameters", []) or []}
+
+
 def _normalize_sdk(fragment: str) -> str:
     """Whitespace-insensitive comparison form of a sdkconfig fragment."""
     lines = [line.strip() for line in (fragment or "").replace("\r", "").split("\n") if line.strip()]
@@ -229,10 +398,7 @@ def find_matching_build(entry: dict) -> int:
             continue
         if not build.get("artifacts"):
             continue
-        build_params = {}
-        for action in build.get("actions", []):
-            for parameter in action.get("parameters", []) or []:
-                build_params[parameter.get("name")] = str(parameter.get("value", ""))
+        build_params = _build_params(build)
         if (
             build_params.get("chip") == wanted["chip"]
             and build_params.get("prov_mode") == wanted["prov_mode"]
@@ -337,7 +503,24 @@ def main() -> int:
     parser.add_argument("--only", help="download a single variant by name (see FIRMWARE_MATRIX)")
     parser.add_argument("--skip-existing", action="store_true",
                         help="skip variants that already have a local bundle for the chip+prov_mode")
+    parser.add_argument("--rmneo-light", action="store_true",
+                        help="force the esp-rmng-firmware light bundle (RMNEO BLE provisioning) and exit")
+    parser.add_argument("--deployment", default=os.environ.get("DEPLOYMENT", ""),
+                        help="deployment: 'rmneo' fetches the RMNEO light bundle into FIRMWARE_ROOT; anything else "
+                             "fetches the standard RainMaker bundles. Defaults to $DEPLOYMENT (set by CI).")
     args = parser.parse_args()
+
+    deployment = (args.deployment or "").strip().lower()
+    if args.rmneo_light or _deployment_type(deployment) == "rmneo":
+        try:
+            if not (JENKINS_USER and JENKINS_API_TOKEN):
+                raise RuntimeError("JENKINS_USER/JENKINS_API_TOKEN unset")
+            download_rmneo_light()
+            if RMNEO_MATTER_FW_URL:
+                download_rmneo_matter_image()
+        except Exception as error:
+            print(f"RMNEO firmware refresh failed ({error}); using pre-placed RMNEO firmware in FIRMWARE_ROOT")
+        return 0
 
     if not (JENKINS_URL and JENKINS_FIRMWARE_JOB):
         print("ERROR: set JENKINS_URL and JENKINS_FIRMWARE_JOB (CI variables / secrets file)")
@@ -388,6 +571,11 @@ def main() -> int:
         download_matter_image()
     except Exception as error:
         print(f"  matter image refresh FAILED (the matter fixture retries at test time): {error}")
+    if RMNEO_MATTER_FW_URL:
+        try:
+            download_rmneo_matter_image()
+        except Exception as error:
+            print(f"  rmneo+matter image refresh FAILED (the matter fixture retries at test time): {error}")
 
     if failures:
         print(f"\nFailed variants: {failures}")

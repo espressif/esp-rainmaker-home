@@ -244,10 +244,186 @@ class ReportGenerator:
         return {}
 
     @staticmethod
-    def _attach_history(test: Dict, history: List, platform: str = "") -> None:
+    def _test_root() -> Path:
+        return Path(__file__).resolve().parents[1]
+
+    def _resolve_firmware_root(self, configured: str) -> Path:
+        path = Path(configured).expanduser()
+        if not path.is_absolute():
+            path = self._test_root() / path
+        return path
+
+    def _newest_build_details(self, root: Path) -> Optional[Path]:
+        """build_details.info/.txt of the newest firmware bundle under root, mirroring the firmware service's bundle selection."""
+        try:
+            for name in ("build_details.info", "build_details.txt"):
+                direct = root / name
+                if direct.exists():
+                    return direct
+            if not root.is_dir():
+                return None
+
+            def _build_number(path: Path) -> int:
+                match = re.search(r"_(\d+)$", path.name)
+                return int(match.group(1)) if match else -1
+
+            bundles = sorted((p for p in root.iterdir() if p.is_dir()), key=_build_number, reverse=True)
+            for bundle in bundles:
+                for name in ("build_details.info", "build_details.txt"):
+                    candidate = bundle / name
+                    if candidate.exists():
+                        return candidate
+        except Exception as error:
+            logger.warning("Firmware build_details scan failed under %s: %s", root, error)
+        return None
+
+    @staticmethod
+    def _parse_build_details_commits(path: Path) -> Dict[str, str]:
+        """Short commits from a build_details file, tolerating both `key: HEAD: <hash>` and `key: <branch>: <describe>: <hash>` layouts."""
+        commits: Dict[str, str] = {}
+        mapping = {
+            "esp-idf": "esp_idf_commit",
+            "esp-rainmaker": "esp_rainmaker_commit",
+            "rmng-sdk": "rmneo_sdk_commit",
+        }
+        try:
+            for line in Path(path).read_text(encoding="utf-8").splitlines():
+                match = re.match(r"^(esp-idf|esp-rainmaker|rmng-sdk):\s*(.+)$", line.strip(), re.I)
+                if not match:
+                    continue
+                hexes = re.findall(r"\b[0-9a-fA-F]{7,40}\b", match.group(2))
+                if hexes:
+                    commits.setdefault(mapping[match.group(1).lower()], hexes[-1][:8])
+        except Exception as error:
+            logger.warning("Could not parse commits from %s: %s", path, error)
+        return commits
+
+    @staticmethod
+    def _httpmeta_marker(directory: Path) -> str:
+        """Best version marker from the first .httpmeta a downloaded image left in directory: the image's embedded app-desc version (app version + IDF + build date) when recorded, else the HTTP Last-Modified/ETag; '' if none."""
+        if not directory.is_dir():
+            return ""
+        for httpmeta in sorted(directory.glob("*.httpmeta")):
+            try:
+                data = json.loads(httpmeta.read_text())
+            except Exception:
+                continue
+            app_version = str(data.get("app_version") or "").strip()
+            idf_ver = str(data.get("idf_ver") or "").strip()
+            build_date = str(data.get("build_date") or "").strip()
+            if app_version or idf_ver:
+                head = ("" if not app_version
+                        else app_version if app_version.lower().startswith("v") else f"v{app_version}")
+                extra = ([f"IDF {idf_ver}"] if idf_ver else []) + ([f"built {build_date}"] if build_date else [])
+                label = f"{head} ({', '.join(extra)})" if head and extra else head or ", ".join(extra)
+                if label:
+                    return label
+            marker = (data.get("last_modified") or data.get("etag") or "").strip().strip('"')
+            if marker:
+                return marker
+        return ""
+
+    def _matter_versions(self, roots: List[Path]) -> Dict[str, str]:
+        """esp-matter / rmneo+matter markers. matter_versions.json (populated by the matter flow) wins; each downloaded image's .httpmeta version (embedded app-desc version, else Last-Modified) is the fallback — esp-matter from matter/, RMNEO+Matter from matter/rmneo/ (kept in its own subdir so the two never collide)."""
+        out = {"esp_matter_commit": "", "rmneo_matter_commit": ""}
+        checked = []
+        for root in roots:
+            matter_dir = root / "matter"
+            if matter_dir in checked:
+                continue
+            checked.append(matter_dir)
+            meta_file = matter_dir / "matter_versions.json"
+            if meta_file.exists():
+                try:
+                    data = json.loads(meta_file.read_text())
+                    out["esp_matter_commit"] = str(data.get("esp_matter_commit") or data.get("esp_matter_version") or "").strip()
+                    out["rmneo_matter_commit"] = str(data.get("rmneo_matter_commit") or data.get("rmneo_matter_version") or "").strip()
+                except Exception as error:
+                    logger.warning("Could not read %s: %s", meta_file, error)
+            if not out["esp_matter_commit"]:
+                out["esp_matter_commit"] = self._httpmeta_marker(matter_dir)
+            if not out["rmneo_matter_commit"]:
+                out["rmneo_matter_commit"] = self._httpmeta_marker(matter_dir / "rmneo")
+            if out["esp_matter_commit"] or out["rmneo_matter_commit"]:
+                break
+        return out
+
+    def _firmware_metadata(self) -> Dict[str, str]:
+        """Firmware commit/version markers read from bundles on disk, to backfill the synthetic-metadata reuse-online E2E and Matter paths that record no commits."""
+        if getattr(self, "_fw_meta_cache", None) is not None:
+            return self._fw_meta_cache
+        meta: Dict[str, str] = {}
+        default_root = self._resolve_firmware_root("firmwares")
+        active_root = self._resolve_firmware_root(os.environ.get("FIRMWARE_ROOT", "firmwares"))
+        info_path = self._newest_build_details(active_root)
+        if info_path:
+            commits = self._parse_build_details_commits(info_path)
+            if commits.get("esp_idf_commit"):
+                meta["esp_idf_commit"] = commits["esp_idf_commit"]
+            if commits.get("esp_rainmaker_commit"):
+                meta["esp_rainmaker_commit"] = commits["esp_rainmaker_commit"]
+            if commits.get("rmneo_sdk_commit"):
+                meta["rmneo_sdk_commit"] = commits["rmneo_sdk_commit"]
+            meta["firmware_build"] = info_path.parent.name
+        for key, value in self._matter_versions([active_root, default_root]).items():
+            if value:
+                meta[key] = value
+        # Local matter builds ship no downloadable marker; CI sets these env vars (a metadata file still wins).
+        for env_key, meta_key in (("ESP_MATTER_FW_COMMIT", "esp_matter_commit"), ("RMNEO_MATTER_FW_COMMIT", "rmneo_matter_commit")):
+            env_val = os.environ.get(env_key, "").strip()
+            if env_val and not meta.get(meta_key):
+                meta[meta_key] = env_val
+        self._fw_meta_cache = meta
+        return meta
+
+    def _backfill_firmware_versions(self, test_results: List[Dict]) -> None:
+        """Fill empty esp-idf / esp-rainmaker commits and add esp-matter / rmneo+matter markers on each test's hardware entries."""
+        fw = self._firmware_metadata() or {}
+        for test in test_results:
+            hardware = test.get("hardware_info")
+            if not hardware:
+                continue
+            entries = [hardware] if isinstance(hardware, dict) else hardware
+            for entry in entries:
+                if not isinstance(entry, dict):
+                    continue
+                firmware_type = (entry.get("firmware_type") or "").lower()
+                if "matter" in firmware_type:
+                    if "rmneo" in firmware_type:
+                        entry["rmneo_matter_commit"] = (
+                            entry.get("rmneo_matter_commit")
+                            or fw.get("rmneo_matter_commit")
+                            or "local build — set RMNEO_MATTER_FW_COMMIT"
+                        )
+                    else:
+                        entry["esp_matter_commit"] = (
+                            entry.get("esp_matter_commit")
+                            or fw.get("esp_matter_commit")
+                            or "unknown — set ESP_MATTER_FW_COMMIT"
+                        )
+                    continue
+                if entry.get("firmware_build") != fw.get("firmware_build"):
+                    continue
+                for key in ("esp_idf_commit", "esp_rainmaker_commit", "rmneo_sdk_commit"):
+                    if fw.get(key) and not entry.get(key):
+                        entry[key] = fw[key]
+
+    @staticmethod
+    def _attach_history(test: Dict, history: List, platform: str = "",
+                        deployment: str = "", active_sdk: str = "") -> None:
         entries = history.get(test.get('nodeid', ''), [])
         if platform:
             entries = [e for e in entries if (e.get('platform') or '') == platform]
+        # Deployment/SDK-specific: keep only prior runs matching this run's deployment + active SDK; older untagged records are excluded.
+        def _norm(value) -> str:
+            return str(value or '').strip().lower()
+        dep, sdk = _norm(deployment), _norm(active_sdk)
+        if dep or sdk:
+            entries = [
+                e for e in entries
+                if (not dep or _norm(e.get('deployment')) == dep)
+                and (not sdk or _norm(e.get('active_sdk')) == sdk)
+            ]
         test['history_runs'] = list(reversed(entries))[:5]
         # Releases: release-branch/tag runs only (branch normalized for origin/); a non-release run never appears, empty if none.
         def _is_release(branch: str) -> bool:
@@ -257,7 +433,15 @@ class ReportGenerator:
                     name = name[len(prefix):]
             return name.startswith('release/') or re.match(r'^v?\d+\.\d+', name) is not None
         releases = [e for e in reversed(entries) if _is_release(e.get('branch'))]
-        test['history_releases'] = releases[:5]
+        unique_releases = []
+        seen_versions = set()
+        for entry in releases:
+            version = entry.get('version')
+            if version in seen_versions:
+                continue
+            seen_versions.add(version)
+            unique_releases.append(entry)
+        test['history_releases'] = unique_releases[:5]
     
     def _calculate_summary_stats(self, test_results: List[Dict]) -> Dict[str, Any]:
         """Calculate summary statistics"""
@@ -321,6 +505,12 @@ class ReportGenerator:
                         app_version: str = "",
                         git_info: Optional[dict] = None,
                         download_url: str = None,
+                        deployment: str = None,
+                        deployment_uri: str = None,
+                        deployment_backend: str = None,
+                        deployment_broker: str = None,
+                        deployment_region: str = None,
+                        active_sdk: str = None,
                         jira_base: str = None,
                         jira_project: str = None,
                         jira_project_id: str = None,
@@ -361,11 +551,13 @@ class ReportGenerator:
                     if not test.get("hardware_info"):
                         test["hardware_info"] = hardware_info_by_test.get(test.get("nodeid", ""), {})
 
+            self._backfill_firmware_versions(test_results)
+
             history = self._load_test_history()
             # Per-test artifact zip is built on demand by the host
             run_zip_base = download_url[:-4] if download_url and download_url.endswith(".zip") else None
             for test in test_results:
-                self._attach_history(test, history, chipset)
+                self._attach_history(test, history, chipset, deployment, active_sdk)
                 if run_zip_base and test.get("outcome") == "failed":
                     node_last = ((test.get("nodeid", "").split("::")[-1]) or "test").split("[")[0]
                     safe = safe_test_name(node_last)
@@ -436,9 +628,16 @@ class ReportGenerator:
             'branch': (git_info or {}).get('branch', ''),
             'mr_iid': (git_info or {}).get('mr_iid', ''),
             'mr_title': (git_info or {}).get('mr_title', ''),
+            'app_commit': (git_info or {}).get('app_commit', ''),
             'created_time': now.strftime("%d-%m-%Y %H:%M:%S"),
             'test_lab': test_lab,
             'platform': chipset,
+            'deployment': deployment,
+            'deployment_uri': deployment_uri,
+            'deployment_backend': deployment_backend,
+            'deployment_broker': deployment_broker,
+            'deployment_region': deployment_region,
+            'active_sdk': active_sdk,
             'execution_time': execution_time or self._calculate_execution_time(test_results),
             'download_url': download_url,
             'jira_base': jira_base,

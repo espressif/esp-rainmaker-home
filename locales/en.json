@@ -125,6 +125,13 @@
       "save": "Save",
       "delete": "Delete",
       "offline": "Offline",
+      "offlineLastSeen": "Offline - {{timeAgo}}",
+      "lastSeen": {
+        "seconds": "{{count}}s ago",
+        "minutes": "{{count}}m ago",
+        "hours": "{{count}}h ago",
+        "days": "{{count}}d ago"
+      },
       "confirm": "Confirm",
       "edit": "Edit",
       "next": "Next",
@@ -158,7 +165,11 @@
       "settingUpNodes": "Setting up nodes",
       "gettingProfile": "Getting profile",
       "finishingUp": "Finishing up",
-      "loading": "Loading..."
+      "loading": "Loading...",
+      "deploymentBanner": {
+        "change": "Change deployment"
+      },
+      "neoCredentialsHint": "You can sign in using your existing RainMaker credentials"
     },
     "signup": {
       "title": "Sign Up",
@@ -238,13 +249,13 @@
   "user": {
     "profile": {
       "title": "My Profile",
-      "userCode": "User Code",
       "thirdPartyIntegration": {
         "title": "Voice Assistants and Integrations"
       },
       "logoutButton": "Log Out",
       "logoutModal": {
-        "message": "Are you sure you want to log out? If you log out from the application, the agents which are configured from your account will also get logged out.",
+        "message": "Are you sure you want to log out?",
+        "messageWithAgents": "Are you sure you want to log out? If you log out from the application, the agents which are configured from your account will also get logged out.",
         "confirmButton": "Yes, Log Out",
         "cancelButton": "Stay Logged In"
       }
@@ -285,7 +296,8 @@
       "noNotification": "No notifications",
       "invitationFromUnknown": "You received an invitation",
       "sharingRequestAccepted": "Sharing request accepted",
-      "sharingRequestDeclined": "Sharing request declined"
+      "sharingRequestDeclined": "Sharing request declined",
+      "sharingRequestUpdateFailed": "Could not process the invitation. It may no longer be valid — for example, if you already have access to this home."
     },
     "aboutUs": {
       "title": "About Us",
@@ -387,11 +399,8 @@
       "confirmRemoveHomeTitle": "Confirm Remove Home",
       "confirmRemoveHomeMessage": "Are you sure you want to remove this Home?",
       "addUserModalTitle": "Add User",
-      "addUserModalDescription": "Enter the email address of the user you want to share the home with.",
-      "addUserModalDescriptionEmailOrUserCode": "Enter the user's email address or their 6-character user code (letters and numbers).",
-      "addUserModalEmailPlaceholder": "Email",
-      "addUserModalUserCodePlaceholder": "User code",
-      "addUserModalEmailOrUserCodePlaceholder": "Email or user code",
+      "addUserModalDescription": "Enter the username of the user you want to share the home with.",
+      "addUserModalUsernamePlaceholder": "Username",
       "grantOwnershipDescription": "Grant ownership/full access",
       "transferGroupDescription": "Transfer group ownership",
       "transferAndAssignRoleDescription": "Transfer group and assign new role to self",
@@ -453,14 +462,18 @@
       "roomUpdatedSuccessfully": "Room updated successfully",
       "roomRemovedSuccessfully": "Room removed successfully",
       "confirmRemoveRoom": "Confirm Remove Room",
-      "confirmRemoveRoomMessage": "Are you sure you want to remove this Room?"
+      "confirmRemoveRoomMessage": "Are you sure you want to remove this Room?",
+      "leaveRoomButton": "Leave Room",
+      "confirmLeaveRoomTitle": "Confirm Leave Room",
+      "confirmLeaveRoomMessage": "Are you sure you want to leave this room? You will lose access to its devices.",
+      "roomLeftSuccessfully": "You have left the room"
     },
     "customizeRoomName": {
       "title": "Customize Room Name",
       "nameList": "Name List",
       "addOwnRoomName": "Add your own room name",
       "roomNamePlaceholder": "Room name",
-      "selectExitingRoomName": "Select Existing Room Name",
+      "selectExitingRoomName": "Suggested Room Names",
       "confirmBtn": "Confirm",
       "cancelBtn": "Cancel",
       "roomNames": {
@@ -490,10 +503,7 @@
       "homeNameTooLong": "Home name cannot exceed 32 characters",
       "homeNameAlreadyExists": "A home with this name already exists",
       "homeNameMinLength": "Home name must be at least 3 characters long",
-      "homeNameMaxLength": "Home name must be less than 20 characters",
-      "pleaseEnterValidEmail": "Please enter a valid email address",
-      "invalidUserCode": "Enter a valid 6-character user code (letters and numbers only).",
-      "invalidEmailOrUserCode": "Enter a valid email or a 6-character user code."
+      "homeNameMaxLength": "Home name must be less than 20 characters"
     },
     "errors": {
       "homeNameUpdateFailed": "Failed to update home name",
@@ -506,6 +516,7 @@
       "errorRemovingUser": "Failed to remove user sharing",
       "errorRemovingHome": "Error removing home",
       "errorLeavingHome": "Error leaving home",
+      "errorLeavingRoom": "Error leaving room",
       "homeNotEmpty": "This home isn't empty. Remove all rooms and devices first.",
       "roomNotEmpty": "This room isn't empty. Remove all devices first.",
       "userNotFound": "User not found",
@@ -579,6 +590,7 @@
     "provision": {
       "title": "Connecting Device",
       "success": "Device provisioned successfully",
+      "timezoneNotSet": "Current TimeZone is not set. Schedules may be unreliable. Set it in Device Settings.",
       "sendingCredentialsTitle": "Sending Wi-Fi Credentials",
       "sendingCredentialsDescription": "Sending network credentials to device...",
       "confirmingConnectionTitle": "Confirming Wi-Fi Connection",
@@ -696,6 +708,9 @@
         "invalidChallenge": "Device confirmation failed.",
         "success": "{{deviceName}} added successfully",
         "scanAgainHint": "Go back and scan the Matter QR code again.",
+        "notSupported": "Matter commissioning is not supported for {{deployment}}.",
+        "notSupportedGeneric": "Matter commissioning is not supported for this deployment.",
+        "notSupportedHint": "Switch to a deployment that supports Matter to add this device.",
         "convertTitle": "Enable Matter for this home",
         "convertMessage": "\"{{homeName}}\" must be set up as a Matter fabric before you can add devices. Continue to convert this home?",
         "convertConfirm": "Continue",
@@ -846,33 +861,25 @@
     "chart": {
       "title": "Chart",
       "errorLoadingData": "Error loading data: {{message}}",
-      "retry": "Retry",
-      "value": "Value",
       "loadingChartData": "Loading chart data...",
-      "notSupportedForDuration": "Not supported for this duration",
       "noDataAvailable": "No data available",
-      "interval": "Interval",
-      "types": "Types",
-      "selectDateRange": "Select Date Range",
-      "simpleTimeSeries": "Simple Time Series",
-      "valueUpdated": "Value Updated",
-      "valueUpdatedSuccessfully": "Value updated successfully",
-      "failedToUpdateValue": "Failed to Update Value",
-      "updateError": "An error occurred while updating the value",
-      "chartHeader": {
-        "cancel": "Cancel",
-        "save": "Save",
-        "saving": "Saving...",
-        "enterValue": "Enter value"
+      "notSupported": "Charts are not supported for this parameter",
+      "noValue": "--",
+      "rangeSeparator": "to",
+      "tabs": {
+        "daily": "Daily",
+        "weekly": "Weekly",
+        "monthly": "Monthly"
       },
-      "aggregation": {
-        "raw": "Raw",
-        "avg": "Avg",
-        "min": "Min",
-        "max": "Max",
-        "count": "Count",
-        "latest": "Latest"
-      }
+      "lastWindow": {
+        "daily": "Last {{count}} Days",
+        "weekly": "Last {{count}} Weeks",
+        "monthly": "Last {{count}} Months"
+      },
+      "proTipLabel": "Pro Tip:",
+      "proTipText": "Single tap on a bar to see its value.",
+      "disclaimerLabel": "Disclaimer:",
+      "disclaimerText": "Values are estimated from data reported by the device. Actual data may vary."
     },
     "camera": {
       "errors": {
@@ -1404,6 +1411,9 @@
       "tableValue": "Value",
       "noRuntimeConfig": "No runtime config (using .env defaults)",
       "updateConfig": "Update config",
+      "savedDeployment": "Previously configured deployment",
+      "continueWithSaved": "Continue with this deployment",
+      "scanNewConfig": "Scan a new QR code",
       "cameraPermissionRequired": "Camera permission is required to scan QR codes.",
       "grantPermission": "Grant Permission",
       "back": "Back",
@@ -1420,6 +1430,20 @@
       "title": "Reset runtime config?",
       "message": "This will revert to build-time defaults and clear all session data.",
       "confirmButton": "Reset"
+    }
+  },
+  "landing": {
+    "title": "Welcome",
+    "subtitle": "Choose a platform to continue",
+    "classic": {
+      "title": "ESP RainMaker Classic"
+    },
+    "neo": {
+      "title": "ESP RainMaker Neo"
+    },
+    "ownDeployment": {
+      "title": "Private deployment",
+      "subtitle": "Scan a configuration QR code"
     }
   }
 }

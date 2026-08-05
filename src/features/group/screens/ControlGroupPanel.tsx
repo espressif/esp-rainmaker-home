@@ -21,9 +21,7 @@ import { globalStyles } from "@shared/theme/globalStyleSheet";
 import { tokens } from "@shared/theme/tokens";
 import { testProps } from "@shared/utils/testProps";
 import { useToast } from "@shared/hooks/useToast";
-import {
-  useGroupControl,
-} from "@features/group/hooks";
+import { useGroupControl } from "@features/group/hooks";
 
 const ControlGroupPanel = observer(() => {
   const { t } = useTranslation();
@@ -41,7 +39,7 @@ const ControlGroupPanel = observer(() => {
     homogeneousDeviceType,
     isConnected,
     paramBroadcastRows,
-    handleEditGroup,    
+    handleEditGroup,
     handleBroadcastParam,
   } = useGroupControl({
     homeId: id,
@@ -63,7 +61,7 @@ const ControlGroupPanel = observer(() => {
             hitSlop={12}
             accessibilityRole="button"
             accessibilityLabel={t("group.deviceGroups.editGroup")}
-          > 
+          >
             <Settings size={22} color={tokens.colors.primary} />
           </Pressable>
         }
@@ -85,9 +83,11 @@ const ControlGroupPanel = observer(() => {
                 containerStyle={styles.offlineBannerInEmpty}
               />
             ) : null}
-            <Text style={styles.emptyText}>
-              {t("group.deviceGroups.controlUnavailable")}
-            </Text>
+            {deviceGroup ? (
+              <Text style={styles.emptyText}>
+                {t("group.deviceGroups.controlUnavailable")}
+              </Text>
+            ) : null}
           </View>
         ) : (
           <ScrollView

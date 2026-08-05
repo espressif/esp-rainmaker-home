@@ -10,9 +10,12 @@ from .base import BasePage
 
 logger = logging.getLogger(__name__)
 
+POST_PLATFORM_PICK_TIMEOUT = 60
+
 class Login(BasePage):
     def __init__(self, driver, page_helper_manager=None):
         super().__init__(driver, page_helper_manager)
+        self.platform_kind = "rm"
     
     def check_screen_displayed(self, timeout=2):
         """Check if login screen is displayed"""
@@ -21,6 +24,43 @@ class Login(BasePage):
         except Exception as e:
             logger.warning(f"Login screen not displayed: {e}")
             return False
+
+    def dismiss_landing_if_shown(self, platform_kind=None, timeout=90):
+        """Pick the deployment's platform on the landing screen (rm -> Classic, rmneo -> Neo); polls the first-launch splash until landing, login or home settles.
+
+        Returns True once the landing state is settled (platform picked, or login/home already
+        showing because the persisted selection skipped landing) and False when the app never
+        settled within `timeout`.
+        """
+        if platform_kind:
+            self.platform_kind = platform_kind
+        perms = self.get_other_page_helper('permissions')
+        home = self.get_other_page_helper('home')
+        landing_shown = False
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            if perms.any_system_alert_present(timeout=1):
+                perms.handle_all_permissions(action="allow", timeout=3)
+            if self.is_visible("landing_view", timeout=1):
+                landing_shown = True
+                break
+            if self.check_screen_displayed(timeout=1) or home.check_screen_displayed(timeout=1):
+                return True
+        if not landing_shown:
+            logger.warning("Neither landing nor login/home settled in %ss; landing stays unhandled", timeout)
+            return False
+        option = "neo_platform_button" if self.platform_kind == "rmneo" else "classic_platform_button"
+        logger.info("Landing screen shown; selecting platform via %s", option)
+        self.click(option, timeout=5)
+        deadline = time.time() + POST_PLATFORM_PICK_TIMEOUT
+        while time.time() < deadline:
+            if perms.any_system_alert_present(timeout=1):
+                perms.handle_all_permissions(action="allow", timeout=3)
+            if self.check_screen_displayed(timeout=2):
+                return True
+            if self.is_visible("landing_view", timeout=1):
+                self.click(option, timeout=5)
+        raise AssertionError("Login screen did not appear after selecting the landing platform")
     
         
     def is_password_visible(self):
@@ -57,10 +97,15 @@ class Login(BasePage):
             perms.handle_all_permissions(action="allow", timeout=3)
             self.send_keys("email_input", email, clear_first=True)
             self.send_keys("password_input", password, clear_first=True)
+        self.hide_keyboard_if_visible()
         if self.is_login_button_enabled():
             self.click("login_button")
         else:
-            logger.warning("Login button not enabled")
+            # iOS keyboard can cover Sign-in (displayed=false); password field returnKeyType=go submits via onSubmitEditing
+            logger.warning("Login button not clickable; submitting via password return key")
+            self.send_keys("password_input", "\n")
+            if self.is_login_button_enabled():
+                self.click("login_button")
 
         return self
     

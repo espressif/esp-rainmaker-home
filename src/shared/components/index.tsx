@@ -10,6 +10,8 @@ export { default as InfoBanner } from "./Banners/InfoBanner";
 export type { InfoBannerProps } from "./Banners/InfoBanner";
 export { default as WarningBanner } from "./Banners/WarningBanner";
 export type { WarningBannerProps } from "./Banners/WarningBanner";
+export { default as DeviceOfflineBanner } from "./Banners/DeviceOfflineBanner";
+export type { DeviceOfflineBannerProps } from "./Banners/DeviceOfflineBanner";
 
 // Cards
 export { default as DeviceCard } from "./Cards/DeviceCard";

@@ -19,6 +19,7 @@ import com.app.notification.ESPNotificationModule
 import com.app.oauth.ESPOauthModule
 import com.app.provisioning.ESPProvModule
 import com.app.mqtt.ESPMQTTModule
+import com.app.restart.ESPAppRestartModule
 import com.app.softap.ESPSoftAPModule
 import com.app.wechat.WeChatModuleProvider
 import com.facebook.react.PackageList
@@ -101,6 +102,12 @@ class MainApplication : Application(), ReactApplication {
                 add(object : ReactPackage {
                     override fun createNativeModules(reactContext: ReactApplicationContext): List<NativeModule> =
                         listOf(ESPSoftAPModule(reactContext))
+                    override fun createViewManagers(reactContext: ReactApplicationContext): List<ViewManager<*, *>> =
+                        emptyList()
+                })
+                add(object : ReactPackage {
+                    override fun createNativeModules(reactContext: ReactApplicationContext): List<NativeModule> =
+                        listOf(ESPAppRestartModule(reactContext))
                     override fun createViewManagers(reactContext: ReactApplicationContext): List<ViewManager<*, *>> =
                         emptyList()
                 })

@@ -40,6 +40,7 @@ import {
   getDeviceCardSensorReadings,
 } from "@shared/utils/deviceCardSensor";
 import { coerceParamValueToBoolean } from "@shared/utils/paramUtils";
+import { resolveOfflineBannerMessage } from "@shared/utils/connectivity";
 
 // Constants
 import {
@@ -186,7 +187,10 @@ const DeviceCard: React.FC<DeviceCardProps> = ({
 
   const isEndpointSplitDevice = /^ep_[0-9a-f]+$/i.test(device.name ?? "");
 
-  const getDeviceName = (cdfNode: ESPCDFNode) => {
+  /**
+   * Matter metadata device name (fallback only — name param / displayName win for sync).
+   */
+  const getMatterMetadataDeviceName = (cdfNode: ESPCDFNode) => {
     const metadata = cdfNode.metadata;
     if (metadata && metadata[MATTER_METADATA_KEY]) {
       const deviceName =
@@ -198,15 +202,22 @@ const DeviceCard: React.FC<DeviceCardProps> = ({
     return "";
   };
 
+  /**
+   * Home card title: live name param and synced `displayName` beat stale Matter metadata
+   * so a rename on another phone is visible after subscription/param sync.
+   */
   const resolveCardTitle = () => {
     if (isEndpointSplitDevice && device.displayName) {
       return device.displayName;
     }
-    return (
-      getDeviceName(storeNode) ||
-      paramTypeMap[ESPRM_NAME_PARAM_TYPE]?.value ||
-      device.displayName
-    );
+    const nameParamValue = paramTypeMap[ESPRM_NAME_PARAM_TYPE]?.value;
+    if (typeof nameParamValue === "string" && nameParamValue.trim().length > 0) {
+      return nameParamValue;
+    }
+    if (device.displayName) {
+      return device.displayName;
+    }
+    return getMatterMetadataDeviceName(storeNode) || "";
   };
 
   // Render compact card
@@ -226,7 +237,7 @@ const DeviceCard: React.FC<DeviceCardProps> = ({
         <Text
           {...testProps("text_device_name")}
           style={[
-            styles.name,
+            globalStyles.controlGroupCardName,
             { marginBottom: 5, paddingRight: 0, textAlign: "center" },
           ]}
         >
@@ -271,6 +282,12 @@ const DeviceCard: React.FC<DeviceCardProps> = ({
   };
 
   const sensorCardDisplay = getDeviceCardSensorReadings(device).join(" · ");
+  const offlineLabel = !deviceConnected
+    ? resolveOfflineBannerMessage(
+        storeNode.connectivityStatus?.lastConnectionTimestamp,
+        t,
+      )
+    : null;
 
   // Render full card
   return (
@@ -278,28 +295,20 @@ const DeviceCard: React.FC<DeviceCardProps> = ({
       {...(qaId ? testProps(qaId) : {})}
       key={device.name}
       style={[
-        styles.card,
+        globalStyles.controlGroupCard,
+        globalStyles.shadowElevationForLightTheme,
         {
+          padding: tokens.spacing._10,
           width: cardWidth,
-          opacity: !deviceConnected ? 0.7 : 1,
+          opacity: deviceConnected ? 1 : 0.7,
           backgroundColor: !deviceConnected
             ? tokens.colors.bg2
             : tokens.colors.white,
         },
+        !deviceConnected && globalStyles.offlineCardNoShadow,
       ]}
       onPress={handleDeviceControl}
     >
-      {!deviceConnected && (
-        <View
-          {...testProps("text_offline_device_card")}
-          style={styles.reachabilityBadge}
-        >
-          <WifiOff size={11} color={tokens.colors.lightGray} />
-          <Text style={styles.reachabilityLabel}>
-            {t("layout.shared.offline")}
-          </Text>
-        </View>
-      )}
       {deviceConnected && availableLocally && (
         <View
           {...testProps("icon_local_control_device_card")}
@@ -380,14 +389,30 @@ const DeviceCard: React.FC<DeviceCardProps> = ({
         )}
       </View>
 
-      <View style={{ width: "100%", paddingLeft: 5 }}>
+      <View style={globalStyles.controlGroupCardNameBlock}>
         <Text
           {...testProps("text_device_name")}
-          style={styles.name}
+          style={globalStyles.controlGroupCardName}
           numberOfLines={1}
         >
           {resolveCardTitle()}
         </Text>
+        <View style={styles.offlineStatusRow}>
+          {offlineLabel != null ? (
+            <>
+              <WifiOff size={11} color={tokens.colors.gray} />
+              <Text
+                {...testProps("text_offline_device_card")}
+                style={globalStyles.controlGroupCardStatus}
+                numberOfLines={1}
+              >
+                {offlineLabel}
+              </Text>
+            </>
+          ) : (
+            <Text style={globalStyles.controlGroupCardStatus} />
+          )}
+        </View>
       </View>
     </TouchableOpacity>
   );
@@ -395,19 +420,6 @@ const DeviceCard: React.FC<DeviceCardProps> = ({
 
 /* ------------------------------ Styles ------------------------------- */
 const styles = StyleSheet.create({
-  card: {
-    position: "relative",
-    marginTop: 12,
-    paddingTop: tokens.spacing._10,
-    paddingHorizontal: tokens.spacing._10,
-    paddingBottom: tokens.spacing._20,
-    backgroundColor: tokens.colors.white,
-    textAlign: "center",
-    alignItems: "center",
-    justifyContent: "center",
-    color: tokens.colors.gray,
-    ...globalStyles.shadowElevationForLightTheme,
-  },
   flexWrap: {
     width: "100%",
     flexDirection: "row",
@@ -419,13 +431,11 @@ const styles = StyleSheet.create({
     height: 46,
     marginBottom: 5,
   },
-  name: {
-    marginTop: 4,
-    paddingRight: 0,
-    fontSize: tokens.fontSize.sm,
-    color: tokens.colors.gray,
-    fontFamily: tokens.fonts.medium,
-    width: "100%",
+  offlineStatusRow: {
+    minHeight: tokens.fontSize.xs + 2,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
   },
   reachabilityBadge: {
     position: "absolute",

@@ -10,6 +10,7 @@ import { globalStyles } from "@shared/theme/globalStyleSheet";
 import { DeviceAction } from "@shared/components";
 import type { DeviceSelectionData } from "@src/types/global";
 import type { CreateAutomationEventInfo } from "@features/automation/utils/automationManagement";
+import {testProps} from "@shared/utils/testProps";
 
 export interface EventDeviceSelectionDeviceItemProps {
   device: DeviceSelectionData;
@@ -43,6 +44,7 @@ export const EventDeviceSelectionDeviceItem: React.FC<
 
   return (
     <View
+      {...testProps("view_event_device_selection")}
       style={[
         globalStyles.sceneDeviceSection,
         isDisabled && globalStyles.deviceCardDisabled,

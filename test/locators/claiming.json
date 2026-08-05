@@ -1,0 +1,15 @@
+{
+  "title": {
+    "by": "id",
+    "value": "title",
+    "text": "Claiming Device"
+  },
+  "progress": {
+    "by": "id",
+    "value": "text_claiming_progress"
+  },
+  "error": {
+    "by": "id",
+    "value": "text_claiming_error"
+  }
+}

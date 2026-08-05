@@ -11,6 +11,7 @@ import { useTranslation } from "react-i18next";
 import { useToast } from "@shared/hooks/useToast";
 import {
   createAuthUsernameValidator,
+  getAuthErrorDescription,
   isUsernameAllowedForAuth,
 } from "@features/auth/utils/authHelper";
 import { getAuthAllowedUsernameTypes } from "@features/auth/utils/authHelper";
@@ -59,10 +60,9 @@ export function useForgotPassword() {
         });
       }
     } catch (error: unknown) {
-      const err = error as { description?: string };
       toast.showError(
         t("auth.errors.verificationCodeSendFailed"),
-        err.description || t("auth.errors.fallback")
+        getAuthErrorDescription(error) || t("auth.errors.fallback")
       );
     } finally {
       setIsLoading(false);

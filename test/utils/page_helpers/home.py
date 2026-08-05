@@ -120,23 +120,47 @@ class Home(BasePage):
             pass
         self.go_home()
 
-    def is_device_visible(self, device_name: str, timeout=10):
+    def is_device_visible(self, device_name: str, timeout=10, attempts=1):
         """Check whether a provisioned device name is visible on the home screen (polling up to timeout)."""
         logger.info("Checking device visibility on home: %s", device_name)
-        end_time = time.monotonic() + timeout
-
-        while time.monotonic() < end_time:
-            for label in self.find_all("device_names_text"):
-                if (label.text or "").strip() == device_name and label.is_displayed():
-                    logger.info("Device '%s' is visible on home screen", device_name)
-                    return True
-            time.sleep(0.5)
+        for attempt in range(attempts):
+            if attempt:
+                logger.info("Device '%s' not visible yet (attempt %s/%s); refreshing home list", device_name, attempt + 1, attempts)
+                self._refresh_home_device_list()
+            end_time = time.monotonic() + timeout
+            while time.monotonic() < end_time:
+                for label in self.find_all("device_names_text"):
+                    if (label.text or "").strip() == device_name and label.is_displayed():
+                        logger.info("Device '%s' is visible on home screen", device_name)
+                        return True
+                time.sleep(0.5)
 
         logger.warning(
             "Device '%s' not visible on home screen within %ss",
             device_name,
             timeout,
         )
+        return False
+
+    def is_device_online(self, device_name, timeout=120):
+        """Poll until the named device's home card is online. The app renders the offline badge (text_offline_device_card) only when a device is offline, so online = that badge is absent from the device's card. Long default since a freshly-commissioned Matter node is slow to establish its cloud link."""
+        logger.info("Waiting up to %ss for device '%s' to be online on home", timeout, device_name)
+        name_by = self.get_element_locator("device_names_text")
+        offline_by = self.get_element_locator("device_offline_badge")
+        end_time = time.monotonic() + timeout
+        while time.monotonic() < end_time:
+            for card in self.find_all("device_card"):
+                try:
+                    label = card.find_element(*name_by)
+                    if (label.text or "").strip() != device_name or not label.is_displayed():
+                        continue
+                    if not card.find_elements(*offline_by):
+                        logger.info("Device '%s' is online on home screen", device_name)
+                        return True
+                except Exception:
+                    continue
+            time.sleep(2)
+        logger.warning("Device '%s' not online on home screen within %ss", device_name, timeout)
         return False
 
     def _card_power_switch(self, device_name, timeout=10):

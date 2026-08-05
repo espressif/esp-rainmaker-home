@@ -81,13 +81,17 @@ export const EventDeviceSelectionScreen = observer(() => {
         label={t("automation.eventDeviceSelection.title")}
         showBack={true}
       />
-      <ScreenWrapper style={globalStyles.automationScreenContainer}>
+      <ScreenWrapper
+        style={globalStyles.automationScreenContainer}
+        qaId="screen_wrapper_event_device_selection"
+      >
         <EventDeviceSelectionContent
           selectedDevices={selectedDevices}
           nonSelectedDevices={nonSelectedDevices}
           selectedSectionTitle={selectedSectionTitle}
           availableSectionTitle={availableSectionTitle}
           renderDeviceItem={renderDeviceItem}
+          qaId="event_device_selection"
         />
       </ScreenWrapper>
     </>

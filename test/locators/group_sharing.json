@@ -1,0 +1,106 @@
+{
+  "sharing_section": {
+    "by": "id",
+    "value": "section_sharing"
+  },
+  "shared_by_section": {
+    "by": "id",
+    "value": "section_shared_by"
+  },
+  "card_subtitle": {
+    "by": "id",
+    "value": "text_subtitle"
+  },
+  "sharing_section_expand": {
+    "by": "id",
+    "value": "button_expand_section_sharing"
+  },
+  "add_user_button": {
+    "by": "id",
+    "value": "button_add_user_sharing"
+  },
+  "add_user_overlay": {
+    "by": "id",
+    "value": "view_overlay_add_user_selection"
+  },
+  "invite_input": {
+    "by": "id",
+    "value": "input_invite_user_sharing"
+  },
+  "primary_sharing_button": {
+    "by": "id",
+    "value": "button_primary_sharing"
+  },
+  "confirm_add_user_button": {
+    "by": "id",
+    "value": "button_confirm_add_user_sharing"
+  },
+  "cancel_add_user_button": {
+    "by": "id",
+    "value": "button_cancel_add_user_sharing"
+  },
+  "pending_user_row": {
+    "by": "id",
+    "value": "view_pending_users"
+  },
+  "pending_user_name": {
+    "by": "id",
+    "value": "text_pending_user_name"
+  },
+  "remove_pending_user_button": {
+    "by": "id",
+    "value": "button_remove_pending_user"
+  },
+  "shared_user_row": {
+    "by": "id",
+    "value": "view_shared_with_users"
+  },
+  "shared_user_name": {
+    "by": "id",
+    "value": "text_shared_with_username"
+  },
+  "remove_shared_user_button": {
+    "by": "id",
+    "value": "button_remove_shared_with_user"
+  },
+  "revoke_confirm_button": {
+    "by": "id",
+    "value": "button_confirm_dialog"
+  },
+  "revoke_cancel_button": {
+    "by": "id",
+    "value": "button_cancel_dialog"
+  },
+  "notifications_row": {
+    "by": "id",
+    "value": "button_user_operation_notifications"
+  },
+  "notification_center_header": {
+    "by": "id",
+    "value": "header_notification_center"
+  },
+  "notification_item": {
+    "by": "id",
+    "value": "notification_item_notification_center"
+  },
+  "notification_description": {
+    "by": "id",
+    "value": "text_description_notification_item_notification_center"
+  },
+  "accept_invitation_button": {
+    "by": "id",
+    "value": "button_accept_notification_item_notification_center"
+  },
+  "decline_invitation_button": {
+    "by": "id",
+    "value": "button_decline_notification_item_notification_center"
+  },
+  "notifications_empty_state": {
+    "by": "id",
+    "value": "empty_state_notification_center"
+  },
+  "toast_title": {
+    "by": "id",
+    "value": "toast_title"
+  }
+}

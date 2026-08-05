@@ -33,6 +33,7 @@ const User: React.FC = observer(() => {
     isLoading,
     showLogoutDialog,
     setShowLogoutDialog,
+    logoutMessage,
     handleNavigation,
     handleLogout,
     confirmLogout,
@@ -102,7 +103,7 @@ const User: React.FC = observer(() => {
 
       <ConfirmationDialog
         open={showLogoutDialog}
-        description={t("user.profile.logoutModal.message")}
+        description={logoutMessage}
         confirmText={t("user.profile.logoutModal.confirmButton")}
         cancelText={t("user.profile.logoutModal.cancelButton")}
         onConfirm={confirmLogout}

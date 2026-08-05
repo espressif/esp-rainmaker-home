@@ -99,6 +99,31 @@ class QrPayloadExtractor:
             time.sleep(0.5)
         raise SerialLogError(f"QR payload not found in {log_path} within {timeout}s")
 
+    @staticmethod
+    def parse(payload: str) -> dict:
+        """Decode a provisioning payload (JSON object or compact 'NP:/RM:<name>|<pop>|<transport>') to {name, pop, transport}."""
+        if not payload:
+            return {}
+        try:
+            obj = json.loads(payload)
+            return obj if isinstance(obj, dict) else {}
+        except (ValueError, TypeError):
+            pass
+        text = str(payload).strip()
+        for prefix in ("NP:", "RM:"):
+            if text.startswith(prefix):
+                parts = text[len(prefix):].split("|")
+                transport_map = {"b": "ble", "s": "softap", "w": "wifi"}
+                info = {}
+                if parts and parts[0]:
+                    info["name"] = parts[0]
+                if len(parts) > 1 and parts[1]:
+                    info["pop"] = parts[1]
+                if len(parts) > 2 and parts[2]:
+                    info["transport"] = transport_map.get(parts[2].lower(), parts[2])
+                return info
+        return {}
+
 
 ScreenSide = Literal["left", "right"]
 
@@ -214,7 +239,7 @@ class QrDisplay:
                 screen_w = int(os.environ.get("QR_SCREEN_WIDTH", "1440"))
             except ValueError:
                 screen_w = 1440
-            bounds_setup = f"set winBounds to {{{screen_w - 550}, 80, {screen_w - 150}, 520}}"
+            bounds_setup = f"set winBounds to {{{screen_w - 550}, 200, {screen_w - 150}, 640}}"
 
         # Launch Preview via `open` and wait until it is running.
         subprocess.run(["open", "-a", "Preview", png_abs], check=False)

@@ -10,7 +10,7 @@ from utils.registered_user_resolver import update_registered_user_password
 from utils.common_utils import normalize_input
 
 logger = logging.getLogger(__name__)
-pytestmark = pytest.mark.regression
+pytestmark = [pytest.mark.regression, pytest.mark.user_management, pytest.mark.change_password]
 
 scenarios('change_password.feature')
 
@@ -44,7 +44,7 @@ def enter_passwords(helper, old_password, new_password, confirm_password, regist
     resolved_old = registered_user_password_resolver(normalize_input(old_password))
     resolved_new = registered_user_password_resolver(normalize_input(new_password))
     resolved_confirm = registered_user_password_resolver(normalize_input(confirm_password))
-    
+
     helper.change_password.send_keys("old_password_input", resolved_old)
     helper.change_password.send_keys("new_password_input", resolved_new)
     helper.change_password.send_keys("confirm_password_input", resolved_confirm)
@@ -70,7 +70,7 @@ def tap_button(helper, button_name):
 
 
 @then(parsers.parse('user should see toast with title "{title}" and message "{message}"'))
-def should_see_toast(helper, title, message):
+def should_see_toast(helper, title, message, pytestconfig):
     message = normalize_input(message)
     toast_title, toast_message = helper.change_password.get_toast_title_and_message(
         timeout=5,
@@ -81,7 +81,8 @@ def should_see_toast(helper, title, message):
         email = getattr(helper.login, "last_login_email", None)
         new_password = getattr(helper.change_password, "last_new_password", None)
         if email and new_password:
-            update_registered_user_password(email, new_password)
+            deployment = pytestconfig.getoption("--deployment")
+            update_registered_user_password(email, new_password, deployment)
     if title:
         assert (toast_title or "") == title, f"Expected toast title: {title} but found: {toast_title}"
     if message:

@@ -38,7 +38,6 @@ export const usePersonalInfo = () => {
   const toast = useToast();
 
   const [userName, setUserName] = useState("");
-  const [userCode, setUserCode] = useState("");
   const [nickName, setNickName] = useState("");
   const [userId, setUserId] = useState("");
   const [showEditModal, setShowEditModal] = useState(false);
@@ -50,7 +49,6 @@ export const usePersonalInfo = () => {
     const initializeUserInfo = async () => {
       if (user && user.userInfo) {
         setUserName(user.userInfo.name || "");
-        setUserCode(user.userInfo.userCode || "");
       }
       try {
         if (user) {
@@ -58,8 +56,6 @@ export const usePersonalInfo = () => {
           if (userDetails?.id) {
             setUserId(userDetails.id);
           }
-          // `getUserInfo()` may also refresh `user.userInfo` (including `userCode`)
-          setUserCode(user?.userInfo?.userCode || "");
         }
       } catch (error) {
         console.error("Error getting user ID:", error);
@@ -116,7 +112,6 @@ export const usePersonalInfo = () => {
 
   return {
     userName,
-    userCode,
     nickName,
     setNickName,
     userId,

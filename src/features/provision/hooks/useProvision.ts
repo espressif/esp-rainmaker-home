@@ -36,10 +36,12 @@ import {
   getOnNetworkProvisionStages,
   MESSAGE_STAGE_MAP,
   CHAL_RESP_MESSAGE_STAGE_MAP,
+  CHAL_RESP_WIFI_STAGE_ID,
   ON_NETWORK_MESSAGE_STAGE_MAP,
   extractErrorMessage,
   getLocalizedErrorMessage,
 } from "@features/provision/utils/provisionHelper";
+import { takeProvisionTimezoneOutcome } from "@shared/utils/timezone";
 
 interface UseProvisionReturn {
   stages: ProvisionStage[];
@@ -243,25 +245,50 @@ export const useProvision = (): UseProvisionReturn => {
     }
   }, []);
 
-  /** Last step ("Setting up node") ticks only when Continue is enabled — same moment as setIsComplete. */
-  const markFinalProvisionStageComplete = useCallback(() => {
-    setStages((prevStages) => {
-      const newStages = [...prevStages];
-      // On-network has 2 stages; chal-resp 3; default 5. Tick the last stage.
-      const lastIdx = newStages.length - 1;
-      const lastStage = newStages[lastIdx];
-      if (lastStage) {
-        lastStage.status = "success";
-        lastStage.error = undefined;
-      }
-      stagesRef.current = newStages;
-      return newStages;
-    });
-    scrollToBottom();
-  }, [scrollToBottom]);
+  /**
+   * Completes the last step when Continue is enabled.
+   * If post-provision TZ verify failed, show the soft warning in the stage
+   * error slot (same place as other step errors) — not a toast.
+   */
+  const markFinalProvisionStageComplete = useCallback(
+    (timezoneSoftWarning?: string) => {
+      setStages((prevStages) => {
+        const newStages = [...prevStages];
+        const lastIdx = newStages.length - 1;
+        const lastStage = newStages[lastIdx];
+        if (lastStage) {
+          if (timezoneSoftWarning) {
+            lastStage.status = "error";
+            lastStage.error = timezoneSoftWarning;
+          } else {
+            lastStage.status = "success";
+            lastStage.error = undefined;
+          }
+        }
+        stagesRef.current = newStages;
+        return newStages;
+      });
+      scrollToBottom();
+    },
+    [scrollToBottom]
+  );
 
   // Handle add device success
   const handleAddDeviceSuccess = useCallback(async (provisionedNode: ESPCDFNode) => {
+    const timezoneApplied = takeProvisionTimezoneOutcome(provisionedNode.id);
+    const timezoneSoftWarning =
+      timezoneApplied === false
+        ? t("device.provision.timezoneNotSet")
+        : undefined;
+
+    const finishSuccess = () => {
+      unstable_batchedUpdates(() => {
+        markFinalProvisionStageComplete(timezoneSoftWarning);
+        setIsComplete(true);
+      });
+      toast.showSuccess(t("device.provision.success"), undefined, { duration: 4000 });
+    };
+
     try {
       provisionedNodeRef.current = provisionedNode;
       const agentAuthService = provisionedNode?.services?.find(
@@ -284,19 +311,11 @@ export const useProvision = (): UseProvisionReturn => {
         }
       }
       await syncHomeAfterProvision(store, syncHomeWithNodes);
-      unstable_batchedUpdates(() => {
-        markFinalProvisionStageComplete();
-        setIsComplete(true);
-      });
-      toast.showSuccess(t("device.provision.success"), undefined, { duration: 4000 });
+      finishSuccess();
     } catch (error) {
       console.error("Error in post-provision agent setup:", error);
       await syncHomeAfterProvision(store, syncHomeWithNodes);
-      unstable_batchedUpdates(() => {
-        markFinalProvisionStageComplete();
-        setIsComplete(true);
-      });
-      toast.showSuccess(t("device.provision.success"), undefined, { duration: 4000 });
+      finishSuccess();
     }
   }, [
     markFinalProvisionStageComplete,
@@ -307,7 +326,13 @@ export const useProvision = (): UseProvisionReturn => {
     t,
   ]);
 
-  // Handle provision update
+  /**
+   * Maps SDK / adaptor provision progress callbacks onto the visible stage list.
+   *
+   * Chal-resp (BLE/SoftAP) emits the same milestone style as MQTT:
+   * association complete → Wi-Fi complete (SUCCEED / WAITING_FOR_ONLINE) →
+   * final "Setting up node" in `handleAddDeviceSuccess`.
+   */
   const handleProvisionUpdate = useCallback((response: ESPCDFProvisionResponse) => {
     const message = response.description || "";
 
@@ -322,8 +347,13 @@ export const useProvision = (): UseProvisionReturn => {
               false
             );
           }
-        } else if (!isChallengeResponseFlowRef.current) {
-          // Default flow: stage 3 completes in handleAddDeviceSuccess with Continue.
+        } else if (isChallengeResponseFlowRef.current) {
+          // Chal-resp SUCCEED description is typically the raw nodeId (or
+          // DEVICE_PROVISIONED fallback). Either means Wi-Fi credentials were
+          // applied — complete stage 2; stage 3 waits for post-provision setup.
+          updateChallengeResponseStage(CHAL_RESP_WIFI_STAGE_ID, false);
+        } else {
+          // MQTT flow: stage 3 completes later in handleAddDeviceSuccess.
           if (message === ESPCDFProvProgressMessages.DEVICE_PROVISIONED) {
             updateStageStatus(message);
             markStage3AsComplete();
@@ -342,13 +372,15 @@ export const useProvision = (): UseProvisionReturn => {
             ON_NETWORK_MESSAGE_STAGE_MAP[message]!,
             false
           );
+        } else if (isChallengeResponseFlowRef.current) {
+          const chalRespStageId = CHAL_RESP_MESSAGE_STAGE_MAP[message];
+          if (chalRespStageId !== undefined) {
+            updateChallengeResponseStage(chalRespStageId, false);
+          }
+          // INITIATING / SENDING / VERIFYING intentionally leave stage 1
+          // pending until SETTING_NETWORK_CREDENTIALS (association confirmed).
         } else if (message === ESPCDFProvProgressMessages.DECODED_NODE_ID) {
           updateStageStatus(message);
-        } else if (
-          isChallengeResponseFlowRef.current &&
-          CHAL_RESP_MESSAGE_STAGE_MAP[message] !== undefined
-        ) {
-          updateChallengeResponseStage(CHAL_RESP_MESSAGE_STAGE_MAP[message], false);
         }
         break;
 

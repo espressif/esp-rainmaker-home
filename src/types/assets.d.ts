@@ -9,3 +9,9 @@ declare module "*.png" {
   const value: ImageSourcePropType;
   export default value;
 }
+
+declare module "*.ttf" {
+  /** Metro resolves font assets to a numeric asset id. */
+  const value: number;
+  export default value;
+}

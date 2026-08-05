@@ -91,6 +91,19 @@ class ESPNotificationModule(reactContext: ReactApplicationContext) :
     }
 
     /**
+     * No Firebase/FCM in the CN build, so there is no Firebase project id.
+     * Resolves an empty string for API parity with the Global flavor; the JS
+     * push-integration selection treats "" as "unknown" and skips gcm matching
+     * (CN push is delivered via JPush, not the /v1/integrations gcm path).
+     *
+     * @param promise Promise that resolves with an empty string.
+     */
+    @ReactMethod
+    fun getPushProjectId(promise: Promise) {
+        promise.resolve("")
+    }
+
+    /**
      * No-op listener toggle (CN queues nothing — there is no FCM source).
      *
      * @param enable Retained for API parity with the Global flavor.

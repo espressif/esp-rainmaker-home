@@ -9,7 +9,7 @@ Feature: Sign Up
 
   @sanity
   Scenario Outline: Successful sign up with valid credentials and verification
-    When user signs up with "new user", "Welcome01", "Welcome01" and "accept" consent
+    When user signs up with "new user", "Welcome01!", "Welcome01!" and "accept" consent
     And user taps "confirm"
     Then user should proceed to verification screen
     When user enters verification code "correct"
@@ -22,7 +22,7 @@ Feature: Sign Up
 
   @regression
   Scenario: Sign up with invalid verification code
-    When user signs up with "new user", "Welcome01", "Welcome01" and "accept" consent
+    When user signs up with "new user", "Welcome01!", "Welcome01!" and "accept" consent
     And user taps "confirm"
     Then user should proceed to verification screen
     When user enters verification code "000000"
@@ -32,7 +32,7 @@ Feature: Sign Up
 
   @regression
   Scenario: Sign up with invalid verification code length
-    When user signs up with "new user", "Welcome01", "Welcome01" and "accept" consent
+    When user signs up with "new user", "Welcome01!", "Welcome01!" and "accept" consent
     And user taps "confirm"
     Then user should proceed to verification screen
     When user enters verification code "12345"
@@ -80,7 +80,7 @@ Feature: Sign Up
     Then user should see app version displayed on sign up
 
   Scenario: Resend verification code during sign up
-    When user signs up with "new user", "Welcome01", "Welcome01" and "accept" consent
+    When user signs up with "new user", "Welcome01!", "Welcome01!" and "accept" consent
     And user taps "confirm"
     Then user should proceed to verification screen
     When user requests to resend verification code

@@ -147,7 +147,44 @@
         .stat-item.pass .value { color: #20c997; }
         .stat-item.fail .value { color: #dc3545; }
         .stat-item.abort .value { color: #6c757d; }
-        
+
+        .run-meta {
+            margin-top: 12px;
+            background: #f8f9fa;
+            border-radius: 4px;
+            padding: 8px 12px;
+            font-size: 12px;
+        }
+        .run-meta > summary {
+            cursor: pointer;
+            color: #555;
+            font-weight: 600;
+            font-size: 12px;
+            list-style: none;
+            outline: none;
+        }
+        .run-meta > summary::-webkit-details-marker { display: none; }
+        .run-meta > summary::before {
+            content: '\25B8';
+            display: inline-block;
+            margin-right: 8px;
+            color: #888;
+            transition: transform 0.15s ease;
+        }
+        .run-meta[open] > summary::before { transform: rotate(90deg); }
+        .run-meta-key { color: #666; font-weight: 600; }
+        .run-meta-val { color: #333; font-weight: 700; }
+        .run-meta-body { margin-top: 8px; }
+        .run-meta-row {
+            display: flex;
+            justify-content: space-between;
+            gap: 16px;
+            padding: 4px 0;
+            border-top: 1px solid #e9ecef;
+        }
+        .run-meta-row label { color: #666; white-space: nowrap; }
+        .run-meta-row value { color: #333; font-weight: 600; word-break: break-all; text-align: right; }
+
         .chart-container {
             background: white;
             padding: 25px;
@@ -493,7 +530,7 @@
         .expand-toggle.expanded::before {
             transform: rotate(90deg);
         }
-        
+
         @media (max-width: 768px) {
             .summary-section {
                 grid-template-columns: 1fr;
@@ -572,8 +609,22 @@
                         <div class="label">Pass %</div>
                     </div>
                 </div>
+                {% if active_sdk or deployment or app_commit or deployment_backend or deployment_uri or deployment_broker %}
+                <details class="run-meta">
+                    <summary>Deployment details (click to expand)</summary>
+                    <div class="run-meta-body">
+                        {% if app_commit %}<div class="run-meta-row"><label>App commit</label><value>{{ app_commit }}</value></div>{% endif %}
+                        {% if active_sdk %}<div class="run-meta-row"><label>Active SDK</label><value>{{ active_sdk }}</value></div>{% endif %}
+                        {% if deployment %}<div class="run-meta-row"><label>Deployment</label><value>{{ deployment }}</value></div>{% endif %}
+                        {% if deployment_region %}<div class="run-meta-row"><label>Region</label><value>{{ deployment_region }}</value></div>{% endif %}
+                        {% if deployment_backend %}<div class="run-meta-row"><label>Backend</label><value>{{ deployment_backend }}</value></div>{% endif %}
+                        {% if deployment_uri %}<div class="run-meta-row"><label>API URI</label><value>{{ deployment_uri }}</value></div>{% endif %}
+                        {% if deployment_broker %}<div class="run-meta-row"><label>MQTT Broker</label><value>{{ deployment_broker }}</value></div>{% endif %}
+                    </div>
+                </details>
+                {% endif %}
             </div>
-            
+
             <div class="chart-container">
                 <h2>Overall Test Result</h2>
                 <div class="chart-wrapper">
@@ -725,9 +776,17 @@
                                             {% if hw.usb_port %}<strong>Port:</strong><span>{{ hw.usb_port }}</span>{% endif %}
                                             {% if hw.provisioning_mode %}<strong>Prov Mode:</strong><span>{{ hw.provisioning_mode }}</span>{% endif %}
                                             {% if hw.product %}<strong>Product:</strong><span>{{ hw.product }}</span>{% endif %}
+                                            {% if hw.booted_project %}<strong>Booted:</strong><span>{{ hw.booted_project }}{% if hw.booted_app_version %} v{{ hw.booted_app_version }}{% endif %}</span>{% endif %}
                                             {% if hw.firmware_type %}<strong>Firmware:</strong><span>{{ hw.firmware_type }}</span>{% endif %}
+                                            {% if hw.firmware_build %}<strong>Build:</strong><span>{{ hw.firmware_build }}</span>{% endif %}
+                                            {% if hw.firmware_source %}<strong>Source:</strong><span>{{ hw.firmware_source }}</span>{% endif %}
+                                            {% if hw.image_sha %}<strong>Image SHA:</strong><span>{{ hw.image_sha }}</span>{% endif %}
+                                            {% if hw.commission_id %}<strong>Identity:</strong><span>{{ hw.commission_id }}</span>{% endif %}
                                             {% if hw.esp_idf_commit %}<strong>ESP-IDF:</strong><span>{{ hw.esp_idf_commit }}</span>{% endif %}
                                             {% if hw.esp_rainmaker_commit %}<strong>RainMaker:</strong><span>{{ hw.esp_rainmaker_commit }}</span>{% endif %}
+                                            {% if hw.rmneo_sdk_commit %}<strong>RMNEO SDK:</strong><span>{{ hw.rmneo_sdk_commit }}</span>{% endif %}
+                                            {% if hw.esp_matter_commit %}<strong>esp-matter:</strong><span>{{ hw.esp_matter_commit }}</span>{% endif %}
+                                            {% if hw.rmneo_matter_commit %}<strong>RMNEO+Matter:</strong><span>{{ hw.rmneo_matter_commit }}</span>{% endif %}
                                             {% endfor %}
                                         </div>
                                         {% endif %}
@@ -790,7 +849,7 @@
             row.classList.add('expanded');
             if (toggle) toggle.classList.add('expanded');
         }
-        
+
         // Chart.js configuration
         const ctx = document.getElementById('testResultChart').getContext('2d');
         const chartData = {

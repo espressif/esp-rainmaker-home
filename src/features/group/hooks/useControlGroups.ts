@@ -8,7 +8,10 @@ import { useState, useCallback, useMemo, useRef, useEffect } from "react";
 import type { TFunction } from "i18next";
 import type { ESPCDFGroup } from "@store";
 import { GROUP_TYPE_ROOM } from "@shared/utils/constants";
-import { getNodeDiff, mapNodeToDisplay } from "@features/group/utils/createRoomHelpers";
+import {
+  getNodeDiff,
+  mapNodeToDisplay,
+} from "@features/group/utils/createRoomHelpers";
 import {
   getLockedTypeFromSelection,
   getPrimaryHomogeneousDeviceType,
@@ -23,6 +26,13 @@ import { useCDF } from "@shared/hooks/useCDF";
 import { fetchNodesIfEmpty } from "@store";
 import type { Node } from "@src/types/global";
 import { useFocusEffect } from "expo-router";
+
+/**
+ * Skip the next focus re-sync after a control-group delete so a not-yet-
+ * consistent cloud `getGroups()` doesn't undo the optimistic prune
+ * (read-after-write race). Set on delete, cleared on first consume.
+ */
+let skipNextControlGroupsSyncForHomeId: string | null = null;
 
 export interface UseControlGroupsOptions {
   homeId: string | undefined;
@@ -42,7 +52,7 @@ export interface UseControlGroupsResult {
  * Lists device-type subgroups for a home (same-type device groups).
  */
 export function useControlGroups(
-  options: UseControlGroupsOptions
+  options: UseControlGroupsOptions,
 ): UseControlGroupsResult {
   const { homeId, router } = options;
   const { store, syncHomeWithNodes } = useCDF();
@@ -73,8 +83,14 @@ export function useControlGroups(
 
   useFocusEffect(
     useCallback(() => {
+      // Right after a delete the store is already correct (synchronizer pruned
+      // the subgroup); skip this one re-sync so a stale cloud read can't re-add it.
+      if (homeId && skipNextControlGroupsSyncForHomeId === homeId) {
+        skipNextControlGroupsSyncForHomeId = null;
+        return;
+      }
       loadRef.current();
-    }, [])
+    }, [homeId]),
   );
 
   const handleRefresh = useCallback(async () => {
@@ -96,7 +112,7 @@ export function useControlGroups(
         params: { id: home?.id, groupId },
       } as any);
     },
-    [router, home?.id]
+    [router, home?.id],
   );
 
   return {
@@ -148,7 +164,7 @@ export interface UseCreateGroupResult {
  * Manages create group state and related actions.
  */
 export function useCreateGroup(
-  options: UseCreateGroupOptions
+  options: UseCreateGroupOptions,
 ): UseCreateGroupResult {
   const {
     homeId,
@@ -170,28 +186,28 @@ export function useCreateGroup(
 
   const home = useMemo(
     () => store?.groupStore?.groupsByIDMap?.[homeId as string],
-    [store?.groupStore?.groupsByIDMap, homeId]
+    [store?.groupStore?.groupsByIDMap, homeId],
   );
 
   const deviceGroup = useMemo(
     () =>
       home?.subGroups?.find(
-        (g: ESPCDFGroup) => g.id === groupId && isDeviceTypeSubgroup(g)
+        (g: ESPCDFGroup) => g.id === groupId && isDeviceTypeSubgroup(g),
       ),
-    [home?.subGroups, groupId]
+    [home?.subGroups, groupId],
   );
 
   const nodes = useMemo(
     () =>
       store?.nodeStore?.nodesList.filter((node) =>
-        home?.nodeIds?.includes(node.id)
+        home?.nodeIds?.includes(node.id),
       ) ?? [],
-    [store?.nodeStore?.nodesList, home?.nodeIds]
+    [store?.nodeStore?.nodesList, home?.nodeIds],
   );
 
   const lockedDeviceType = useMemo(
     () => getLockedTypeFromSelection(nodes, selectedNodesIds),
-    [nodes, selectedNodesIds]
+    [nodes, selectedNodesIds],
   );
 
   const selectedNodes: Node[] = useMemo(
@@ -199,7 +215,7 @@ export function useCreateGroup(
       nodes
         .filter((node) => selectedNodesIds.includes(node.id))
         .map(mapNodeToDisplay),
-    [nodes, selectedNodesIds]
+    [nodes, selectedNodesIds],
   );
 
   const availableNodes: Node[] = useMemo(() => {
@@ -209,7 +225,7 @@ export function useCreateGroup(
       .filter((node) =>
         !lockedDeviceType
           ? true
-          : nodeMatchesHomogeneousType(node, lockedDeviceType)
+          : nodeMatchesHomogeneousType(node, lockedDeviceType),
       )
       .map(mapNodeToDisplay);
   }, [nodes, selectedNodesIds, lockedDeviceType]);
@@ -245,7 +261,7 @@ export function useCreateGroup(
     } else if (deviceGroup) {
       setGroupName(stripGroupControlSubgroupDisplayName(deviceGroup.name));
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional hook deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional hook deps
   }, [roomNameParam, deviceGroup?.id, deviceGroup?.name]);
 
   const handleCustomizeName = useCallback(() => {
@@ -277,7 +293,7 @@ export function useCreateGroup(
       }
       setSelectedNodesIds((prev) => [...prev, node.id]);
     },
-    [nodes, selectedNodesIds, toast, t]
+    [nodes, selectedNodesIds, toast, t],
   );
 
   const handleRemoveDevice = useCallback((node: Node) => {
@@ -322,16 +338,21 @@ export function useCreateGroup(
       toast.showError(t("group.deviceGroups.needHomogeneousSelection"));
       return;
     }
+    setIsLoading((prev) => ({ ...prev, save: true }));
     try {
       const existing = deviceGroup.nodeIds ?? [];
       const { toAdd, toRemove } = getNodeDiff(existing, selectedNodesIds);
-      await Promise.allSettled([
-        deviceGroup.updateGroupInfo({
-          groupName: toGroupControlStorageName(groupName),
-        }),
-        toAdd.length > 0 ? deviceGroup.addNodes(toAdd) : undefined,
-        toRemove.length > 0 ? deviceGroup.removeNodes(toRemove) : undefined,
-      ]);
+      // Sequential: parallel add/remove raced MQTT resync and left DeviceCard
+      // stale until pull-to-refresh. Adaptor resync coalesces if both run.
+      await deviceGroup.updateGroupInfo({
+        groupName: toGroupControlStorageName(groupName),
+      });
+      if (toRemove.length > 0) {
+        await deviceGroup.removeNodes(toRemove);
+      }
+      if (toAdd.length > 0) {
+        await deviceGroup.addNodes(toAdd);
+      }
       toast.showSuccess(t("group.deviceGroups.groupUpdatedSuccessfully"));
       router.dismissTo({
         pathname: "/(group)/ControlGroups",
@@ -339,6 +360,8 @@ export function useCreateGroup(
       } as any);
     } catch (error: any) {
       toast.showError(error.description ?? t("group.errors.fallback"));
+    } finally {
+      setIsLoading((prev) => ({ ...prev, save: false }));
     }
   }, [
     deviceGroup,
@@ -360,6 +383,9 @@ export function useCreateGroup(
     setIsLoading((prev) => ({ ...prev, delete: true }));
     try {
       await deviceGroup.delete();
+      // Store is now optimistically pruned; tell the ControlGroups list to skip
+      // its next focus re-sync so a stale cloud read can't re-add the group.
+      skipNextControlGroupsSyncForHomeId = homeId ?? null;
       toast.showSuccess(t("group.deviceGroups.groupRemovedSuccessfully"));
       router.dismissTo({
         pathname: "/(group)/ControlGroups",

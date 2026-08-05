@@ -46,6 +46,43 @@ export const clampValue = (value: number, min: number, max: number): number => {
   return Math.min(Math.max(value, min), max);
 };
 
+/**
+ * Snaps a raw slider reading to the nearest valid step and maps near-edge
+ * drags to exact min/max. Tamagui thumb inset prevents reaching track ends,
+ * so edge tolerance compensates without changing the slider component itself.
+ * @param value - Raw slider value (may be fractional)
+ * @param min - Lower bound
+ * @param max - Upper bound
+ * @param step - Step increment from min
+ * @returns Step-aligned value within [min, max]
+ */
+export const snapSliderValue = (
+  value: number,
+  min: number,
+  max: number,
+  step: number,
+): number => {
+  if (!Number.isFinite(value) || max <= min) {
+    return min;
+  }
+
+  const safeStep =
+    typeof step === "number" && Number.isFinite(step) && step > 0 ? step : 1;
+  const range = max - min;
+  const edgeTolerance = Math.max(safeStep / 2, range * 0.01);
+  const clamped = clampValue(value, min, max);
+
+  if (clamped - min <= edgeTolerance) {
+    return min;
+  }
+  if (max - clamped <= edgeTolerance) {
+    return max;
+  }
+
+  const snapped = min + Math.round((clamped - min) / safeStep) * safeStep;
+  return clampValue(snapped, min, max);
+};
+
 // Helper function to convert value to string safely
 /**
  * Handles safe value to string logic for this module.

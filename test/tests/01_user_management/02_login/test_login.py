@@ -64,7 +64,7 @@ def should_see_version(helper, expected_app_version):
     try:
         version = helper.login.get_text("app_version_text")
         assert version is not None, "App version should be displayed"
-        assert version == expected_app_version, f"Expected '{expected_app_version}', got '{version}'"
+        assert expected_app_version in version, f"Expected '{expected_app_version}' within displayed text, got '{version}'"
         logger.info(f"App version: {version}")
     except Exception:
         pytest.skip("App version element not found")

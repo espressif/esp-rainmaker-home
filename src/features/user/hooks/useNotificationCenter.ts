@@ -110,8 +110,9 @@ export const useNotificationCenter = () => {
     try {
       if (accept) {
         await item.accept();
-        const shouldFetchFirstPage = true;
-        await syncHomeWithNodes(shouldFetchFirstPage);
+        // syncHomeWithNodes covers every home, so the accepted group's nodes
+        // land in the store and get subscribed with no special-casing here.
+        await syncHomeWithNodes(true);
       } else {
         await item.decline();
       }
@@ -122,9 +123,6 @@ export const useNotificationCenter = () => {
             : item
         )
       );
-      if (item.type === "group" && item.groupIds[0]) {
-        store.groupStore.currentHomeId = item.groupIds[0];
-      }
       await loadSharingRequests();
       toast.showSuccess(
         accept
@@ -132,7 +130,11 @@ export const useNotificationCenter = () => {
           : t("user.notifications.sharingRequestDeclined")
       );
     } catch (error) {
-      toast.showError("Failed to update request");
+      // A failed accept may still consume the request server-side (e.g. a room
+      // invite for a user who already has home access is rejected only at
+      // accept time) — refresh the list so a dead request doesn't linger.
+      await loadSharingRequests();
+      toast.showError(t("user.notifications.sharingRequestUpdateFailed"));
       console.error("Error updating request:", error);
     } finally {
       setActionLoadingById((prev) => {

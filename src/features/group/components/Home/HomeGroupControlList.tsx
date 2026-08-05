@@ -5,7 +5,7 @@
  */
 
 import React from "react";
-import { View, FlatList, StyleSheet } from "react-native";
+import { View, StyleSheet } from "react-native";
 import type { ESPCDFGroup } from "@store";
 import { tokens } from "@shared/theme/tokens";
 import { testProps } from "@shared/utils/testProps";
@@ -18,6 +18,11 @@ export interface HomeGroupControlListProps {
 
 /**
  * Non-scrolling grid of group-control cards on Home, plus divider before devices.
+ * Uses a plain View (not a nested FlatList) so the parent Home list owns
+ * vertical pull-to-refresh gestures over this region.
+ *
+ * @param props - Control groups and parent home id for navigation
+ * @returns Group cards grid + divider, or null when empty
  */
 export const HomeGroupControlList: React.FC<HomeGroupControlListProps> = ({
   groups,
@@ -29,22 +34,19 @@ export const HomeGroupControlList: React.FC<HomeGroupControlListProps> = ({
 
   return (
     <>
-      <FlatList
+      <View
         {...testProps("list_home_group_control")}
-        data={groups}
-        keyExtractor={(g) => g.id}
-        renderItem={({ item }) => (
+        style={styles.listContent}
+      >
+        {groups.map((group) => (
           <ControlGroupCard
-            group={item}
+            key={group.id}
+            group={group}
             homeId={homeId}
             qaId="card_group_control_home"
           />
-        )}
-        scrollEnabled={false}
-        style={styles.list}
-        contentContainerStyle={styles.listContent}
-        showsVerticalScrollIndicator={false}
-      />
+        ))}
+      </View>
       <View
         {...testProps("view_home_group_control_divider")}
         style={styles.divider}
@@ -54,10 +56,7 @@ export const HomeGroupControlList: React.FC<HomeGroupControlListProps> = ({
 };
 
 const styles = StyleSheet.create({
-  /** Non-scrolling list: wraps cards like `homeDeviceList` (row + wrap). */
-  list: {
-    flexGrow: 0,
-  },
+  /** Non-scrolling grid: wraps cards like `homeDeviceList` (row + wrap). */
   listContent: {
     flexDirection: "row",
     flexWrap: "wrap",

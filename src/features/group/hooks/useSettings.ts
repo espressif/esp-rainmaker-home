@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useState, useEffect, useCallback, useRef, useMemo } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import type { TFunction } from "i18next";
 import type { ESPCDFGroup } from "@store";
 import { ESPCDFGroupSharingRequest } from "@store";
@@ -18,13 +18,13 @@ import {
 } from "@features/group/utils/dateUtils";
 import { generateRandomId } from "@shared/utils/common";
 import {
-  createGroupSharingInviteValidator,
-  getGroupSharingAllowedTypes,
-  isGroupSharingInviteAllowed,
+  validateGroupSharingInvite,
   normalizeGroupSharingInviteForApi,
 } from "@features/group/utils/settingsHelpers";
 import { useCDF } from "@shared/hooks/useCDF";
 import { getFeatures } from "@config/features.config";
+import { getResolvedActiveSdk, isRmneoStackSdkId } from "@config/sdk.config";
+import { hasGroupLevelAccess } from "@shared/utils/groupAccess";
 
 export interface UseSettingsOptions {
   homeId: string | undefined;
@@ -41,6 +41,21 @@ export interface UseSettingsResult {
   homeName: string;
   setHomeName: (name: string) => void;
   isPrimary: boolean;
+  /** True when the viewer's access to this home is subgroup-only (room share, no group-level rights). */
+  isSubgroupOnlyViewer: boolean;
+  /**
+   * Show the Room Management entry: primary users manage rooms; subgroup-only
+   * viewers reach their shared rooms; secondary users are included when the
+   * active SDK supports it (`secondaryGroupManagement` feature).
+   */
+  showRoomManagement: boolean;
+  /**
+   * Allow editing the home name: primary users always; secondary users when the
+   * active SDK supports it (`secondaryGroupManagement` feature).
+   */
+  canRenameHome: boolean;
+  /** Show the home-level sharing section; hidden for subgroup-only viewers (no group-level listing exists). */
+  showGroupSharing: boolean;
   isLoading: boolean;
   showDelete: boolean;
   setShowDelete: (show: boolean) => void;
@@ -84,7 +99,7 @@ export function useSettings(options: UseSettingsOptions): UseSettingsResult {
   const user = store?.userStore?.user;
   const home = store?.groupStore?.groupsByIDMap?.[homeId as string];
 
-  const [isPrimary, setIsPrimary] = useState(false);
+  const isPrimary = home?.isPrimaryUser ?? false;
   const [homeName, setHomeName] = useState(home?.name || "");
   const [isLoading, setIsLoading] = useState(false);
   const [showDelete, setShowDelete] = useState(false);
@@ -102,16 +117,19 @@ export function useSettings(options: UseSettingsOptions): UseSettingsResult {
   const [transferAndAssignRole, setTransferAndAssignRole] = useState(false);
   const [isInviteValid, setIsInviteValid] = useState(false);
 
-  const inviteValidator = useMemo(
-    () =>
-      createGroupSharingInviteValidator(getGroupSharingAllowedTypes(), t),
-    [t]
-  );
+  const inviteValidator = validateGroupSharingInvite;
 
   const getSharedUsers = useCallback(async () => {
     if (!home) return;
     if (!getFeatures().groupSharing) {
-      setIsPrimary(true);
+      setSharedUsers([]);
+      setPendingUsers([]);
+      setSharedByUser(null);
+      return;
+    }
+    // Subgroup-only viewers have no group-level access: the backend rejects the
+    // home users listing, so skip the call instead of surfacing an error toast.
+    if (!hasGroupLevelAccess(home.accessType)) {
       setSharedUsers([]);
       setPendingUsers([]);
       setSharedByUser(null);
@@ -137,7 +155,6 @@ export function useSettings(options: UseSettingsOptions): UseSettingsResult {
       const isCurrentUserPrimary = primaryUsers.some(
         (u) => u.username === currentUsername
       );
-      setIsPrimary(isCurrentUserPrimary);
 
       if (!isCurrentUserPrimary && primaryUsers.length > 0) {
         setSharedByUser({
@@ -261,32 +278,43 @@ export function useSettings(options: UseSettingsOptions): UseSettingsResult {
 
   const handleAddUser = useCallback(async () => {
     if (!home) return;
-    const allowed = getGroupSharingAllowedTypes();
-    if (!isGroupSharingInviteAllowed(newUserEmail, allowed)) return;
-    const toUserName = normalizeGroupSharingInviteForApi(newUserEmail, allowed);
+    if (!validateGroupSharingInvite(newUserEmail).isValid) return;
+    const toUserName = normalizeGroupSharingInviteForApi(newUserEmail);
     setIsAddingUserLoading(true);
     try {
+      let shareResult: unknown;
       if (transferAndAssignRole) {
-        await home.transfer({
+        shareResult = await home.transfer({
           toUserName,
           assignRoleToSelf: "secondary",
           metadata: {},
         });
       } else if (transfer) {
-        await home.transfer({
+        shareResult = await home.transfer({
           toUserName,
           metadata: {},
         });
       } else {
-        await home.share({
+        shareResult = await home.share({
           toUserName,
           makePrimary: makePrimary,
         });
       }
+      // Neo share/transfer maps API `message` → CDF `description`; prefer it for toast.
+      const neoShareMessage =
+        isRmneoStackSdkId(getResolvedActiveSdk()) &&
+        shareResult &&
+        typeof shareResult === "object" &&
+        "description" in shareResult &&
+        typeof (shareResult as { description?: unknown }).description ===
+          "string"
+          ? (shareResult as { description: string }).description.trim()
+          : "";
       toast.showSuccess(
-        transfer || transferAndAssignRole
-          ? t("group.settings.transferRequestedSuccessfully")
-          : t("group.settings.sharingRequestedSuccessfully")
+        neoShareMessage ||
+          (transfer || transferAndAssignRole
+            ? t("group.settings.transferRequestedSuccessfully")
+            : t("group.settings.sharingRequestedSuccessfully"))
       );
       setIsAddingUser(false);
       setNewUserEmail("");
@@ -400,11 +428,30 @@ export function useSettings(options: UseSettingsOptions): UseSettingsResult {
     } as any);
   }, [router, homeId]);
 
+  // Visibility for the Settings screen, derived from the viewer's access to this
+  // home (known from the store — no API call needed). Subgroup-only viewers get
+  // the Room Management entry (their only path to their shared rooms) and no
+  // home-level sharing section (the backend rejects the group users listing).
+  // Secondary users get the group-management surface (Room Management entry,
+  // home rename) only where the active SDK supports it — see the
+  // `secondaryGroupManagement` feature in the SDK capability map.
+  const isSubgroupOnlyViewer = !hasGroupLevelAccess(home?.accessType);
+  const isSecondaryManagementEnabled =
+    getFeatures().secondaryGroupManagement && hasGroupLevelAccess(home?.accessType);
+  const showRoomManagement =
+    isPrimary || isSubgroupOnlyViewer || isSecondaryManagementEnabled;
+  const showGroupSharing = !isSubgroupOnlyViewer;
+  const canRenameHome = isPrimary || isSecondaryManagementEnabled;
+
   return {
     home,
     homeName,
     setHomeName,
     isPrimary,
+    isSubgroupOnlyViewer,
+    showRoomManagement,
+    showGroupSharing,
+    canRenameHome,
     isLoading,
     showDelete,
     setShowDelete,

@@ -145,14 +145,15 @@ class OauthLogin(BasePage):
                     continue
                 logger.info("Auth surface closed; oauth redirect handed back to the app")
                 return self
-            if self._dismiss_chrome_first_run():
+            # Chrome first-run and the Credential-Manager passkey sheet only precede the completed password; skip once past.
+            if not password_done and self._dismiss_chrome_first_run():
                 continue
-            if self._dismiss_google_passkey():
+            if not password_done and self._dismiss_google_passkey():
                 continue
             blocker = self._detect_blocker()
             if blocker:
                 raise RuntimeError(f"google blocked automated login: '{blocker}'")
-            if not totp_done and self._text_visible(TWO_FACTOR_MARKERS, timeout=1):
+            if password_done and not totp_done and self._text_visible(TWO_FACTOR_MARKERS, timeout=1):
                 if not totp_secret:
                     raise RuntimeError(
                         "google requires 2FA and no totp_secret is configured; "
@@ -164,26 +165,28 @@ class OauthLogin(BasePage):
                     totp_started = True
                 totp_done = self._handle_totp_challenge(totp_secret)
                 continue
-            if self._text_visible(("Choose an account",), timeout=1) and self._text_visible((email,), timeout=1):
-                logger.info("Account chooser shown; selecting %s", email)
-                self._tap_text(email)
-                time.sleep(2)
-                continue
-            password_field = self._find_password_field()
-            if password_field is not None and not password_done:
-                logger.info("Entering google password")
-                self._type_and_submit(password_field, password, ("Next", "Continue", "Sign in", "Sign In"))
-                password_done = True
-                time.sleep(3)
-                continue
-            if not email_done and password_field is None:
-                field = self._find_text_field()
-                if field is not None:
-                    logger.info("Entering google email")
-                    self._type_and_submit(field, email, ("Next", "Continue"))
-                    email_done = True
+            if not password_done:
+                if not email_done and self._text_visible(("Choose an account",), timeout=1) \
+                        and self._text_visible((email,), timeout=1):
+                    logger.info("Account chooser shown; selecting %s", email)
+                    self._tap_text(email)
+                    time.sleep(2)
+                    continue
+                password_field = self._find_password_field()
+                if password_field is not None:
+                    logger.info("Entering google password")
+                    self._type_and_submit(password_field, password, ("Next", "Continue", "Sign in", "Sign In"))
+                    password_done = True
                     time.sleep(3)
                     continue
+                if not email_done and password_field is None:
+                    field = self._find_text_field()
+                    if field is not None:
+                        logger.info("Entering google email")
+                        self._type_and_submit(field, email, ("Next", "Continue"))
+                        email_done = True
+                        time.sleep(3)
+                        continue
             self._tap_any(("Continue", "I agree", "Allow", "Next"), quiet=True)
             time.sleep(1)
         return self._finish_auth("google", timeout)
@@ -204,7 +207,7 @@ class OauthLogin(BasePage):
             if not self._in_auth_surface():
                 logger.info("Auth surface closed; oauth redirect handed back to the app")
                 return self
-            if self._dismiss_chrome_first_run():
+            if not password_done and self._dismiss_chrome_first_run():
                 continue
             blocker = self._detect_blocker()
             if blocker:
@@ -214,27 +217,32 @@ class OauthLogin(BasePage):
                 # SMS delivery + resend can burn most of the budget; guarantee time for Trust/consent/redirect.
                 deadline = max(deadline, time.time() + 90)
                 continue
-            if self._apple_handle_trust_browser():
+            # Trust-browser and share-email consent are strictly post-password; skip the probes until the password is in.
+            if password_done and self._apple_handle_trust_browser():
                 continue
-            if self._apple_handle_share_email_consent():
+            if password_done and self._apple_handle_share_email_consent():
                 # Consent is the last interactive step; hand off to wait_for_login_completion for the redirect.
                 logger.info("Apple consent completed; leaving the redirect to complete undisturbed")
                 return self
-            password_field = self._find_password_field()
-            if password_field is not None and not password_done:
-                logger.info("Entering apple password")
-                self._type_and_submit(password_field, password, ("Next", "Continue", "Sign in", "Sign In"))
-                password_done = True
-                time.sleep(3)
-                continue
-            if not email_done and password_field is None:
-                field = self._find_text_field()
-                if field is not None:
-                    logger.info("Entering apple email")
-                    self._type_and_submit(field, email, ("Next", "Continue"))
-                    email_done = True
+            if not password_done:
+                password_field = self._find_password_field()
+                if password_field is not None:
+                    logger.info("Entering apple password")
+                    self._type_and_submit(password_field, password, ("Next", "Continue", "Sign in", "Sign In"))
+                    password_done = True
                     time.sleep(3)
                     continue
+                if password_field is None:
+                    field = self._find_text_field()
+                    if field is not None:
+                        if not email_done:
+                            logger.info("Entering apple email")
+                            self._type_and_submit(field, email, ("Next", "Continue"))
+                            email_done = True
+                        elif self.platform == "android":
+                            self.driver.press_keycode(66)
+                        time.sleep(3)
+                        continue
             self._tap_any(("Continue", "Trust", "I agree", "Allow", "Next"), quiet=True)
             time.sleep(1)
         return self._finish_auth("apple", timeout)
@@ -456,6 +464,15 @@ class OauthLogin(BasePage):
         else:
             self.click("ios_predicate", f'label CONTAINS "{text}" OR name CONTAINS "{text}"', timeout=timeout)
 
+    def _tap_web_link_center(self, by, value, timeout=3):
+        """Activate an in-app-Safari web link via a discrete center tap."""
+        el = self.find_visible(by, value, timeout=timeout)
+        if el is None:
+            return False
+        r = el.rect
+        self.driver.execute_script("mobile: tap", {"x": r["x"] + r["width"] / 2, "y": r["y"] + r["height"] / 2})
+        return True
+
     def _tap_any(self, texts, quiet=False):
         for text in texts:
             if self.platform == "android":
@@ -541,10 +558,7 @@ class OauthLogin(BasePage):
 
     def _handle_apple_device_code(self):
         """Read the trusted-device 2FA code (iOS: from the phone; Android: routed to SMS) and enter it."""
-        if self.platform == "ios":
-            from utils.apple_2fa_reader import read_code_with_driver
-            code = read_code_with_driver(self.driver)
-        else:
+        if self.platform != "ios":
             self._apple_request_sms_code()
             from utils.android_sms_reader import fetch_apple_2fa_code_from_sms
             udid = self.driver.capabilities.get("udid")
@@ -557,21 +571,87 @@ class OauthLogin(BasePage):
                     "No Apple 2FA code arrived by SMS. Ensure the device SIM's number is "
                     "registered as a trusted phone number on the Apple account and that the "
                     "'Cannot access your devices? -> Text' routing selected it.")
+            return self._android_enter_apple_2fa_code(code)
+        from utils.apple_2fa_reader import read_code_with_driver
+        code = read_code_with_driver(self.driver)
         field = self._find_text_field()
         if field is None:
-            field = self.find_visible("web_edit_text" if self.platform == "android" else "ios_web_text_field", timeout=10)
+            field = self.find_visible("ios_web_text_field", timeout=10)
         if field is None:
             raise RuntimeError("Apple 2FA code inputs not found in the auth surface")
         field.click()
         time.sleep(0.5)
-        if self.platform == "android":
-            for digit in code:
-                self.driver.press_keycode(7 + int(digit))
-                time.sleep(0.3)
-        else:
-            field.send_keys(code)
+        field.send_keys(code)
         time.sleep(2)
         return True
+
+    def _android_enter_apple_2fa_code(self, code):
+        """Enter the Apple SMS 2FA code on Android, robust to the SMS-autofill chip / heads-up notification stealing the focusing tap; skips typing when the OS already filled the field (single- or split-box layout)."""
+        field = self._find_text_field() or self.find_visible("web_edit_text", timeout=10)
+        if field is None:
+            raise RuntimeError("Apple 2FA code inputs not found in the auth surface")
+        focused = False
+        for _ in range(4):
+            self._android_dismiss_heads_up()
+            if self._android_code_field_digits() == code:
+                logger.info("Apple 2FA code already populated by OS SMS autofill; not re-typing")
+                time.sleep(1)
+                return True
+            field = self._find_text_field() or field
+            try:
+                field.click()
+            except Exception:
+                time.sleep(1)
+                continue
+            time.sleep(0.6)
+            if self._android_code_field_digits() == code:
+                logger.info("Apple 2FA code autofilled on field focus; not re-typing")
+                time.sleep(1)
+                return True
+            if (field.get_attribute("focused") or "").lower() != "false":
+                focused = True
+                break
+            logger.info("Apple 2FA field not focused (notification/autofill overlay ate the tap); re-focusing")
+            time.sleep(1.5)
+        if not focused:
+            logger.warning("Apple 2FA field focus unconfirmed after retries; typing best-effort")
+        for digit in code:
+            self.driver.press_keycode(7 + int(digit))
+            time.sleep(0.3)
+        time.sleep(2)
+        return True
+
+    def _android_code_field_digits(self):
+        """Concatenated digits across the code input(s) — covers single-field and split-box OTP layouts."""
+        import re
+        digits = ""
+        try:
+            elements = self.driver.find_elements("class name", "android.widget.EditText")
+        except Exception:
+            return ""
+        for element in elements:
+            try:
+                digits += re.sub(r"\D", "", element.get_attribute("text") or "")
+            except Exception:
+                continue
+        return digits
+
+    def _android_dismiss_heads_up(self):
+        """Best-effort: swipe away a heads-up notification (e.g. the just-arrived 2FA SMS) covering the code field."""
+        try:
+            heads_up = self.driver.find_elements("id", "com.android.systemui:id/status_bar_latest_event_content")
+        except Exception:
+            return
+        if not heads_up:
+            return
+        try:
+            rect = heads_up[0].rect
+            x = rect["x"] + rect["width"] // 2
+            self._drag(x, rect["y"] + rect["height"] // 2, x, max(1, rect["y"] - rect["height"]))
+            logger.info("Dismissed a heads-up notification covering the 2FA code field")
+            time.sleep(0.5)
+        except Exception:
+            pass
 
     def _handle_totp_challenge(self, totp_secret):
         """Steer the 2FA screen to the authenticator-code method and submit a fresh TOTP code."""
@@ -586,7 +666,10 @@ class OauthLogin(BasePage):
         for option in ("Google Authenticator", "verification code"):
             if self._text_visible((option,), timeout=1):
                 logger.info("Selecting 2FA method containing '%s'", option)
-                self._tap_text(option)
+                if self.platform == "android":
+                    self._tap_text(option)
+                else:
+                    self._tap_web_link_center("ios_predicate", f'label CONTAINS "{option}" OR name CONTAINS "{option}"')
                 time.sleep(2)
                 return False
         # 'Try another way' is below the fold in the provider web page (not natively scrollable); swipe is the only option.
@@ -660,7 +743,8 @@ class OauthLogin(BasePage):
                 "regression (should be host-scoped so only OAuthRedirectActivity matches)")
 
     def _detect_blocker(self):
+        # Blockers are persistent full-screen interstitials; a single poll (timeout=0) catches them without a 1s wait per marker.
         for marker in AUTH_BLOCKERS:
-            if self._text_visible((marker,), timeout=1):
+            if self._text_visible((marker,), timeout=0):
                 return marker
         return None

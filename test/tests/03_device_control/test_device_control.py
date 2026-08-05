@@ -25,7 +25,7 @@ def restore_baseline_params(hardware_session):
     if ds is None or not baseline:
         return
     for param, value in baseline.items():
-        if isinstance(value, (bool, int)):
+        if isinstance(value, (bool, int)) and " " not in param:
             try:
                 ds.set_param(param, value)
             except Exception as error:
@@ -35,26 +35,6 @@ def restore_baseline_params(hardware_session):
 def _mark_serial(hardware_session):
     """Stamp the serial-log position once per scenario, before the first param change."""
     hardware_session.setdefault("serial_since", hardware_session["device_serial"].marker())
-
-
-@when(parsers.parse('user toggles "{device}" power to "{state}" from the home screen'))
-def toggle_home_power(helper, hardware_session, device, state):
-    helper.home.go_home()
-    _mark_serial(hardware_session)
-    helper.home.set_card_power(device, state == "on")
-
-
-@then(parsers.parse('the home card should show "{device}" power as "{state}"'))
-def home_card_power_should_be(helper, device, state):
-    helper.home.go_home()
-    deadline = time.time() + 20
-    actual = None
-    while time.time() < deadline:
-        actual = helper.home.read_card_power(device, timeout=3)
-        if actual == state:
-            return
-        time.sleep(1)
-    assert actual == state, f"Home card power for {device} is {actual}, expected {state}"
 
 
 @then(parsers.parse('the home card should show "{device}" as locally reachable'))

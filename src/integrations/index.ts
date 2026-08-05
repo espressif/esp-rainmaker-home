@@ -4,31 +4,27 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { ESPCDF, AdaptorRegistry, initCDF, ESPSDKAdaptor } from "@store";
+import { ESPCDF, AdaptorRegistry, initCDF, disposeCDF, ESPSDKAdaptor } from "@store";
 import { ESPRMBaseSDKAdaptor, ESPRMBaseAdaptorIdentifier } from '@sdk-adaptors/ESPRMBase';
-import { ESPRMNGBaseSDKAdaptor, ESPRMNGBaseAdaptorIdentifier } from '@sdk-adaptors/ESPRMNGBase';
-import {
-  ESPRMNGMatterBaseSDKAdaptor,
-  ESPRMNGMatterBaseAdaptorIdentifier,
-} from '@sdk-adaptors/ESPRMNGMatterBase';
+import { ESPRMNeoBaseSDKAdaptor, ESPRMNeoBaseAdaptorIdentifier } from '@sdk-adaptors/ESPRMNeoBase';
 import { ESPRMMatterBaseSDKAdaptor, ESPRMMatterBaseAdaptorIdentifier } from '@sdk-adaptors/ESPRMMatterBase';
 import { runtimeConfigManager } from '@config/runtime.config';
+import { ESPMQTTAdapter } from '@native-adaptors/implementations/ESPMQTTAdapter';
+import { ESPMatterControlAdapter } from '@native-adaptors/implementations/ESPMatterControlAdapter';
 import {
-    getResolvedActiveSdk,
-    getRMSDKConfig,
-    getRMNGSDKConfig,
-    getRMNGMatterSDKConfig,
-    getMatterSDKConfig,
-  } from '@config/sdk.config';
+  getResolvedActiveSdk,
+  getRMSDKConfig,
+  getRMNeoSDKConfig,
+  getMatterSDKConfig,
+} from "@config/sdk.config";
 /**
  * Available adaptor identifiers.
  * Add new SDK adaptor identifiers here as new integrations are added.
  */
 export const ADAPTOR_IDENTIFIERS = {
     ESPRM_BASE: ESPRMBaseAdaptorIdentifier,
-    ESPRM_MATTER_BASE: ESPRMMatterBaseAdaptorIdentifier,
-    ESPRMNG_BASE: ESPRMNGBaseAdaptorIdentifier,
-    ESPRMNG_MATTER_BASE: ESPRMNGMatterBaseAdaptorIdentifier,
+    ESPRM_MATTER: ESPRMMatterBaseAdaptorIdentifier,
+    ESPRMNEO_BASE: ESPRMNeoBaseAdaptorIdentifier,
 } as const;
 
 /**
@@ -38,10 +34,9 @@ export const ADAPTOR_IDENTIFIERS = {
 class AdaptorFactory {
     createAll(): ESPSDKAdaptor[] {
         return [
-            new ESPRMBaseSDKAdaptor(getRMSDKConfig()),
-            new ESPRMMatterBaseSDKAdaptor(getMatterSDKConfig()),
-            new ESPRMNGBaseSDKAdaptor(getRMNGSDKConfig()),
-            new ESPRMNGMatterBaseSDKAdaptor(getRMNGMatterSDKConfig()),
+          new ESPRMBaseSDKAdaptor(getRMSDKConfig()),
+          new ESPRMMatterBaseSDKAdaptor(getMatterSDKConfig()),
+          new ESPRMNeoBaseSDKAdaptor(getRMNeoSDKConfig()),
         ];
     }
 }
@@ -147,10 +142,31 @@ class CDFBootstrap {
     /**
      * Resets the CDF runtime and clears the adaptor registry.
      * A subsequent initialize() call will re-register all adaptors fresh.
+     *
+     * Teardown order matters:
+     *   1. Live native connections (MQTT, Matter subscriptions), owned by native
+     *      module instances tied to the current JS runtime. A `restartApp()`
+     *      recreates that runtime but does not close connections opened on the
+     *      old one, leaving orphaned native sockets under the fresh instances.
+     *   2. `disposeCDF()`, which releases the store synchronizers' subscriptions
+     *      and drops the `ESPCDF.instance` singleton. Nulling our own reference
+     *      is not enough: `initCDF` returns the cached instance and DISCARDS the
+     *      config it is given, so a re-initialise against a different backend
+     *      would silently keep the previous deployment's stores. Runs before the
+     *      registry is cleared, since the callbacks being torn down may still
+     *      consult the active adaptor.
      */
-    reset(): void {
+    async reset(): Promise<void> {
         this._isInitialized = false;
         this.cdfInstance = null;
+
+        await Promise.allSettled([
+            ESPMQTTAdapter.disconnect(),
+            ESPMatterControlAdapter.shutdown?.(),
+        ]);
+
+        disposeCDF();
+
         AdaptorRegistry.getInstance().clear();
     }
 }

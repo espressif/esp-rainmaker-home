@@ -6,17 +6,20 @@
 
 import Joi from "joi";
 import type { ScannedConfigPayload } from "@config/runtime.config";
-import type { SDKIdentifier } from "@config/sdk.config";
 import {
-  ESPRMNG_BASE_SDK_ID,
-  ESPRMNGMatter_BASE_SDK_ID,
+  ESPRMNeo_BASE_SDK_ID,
+  normalizeSdkIdentifier,
   SUPPORTED_SDK_IDENTIFIERS,
 } from "@config/sdk.config";
 import { CONFIG_FETCH_TIMEOUT_MS } from "@shared/utils/constants";
 import {
-  isRmngClientOutputsDoc,
-  mapRmngClientOutputsToScannedPayload,
-} from "./rmngClientOutputsMap";
+  CONFIG_SCAN_URL_SCHEME_HTTP,
+  CONFIG_SCAN_URL_SCHEME_HTTPS,
+} from "@features/config/constants";
+import {
+  isRmneoClientOutputsDoc,
+  mapRmneoClientOutputsToScannedPayload,
+} from "./rmneoClientOutputsMap";
 
 // Validation schema (Single Responsibility: config validation)
 const ESPRM_BASE_CONFIG_SCHEMA = Joi.object({
@@ -27,21 +30,17 @@ const ESPRM_BASE_CONFIG_SCHEMA = Joi.object({
   clientId: Joi.string().min(1).optional(),
   redirectUrl: Joi.string().uri().optional(),
   authProviders: Joi.array().items(Joi.string()).optional(),
+  dashboardUrl: Joi.string().uri({ scheme: ["https"] }).optional(),
 })
   .required()
   .unknown(false);
 
-const ESPRMNG_BASE_CONFIG_SCHEMA = Joi.object({
+const ESPRMNEO_BASE_CONFIG_SCHEMA = Joi.object({
   baseUrl: Joi.string().uri({ scheme: ["https"] }).required(),
-  apiPath: Joi.string().optional(),
-  userApiBase: Joi.string().uri({ scheme: ["https"] }).optional(),
-  userApiBaseUrl: Joi.string().uri({ scheme: ["https"] }).optional(),
-  userApiPath: Joi.string().optional(),
-  identityId: Joi.string().min(1).required(),
+  userApiBase: Joi.string().uri({ scheme: ["https"] }).required(),
   awsRegion: Joi.string().min(1).required(),
-  userPoolId: Joi.string().min(1).required(),
-  clientId: Joi.string().min(1).required(),
   iotEndpoint: Joi.string().min(1).required(),
+  dashboardUrl: Joi.string().uri({ scheme: ["https"] }).optional(),
 })
   .required()
   .unknown(false);
@@ -52,18 +51,119 @@ const CONFIG_SCHEMA = Joi.object({
     .valid(...SUPPORTED_SDK_IDENTIFIERS)
     .required(),
   config: Joi.when("sdk", {
-    is: Joi.valid(ESPRMNG_BASE_SDK_ID, ESPRMNGMatter_BASE_SDK_ID),
-    then: ESPRMNG_BASE_CONFIG_SCHEMA,
+    is: ESPRMNeo_BASE_SDK_ID,
+    then: ESPRMNEO_BASE_CONFIG_SCHEMA,
     otherwise: ESPRM_BASE_CONFIG_SCHEMA,
   }),
 }).unknown(false);
 
 /**
- * Matter-capable app: scanned `rmng-base-sdk` → `rmng-matter-sdk` (mirrors using
- * rainmaker-matter-sdk when the deployment supports Matter).
+ * Trims a value when it is a string; otherwise returns "".
+ *
+ * @param value - Unknown field from scanned config JSON
+ * @returns Trimmed string, or empty when not a string
  */
-function normalizeScannedActiveSdk(sdk: SDKIdentifier): SDKIdentifier {
-  return sdk === ESPRMNG_BASE_SDK_ID ? ESPRMNGMatter_BASE_SDK_ID : sdk;
+function readTrimmedString(value: unknown): string {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+/**
+ * Joins an origin URL with an optional path without a double slash.
+ *
+ * @param origin - Base origin (may have a trailing slash)
+ * @param path - Optional path segment
+ * @returns Origin alone when path is empty; otherwise origin + path
+ */
+function joinOriginAndPath(origin: string, path: string): string {
+  if (!origin) {
+    return "";
+  }
+  if (!path) {
+    return origin;
+  }
+  return `${origin.replace(/\/$/, "")}${path.startsWith("/") ? path : `/${path}`}`;
+}
+
+/**
+ * Resolves RMNeo device API `baseUrl` from `baseUrl` + optional `apiPath`.
+ *
+ * @param config - Raw RMNeo config fields
+ * @returns Full device API base URL
+ */
+function resolveNeoBaseUrl(config: Record<string, unknown>): string {
+  return joinOriginAndPath(
+    readTrimmedString(config.baseUrl),
+    readTrimmedString(config.apiPath)
+  );
+}
+
+/**
+ * Resolves RMNeo `userApiBase`: prefers a full `userApiBase`, else
+ * `userApiBaseUrl` + optional `userApiPath`.
+ *
+ * @param config - Raw RMNeo config fields
+ * @returns Full user/auth API base URL
+ */
+function resolveNeoUserApiBase(config: Record<string, unknown>): string {
+  const existing = readTrimmedString(config.userApiBase);
+  if (existing) {
+    return existing;
+  }
+
+  return joinOriginAndPath(
+    readTrimmedString(config.userApiBaseUrl),
+    readTrimmedString(config.userApiPath)
+  );
+}
+
+/**
+ * Normalizes a scanned RMNeo config object to the two-URL shape used by
+ * {@link ESPRMNeoRuntimeConfig} (joins origin + path fields when present).
+ *
+ * @param config - Raw config from QR / fetch (may still use apiPath / userApiBaseUrl)
+ * @returns Config with full `baseUrl` and `userApiBase` only
+ */
+function normalizeScannedNeoConfig(
+  config: Record<string, unknown>
+): Record<string, unknown> {
+  return {
+    baseUrl: resolveNeoBaseUrl(config),
+    userApiBase: resolveNeoUserApiBase(config),
+    awsRegion: config.awsRegion,
+    iotEndpoint: config.iotEndpoint,
+    // Whitelisted explicitly: anything not named here is dropped before Joi.
+    dashboardUrl: config.dashboardUrl,
+  };
+}
+
+/**
+ * Prepares a raw scanned payload for Joi (SDK id normalization + RMNeo URL shape).
+ *
+ * @param payload - Parsed scan / fetch JSON
+ * @returns Payload ready for {@link validateConfig}
+ */
+function preprocessScannedPayload(
+  payload: ScannedConfigPayload
+): ScannedConfigPayload {
+  const rawSdk = String(payload.sdk ?? "");
+  const sdk = normalizeSdkIdentifier(rawSdk) ?? rawSdk;
+  const withCanonicalSdk =
+    sdk !== rawSdk ? { ...payload, sdk } : payload;
+
+  if (
+    sdk !== ESPRMNeo_BASE_SDK_ID ||
+    !withCanonicalSdk.config ||
+    typeof withCanonicalSdk.config !== "object"
+  ) {
+    return withCanonicalSdk as ScannedConfigPayload;
+  }
+  return {
+    ...withCanonicalSdk,
+    sdk: ESPRMNeo_BASE_SDK_ID,
+    config: normalizeScannedNeoConfig(
+      withCanonicalSdk.config as unknown as Record<string, unknown>
+    ) as ScannedConfigPayload["config"],
+  };
 }
 
 /** Parses scanned value as JSON. Returns null if not valid JSON. */
@@ -75,13 +175,23 @@ function tryParseJson(value: string): unknown | null {
   }
 }
 
+/**
+ * @param trimmed - Trimmed scan string
+ * @returns Whether the string looks like an http(s) URL
+ */
 function isHttpOrHttpsUrl(trimmed: string): boolean {
   return (
-    trimmed.startsWith("http://") || trimmed.startsWith("https://")
+    trimmed.startsWith(CONFIG_SCAN_URL_SCHEME_HTTP) ||
+    trimmed.startsWith(CONFIG_SCAN_URL_SCHEME_HTTPS)
   );
 }
 
-/** Fetches JSON from URL. Throws on error. */
+/**
+ * Fetches JSON from URL.
+ *
+ * @param url - Remote config URL
+ * @returns Parsed JSON body
+ */
 async function fetchJsonFromUrl(url: string): Promise<unknown> {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), CONFIG_FETCH_TIMEOUT_MS);
@@ -110,11 +220,17 @@ async function fetchJsonFromUrl(url: string): Promise<unknown> {
   }
 }
 
-/** Validates config payload. Returns validated payload or throws with message. */
+/**
+ * Validates config payload. Returns validated payload or throws with message.
+ *
+ * @param payload - Candidate scanned config
+ * @returns Validated {@link ScannedConfigPayload}
+ */
 export function validateConfig(
   payload: ScannedConfigPayload
 ): ScannedConfigPayload {
-  const { error, value } = CONFIG_SCHEMA.validate(payload, {
+  const prepared = preprocessScannedPayload(payload);
+  const { error, value } = CONFIG_SCHEMA.validate(prepared, {
     abortEarly: false,
     stripUnknown: true,
   });
@@ -124,16 +240,28 @@ export function validateConfig(
     throw new Error(`Invalid config format: ${messages}`);
   }
 
-  const validated = value as ScannedConfigPayload;
-  return {
-    ...validated,
-    sdk: normalizeScannedActiveSdk(validated.sdk),
-  };
+  return value as ScannedConfigPayload;
 }
 
 /**
- * Resolves config from scanned value (JSON string or URL).
- * Returns validated ScannedConfigPayload. Throws on error.
+ * Maps client-outputs JSON to a scanned payload, or null.
+ *
+ * @param value - Parsed scan / fetch JSON
+ * @returns Mapped payload, or null when not a client-outputs document
+ */
+function tryMapClientOutputsDoc(value: unknown): ScannedConfigPayload | null {
+  if (isRmneoClientOutputsDoc(value)) {
+    return mapRmneoClientOutputsToScannedPayload(value);
+  }
+  return null;
+}
+
+/**
+ * Resolves config from scanned value (JSON string, client-outputs JSON, or URL).
+ * Client-outputs (`rmng-base`) map to `rainmaker-neo-base-sdk`.
+ *
+ * @param scannedValue - QR payload or pasted string
+ * @returns Validated {@link ScannedConfigPayload}
  */
 export async function resolveConfigFromScan(
   scannedValue: string
@@ -142,10 +270,9 @@ export async function resolveConfigFromScan(
   const parsed = tryParseJson(trimmed);
 
   if (parsed !== null) {
-    if (isRmngClientOutputsDoc(parsed)) {
-      return validateConfig(
-        mapRmngClientOutputsToScannedPayload(parsed)
-      );
+    const fromOutputs = tryMapClientOutputsDoc(parsed);
+    if (fromOutputs) {
+      return validateConfig(fromOutputs);
     }
     return validateConfig(parsed as ScannedConfigPayload);
   }
@@ -157,9 +284,9 @@ export async function resolveConfigFromScan(
   }
 
   const fetched = await fetchJsonFromUrl(trimmed);
-
-  if (isRmngClientOutputsDoc(fetched)) {
-    return validateConfig(mapRmngClientOutputsToScannedPayload(fetched));
+  const fromFetchedOutputs = tryMapClientOutputsDoc(fetched);
+  if (fromFetchedOutputs) {
+    return validateConfig(fromFetchedOutputs);
   }
 
   return validateConfig(fetched as ScannedConfigPayload);

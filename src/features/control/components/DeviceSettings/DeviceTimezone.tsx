@@ -15,6 +15,10 @@ import {
   ActivityIndicator,
   StyleSheet,
   TextInput,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  type GestureResponderEvent,
 } from "react-native";
 import { ChevronDown, Search } from "lucide-react-native";
 import { useTranslation } from "react-i18next";
@@ -108,7 +112,16 @@ const DeviceTimezone: React.FC<DeviceTimezoneProps> = ({ node, disabled }) => {
   };
 
   /**
+   * Prevents backdrop press from closing when interacting with sheet content.
+   * @param event - Press event from the sheet content
+   */
+  const handleContentPress = (event: GestureResponderEvent) => {
+    event.stopPropagation();
+  };
+
+  /**
    * Handles timezone selection and updates the device
+   * @param timezone - Selected IANA timezone identifier
    */
   const handleTimezoneSelect = async (timezone: string) => {
     if (!isEditable || !timeService || !timezoneParam) return;
@@ -136,6 +149,8 @@ const DeviceTimezone: React.FC<DeviceTimezoneProps> = ({ node, disabled }) => {
 
   /**
    * Renders individual timezone option in dropdown
+   * @param item - Timezone list item
+   * @returns Timezone option row
    */
   const renderTimezoneOption = ({ item }: { item: string }) => (
     <TouchableOpacity
@@ -201,53 +216,57 @@ const DeviceTimezone: React.FC<DeviceTimezoneProps> = ({ node, disabled }) => {
         animationType="slide"
         onRequestClose={handleModalClose}
       >
-        <TouchableOpacity
+        <Pressable
           style={globalStyles.dropdownOverlay}
-          activeOpacity={1}
           onPress={handleModalClose}
         >
-          <TouchableOpacity
-            style={globalStyles.dropdownModal}
-            activeOpacity={1}
-            onPress={() => {}}
+          <KeyboardAvoidingView
+            behavior={Platform.OS === "ios" ? "padding" : "height"}
+            style={globalStyles.bottomSheetKeyboardAvoidingView}
           >
-            {/* Search Input */}
-            <View style={globalStyles.dropdownSearchContainer}>
-              <Search size={20} color={tokens.colors.text_secondary} />
-              <TextInput
-                style={globalStyles.dropdownSearchInput}
-                placeholder={t("device.settings.searchTimezone")}
-                placeholderTextColor={tokens.colors.text_secondary}
-                value={searchQuery}
-                onChangeText={setSearchQuery}
-                autoCapitalize="none"
-                autoCorrect={false}
-              />
-              {searchQuery.length > 0 && (
-                <TouchableOpacity onPress={() => setSearchQuery("")}>
-                  <Text style={globalStyles.dropdownClearButton}>✕</Text>
-                </TouchableOpacity>
-              )}
-            </View>
+            <Pressable
+              style={globalStyles.dropdownModal}
+              onPress={handleContentPress}
+            >
+              {/* Search Input */}
+              <View style={globalStyles.dropdownSearchContainer}>
+                <Search size={20} color={tokens.colors.text_secondary} />
+                <TextInput
+                  style={globalStyles.dropdownSearchInput}
+                  placeholder={t("device.settings.searchTimezone")}
+                  placeholderTextColor={tokens.colors.text_secondary}
+                  value={searchQuery}
+                  onChangeText={setSearchQuery}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                />
+                {searchQuery.length > 0 && (
+                  <TouchableOpacity onPress={() => setSearchQuery("")}>
+                    <Text style={globalStyles.dropdownClearButton}>✕</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
 
-            {/* Timezone List */}
-            <FlatList
-              data={filteredTimezones}
-              renderItem={renderTimezoneOption}
-              keyExtractor={(item) => item}
-              style={globalStyles.dropdownList}
-              showsVerticalScrollIndicator={true}
-              ListEmptyComponent={
-                <View style={globalStyles.dropdownEmptyState}>
-                  <Text style={globalStyles.dropdownEmptyStateText}>
-                    {t("device.settings.noTimezonesFound")}
-                  </Text>
-                </View>
-              }
-            />
-            <View style={globalStyles.bottomSafeArea} />
-          </TouchableOpacity>
-        </TouchableOpacity>
+              {/* Timezone List */}
+              <FlatList
+                data={filteredTimezones}
+                renderItem={renderTimezoneOption}
+                keyExtractor={(item) => item}
+                style={globalStyles.dropdownList}
+                showsVerticalScrollIndicator={true}
+                keyboardShouldPersistTaps="handled"
+                ListEmptyComponent={
+                  <View style={globalStyles.dropdownEmptyState}>
+                    <Text style={globalStyles.dropdownEmptyStateText}>
+                      {t("device.settings.noTimezonesFound")}
+                    </Text>
+                  </View>
+                }
+              />
+              <View style={globalStyles.bottomSafeArea} />
+            </Pressable>
+          </KeyboardAvoidingView>
+        </Pressable>
       </Modal>
     </>
   );

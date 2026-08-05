@@ -14,6 +14,7 @@ import {
   createAuthUsernameValidator,
   createPasswordValidator,
   createConfirmPasswordValidator,
+  getAuthErrorDescription,
   isUsernameAllowedForAuth,
 } from "@features/auth/utils/authHelper";
 
@@ -89,11 +90,10 @@ export function useSignup() {
         });
       }
     } catch (error: unknown) {
-      const err = error as { description?: string };
       console.error("Failed to send sign up code:", error);
       toast.showError(
         t("auth.errors.verificationCodeSendFailed"),
-        err.description || t("auth.errors.fallback")
+        getAuthErrorDescription(error) || t("auth.errors.fallback")
       );
     } finally {
       setIsLoading(false);

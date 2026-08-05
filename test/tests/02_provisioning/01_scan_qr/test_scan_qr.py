@@ -58,8 +58,12 @@ def scan_qr_code(helper, hardware_session):
     if not resource or not resource.qr_payload:
         pytest.fail("QR payload missing. Ensure serial logging captured provisioning output.")
     helper.scan_qr.perform_qr_scan()
-    helper.connect_wifi.check_screen_displayed(timeout=10)
+    scanned = helper.connect_wifi.check_screen_displayed(timeout=10)
     QrDisplay.close()
+    assert scanned, (
+        "QR scan did not navigate to the Wi-Fi screen — the camera did not read the QR "
+        "(check the Preview window position on the rig display). Aborting instead of looping."
+    )
 
 
 @then("user should be on scan qr screen")

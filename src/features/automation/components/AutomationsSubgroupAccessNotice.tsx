@@ -20,7 +20,7 @@ export interface AutomationsSubgroupAccessNoticeProps {
 
 /**
  * Full-screen-style notice when the current home is shared with subgroup-only access
- * and automations are not supported (RMNG). Shown from {@link AutomationsScreen} instead of the list.
+ * and automations are not supported (RainMaker Neo). Shown from {@link AutomationsScreen} instead of the list.
  */
 export const AutomationsSubgroupAccessNotice: React.FC<
   AutomationsSubgroupAccessNoticeProps

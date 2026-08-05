@@ -107,7 +107,7 @@ export function sanitizeDeviceActionsMap(
 
 /**
  * Sanitizes flat automation actions (`{ nodeId, deviceName, param, value }`)
- * before they are converted to RMNG action targets.
+ * before they are converted to RainMaker Neo action targets.
  */
 export function sanitizeAutomationActions(
   actions: ESPCDFAutomationAction[],
@@ -125,10 +125,10 @@ export function sanitizeAutomationActions(
   }));
 }
 
-/** Ordering operators; firmware only accepts these for int/float params. */
-const ORDERING_OPERATORS: readonly string[] = ["<", "<=", ">", ">=", "lt", "le", "gt", "ge"];
+/** CDF ordering operators; firmware only accepts ordering compares for int/float params. */
+const ORDERING_OPERATORS: readonly string[] = ["<", "<=", ">", ">="];
 
-/** Operator the firmware accepts for every value type. */
+/** CDF operator whose wire compare (eq) the firmware accepts for every value type. */
 const EQUAL_OPERATOR = "==";
 
 /** Node-params automation event shape (deviceName/param/check/value). */

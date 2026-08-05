@@ -7,7 +7,7 @@
 // Bootstrap
 import "@src/bootstrap";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { View, ActivityIndicator } from "react-native";
 
 import { Stack, usePathname, RelativePathString } from "expo-router";
@@ -28,6 +28,7 @@ import { Provider as PaperProvider } from "react-native-paper";
 import { SceneProvider } from "@context/scenes.context";
 import { ScheduleProvider } from "@context/schedules.context";
 import { AppRestartContext } from "@context/appRestart.context";
+import { ESPAppRestartAdapter } from "@native-adaptors/implementations/ESPAppRestartAdapter";
 
 // hooks
 import { useTranslation } from "react-i18next";
@@ -46,7 +47,7 @@ import { tokens } from "@shared/theme/tokens";
 import { globalStyles } from "@shared/theme/globalStyleSheet";
 
 // async SDK + runtime config init
-import { initializeApp } from "@src/integrations";
+import { cdfBootstrap, initializeApp } from "@src/integrations";
 
 const config = createTamagui(defaultConfig);
 
@@ -154,11 +155,15 @@ const InnerLayout = () => {
  * time, guaranteeing the SDK and runtime config are ready before any
  * feature screen can render.
  *
- * Receives a fresh `key` from `RootLayout` on every programmatic restart,
- * which unmounts and re-mounts this component — re-running the init gate
- * from scratch.
+ * On a programmatic restart (`restartApp`), the entire JS runtime is torn
+ * down and rebuilt from the entry point, so this component's `useEffect`
+ * naturally re-runs the init gate from scratch — no remount key needed.
+ *
+ * `generation` covers the in-place path: `reinitializeSdk` bumps it so the
+ * provider tree remounts and `StoreProvider` re-reads the new `ESPCDF`
+ * instance into its ref.
  */
-const AppInitGate = () => {
+const AppInitGate = ({ generation }: { generation: number }) => {
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
@@ -176,7 +181,7 @@ const AppInitGate = () => {
   return (
     <SafeAreaProvider>
       <StatusBar style="dark" backgroundColor={tokens.colors.white} translucent={false} />
-      <InnerLayout />
+      <InnerLayout key={generation} />
     </SafeAreaProvider>
   );
 };
@@ -184,22 +189,35 @@ const AppInitGate = () => {
 /**
  * Top-level component exported as the default Expo Router root layout.
  *
- * Owns a single `appKey` counter that acts as a "remount key" for the
- * entire app tree. Incrementing it (via `restartApp`) fully unmounts and
- * re-mounts `<AppInitGate>`, which re-runs the SDK init sequence — the
- * React-native equivalent of a soft app restart without leaving the process.
+ * Exposes two ways to re-establish the SDK layer through `AppRestartContext`:
  *
- * `AppRestartContext` propagates `restartApp` down to any consumer that
- * needs to trigger a programmatic restart (e.g. after sign-out or a
- * critical config change).
+ * - `restartApp` relaunches the process, for state that cannot be rebuilt in
+ *   place (sign-out, a scanned private deployment). See `ESPAppRestartAdapter`.
+ * - `reinitializeSdk` rebuilds in place: tear the CDF runtime down (disposing the
+ *   `ESPCDF` singleton so `initCDF` builds a fresh one on the new config rather
+ *   than returning the cached instance), re-init, then remount via `generation`.
  */
 const RootLayout = () => {
-  const [appKey, setAppKey] = useState(0);
-  const restartApp = useCallback(() => setAppKey((k) => k + 1), []);
+  const [generation, setGeneration] = useState(0);
+
+  const restartApp = useCallback(() => {
+    void ESPAppRestartAdapter.restartApp();
+  }, []);
+
+  const reinitializeSdk = useCallback(async () => {
+    await cdfBootstrap.reset();
+    await initializeApp();
+    setGeneration((current) => current + 1);
+  }, []);
+
+  const restartValue = useMemo(
+    () => ({ restartApp, reinitializeSdk }),
+    [restartApp, reinitializeSdk],
+  );
 
   return (
-    <AppRestartContext.Provider value={{ restartApp }}>
-      <AppInitGate key={appKey} />
+    <AppRestartContext.Provider value={restartValue}>
+      <AppInitGate generation={generation} />
     </AppRestartContext.Provider>
   );
 };

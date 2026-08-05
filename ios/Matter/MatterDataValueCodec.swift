@@ -7,7 +7,7 @@
 import Foundation
 
 /// CHIP TLV encoder for Matter data-value dictionaries.
-/// Mirrors Android `MatterDataValueCodec` so RMNG MQTT command payloads match across platforms.
+/// Mirrors Android `MatterDataValueCodec` so Matter command payloads match across platforms.
 enum MatterDataValueCodec {
 
   static func encodeCommandFieldsToTlv(_ value: NSDictionary?) -> Data {

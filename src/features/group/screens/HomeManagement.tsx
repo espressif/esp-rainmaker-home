@@ -63,7 +63,6 @@ const HomeManagement = observer(() => {
         homeName={home.name}
         description={formatHomeDescription?.(home) ?? ""}
         onPress={() => handleHomePress(home)}
-        qaId="home_management"
       />
     ),
     [formatHomeDescription, handleHomePress],

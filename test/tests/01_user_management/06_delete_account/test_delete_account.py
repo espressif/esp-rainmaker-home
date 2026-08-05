@@ -13,7 +13,7 @@ from utils.registered_user_resolver import load_deployment_config
 from utils.common_utils import normalize_input
 
 logger = logging.getLogger(__name__)
-pytestmark = pytest.mark.regression
+pytestmark = [pytest.mark.regression, pytest.mark.user_management, pytest.mark.delete_account]
 
 scenarios('delete_account.feature')
 

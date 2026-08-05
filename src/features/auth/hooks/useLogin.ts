@@ -4,7 +4,14 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useState, useEffect, useMemo, useCallback, useRef } from "react";
+import {
+  useState,
+  useEffect,
+  useMemo,
+  useCallback,
+  useContext,
+  useRef,
+} from "react";
 import { useCDF } from "@shared/hooks/useCDF";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useTranslation } from "react-i18next";
@@ -21,6 +28,7 @@ import { getAuthAllowedUsernameTypes } from "@features/auth/utils/authHelper";
 import {
   createAuthUsernameValidator,
   createPasswordValidator,
+  getAuthErrorDescription,
   isUsernameAllowedForAuth,
 } from "@features/auth/utils/authHelper";
 import {
@@ -46,6 +54,10 @@ import {
   hasReceivedWeChatAuthCode,
 } from "@native-adaptors/implementations/ESPWeChatAdapter";
 import { espOauthAdapter } from "@native-adaptors/implementations/ESPOauthAdapter";
+import { runtimeConfigManager } from "@config/runtime.config";
+import asyncStorageAdapter from "@native-adaptors/implementations/ESPAsyncStorage";
+import { AppRestartContext } from "@context/appRestart.context";
+import { getPreAuthRoute } from "@features/landing/utils/currentDeployment";
 
 export type PostSignupLoginCredentials = {
   username: string;
@@ -88,6 +100,7 @@ export function useLogin() {
   const { t } = useTranslation();
   const params = useLocalSearchParams();
   const router = useRouter();
+  const { restartApp, reinitializeSdk } = useContext(AppRestartContext);
   const toast = useToast();
 
   const usernameParam =
@@ -147,10 +160,10 @@ export function useLogin() {
         setESPCDFUser(store.userStore.user ?? null);
         await executePostLoginPipeline(postLoginOptions);
       } catch (error: unknown) {
-        const err = error as { description?: string };
+        console.error("[useLogin] credential login failed:", error);
         toast.showError(
           t("auth.errors.signInFailed"),
-          err?.description || t("auth.errors.fallback")
+          getAuthErrorDescription(error) || t("auth.errors.fallback")
         );
       } finally {
         setIsLoading(false);
@@ -397,6 +410,32 @@ export function useLogin() {
     setShowConfigResetDialog(true);
   };
 
+  /**
+   * Confirms the custom-deployment reset: drops the runtime override, wipes the
+   * session, then rebuilds the SDK layer in place onto the built-in default
+   * backend. Falls back to a process relaunch on failure.
+   *
+   * Routes via `getPreAuthRoute()` rather than staying here: it reads
+   * `isRuntimeConfigActive` at call time, which the reset just cleared, so the
+   * destination is usually Landing.
+   */
+  const confirmConfigReset = useCallback(async () => {
+    setIsConfigResetting(true);
+    try {
+      await runtimeConfigManager.reset();
+      await asyncStorageAdapter.clear();
+      try {
+        await reinitializeSdk();
+        router.replace(getPreAuthRoute() as never);
+      } catch (error) {
+        console.error("[Login] In-place SDK switch failed, relaunching:", error);
+        restartApp();
+      }
+    } finally {
+      setIsConfigResetting(false);
+    }
+  }, [router, reinitializeSdk, restartApp, setIsConfigResetting]);
+
   const getFriendlyStepName = (stepName: string): string => {
     const stepMap: Record<string, string> = {
       setUserTimeZone: t("auth.login.settingUpAccount") || "Setting up account",
@@ -449,6 +488,7 @@ export function useLogin() {
     handleOAuthAppBecameActive,
     handleCancelOAuth,
     handleConfigReset,
+    confirmConfigReset,
     getCurrentFriendlyMessage,
   };
 }

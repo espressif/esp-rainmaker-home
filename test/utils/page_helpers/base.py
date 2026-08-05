@@ -381,6 +381,14 @@ class BasePage:
         """Quick visibility check for a raw resource-id / accessibility-id (shorthand for is_visible('id', ...))."""
         return self.is_visible("id", value, timeout=timeout)
 
+    def open_param_editor(self, row_id, save_key, tries=3):
+        """Open a device-param's value editor by tapping its selection row, re-tapping if a tap lands mid push-transition"""
+        for _ in range(tries):
+            self.click("id", row_id, timeout=10)
+            if self.is_visible(save_key, timeout=3):
+                return self
+        raise RuntimeError(f"Param editor '{row_id}' did not open after {tries} taps")
+
     def set_param_toggle(self, label, target_on, timeout=10):
         """Set a boolean param control (Power, etc.) to target_on using its state-encoding id."""
         on_id = f"toggle_{label}_on"
@@ -410,12 +418,20 @@ class BasePage:
         self.set_param_slider(label, int(value), max_v=self._param_slider_max(label))
         return self.read_slider_value(label)
 
+    def _param_slider_range(self, label):
+        """Value range (min, max) of a slider param — Hue 0-360, CCT 2700-6500K, most others 0-100."""
+        if label == "Hue":
+            return (0, 360)
+        if label == "CCT":
+            return (2700, 6500)
+        return (0, 100)
+
     def _param_slider_max(self, label):
-        """Upper bound of a slider param control (Hue spans 0-360; most others 0-100)."""
-        return 360 if label == "Hue" else 100
+        """Upper bound of a slider param control."""
+        return self._param_slider_range(label)[1]
 
     def read_slider_value(self, label, timeout=5):
-        """Read the numeric value shown next to a slider param control, or None if absent."""
+        """Read a slider param's numeric value from the `slider_<label>_value` text (ID only)."""
         deadline = time.time() + timeout
         while True:
             for el in self.find_all("id", value=f"slider_{label}_value"):

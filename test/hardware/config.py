@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import os
 import re
+import sys
 from pathlib import Path
 from typing import Any, Dict, Optional
 
@@ -120,8 +121,13 @@ class HardwareConfig:
 
     @property
     def esptool_path(self) -> str:
-        """esptool executable or module invocation."""
-        return str(self.hardware.get("esptool_path", "python -m esptool"))
+        """esptool executable or module invocation; a bare `python`/`python3` binds to the running interpreter, so flashing works without an activated venv."""
+        configured = str(self.hardware.get("esptool_path", "python -m esptool")).strip()
+        parts = configured.split()
+        if parts and parts[0] in ("python", "python3"):
+            parts[0] = sys.executable
+            return " ".join(parts)
+        return configured
 
     @classmethod
     def load(cls, config_path: Optional[Path] = None) -> "HardwareConfig":

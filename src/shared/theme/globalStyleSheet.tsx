@@ -320,6 +320,32 @@ export const globalStyles = StyleSheet.create({
     textAlign: "center",
     marginTop: tokens.spacing._10,
   },
+  deploymentLink: {
+    alignSelf: "center",
+    marginBottom: tokens.spacing._20,
+    paddingVertical: tokens.spacing._5,
+    paddingHorizontal: tokens.spacing._10,
+  },
+  deploymentLinkText: {
+    fontFamily: tokens.fonts.regular,
+    fontSize: tokens.fontSize.xs,
+    color: tokens.colors.text_secondary,
+    textAlign: "center",
+  },
+  deploymentLinkAction: {
+    fontFamily: tokens.fonts.medium,
+    color: tokens.colors.primary,
+  },
+  deploymentHint: {
+    alignSelf: "center",
+    fontFamily: tokens.fonts.regular,
+    fontSize: tokens.fontSize.xs,
+    color: tokens.colors.text_secondary,
+    textAlign: "center",
+    paddingHorizontal: tokens.spacing._20,
+    marginTop: tokens.spacing._5,
+    marginBottom: tokens.spacing._10,
+  },
   switch: {
     backgroundColor: tokens.colors.bg1,
     borderColor: tokens.colors.bg1,
@@ -720,6 +746,11 @@ export const globalStyles = StyleSheet.create({
   controlGroupCardStatusContainer: {
     flexDirection: "column",
     alignItems: "flex-start",
+  },
+  controlGroupCardOfflineRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
   },
   controlGroupCardStatus: {
     fontSize: tokens.fontSize.xs,
@@ -1991,6 +2022,19 @@ export const globalStyles = StyleSheet.create({
     shadowRadius: 10,
     elevation: 6,
   },
+  /**
+   * Clears elevation/shadow for offline cards.
+   * Android elevation + reduced opacity otherwise paints a black halo.
+   */
+  offlineCardNoShadow: {
+    elevation: 0,
+    shadowOpacity: 0,
+    shadowRadius: 0,
+    shadowOffset: {
+      width: 0,
+      height: 0,
+    },
+  },
 
   // Dropdown/List Styles
   dropdownOverlay: {
@@ -2908,6 +2952,23 @@ export const globalStyles = StyleSheet.create({
   },
   configScanButtonText: {
     color: tokens.colors.white,
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  configScanSecondaryButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: tokens.colors.white,
+    borderWidth: tokens.border.defaultWidth,
+    borderColor: tokens.colors.primary,
+    paddingVertical: tokens.spacing._15,
+    paddingHorizontal: tokens.spacing._20,
+    borderRadius: tokens.radius.sm,
+    marginTop: tokens.spacing._10,
+  },
+  configScanSecondaryButtonText: {
+    color: tokens.colors.primary,
     fontSize: 16,
     fontWeight: "600",
   },

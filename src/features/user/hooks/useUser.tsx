@@ -20,9 +20,11 @@ import { useToast } from "@shared/hooks/useToast";
 import { openUrl } from "@shared/utils/common";
 import {
   CDF_EXTERNAL_PROPERTIES,
+} from "@shared/utils/constants";
+import {
   getPrivacyPolicyLink,
   getTermsOfUseLink,
-} from "@shared/utils/constants";
+} from "@shared/utils/legalLinks";
 import { unregisterForNotification } from "@shared/utils/notifications";
 import { pipelineTask } from "@shared/utils/pipelineTask";
 
@@ -30,6 +32,8 @@ import { pipelineTask } from "@shared/utils/pipelineTask";
 import { UserOperationConfig, IntegrationConfig } from "@src/types/global";
 import { ESPCDFAPIError } from "@store";
 import { getFeatures } from "@/config/features.config";
+import { getResolvedActiveSdk, isRmneoStackSdkId } from "@config/sdk.config";
+import { getPreAuthRoute } from "@features/landing";
 
 // Tokens
 import { tokens } from "@shared/theme/tokens";
@@ -59,6 +63,13 @@ export const useUser = () => {
   const [showLogoutDialog, setShowLogoutDialog] = useState(false);
   const user = store?.userStore.user;
   const features = getFeatures();
+
+  // Logout copy depends on the active stack: the RainMaker stack (base +
+  // Matter) also signs out account-configured agents, so it carries the
+  // agents warning; the RMNeo stack shows the plain confirmation.
+  const logoutMessage = isRmneoStackSdkId(getResolvedActiveSdk())
+    ? t("user.profile.logoutModal.message")
+    : t("user.profile.logoutModal.messageWithAgents");
 
   const userOperations: UserOperationConfig[] = [
     features.notifications && {
@@ -197,7 +208,9 @@ export const useUser = () => {
       setShowLogoutDialog(false);
       setIsLoading(false);
       setTimeout(() => {
-        router.replace("/(auth)/Login");
+        // Post-logout redirect goes through the shared helper so a user who
+        // has already picked a backend lands on Login (not Landing again).
+        router.replace(getPreAuthRoute() as never);
       }, 100);
     } catch (error) {
       console.error("Logout error:", error);
@@ -219,6 +232,7 @@ export const useUser = () => {
     isLoading,
     showLogoutDialog,
     setShowLogoutDialog,
+    logoutMessage,
     handleNavigation,
     handleLogout,
     confirmLogout,

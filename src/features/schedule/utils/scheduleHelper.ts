@@ -89,6 +89,7 @@ export const getScheduleDeviceParams = (
 
   return filteredParams
     .filter((param) => param.properties?.includes(WRITE_PERMISSION))
+    .filter((param) => !!param.name?.trim())
     .map((param) => ({
       ...param,
       value:

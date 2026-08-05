@@ -12,7 +12,7 @@ from pytest_bdd import scenarios, when, then, parsers
 from utils.phone_network import adb_prefix
 
 logger = logging.getLogger(__name__)
-pytestmark = [pytest.mark.regression, pytest.mark.user_management]
+pytestmark = [pytest.mark.regression, pytest.mark.user_management, pytest.mark.third_party]
 
 scenarios('third_party_login.feature')
 

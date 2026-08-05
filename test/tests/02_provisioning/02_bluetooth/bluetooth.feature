@@ -9,7 +9,7 @@ Feature: Bluetooth provisioning
     And user should be on login screen
 
   @sanity
-  Scenario: Successfully provision ESP32C3 device via Bluetooth (BLE sec1)
+  Scenario: Successfully provision ESP32C3 device via Bluetooth
     When the device is flashed with "led_light", "ble" transport
     And user login with "registered user 1" and "registered user 1 password"
     Then user should land on the home screen

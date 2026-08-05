@@ -31,7 +31,7 @@ function hasMatterLocalTransport(nodeId: string): boolean {
     );
 }
 
-/** Bridged RMNG child ids: `{parentNodeId}--{suffix}`. */
+/** Bridged RainMaker Neo child ids: `{parentNodeId}--{suffix}`. */
 export function parseBridgedChildParentNodeId(nodeId: string): string | null {
     const sep = nodeId.indexOf("--");
     if (sep <= 0) return null;

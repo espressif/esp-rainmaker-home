@@ -8,8 +8,10 @@ import { useCallback, useMemo } from "react";
 import type { ESPCDFNode, ESPCDFDevice } from "@store";
 import { deepClone } from "@shared/utils/common";
 import { getEventInfoFromEvents } from "@features/automation/utils/automationManagement";
-import { sortByConnectivity } from "@shared/utils/eventDeviceSelection";
-import { isBridgeParentInfrastructureNode } from "@shared/utils/rmngMatterDeviceClassification";
+import {
+  sortByConnectivity,
+  isAutomationMatterIneligibleNode,
+} from "@shared/utils/eventDeviceSelection";
 import { useCDF } from "@shared/hooks/useCDF";
 import { useAutomation } from "@context/automation.context";
 import { useDeviceSelectionBase } from "@features/automation/hooks/useDeviceSelectionBase";
@@ -75,7 +77,9 @@ export function useActionDeviceSelection(
     const allDevices: DeviceSelectionData[] = [];
 
     currentHomeNodes.forEach((node) => {
-      if (isBridgeParentInfrastructureNode(node)) return;
+      // Matter-backed nodes can't drive cloud automations. Check runs on the
+      // original — the deepClone below strips the matterNodeId getter.
+      if (isAutomationMatterIneligibleNode(node)) return;
       const nodeDevices = node?.devices ?? [];
       nodeDevices
         .filter((device) => device.params && device.params.length > 0)

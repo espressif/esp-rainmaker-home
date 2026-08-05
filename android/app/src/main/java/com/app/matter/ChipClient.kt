@@ -68,6 +68,8 @@ class ChipClient @JvmOverloads constructor(
         private const val COMMISSIONING_FAILSAFE_EXPIRY_SECONDS = 90
         private const val BASIC_INFORMATION_CLUSTER_ID = 0x00000028L
         private const val DATA_MODEL_REVISION_ATTRIBUTE_ID = 0x00000000L
+        private const val SOFTWARE_VERSION_ATTRIBUTE_ID = 0x00000009L
+        private const val SOFTWARE_VERSION_STRING_ATTRIBUTE_ID = 0x0000000AL
 
         // ----------------------------------------------------------------------------------
         // Process-wide AndroidChipPlatform / AndroidBleManager.
@@ -152,7 +154,6 @@ class ChipClient @JvmOverloads constructor(
     var ipkEpochKey: ByteArray? = null
     lateinit var nocKey: ByteArray
     var requestId: String? = null
-    var csrNonce: String? = null
     var lastCommissionedDeviceName: String? = null
     var lastCommissionedNodeId: Long? = null
     var matterNodeId: String? = null
@@ -322,33 +323,7 @@ class ChipClient @JvmOverloads constructor(
         try {
             chipDeviceController.setCompletionListener(buildCommissioningCompletionListener(continuation))
 
-            val serverCsrNonce = csrNonce
-            Log.d(
-                TAG,
-                "[NONCE-TRACE] awaitCommissionDevice: serverCsrNonce=${serverCsrNonce?.take(16)}... (len=${serverCsrNonce?.length}, null=${serverCsrNonce == null})"
-            )
-            if (serverCsrNonce != null) {
-                try {
-                    val nonceBytes = decodeHex(serverCsrNonce)
-                    Log.d(TAG, "[NONCE-TRACE] Decoded hex -> ${nonceBytes.size} bytes: ${nonceBytes.toHexString()}")
-                    if (nonceBytes.size == 32) {
-                        val params = CommissionParameters.Builder()
-                            .setCsrNonce(nonceBytes)
-                            .setNetworkCredentials(networkCredentials)
-                            .build()
-                        Log.d(TAG, "Commissioning with server CSR nonce (${nonceBytes.size} bytes)")
-                        chipDeviceController.commissionDevice(deviceId, params)
-                    } else {
-                        Log.w(TAG, "Server CSR nonce is ${nonceBytes.size} bytes (expected 32), falling back to random nonce")
-                        chipDeviceController.commissionDevice(deviceId, networkCredentials)
-                    }
-                } catch (e: Exception) {
-                    Log.w(TAG, "Failed to decode server CSR nonce, falling back to random nonce: ${e.message}")
-                    chipDeviceController.commissionDevice(deviceId, networkCredentials)
-                }
-            } else {
-                chipDeviceController.commissionDevice(deviceId, networkCredentials)
-            }
+            chipDeviceController.commissionDevice(deviceId, networkCredentials)
 
         } catch (e: Exception) {
             Log.e(TAG, "Failed to commission device: ${e.message}", e)
@@ -399,49 +374,13 @@ class ChipClient @JvmOverloads constructor(
         try {
             chipDeviceController.setCompletionListener(buildCommissioningCompletionListener(continuation))
 
-            val serverCsrNonce = csrNonce
-            if (serverCsrNonce != null) {
-                try {
-                    val nonceBytes = decodeHex(serverCsrNonce)
-                    if (nonceBytes.size == 32) {
-                        Log.d(TAG, "Pairing over BLE with server CSR nonce (${nonceBytes.size} bytes)")
-                        chipDeviceController.pairDevice(
-                            bleGatt,
-                            connId,
-                            deviceId,
-                            setupPinCode,
-                            nonceBytes,
-                            networkCredentials
-                        )
-                    } else {
-                        Log.w(TAG, "Server CSR nonce is ${nonceBytes.size} bytes (expected 32), falling back to random nonce")
-                        chipDeviceController.pairDevice(
-                            bleGatt,
-                            connId,
-                            deviceId,
-                            setupPinCode,
-                            networkCredentials
-                        )
-                    }
-                } catch (e: Exception) {
-                    Log.w(TAG, "Failed to decode server CSR nonce for BLE pairing: ${e.message}")
-                    chipDeviceController.pairDevice(
-                        bleGatt,
-                        connId,
-                        deviceId,
-                        setupPinCode,
-                        networkCredentials
-                    )
-                }
-            } else {
-                chipDeviceController.pairDevice(
-                    bleGatt,
-                    connId,
-                    deviceId,
-                    setupPinCode,
-                    networkCredentials
-                )
-            }
+            chipDeviceController.pairDevice(
+                bleGatt,
+                connId,
+                deviceId,
+                setupPinCode,
+                networkCredentials
+            )
         } catch (e: Exception) {
             Log.e(TAG, "Failed to pair device over BLE: ${e.message}", e)
             continuation.resumeWithException(e)
@@ -659,6 +598,50 @@ class ChipClient @JvmOverloads constructor(
                                         )
                                         metadataJson.addProperty(AppConstants.KEY_GROUP_ID, groupId)
                                         metadataJson.add(AppConstants.KEY_ENDPOINTS, endpointsJson)
+
+                                        // Basic Information (0x28) on EP0: capture SoftwareVersion (0x9,
+                                        // numeric build id) + SoftwareVersionString (0xA, display) so
+                                        // pure-Matter nodes (no cloud config) can surface a version. The
+                                        // values ride along in metadataJson -> body.metadata.Matter and
+                                        // are persisted by the confirm-commission task, same as
+                                        // deviceName / rmNodeId. A missing/unsupported attribute must not
+                                        // abort commissioning, so failures are swallowed.
+                                        try {
+                                            val softwareVersion = readAttribute(
+                                                devicePtr,
+                                                ChipAttributePath.newInstance(
+                                                    AppConstants.ENDPOINT_0,
+                                                    BASIC_INFORMATION_CLUSTER_ID,
+                                                    SOFTWARE_VERSION_ATTRIBUTE_ID
+                                                )
+                                            )?.value
+                                            val softwareVersionString = readAttribute(
+                                                devicePtr,
+                                                ChipAttributePath.newInstance(
+                                                    AppConstants.ENDPOINT_0,
+                                                    BASIC_INFORMATION_CLUSTER_ID,
+                                                    SOFTWARE_VERSION_STRING_ATTRIBUTE_ID
+                                                )
+                                            )?.value
+                                            if (softwareVersion != null) {
+                                                metadataJson.addProperty(
+                                                    AppConstants.KEY_SOFTWARE_VERSION,
+                                                    softwareVersion.toString()
+                                                )
+                                            }
+                                            if (softwareVersionString is String) {
+                                                metadataJson.addProperty(
+                                                    AppConstants.KEY_SOFTWARE_VERSION_STRING,
+                                                    softwareVersionString
+                                                )
+                                            }
+                                        } catch (e: Exception) {
+                                            Log.w(
+                                                TAG,
+                                                "Failed to read Basic Information software version: ${e.message}"
+                                            )
+                                        }
+
                                         logMatterDeviceDataModel(metadataJson)
 
                                         this@ChipClient.lastCommissionedDeviceName = deviceName
@@ -913,13 +896,9 @@ class ChipClient @JvmOverloads constructor(
                 attestationChallenge?.let {
                     putExtra(AppConstants.KEY_ATTESTATION_CHALLENGE, it)
                 }
-                // The standard RainMaker NOC task has no attestation/NOCSRElements API
-                // (only fabric.issueNodeNoC({csr})). For a RainMaker commission there is no
-                // cloud /initiate challenge, so csrNonce is null — in that case also forward
-                // the PEM CSR so that task can issue the NOC. RMNG commissions set csrNonce
-                // (the /initiate challenge) and use nocsrElements + attestation, so they are
-                // left byte-for-byte unchanged.
-                if (csrNonce.isNullOrEmpty() && csr.isNotEmpty()) {
+                // The RainMaker NOC task issues the cert from the PEM CSR
+                // (fabric.issueNodeNoC({csr})).
+                if (csr.isNotEmpty()) {
                     putExtra(AppConstants.KEY_CSR, csr)
                 }
                 putExtra(AppConstants.KEY_SIGV4_ACCESS_KEY, fabric?.sigv4AccessKey ?: "")
@@ -998,7 +977,7 @@ class ChipClient @JvmOverloads constructor(
         receiveNOCChain(
             requestId = taskRequestId,
             rootCert = rootCa,
-            // intermediateCert is intentionally empty: RainMaker/RMNG use a 2-tier PKI
+            // intermediateCert is intentionally empty: RainMaker uses a 2-tier PKI
             // (Root -> NOC, no ICA). receiveNOCChain() ignores this argument and always
             // installs an empty ICAC (see emptyIcac in receiveNOCChain). Passing rootCa
             // here was misleading dead code, not an actual intermediate certificate.
@@ -1525,51 +1504,12 @@ class ChipClient @JvmOverloads constructor(
                     )
                     Log.d(TAG, "AttestationInfo challenge: ${attestationInfo?.challenge?.size} bytes")
 
-                    val expectedNonceHex = csrNonce
-                    if (csrElementsTLVBytes != null && expectedNonceHex != null) {
-                        val nonceTag = byteArrayOf(0x30, 0x02, 0x20)
-                        var tlvNonceHex: String? = null
-                        for (i in 0 until csrElementsTLVBytes.size - nonceTag.size - 32) {
-                            if (csrElementsTLVBytes[i] == nonceTag[0] &&
-                                csrElementsTLVBytes[i + 1] == nonceTag[1] &&
-                                csrElementsTLVBytes[i + 2] == nonceTag[2]
-                            ) {
-                                tlvNonceHex = csrElementsTLVBytes
-                                    .sliceArray(i + 3 until i + 3 + 32)
-                                    .toHexString()
-                                break
-                            }
-                        }
-                        val nonceMatches = expectedNonceHex.lowercase() == tlvNonceHex?.lowercase()
-                        Log.d(TAG, "[NONCE-TRACE] === CSR NONCE COMPARISON ===")
-                        Log.d(TAG, "[NONCE-TRACE] Expected (from API challenge): $expectedNonceHex")
-                        Log.d(TAG, "[NONCE-TRACE] In TLV NOCSRElements:          $tlvNonceHex")
-                        Log.d(TAG, "[NONCE-TRACE] Match: $nonceMatches")
-                        if (!nonceMatches) {
-                            // The device must echo the CSRNonce from the Matter CSRRequest. A mismatch
-                            // means CHIP ignored the app-provided nonce and generated a random one.
-                            // RMNG /verify rejects such requests (HTTP 400 "CSRNonce does not match the
-                            // challenge from initiate"), leading to fail-safe expiry. Fix requires
-                            // libCHIPController.so with external CSRNonce support.
-                            Log.e(
-                                TAG,
-                                "[NONCE-TRACE] CSR NONCE MISMATCH — native CHIP lib ignored the supplied " +
-                                    "csrNonce and used a random one; cloud /verify will reject this. " +
-                                    "Root cause is libCHIPController.so (no external-CSR-nonce support), " +
-                                    "not the SDK or cloud. See receiveNOCChain/awaitCommissionDevice."
-                            )
-                        }
-                    }
-
                     val csrElementsTLVHex = csrElementsTLVBytes?.toHexString()
 
                     if (elementsSignatureHex != null && csrElementsTLVHex != null) {
                         Log.d(TAG, "Attestation data extracted — using /verify flow")
-                        // Build the PEM CSR alongside the attestation data. The RMNG task
-                        // uses nocsrElements + attestation; the standard RainMaker task has
-                        // only fabric.issueNodeNoC({csr}) and needs this CSR. It is forwarded
-                        // only when csrNonce is null (RainMaker), gated inside
-                        // triggerNOCTaskWithAttestation, so the RMNG flow is unaffected.
+                        // Build the PEM CSR for the RainMaker NOC task
+                        // (fabric.issueNodeNoC({csr})).
                         val csrPem = AppConstants.CERT_BEGIN + "\n" +
                             Base64.encodeToString(csrInfo.csr, Base64.NO_WRAP) + "\n" +
                             AppConstants.CERT_END

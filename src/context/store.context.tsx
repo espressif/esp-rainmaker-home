@@ -43,7 +43,10 @@ export const StoreContext = createContext<StoreContextType | undefined>(
 export const StoreProvider: React.FC<StoreProviderProps> = ({ children }) => {
   const [isInitialized, setIsInitialized] = useState(false);
   const [espCDFUser, setESPCDFUser] = useState<ESPCDFUser | null>(null);
-  const cdfInstanceRef = useRef<ESPCDF | null>(null);
+  // AppInitGate already awaits cdfBootstrap.initialize() before this mounts.
+  // Seed synchronously so the first render (e.g. restored Home after Android
+  // notification reopen) does not expose store: null to group screens.
+  const cdfInstanceRef = useRef<ESPCDF | null>(cdfBootstrap.getCDFInstance());
 
   const initApp = async () => {
     try {

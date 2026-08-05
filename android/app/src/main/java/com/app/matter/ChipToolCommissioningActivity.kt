@@ -174,7 +174,6 @@ class ChipToolCommissioningActivity : AppCompatActivity() {
         )
         chipClient = client
         fabricInfo.requestId?.let { client.requestId = it }
-        fabricInfo.csrNonce?.let { client.csrNonce = it }
         // The headless confirm-commission task and any other native callbacks look the
         // ChipClient up via FabricSessionManager, so register the freshly-created one here
         // before kicking off pairing.

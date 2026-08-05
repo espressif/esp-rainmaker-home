@@ -9,7 +9,7 @@ import { WebView } from "react-native-webview";
 import { useTranslation } from "react-i18next";
 
 import { ScreenWrapper, Button } from "@shared/components";
-import { getPrivacyPolicyLink } from "@shared/utils/constants";
+import { getPrivacyPolicyLink } from "@shared/utils/legalLinks";
 import { tokens } from "@shared/theme/tokens";
 import { testProps } from "@shared/utils/testProps";
 

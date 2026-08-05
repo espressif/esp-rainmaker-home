@@ -147,6 +147,10 @@ class ESPDiscoveryModule: RCTEventEmitter {
       "serviceName": serviceName,
     ]
     attachMatterFields(into: &eventData, serviceType: serviceType, serviceName: serviceName)
+    NSLog(
+      "[ESPDiscoveryModule][LOST_EVENT] emit DiscoveryLost type=%@ nodeId=%@ name=%@",
+      serviceType, nodeId, serviceName
+    )
     sendEvent(withName: "DiscoveryLost", body: eventData)
   }
 
@@ -260,10 +264,10 @@ private final class BrowseSession: NSObject, NetServiceBrowserDelegate, NetServi
     NSLog("ESPDiscoveryModule: willSearch type=%@", serviceType)
   }
 
-  func netServiceBrowser(_: NetServiceBrowser, didRemove service: NetService, moreComing _: Bool) {
+  func netServiceBrowser(_: NetServiceBrowser, didRemove service: NetService, moreComing: Bool) {
     NSLog(
-      "ESPDiscoveryModule: Service lost type=%@ name=%@",
-      service.type, service.name
+      "[ESPDiscoveryModule][LOST_EVENT] didRemove FIRED session=%@ name=%@ type=%@ domain=%@ moreComing=%@",
+      serviceType, service.name, service.type, service.domain, moreComing ? "true" : "false"
     )
     servicesBeingResolved.removeAll {
       $0.name == service.name && $0.type == service.type && $0.domain == service.domain
@@ -272,6 +276,11 @@ private final class BrowseSession: NSObject, NetServiceBrowserDelegate, NetServi
     let nodeId = resolvedNodeIdByServiceKey.removeValue(forKey: key) ?? service.name
     if !nodeId.isEmpty {
       owner?.emitDeviceLost(serviceType: serviceType, nodeId: nodeId, serviceName: service.name)
+    } else {
+      NSLog(
+        "[ESPDiscoveryModule][LOST_EVENT] didRemove dropped: empty nodeId for session=%@ name=%@",
+        serviceType, service.name
+      )
     }
   }
 

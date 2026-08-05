@@ -16,6 +16,7 @@ import {
   CreateRoomFooter,
   GroupSharing,
   AddUserModal,
+  RoomLeave,
 } from "@features/group/components";
 import { testProps } from "@shared/utils/testProps";
 import { useToast } from "@shared/hooks/useToast";
@@ -56,6 +57,13 @@ const CreateRoom = () => {
   const {
     roomName,
     room,
+    canManageRoom,
+    canEditRoomDevices,
+    canLeaveRoom,
+    showLeaveDialog,
+    setShowLeaveDialog,
+    isLeavingRoom,
+    confirmLeaveRoom,
     selectedNodes,
     availableNodes,
     isLoading,
@@ -135,7 +143,7 @@ const CreateRoom = () => {
             onPress={handleCustomRoomName}
           />
 
-          {showSelection && (
+          {showSelection && canEditRoomDevices && (
             <>
               <CreateRoomDeviceSection
                 title={t("group.createRoom.existingDevice")}
@@ -179,6 +187,15 @@ const CreateRoom = () => {
             />
           )}
 
+          {canLeaveRoom && (
+            <RoomLeave
+              onLeave={confirmLeaveRoom}
+              isLoading={isLeavingRoom}
+              showLeave={showLeaveDialog}
+              setShowLeave={setShowLeaveDialog}
+            />
+          )}
+
           <CreateRoomFooter
             saveLabel={t("layout.shared.save")}
             deleteLabel={t("layout.shared.delete")}
@@ -186,7 +203,7 @@ const CreateRoom = () => {
             deleteDisabled={isLoading.delete}
             saveLoading={isLoading.save}
             deleteLoading={isLoading.delete}
-            showDelete={!!room}
+            showDelete={!!room && canManageRoom}
             onSave={room ? handleUpdate : handleSave}
             onDelete={handleDelete}
           />
@@ -208,6 +225,7 @@ const CreateRoom = () => {
             onTransferChange={setTransferRoom}
             transferAndAssignRole={transferRoomAndAssignRole}
             onTransferAndAssignRoleChange={setTransferRoomAndAssignRole}
+            showRoleOptions={false}
           />
         )}
       </ScreenWrapper>

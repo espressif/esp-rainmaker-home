@@ -111,7 +111,10 @@ export const EventDeviceParamSelectionScreen = observer(() => {
         label={t("automation.eventParamSelection.title")}
         showBack={true}
       />
-      <ScreenWrapper style={globalStyles.automationScreenContainerPadded}>
+      <ScreenWrapper
+        style={globalStyles.automationScreenContainerPadded}
+        qaId="screen_wrapper_event_device_params_selection"
+      >
         <EventDeviceParamSelectionParamList
           params={params}
           activeEventParam={activeEventParam}

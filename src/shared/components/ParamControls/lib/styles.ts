@@ -109,6 +109,16 @@ export const paramControlStyles = StyleSheet.create({
     elevation: 5,
   },
 
+  /** Offline / disabled thumbs: light solid fill (bg1), no elevation halo. */
+  thumbDisabled: {
+    elevation: 0,
+    shadowOpacity: 0,
+    shadowRadius: 0,
+    shadowOffset: { width: 0, height: 0 },
+    backgroundColor: tokens.colors.bg1,
+    borderColor: tokens.colors.bg2,
+  },
+
   sliderLabel: {
     ...globalStyles.fontMd,
     ...globalStyles.fontMedium,
@@ -256,6 +266,18 @@ export const paramControlStyles = StyleSheet.create({
     shadowOpacity: 0.3,
   },
 
+  /**
+   * Offline / disabled: strip elevation + shadow and use a light solid fill (bg1).
+   */
+  powerButtonDisabled: {
+    elevation: 0,
+    shadowOpacity: 0,
+    shadowRadius: 0,
+    shadowOffset: { width: 0, height: 0 },
+    backgroundColor: tokens.colors.bg1,
+    borderColor: tokens.colors.bg2,
+  },
+
   powerButtonInner: {
     alignItems: 'center',
     justifyContent: 'center',
@@ -267,6 +289,11 @@ export const paramControlStyles = StyleSheet.create({
   powerButtonInnerActive: {
     backgroundColor: tokens.colors.blue,
     borderColor: tokens.colors.blue,
+  },
+
+  powerButtonInnerDisabled: {
+    backgroundColor: tokens.colors.bg1,
+    borderColor: tokens.colors.bg2,
   },
 
   powerButtonGlow: {

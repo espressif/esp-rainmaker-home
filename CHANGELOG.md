@@ -5,6 +5,52 @@ All notable changes to the ESP RainMaker Home app will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [6.0.0]
+
+> **Naming:** **ESP RainMaker Neo** (RMNeo) is the product name for this stack.
+> Earlier changelog entries used the internal codename **RMNG** for the same backend. Historical references to **RMNG** should be interpreted as **ESP RainMaker Neo**.
+
+### Added
+
+#### ESP RainMaker Neo
+
+Integrated support for **ESP RainMaker Neo** through the new `@espressif/rainmaker-neo-base-sdk`, including:
+
+- **Authentication & user management**
+  - Complete account management, including sign-up, sign-in, password management, session restore, profile management, and temporary credentials.
+- **Provisioning**
+  - Support for BLE provisioning with Assisted Claiming.
+- **Node, device & service management**
+  - Manage devices and services with configuration, parameter control, shadow synchronization, and time-series data.
+- **Groups & sharing**
+  - Create and manage homes and rooms, control groups, and share access with other users.
+- **Automations**
+  - Create and manage schedules, triggers, and automations for nodes and groups.
+- **Real-time connectivity**
+  - Receive live device updates through AWS IoT MQTT.
+- **Notifications**
+  - Integrated push notification support.
+- **Integrations & platform**
+  - Added React Native adapters for MQTT, storage, provisioning, and backend integrations.
+- **Region & deployment**
+  - Public RainMaker Neo deployment defaults via `RMNEO_*`.
+  - Configure the stock app for private RainMaker Neo deployments by scanning a deployment QR code.
+- **Product capabilities**
+  - Support for group control and secondary-user group and room management (SDK-gated; Classic RainMaker unchanged).
+
+#### Backend selection
+
+- Added a pre-auth backend selection screen with **ESP RainMaker Classic**, **ESP RainMaker Neo**, and **Private deployment** options.
+- Added built-in region defaults for RainMaker Classic and RainMaker Neo while preserving scanned configurations as Private deployments.
+
+### Enhanced
+
+- Refactored time-series charts for a clearer device history experience.
+
+### Fixed
+
+- App-wide stability and reliability improvements.
+
 ## [5.4.0]
 
 ### Added

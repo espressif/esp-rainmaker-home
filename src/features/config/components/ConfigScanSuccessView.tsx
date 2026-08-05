@@ -5,6 +5,7 @@
  */
 
 import { View, Text } from "react-native";
+import { testProps } from "@shared/utils/testProps";
 import { useTranslation } from "react-i18next";
 import { Check } from "lucide-react-native";
 
@@ -19,10 +20,10 @@ export function ConfigScanSuccessView() {
   const { t } = useTranslation();
 
   return (
-    <ScreenWrapper style={globalStyles.configScanNoPadding}>
-      <View style={globalStyles.configScanCenterContent}>
+    <ScreenWrapper {...testProps("screen_wrapper_config_scan_success")} style={globalStyles.configScanNoPadding}>
+      <View {...testProps("view_config_scan_success")} style={globalStyles.configScanCenterContent}>
         <Check size={48} color={tokens.colors.primary} />
-        <Text style={globalStyles.configScanMessage}>
+        <Text {...testProps("text_config_scan_success")} style={globalStyles.configScanMessage}>
           {t("config.scan.success")}
         </Text>
       </View>

@@ -5,6 +5,7 @@
  */
 
 import { View, Text, TouchableOpacity } from "react-native";
+import { testProps } from "@shared/utils/testProps";
 import { useTranslation } from "react-i18next";
 
 import { ScreenWrapper, Header } from "@shared/components";
@@ -29,13 +30,14 @@ export function ConfigScanErrorView({
   const { t } = useTranslation();
 
   return (
-    <ScreenWrapper style={globalStyles.configScanNoPadding}>
+    <ScreenWrapper {...testProps("screen_wrapper_config_scan")} style={globalStyles.configScanNoPadding}>
       <Header label={title} showBack onBackPress={onCancel} />
-      <View style={globalStyles.configScanCenterContent}>
-        <Text style={globalStyles.configScanErrorText}>{errorMessage}</Text>
+      <View {...testProps("view_config_scan")} style={globalStyles.configScanCenterContent}>
+        <Text {...testProps("text_config_scan_error")} style={globalStyles.configScanErrorText}>{errorMessage}</Text>
         <View style={globalStyles.configScanButtonRow}>
           {/* Retry Button */}
           <TouchableOpacity
+            {...testProps("button_config_scan_retry")}
             style={globalStyles.configScanButton}
             onPress={onRetry}
           >
@@ -45,6 +47,7 @@ export function ConfigScanErrorView({
           </TouchableOpacity>
           {/* Cancel Button */}
           <TouchableOpacity
+            {...testProps("button_config_scan_cancel")}
             style={[
               globalStyles.configScanButton,
               globalStyles.configScanCancelButton,
