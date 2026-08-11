@@ -86,6 +86,30 @@ export const deepClone = <T>(obj: T): T => {
   return clonedObj;
 };
 
+/**
+ * JSON.stringify with recursively sorted object keys, so two deeply-equal
+ * objects always serialize identically regardless of key insertion order.
+ * Arrays keep their order. Useful for content-based change detection
+ * (e.g. unsaved-changes snapshots).
+ */
+export const stableStringify = (value: unknown): string => {
+  if (Array.isArray(value)) {
+    return `[${value.map(stableStringify).join(",")}]`;
+  }
+  if (value && typeof value === "object") {
+    return `{${Object.keys(value)
+      .sort()
+      .map(
+        (key) =>
+          `${JSON.stringify(key)}:${stableStringify(
+            (value as Record<string, unknown>)[key]
+          )}`
+      )
+      .join(",")}}`;
+  }
+  return JSON.stringify(value);
+};
+
 /** One ring in a stacked node avatar row (device type + connectivity for imagery). */
 export interface NodeDeviceImageEntry {
   key: string;

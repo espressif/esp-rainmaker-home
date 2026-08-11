@@ -5,7 +5,7 @@
  */
 
 import { useMemo } from "react";
-import { ActivityIndicator, Pressable, View } from "react-native";
+import { Pressable, View } from "react-native";
 import { Plus } from "lucide-react-native";
 import { tokens } from "@shared/theme/tokens";
 import { globalStyles } from "@shared/theme/globalStyleSheet";
@@ -14,11 +14,17 @@ import { globalStyles } from "@shared/theme/globalStyleSheet";
 import { useTranslation } from "react-i18next";
 import { observer } from "mobx-react-lite";
 import { useHomeScreen } from "@features/group/hooks";
+import { useExitAppConfirmation } from "@shared/hooks/useExitAppConfirmation";
 import { getFeatures } from "@/config/features.config";
 import { ALL_DEVICES_TAB_ID } from "@features/group/utils/constants";
 
 // Components
-import { Header, Tabs, ScreenWrapper } from "@shared/components";
+import {
+  Header,
+  Tabs,
+  ScreenWrapper,
+  ConfirmationDialog,
+} from "@shared/components";
 import {
   Banner,
   FloatingChatButton,
@@ -29,13 +35,15 @@ import {
   DeviceTypeFilterTabs,
   RoomControlSwitch,
   AddYourFirstDeviceBanner,
+  HomeDeviceSkeletonList,
 } from "@features/group/components";
 import { testProps } from "@shared/utils/testProps";
 
 /**
  * Home Screen – first screen after login.
- * Banner, tabs, filters, and lists share one FlatList so pull-to-refresh works
- * from anywhere on the scroll surface (not only over device cards).
+ * Banner stays visible (dropdown shows a small skeleton while the home name
+ * loads). Room/device cards use a matching skeleton grid until CDF has list
+ * content; then MobX updates paint the real cards without a refresh.
  */
 const HomeScreen = () => {
   const { t } = useTranslation();
@@ -67,6 +75,11 @@ const HomeScreen = () => {
   const { controlGroups: controlGroupsEnabled, aiAgent: aiAgentEnabled } =
     getFeatures();
 
+  // Login clears the pre-auth stack, so Home is the bottom of it — back here
+  // leaves the app. Confirm rather than dropping the user to the launcher.
+  const { isExitDialogOpen, confirmExit, cancelExit } =
+    useExitAppConfirmation();
+
   const isRoomSelected = useMemo(
     () => selectedRoom.id !== ALL_DEVICES_TAB_ID,
     [selectedRoom.id],
@@ -77,11 +90,13 @@ const HomeScreen = () => {
     controlGroups.length > 0 &&
     !isRoomSelected;
 
-  const listDevices = isLoading
-    ? []
-    : isRoomSelected
-      ? filteredRoomDevices
-      : roomDevices;
+  const listDevices = isRoomSelected ? filteredRoomDevices : roomDevices;
+
+  /** Device/room card skeletons while initializing and the list is still empty. */
+  const showDeviceSkeleton =
+    isLoading &&
+    listDevices.length === 0 &&
+    !showGroupControlOnHome;
 
   const listHeader = (
     <>
@@ -89,6 +104,7 @@ const HomeScreen = () => {
         activeGroup={selectedHome}
         onDropdownPress={handleDropdownPress}
         image={require("@assets/images/home.png")}
+        isHomeNameLoading={isLoading && !selectedHome?.name}
       />
       <Tabs
         tabs={roomTabs}
@@ -119,17 +135,12 @@ const HomeScreen = () => {
 
   const showEmptyCta =
     !isLoading &&
-    (roomDevices?.length ?? 0) === 0 &&
+    listDevices.length === 0 &&
     !showGroupControlOnHome;
 
-  /** Loading spinner or empty CTA — always inside the refreshed FlatList. */
-  const listEmpty = isLoading ? (
-    <ActivityIndicator
-      {...testProps("activity_indicator_home")}
-      style={globalStyles.homeActivityIndicator}
-      size="large"
-      color={tokens.colors.primary}
-    />
+  /** Skeleton device rows, empty CTA, or null — always inside the FlatList. */
+  const listEmpty = showDeviceSkeleton ? (
+    <HomeDeviceSkeletonList />
   ) : showEmptyCta ? (
     <AddYourFirstDeviceBanner
       redirectOperations={redirectOperations}
@@ -189,6 +200,18 @@ const HomeScreen = () => {
         title={t("group.home.migrationPromptTitle")}
         message={t("group.home.migrationPromptMessage")}
         buttonLabel={t("group.home.migrationPromptUnderstood")}
+      />
+
+      <ConfirmationDialog
+        open={isExitDialogOpen}
+        title={t("layout.shared.exitAppTitle")}
+        description={t("layout.shared.exitAppMessage")}
+        confirmText={t("layout.shared.exitAppConfirm")}
+        cancelText={t("layout.shared.cancel")}
+        onConfirm={confirmExit}
+        onCancel={cancelExit}
+        confirmColor={tokens.colors.red}
+        qaId="exit_app"
       />
     </>
   );

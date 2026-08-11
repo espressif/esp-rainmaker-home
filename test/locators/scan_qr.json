@@ -56,5 +56,13 @@
     "by": "id",
     "value": "text_scan_again",
     "text": "Scan Again"
+  },
+  "no_qr_code_button": {
+    "by": "id",
+    "value": "button_no_qr_code"
+  },
+  "no_qr_code_text": {
+    "by": "id",
+    "value": "text_no_qr_code"
   }
 }

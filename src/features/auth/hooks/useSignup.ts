@@ -52,12 +52,12 @@ export function useSignup() {
   };
 
   const handlePasswordChange = (value: string, isValid: boolean) => {
-    setPassword(value.trim());
+    setPassword(value);
     setIsPasswordValid(isValid);
   };
 
   const handleConfirmPasswordChange = (value: string, isValid: boolean) => {
-    setConfirmPassword(value.trim());
+    setConfirmPassword(value);
     setIsConfirmPasswordValid(isValid);
   };
 
@@ -83,7 +83,7 @@ export function useSignup() {
         password: password,
       });
       if (res) {
-        toast.showSuccess(t("auth.verification.heading"), undefined, { duration: 4000 });
+        toast.showSuccess(t("auth.verification.heading"), res.description || undefined, { duration: 4000 });
         router.push({
           pathname: "/(auth)/ConfirmationCode",
           params: { email, password },

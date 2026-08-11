@@ -17,11 +17,9 @@ scenarios("matter.feature")
 
 @when(parsers.parse('user adds a device via "{method}"'))
 def add_device_via(helper, method):
-    helper.add_device.open_from_home()
-    if method == "scan qr":
-        helper.add_device.select_scan_qr_option()
-    else:
+    if method != "scan qr":
         raise AssertionError(f"Unsupported matter add-device method: {method}")
+    helper.add_device.open_from_home()
 
 
 @when("user completes the Google Play services commissioning")

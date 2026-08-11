@@ -20,7 +20,6 @@ export interface HomeGroupControlListProps {
  * Non-scrolling grid of group-control cards on Home, plus divider before devices.
  * Uses a plain View (not a nested FlatList) so the parent Home list owns
  * vertical pull-to-refresh gestures over this region.
- *
  * @param props - Control groups and parent home id for navigation
  * @returns Group cards grid + divider, or null when empty
  */

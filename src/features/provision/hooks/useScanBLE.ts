@@ -17,7 +17,10 @@ import { parseRMakerCapabilities } from "@features/provision/utils/rmakerCapabil
 import { getAgentTermsAccepted } from "@features/agent/utils/storage";
 import ESPAppUtilityAdapter from "@native-adaptors/implementations/ESPAppUtilityAdapter";
 import { getScanErrorType } from "@features/provision/utils/scanBLEHelper";
-import { isAIAgentFromAdvertisement } from "@shared/utils/device";
+import {
+  getSupportedDeviceTypes,
+  isAIAgentFromAdvertisement,
+} from "@shared/utils/device";
 import { DEVICE_TYPE_LIST } from "@/config/devices.config";
 
 export interface UseScanBLEReturn {
@@ -69,7 +72,7 @@ export const useScanBLE = (): UseScanBLEReturn => {
   const [pendingAIAgentDevice, setPendingAIAgentDevice] = useState<ESPCDFProvisioningDevice | null>(null);
 
   // Filter out disabled device types
-  const availableDevices = DEVICE_TYPE_LIST.filter((device) => !device.disabled);
+  const availableDevices = getSupportedDeviceTypes();
 
   // User reference
   const user = store?.userStore?.user;

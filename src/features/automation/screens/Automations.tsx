@@ -5,12 +5,16 @@
  */
 
 import { useCallback, useMemo, useRef, useEffect } from "react";
-import { Pressable, RefreshControl, ScrollView } from "react-native";
+import { StyleSheet, View } from "react-native";
+import Animated from "react-native-reanimated";
 import { tokens } from "@shared/theme/tokens";
 import { globalStyles } from "@shared/theme/globalStyleSheet";
 import { useRouter } from "expo-router";
+import { useAddDeviceNavigation } from "@features/provision/hooks";
 import { useTranslation } from "react-i18next";
 import { useToast } from "@shared/hooks/useToast";
+import { useSkeletonReveal } from "@shared/hooks/useSkeletonReveal";
+import { SKELETON_REVEAL_PHASE_READY } from "@shared/utils/constants";
 import { useFocusEffect } from "@react-navigation/native";
 import { useAutomation } from "@context/automation.context";
 import {
@@ -18,7 +22,7 @@ import {
   type UseAutomationsListOptions,
 } from "@features/automation/hooks";
 import { observer } from "mobx-react-lite";
-import { Plus, Edit, Trash2 } from "lucide-react-native";
+import { Edit, Trash2 } from "lucide-react-native";
 import { Header, ScreenWrapper, InputDialog } from "@shared/components";
 import {
   AutomationMenuBottomSheet,
@@ -26,6 +30,8 @@ import {
   AutomationsList,
   AutomationsFooterButton,
   AutomationsSubgroupAccessNotice,
+  AutomationsHeaderActions,
+  AutomationsLoadingSkeleton,
 } from "@features/automation/components";
 import { testProps } from "@shared/utils/testProps";
 import type { AutomationMenuOption } from "@src/types/global";
@@ -35,10 +41,12 @@ import type { ESPCDFAutomation } from "@store";
  * Automations Screen – UI / presentation layer.
  * Business logic lives in useAutomationsList and utils/automation.
  * Handles toast, navigation, and translations; hook returns structured results.
+ * Initial load uses a mild skeleton collapse then content slide-up.
  */
 export const AutomationsScreen = observer(() => {
   const { t } = useTranslation();
   const router = useRouter();
+  const goToAddDevice = useAddDeviceNavigation();
   const toast = useToast();
   const { resetState } = useAutomation();
 
@@ -48,7 +56,10 @@ export const AutomationsScreen = observer(() => {
     isAutomationsAccessRestricted,
     isLoading,
     isRefreshing,
+    isEditing,
+    setIsEditing,
     toggleLoadingStates,
+    actionLoadingStates,
     setSelectedAutomation,
     selectedAutomation,
     isBottomSheetVisible,
@@ -108,6 +119,18 @@ export const AutomationsScreen = observer(() => {
     [setSelectedAutomation, setIsBottomSheetVisible],
   );
 
+  /**
+   * Deletes an automation from list edit mode (trash on card).
+   * @param automation - Automation to delete
+   */
+  const handleAutomationDelete = useCallback(
+    (automation: ESPCDFAutomation) => {
+      if (!handleAutomationAction || !automation.id) return;
+      void handleAutomationAction(automation.id, "delete");
+    },
+    [handleAutomationAction],
+  );
+
   const handleCloseBottomSheet = useCallback(() => {
     setIsBottomSheetVisible(false);
     setSelectedAutomation(null);
@@ -142,6 +165,7 @@ export const AutomationsScreen = observer(() => {
   }, [automationMenuOptions, handleAutomationAction, selectedAutomation, t]);
 
   const hasDevices = nodeList.length > 0;
+  const hasAutomations = filteredAutomations.length > 0;
   const emptyTitle = hasDevices
     ? t("automation.automations.noAutomationsYet")
     : t("automation.automations.noDevicesForAutomation");
@@ -157,11 +181,22 @@ export const AutomationsScreen = observer(() => {
     if (hasDevices) {
       handleAddAutomation();
     } else {
-      router.push({ pathname: "/(provision)/AddDeviceSelection" } as any);
+      goToAddDevice();
     }
-  }, [hasDevices, handleAddAutomation, router]);
+  }, [hasDevices, handleAddAutomation, goToAddDevice]);
 
   const showFullAutomationsUi = !isAutomationsAccessRestricted;
+
+  const {
+    showSkeleton,
+    showContent,
+    phase,
+    skeletonAnimatedStyle,
+    contentAnimatedStyle,
+    onSkeletonLayout,
+  } = useSkeletonReveal(isLoading && showFullAutomationsUi);
+
+  const showFooter = phase === SKELETON_REVEAL_PHASE_READY;
 
   return (
     <>
@@ -169,17 +204,19 @@ export const AutomationsScreen = observer(() => {
         label={t("automation.automations.title")}
         showBack={false}
         rightSlot={
-          showFullAutomationsUi && hasDevices ? (
-            <Pressable
-              {...testProps("button_add_automation_header")}
-              onPress={handleAddAutomation}
-            >
-              <Plus size={24} color={tokens.colors.primary} />
-            </Pressable>
+          showFullAutomationsUi ? (
+            <AutomationsHeaderActions
+              hasAutomations={hasAutomations}
+              isEditing={isEditing}
+              onEditToggle={() => setIsEditing(!isEditing)}
+            />
           ) : undefined
         }
       />
-      <ScreenWrapper style={globalStyles.automationsScreenContainer}>
+      <ScreenWrapper
+        style={globalStyles.automationsScreenContainer}
+        dismissKeyboard={false}
+      >
         {isAutomationsAccessRestricted ? (
           <AutomationsSubgroupAccessNotice
             title={t("automation.automations.notSupportedSubgroupAccessTitle")}
@@ -189,37 +226,48 @@ export const AutomationsScreen = observer(() => {
           />
         ) : (
           <>
-            <ScrollView
-              {...testProps("scroll_automations")}
-              style={globalStyles.automationsScrollView}
-              showsVerticalScrollIndicator={false}
-              contentContainerStyle={globalStyles.automationsScrollContent}
-              refreshControl={
-                <RefreshControl
-                  refreshing={isRefreshing}
-                  onRefresh={handleRefresh}
-                  colors={[tokens.colors.primary]}
-                  tintColor={tokens.colors.primary}
-                />
-              }
-            >
-              {filteredAutomations.length === 0 ? (
-                <AutomationsEmptyState
-                  isLoading={isLoading}
-                  title={emptyTitle}
-                  description={emptyDescription}
-                />
-              ) : (
-                <AutomationsList
-                  automations={filteredAutomations}
-                  onAutomationPress={handleAutomationPress}
-                  onToggle={handleAutomationToggle!}
-                  toggleLoadingStates={toggleLoadingStates}
-                />
-              )}
-            </ScrollView>
+            {showSkeleton && (
+              <Animated.View
+                {...testProps("view_automations_skeleton_reveal")}
+                style={[styles.skeletonSlot, skeletonAnimatedStyle]}
+              >
+                <View onLayout={onSkeletonLayout}>
+                  <AutomationsLoadingSkeleton />
+                </View>
+              </Animated.View>
+            )}
 
-            {!isLoading && (
+            {showContent && (
+              <Animated.View style={contentAnimatedStyle}>
+                {hasAutomations ? (
+                  <AutomationsList
+                    automations={filteredAutomations}
+                    onAutomationPress={handleAutomationPress}
+                    onToggle={handleAutomationToggle!}
+                    onDelete={handleAutomationDelete}
+                    toggleLoadingStates={toggleLoadingStates}
+                    actionLoadingStates={actionLoadingStates}
+                    isEditing={isEditing}
+                    refreshing={isRefreshing}
+                    onRefresh={handleRefresh}
+                  />
+                ) : (
+                  <View
+                    {...testProps("view_automations_empty")}
+                    style={globalStyles.flex1}
+                  >
+                    <AutomationsEmptyState
+                      refreshing={isRefreshing}
+                      onRefresh={handleRefresh}
+                      title={emptyTitle}
+                      description={emptyDescription}
+                    />
+                  </View>
+                )}
+              </Animated.View>
+            )}
+
+            {showFooter && (
               <AutomationsFooterButton
                 label={footerButtonLabel}
                 onPress={handleFooterButtonPress}
@@ -256,4 +304,10 @@ export const AutomationsScreen = observer(() => {
       )}
     </>
   );
+});
+
+const styles = StyleSheet.create({
+  skeletonSlot: {
+    width: "100%",
+  },
 });

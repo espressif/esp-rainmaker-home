@@ -457,6 +457,7 @@ def _provision_reserved_chip(cloud, helper, hardware_session, resource_manager, 
 
     helper.home.go_home()
     helper.add_device.open_from_home()
+    helper.add_device.open_selection_from_scanner()
     helper.add_device.select_bluetooth_option()
     helper.scan_ble.select_device(info.get("name"))
     if helper.pop.check_screen_displayed(timeout=5):

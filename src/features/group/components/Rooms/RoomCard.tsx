@@ -286,11 +286,9 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    borderBottomColor: tokens.colors.bg1,
   },
   roomHeaderBottom: {
     paddingBottom: tokens.spacing._10,
-    borderBottomWidth: 1,
   },
   titleContainer: {
     flexDirection: "row",

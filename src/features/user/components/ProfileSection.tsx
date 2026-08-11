@@ -4,7 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-
 import React from "react";
 import { View, Text, Pressable, StyleSheet } from "react-native";
 
@@ -16,7 +15,9 @@ import { tokens } from "@shared/theme/tokens";
 import { globalStyles } from "@shared/theme/globalStyleSheet";
 
 import { testProps } from "@shared/utils/testProps";
+import { PROFILE_AVATAR_SIZE } from "@features/user/constants";
 import { ESPCDFUserInfo } from "@store";
+
 // Types
 interface DebugInfo {
   /** Whether app is in development mode */
@@ -36,6 +37,11 @@ interface ProfileSectionProps {
   qaId?: string;
 }
 
+/**
+ * Resolves the avatar initial from name, then email, then a stable fallback.
+ * @param userInfo - Optional CDF user profile
+ * @returns Single uppercase letter for the avatar
+ */
 const getAvatarLetter = (userInfo?: ESPCDFUserInfo): string => {
   if (userInfo?.name?.trim()) {
     return userInfo.name.charAt(0).toUpperCase();
@@ -51,13 +57,8 @@ const getAvatarLetter = (userInfo?: ESPCDFUserInfo): string => {
 /**
  * ProfileSection
  *
- * A component for displaying user profile information.
- * Features:
- * - Avatar with initials (smart fallback logic)
- * - User name and username display
- * - Press interaction
- * - Debug mode indicator
- * - Consistent styling
+ * Displays signed-in user identity on My Profile (avatar, name/email).
+ * Callers should swap in `ProfileLoadingSkeleton` while CDF userInfo hydrates.
  */
 const ProfileSection: React.FC<ProfileSectionProps> = ({
   userInfo,
@@ -66,7 +67,8 @@ const ProfileSection: React.FC<ProfileSectionProps> = ({
   qaId,
 }) => {
   return (
-    <Pressable {...(qaId ? testProps(qaId) : {})}
+    <Pressable
+      {...(qaId ? testProps(qaId) : {})}
       onPress={onPress}
       style={[globalStyles.settingsSection, styles.profileContainer]}
     >
@@ -128,9 +130,9 @@ const styles = StyleSheet.create({
     marginRight: tokens.spacing._15,
   },
   avatar: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
+    width: PROFILE_AVATAR_SIZE,
+    height: PROFILE_AVATAR_SIZE,
+    borderRadius: PROFILE_AVATAR_SIZE / 2,
     backgroundColor: tokens.colors.bg3,
     justifyContent: "center",
     alignItems: "center",

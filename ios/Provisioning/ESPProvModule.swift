@@ -152,11 +152,24 @@ class ESPProvModule: NSObject, ESPDeviceConnectionDelegate, RCTBridgeModule {
           return
       }
       
-      // Store the resolve block in the resolveList dictionary for this device
-      resolveList[deviceName] = resolve
-      
+      // The promise must settle exactly once: the connection handler can fire
+      // again after settling (e.g. a disconnect event following a successful
+      // connect), and the getProofOfPossesion delegate fallback may also
+      // resolve this same promise.
+      var invoked = false
+
+      // Store a single-invocation resolve wrapper for the PoP delegate fallback
+      resolveList[deviceName] = { value in
+          guard !invoked else { return }
+          invoked = true
+          resolve(value)
+      }
+
       // Attempt to connect to the ESP device
       espDevice.connect(delegate: self) { status in
+          guard !invoked else { return }
+          invoked = true
+
           // Handle different connection statuses
           switch status {
           case .connected:
@@ -248,8 +261,15 @@ class ESPProvModule: NSObject, ESPDeviceConnectionDelegate, RCTBridgeModule {
   func initializeSession(deviceName: String, resolve: @escaping RCTPromiseResolveBlock, reject: @escaping RCTPromiseRejectBlock) {
       // Check if the specified ESP device exists in the espDevices dictionary
       if let device = espDevices[deviceName] {
+          // The promise must settle exactly once: the connection handler can
+          // fire again after settling (e.g. a later disconnect event).
+          var invoked = false
+
           // Attempt to connect to the ESP device
           device.connect(delegate: self) { status in
+              guard !invoked else { return }
+              invoked = true
+
               // Handle the connection status
               switch status {
               case .connected:
@@ -350,6 +370,30 @@ class ESPProvModule: NSObject, ESPDeviceConnectionDelegate, RCTBridgeModule {
       }
   }
   
+  /// Clears the device's Wi-Fi state over the open session, leaving the
+  /// user-node association intact so a corrected password can be re-sent.
+  @objc(resetWifiStatus:resolve:reject:)
+  func resetWifiStatus(deviceName: String, resolve: @escaping RCTPromiseResolveBlock, reject: @escaping RCTPromiseRejectBlock) {
+      guard let espDevice = self.espDevices[deviceName] else {
+          reject("DEVICE_NOT_FOUND", "No ESP device found. Call createESPDevice first.", nil)
+          return
+      }
+
+      // Settle the promise exactly once, as the other device commands do.
+      var invoked = false
+      espDevice.resetWifiStatus { success, error in
+          guard !invoked else { return }
+          invoked = true
+
+          if let error = error {
+              reject("WIFI_RESET_FAILED", error.localizedDescription, error)
+              return
+          }
+
+          resolve(success)
+      }
+  }
+
   /// Provisions the specified ESP device with the provided Wi-Fi credentials.
   ///
   /// - Parameters:
@@ -401,7 +445,6 @@ class ESPProvModule: NSObject, ESPDeviceConnectionDelegate, RCTBridgeModule {
       // Disconnect the ESP device if it exists in the espDevices dictionary
       self.espDevices[deviceName]?.disconnect()
   }
-
 
   // MARK: ESPDeviceConnectionDelegate
   

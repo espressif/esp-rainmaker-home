@@ -19,10 +19,7 @@ import { globalStyles } from "@shared/theme/globalStyleSheet";
 import { tokens } from "@shared/theme/tokens";
 
 // Constants
-import { deviceImages } from "@shared/utils/device";
-
-// config
-import { DEVICE_TYPE_LIST } from "@/config/devices.config";
+import { deviceImages, getSupportedDeviceTypes } from "@shared/utils/device";
 
 // Hooks
 import { useTranslation } from "react-i18next";
@@ -51,9 +48,7 @@ const AddYourFirstDeviceBanner: React.FC<AddYourFirstDeviceBannerProps> = ({
   qaId,
 }) => {
   const { t } = useTranslation();
-  const availableDevices = DEVICE_TYPE_LIST.filter(
-    (device) => !device.disabled
-  );
+  const availableDevices = getSupportedDeviceTypes();
 
   return (
     <Pressable {...(qaId ? testProps(qaId) : {})}

@@ -15,13 +15,18 @@ import { useSchedule } from "@context/schedules.context";
 import { useCreateSchedule } from "@features/schedule/hooks";
 
 // Components
-import { ScreenWrapper, Header } from "@shared/components";
+import {
+  ScreenWrapper,
+  Header,
+  UnsavedChangesDialog,
+} from "@shared/components";
 import {
   ScheduleTime,
   ScheduleDays,
   ScheduleNameInput,
   ScheduleWarningBanner,
   ScheduleActionsList,
+  ScheduleCreateEmptyState,
   ScheduleActionButtons,
 } from "@features/schedule/components";
 
@@ -49,6 +54,9 @@ export function CreateScheduleScreen() {
     warning,
     disableActionButton,
     scheduleActions,
+    isDiscardDialogOpen,
+    confirmDiscard,
+    cancelDiscard,
     handleSave,
     handleDelete,
     handleAddDeviceAction,
@@ -98,6 +106,15 @@ export function CreateScheduleScreen() {
           onAddDeviceAction={handleAddDeviceAction}
         />
 
+        {scheduleActions.length === 0 && (
+          <ScheduleCreateEmptyState
+            title={t("schedule.createSchedule.noActionsSelected")}
+            description={t(
+              "schedule.createSchedule.noActionsSelectedDescription",
+            )}
+          />
+        )}
+
         {/* ACTION BUTTONS */}
         <ScheduleActionButtons
           isEditing={state.isEditing}
@@ -116,6 +133,13 @@ export function CreateScheduleScreen() {
         initialHour={initialHour}
         initialMinute={initialMinute}
         initialPeriod={initialPeriod}
+      />
+
+      <UnsavedChangesDialog
+        open={isDiscardDialogOpen}
+        onDiscard={confirmDiscard}
+        onKeepEditing={cancelDiscard}
+        qaId="create_schedule_unsaved_changes"
       />
     </>
   );

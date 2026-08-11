@@ -7,6 +7,7 @@
 import { View, ActivityIndicator, Text, StyleSheet } from "react-native";
 import { Check, Trash2 } from "lucide-react-native";
 import { ActionButton } from "@shared/components";
+import { useKeyboardVisible } from "@shared/hooks/useKeyboardVisible";
 import { tokens } from "@shared/theme/tokens";
 import { globalStyles } from "@shared/theme/globalStyleSheet";
 import { testProps } from "@shared/utils/testProps";
@@ -26,7 +27,8 @@ type SceneActionButtonsProps = {
  * SceneActionButtons Component
  *
  * Reusable component for scene action buttons (Save/Update and Delete)
- * Used in Create Scene, Edit Scene, and other scene-related screens
+ * Used in Create Scene, Edit Scene, and other scene-related screens.
+ * Hidden while the keyboard is open so the footer does not ride up over inputs.
  */
 export default function SceneActionButtons({
   isEditing,
@@ -38,6 +40,12 @@ export default function SceneActionButtons({
   saveLabel,
   deleteLabel,
 }: SceneActionButtonsProps) {
+  const isKeyboardVisible = useKeyboardVisible();
+
+  if (isKeyboardVisible) {
+    return null;
+  }
+
   return (
     <View style={[globalStyles.actionButtonContainer, styles.container]}>
       {/* SAVE ACTION */}

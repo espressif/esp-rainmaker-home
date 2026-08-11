@@ -10,7 +10,7 @@
   },
   "add_automation_button": {
     "by": "id",
-    "value": "button_add_automation_header"
+    "value": "button_add_automation"
   },
   "automation_card": {
     "by": "xpath",

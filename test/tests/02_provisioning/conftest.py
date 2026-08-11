@@ -172,8 +172,6 @@ def flash_device_chal_resp(request, hardware_session, resource_manager, product,
 def tap_button(helper, button_name):
     if button_name == "add device":
         helper.add_device.open_from_home()
-    elif button_name == "scan qr":
-        helper.add_device.select_scan_qr_option()
     elif button_name == "bluetooth":
         helper.add_device.select_bluetooth_option()
     elif button_name == "softap":
@@ -230,9 +228,7 @@ def enter_device_pop(helper, hardware_session):
 
 @then("user should be on add device selection screen")
 def should_be_on_add_device_selection_screen(helper):
-    if not helper.add_device.check_screen_displayed(timeout=5):
-        helper.permissions.handle_all_permissions(action="allow", timeout=3)
-        helper.add_device.open_from_home()
+    helper.add_device.open_selection_from_scanner()
     assert helper.add_device.check_screen_displayed(), "Should be on add device selection screen"
 
 

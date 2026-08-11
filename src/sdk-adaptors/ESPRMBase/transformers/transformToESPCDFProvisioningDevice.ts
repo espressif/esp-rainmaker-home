@@ -97,6 +97,22 @@ export function transformToESPCDFProvisioningDevice(
             );
             return isChallengeResponseSupported;
         },
+
+        async resetWifiStatus(): Promise<boolean> {
+            return await espDevice.resetWifiStatus();
+        },
+
+        async retryNetworkCredentials(
+            ssid: string,
+            password: string,
+            onProgress?: (response: any) => void
+        ): Promise<void> {
+            await espDevice.retryNetworkCredentials(
+                ssid,
+                password,
+                onProgress ?? (() => {})
+            );
+        },
     };
 
     // Create device interface

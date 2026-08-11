@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { AppState, type AppStateStatus } from "react-native";
 import {
   ESPRMNeoUser,
   extractNodeIdFromTopic,
@@ -12,11 +13,18 @@ import {
 import { ESPCDF } from "@store";
 import { delay } from "@shared/utils/common";
 import {
+  APP_STATE_ACTIVE,
+  APP_STATE_BACKGROUND,
+  APP_STATE_INACTIVE,
+} from "@shared/utils/constants";
+import {
   addMqttMessageHook,
+  addMqttConnectionListener,
   ESPMQTTAdapter,
 } from "@native-adaptors/implementations/ESPMQTTAdapter";
 import { bindRmneoCdfStoreSink, projectShadowDocumentToCdf } from "./cdfStoreSinkHelpers";
 import { resetMqttNodeRegistrations } from "./groupHelpers";
+import { mqttTransportUiState } from "@shared/state/mqttTransportUiState";
 
 const mqttConnectionByUser = new WeakMap<ESPRMNeoUser, Promise<unknown>>();
 const watchdogTimerByUser = new WeakMap<
@@ -25,6 +33,8 @@ const watchdogTimerByUser = new WeakMap<
 >();
 // Dedupes concurrent reconnect callers so only one attempt runs per user.
 const reconnectInFlightByUser = new WeakMap<ESPRMNeoUser, Promise<void>>();
+const connectionListenerUnsubByUser = new WeakMap<ESPRMNeoUser, () => void>();
+const appStateUnsubByUser = new WeakMap<ESPRMNeoUser, () => void>();
 let updateAcceptedCdfBridgeInstalled = false;
 
 /**
@@ -103,6 +113,9 @@ export function startRmneoMqttConnection(
     .then(() => {
       ensureUpdateAcceptedCdfBridge();
       startReconnectWatchdog(esprmngUser);
+      startConnectionStatusListener(esprmngUser);
+      startAppStateResumeListener(esprmngUser);
+      mqttTransportUiState.setConnected(true);
     })
     .catch((error) => {
       console.error(
@@ -122,6 +135,8 @@ export function startRmneoMqttConnection(
 export function clearRmneoMqttConnection(esprmngUser: ESPRMNeoUser): void {
   mqttConnectionByUser.delete(esprmngUser);
   stopReconnectWatchdog(esprmngUser);
+  stopConnectionStatusListener(esprmngUser);
+  stopAppStateResumeListener(esprmngUser);
 }
 
 /**
@@ -157,6 +172,101 @@ function stopReconnectWatchdog(esprmngUser: ESPRMNeoUser): void {
 }
 
 /**
+ * Subscribes once per user to native MQTT transport status so disconnect
+ * triggers reconnect promptly (watchdog remains the fallback).
+ * @param esprmngUser - RMNeo user whose transport is watched.
+ */
+function startConnectionStatusListener(esprmngUser: ESPRMNeoUser): void {
+  if (connectionListenerUnsubByUser.has(esprmngUser)) {
+    return;
+  }
+  console.log(
+    "[MQTT_CONN_CB] registering app mqtt connection status listener",
+  );
+  const unsubscribe = addMqttConnectionListener((status) => {
+    if (status.connected) {
+      console.log(
+        "[MQTT_CONN_CB] app callback: MQTT connected (re-established or initial)",
+      );
+      return;
+    }
+    mqttTransportUiState.setConnected(false);
+    console.warn(
+      "[MQTT_CONN_CB] app callback: MQTT disconnected; triggering ensureRmneoMqttConnected",
+    );
+    ensureRmneoMqttConnected(esprmngUser).catch((error) => {
+      console.warn(
+        "[MQTT_CONN_CB] push-driven reconnect failed:",
+        error,
+      );
+    });
+  });
+  connectionListenerUnsubByUser.set(esprmngUser, unsubscribe);
+}
+
+/**
+ * Removes the per-user MQTT connection-status listener.
+ * @param esprmngUser - RMNeo user whose listener is cleared.
+ */
+function stopConnectionStatusListener(esprmngUser: ESPRMNeoUser): void {
+  const unsubscribe = connectionListenerUnsubByUser.get(esprmngUser);
+  if (unsubscribe) {
+    unsubscribe();
+    connectionListenerUnsubByUser.delete(esprmngUser);
+  }
+}
+
+/**
+ * On foreground resume after background/inactive, force-tears down MQTT and
+ * reconnects. Native `isConnected` can stay stale after Wi-Fi changes while
+ * backgrounded; a soft ensure would no-op.
+ * @param esprmngUser - RMNeo user whose transport is watched.
+ */
+function startAppStateResumeListener(esprmngUser: ESPRMNeoUser): void {
+  if (appStateUnsubByUser.has(esprmngUser)) {
+    return;
+  }
+  let previousState: AppStateStatus = AppState.currentState;
+  console.log(
+    "[rmneoMqttConnection] registering AppState resume MQTT listener",
+  );
+  const subscription = AppState.addEventListener(
+    "change",
+    (nextState: AppStateStatus) => {
+      const wasBackgrounded =
+        previousState === APP_STATE_BACKGROUND ||
+        previousState === APP_STATE_INACTIVE;
+      previousState = nextState;
+      if (!wasBackgrounded || nextState !== APP_STATE_ACTIVE) {
+        return;
+      }
+      console.warn(
+        "[rmneoMqttConnection] App became active; forcing MQTT reconnect",
+      );
+      forceRmneoMqttReconnectOnResume(esprmngUser).catch((error) => {
+        console.warn(
+          "[rmneoMqttConnection] resume-driven MQTT reconnect failed:",
+          error,
+        );
+      });
+    },
+  );
+  appStateUnsubByUser.set(esprmngUser, () => subscription.remove());
+}
+
+/**
+ * Removes the per-user AppState resume listener.
+ * @param esprmngUser - RMNeo user whose listener is cleared.
+ */
+function stopAppStateResumeListener(esprmngUser: ESPRMNeoUser): void {
+  const unsubscribe = appStateUnsubByUser.get(esprmngUser);
+  if (unsubscribe) {
+    unsubscribe();
+    appStateUnsubByUser.delete(esprmngUser);
+  }
+}
+
+/**
  * If the transport is disconnected, reconnects with fresh credentials and
  * re-subscribes every known node so live shadow updates resume. Concurrent
  * callers share the same in-flight attempt.
@@ -166,13 +276,55 @@ function stopReconnectWatchdog(esprmngUser: ESPRMNeoUser): void {
 export function ensureRmneoMqttConnected(
   esprmngUser: ESPRMNeoUser,
 ): Promise<void> {
+  return runExclusiveMqttReconnect(esprmngUser, () =>
+    ensureRmneoMqttConnectedOnce(esprmngUser),
+  );
+}
+
+/**
+ * Forces MQTT teardown + reconnect + resubscribe after app resume.
+ * Does not trust native `isConnected` (may be stale after background network changes).
+ * If another reconnect is already running, waits for it then still force-reconnects
+ * so a soft ensure that early-returned on a stale CONNECTED flag cannot skip work.
+ * @param esprmngUser - RMNeo user whose MQTT session is rebuilt.
+ * @returns Promise settled after the forced reconnect attempt.
+ */
+export function forceRmneoMqttReconnectOnResume(
+  esprmngUser: ESPRMNeoUser,
+): Promise<void> {
+  const prior = reconnectInFlightByUser.get(esprmngUser);
+  const promise = (async () => {
+    if (prior) {
+      await prior.catch(() => {});
+    }
+    await forceRmneoMqttReconnectOnce(esprmngUser);
+  })().finally(() => {
+    if (reconnectInFlightByUser.get(esprmngUser) === promise) {
+      reconnectInFlightByUser.delete(esprmngUser);
+    }
+  });
+  reconnectInFlightByUser.set(esprmngUser, promise);
+  return promise;
+}
+
+/**
+ * Runs a reconnect task exclusively per user (shared in-flight promise).
+ * @param esprmngUser - RMNeo user scoped for dedupe.
+ * @param task - Reconnect work to run.
+ */
+function runExclusiveMqttReconnect(
+  esprmngUser: ESPRMNeoUser,
+  task: () => Promise<void>,
+): Promise<void> {
   const inFlight = reconnectInFlightByUser.get(esprmngUser);
   if (inFlight) {
     return inFlight;
   }
 
-  const promise = ensureRmneoMqttConnectedOnce(esprmngUser).finally(() => {
-    reconnectInFlightByUser.delete(esprmngUser);
+  const promise = task().finally(() => {
+    if (reconnectInFlightByUser.get(esprmngUser) === promise) {
+      reconnectInFlightByUser.delete(esprmngUser);
+    }
   });
   reconnectInFlightByUser.set(esprmngUser, promise);
   return promise;
@@ -186,15 +338,50 @@ async function ensureRmneoMqttConnectedOnce(
   esprmngUser: ESPRMNeoUser,
 ): Promise<void> {
   if (await ESPMQTTAdapter.isConnected()) {
+    mqttTransportUiState.setConnected(true);
     return;
   }
 
+  mqttTransportUiState.setConnected(false);
   console.warn(
     "[rmneoMqttConnection] MQTT transport reports disconnected; reconnecting with fresh credentials",
   );
   mqttConnectionByUser.delete(esprmngUser);
   await startRmneoMqttConnection(esprmngUser);
+  await finishReconnectWithResubscribe();
+}
 
+/**
+ * Tears down any native MQTT session, reconnects with fresh credentials, and
+ * resubscribes. Used on AppState resume when the CONNECTED flag may be stale.
+ * @param esprmngUser - RMNeo user whose session is rebuilt.
+ */
+async function forceRmneoMqttReconnectOnce(
+  esprmngUser: ESPRMNeoUser,
+): Promise<void> {
+  mqttTransportUiState.setConnected(false);
+  console.warn(
+    "[rmneoMqttConnection] Forcing MQTT disconnect before resume reconnect",
+  );
+  try {
+    // Bypass SDK disconnectMQTT's isConnected guard so CONNECTING/stale
+    // CONNECTED native state cannot block a fresh connect().
+    await ESPMQTTAdapter.disconnect();
+  } catch (error) {
+    console.warn(
+      "[rmneoMqttConnection] Forced MQTT disconnect failed (continuing):",
+      error,
+    );
+  }
+  mqttConnectionByUser.delete(esprmngUser);
+  await startRmneoMqttConnection(esprmngUser);
+  await finishReconnectWithResubscribe();
+}
+
+/**
+ * After a reconnect attempt, resubscribes nodes when the transport is up.
+ */
+async function finishReconnectWithResubscribe(): Promise<void> {
   const reconnected = await ESPMQTTAdapter.isConnected();
   console.log(
     `[rmneoMqttConnection] reconnect attempt finished, connected=${reconnected}`,
@@ -203,8 +390,6 @@ async function ensureRmneoMqttConnectedOnce(
     return;
   }
 
-  // Reset and re-subscribe every known node so orchestrator bookkeeping
-  // matches the fresh transport.
   const nodesList = ESPCDF.instance?.nodeStore?.nodesList ?? [];
   const nodeIds = nodesList.map((node) => node.id);
   const cdfUser = ESPCDF.instance?.userStore?.user;
@@ -214,7 +399,6 @@ async function ensureRmneoMqttConnectedOnce(
   if (cdfUser && nodesList.length > 0) {
     try {
       await cdfUser.subscribeToNodeUpdates({ nodeList: nodesList });
-      // reset wiped transform-time store sinks; re-bind so UI params update.
       for (const cdfNode of nodesList) {
         const raw = cdfNode._raw as ESPRMNeoNode | undefined;
         if (raw?.nodeId) {
@@ -231,6 +415,8 @@ async function ensureRmneoMqttConnectedOnce(
       );
     }
   }
+
+  mqttTransportUiState.setConnected(true);
 }
 
 /**

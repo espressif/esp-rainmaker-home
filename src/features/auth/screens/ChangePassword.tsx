@@ -9,6 +9,7 @@ import { View, TextInput } from "react-native";
 import { useTranslation } from "react-i18next";
 
 import { globalStyles } from "@shared/theme/globalStyleSheet";
+import { useDeploymentBranding } from "@features/landing";
 
 import { useChangePassword } from "@features/auth/hooks";
 
@@ -20,6 +21,13 @@ import {
   Logo,
 } from "@shared/components";
 import { testProps } from "@shared/utils/testProps";
+import {
+  AUTO_COMPLETE_NEW_PASSWORD,
+  AUTO_COMPLETE_PASSWORD,
+  IMPORTANT_FOR_AUTOFILL_YES,
+  TEXT_CONTENT_TYPE_NEW_PASSWORD,
+  TEXT_CONTENT_TYPE_PASSWORD,
+} from "@shared/utils/constants";
 
 /**
  * Renders the change password screen UI section.
@@ -45,6 +53,11 @@ export function ChangePasswordScreen() {
 
   const newPasswordInputRef = useRef<TextInput>(null);
   const confirmPasswordInputRef = useRef<TextInput>(null);
+
+  // Same deployment mark as Login, so changing an ESP RainMaker Classic /
+  // Neo password shows that deployment's logo rather than the generic app
+  // lockup.
+  const { deploymentLabel, deploymentWordmark } = useDeploymentBranding();
 
   const isFormValid =
     isOldPasswordValid &&
@@ -73,7 +86,11 @@ export function ChangePasswordScreen() {
             globalStyles.authScrollViewContentWithPadding,
           ]}
         >
-          <Logo qaId="logo_change_password" />
+          <Logo
+            qaId="logo_change_password"
+            caption={deploymentLabel}
+            captionSource={deploymentWordmark}
+          />
           <View
             {...testProps("view_input_change_password")}
             style={globalStyles.inputContainer}
@@ -86,6 +103,11 @@ export function ChangePasswordScreen() {
               validator={oldPasswordValidator}
               validateOnChange={true}
               debounceDelay={500}
+              autoCapitalize="none"
+              autoCorrect={false}
+              textContentType={TEXT_CONTENT_TYPE_PASSWORD}
+              autoComplete={AUTO_COMPLETE_PASSWORD}
+              importantForAutofill={IMPORTANT_FOR_AUTOFILL_YES}
               returnKeyType="next"
               onSubmitEditing={() => {
                 if (isOldPasswordValid) {
@@ -103,6 +125,11 @@ export function ChangePasswordScreen() {
               validator={newPasswordValidator}
               validateOnChange={true}
               debounceDelay={500}
+              autoCapitalize="none"
+              autoCorrect={false}
+              textContentType={TEXT_CONTENT_TYPE_NEW_PASSWORD}
+              autoComplete={AUTO_COMPLETE_NEW_PASSWORD}
+              importantForAutofill={IMPORTANT_FOR_AUTOFILL_YES}
               returnKeyType="next"
               onSubmitEditing={() => {
                 if (isNewPasswordValid) {
@@ -122,6 +149,11 @@ export function ChangePasswordScreen() {
               validator={confirmPasswordValidator}
               validateOnChange={true}
               debounceDelay={50}
+              autoCapitalize="none"
+              autoCorrect={false}
+              textContentType={TEXT_CONTENT_TYPE_NEW_PASSWORD}
+              autoComplete={AUTO_COMPLETE_NEW_PASSWORD}
+              importantForAutofill={IMPORTANT_FOR_AUTOFILL_YES}
               returnKeyType="go"
               onSubmitEditing={() => {
                 if (isFormValid) {

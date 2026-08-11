@@ -57,6 +57,22 @@ export const WEBSITE_LINK =
 export const CN_CONSENT_ACCEPTED_KEY = "@esp_cn_consent_accepted";
 export const CONSENT_ACCEPTED_VALUE = "true";
 
+// SKELETON LOADERS
+/** `react-native-reanimated-skeleton` pulse animation (no linear-gradient bones). */
+export const SKELETON_ANIMATION_PULSE = "pulse" as const;
+
+/** Skeleton reveal: still showing bones while data loads. */
+export const SKELETON_REVEAL_PHASE_LOADING = "loading" as const;
+/** Skeleton reveal: collapsing skeleton height after load finishes. */
+export const SKELETON_REVEAL_PHASE_EXITING = "exiting" as const;
+/** Skeleton reveal: real content visible after exit. */
+export const SKELETON_REVEAL_PHASE_READY = "ready" as const;
+
+/** Shared duration for synced skeleton collapse + content slide-up (ms). */
+export const SKELETON_REVEAL_SHRINK_MS = 160;
+/** Mild content translateY at exit start (dp); eases to 0 with the skeleton. */
+export const SKELETON_REVEAL_SLIDE_OFFSET = 8;
+
 // TOAST TYPES
 export const SUCESS = "success";
 export const ERROR = 1;
@@ -77,6 +93,10 @@ export const APP_STATE_INACTIVE = "inactive";
 export const APP_STATE_BACKGROUND = "background";
 export const OAUTH_APP_RESUME_CHECK_DELAY_MS = 1000;
 export const OAUTH_APP_RESUME_CANCEL_GRACE_PERIOD_MS = 4000;
+
+// KEYBOARD EVENTS
+export const KEYBOARD_DID_SHOW = "keyboardDidShow";
+export const KEYBOARD_DID_HIDE = "keyboardDidHide";
 
 // DATA TYPES
 export const DATA_TYPE_ALL = "all";
@@ -139,6 +159,15 @@ export const VOLUME_PARAM_NAME = "Volume";
 /** Min ms between throttled `setValue` (burst coalesce, post-write queue). */
 export const PARAM_CONTROL_THROTTLE_MS = 400;
 
+/** Delay before adopting incoming MQTT/store `param.value` into local UI after user writes. */
+export const PARAM_INCOMING_UPDATE_DEBOUNCE_MS = 3000;
+
+/**
+ * Leading-edge window for duplicate `router.push` to the same destination.
+ * Prevents rapid taps from stacking the same screen.
+ */
+export const NAVIGATION_THROTTLE_MS = 700;
+
 // DURATION / LAST-SEEN (connectivity offline banner)
 export const MS_PER_SECOND = 1000;
 export const MS_PER_MINUTE = 60 * MS_PER_SECOND;
@@ -191,6 +220,19 @@ export const MATTER_CTL_CMD_UPDATE_DEVICE_LIST = 2;
 
 // AUTH STORAGE KEYS
 export const ESPRM_REFRESH_TOKEN_STORAGE_KEY = "com.esprmbase.refreshToken";
+
+// TEXT INPUT AUTOFILL (iOS textContentType / Android autoComplete)
+export const TEXT_CONTENT_TYPE_USERNAME = "username";
+export const TEXT_CONTENT_TYPE_EMAIL_ADDRESS = "emailAddress";
+export const TEXT_CONTENT_TYPE_PASSWORD = "password";
+export const TEXT_CONTENT_TYPE_NEW_PASSWORD = "newPassword";
+export const TEXT_CONTENT_TYPE_ONE_TIME_CODE = "oneTimeCode";
+export const AUTO_COMPLETE_USERNAME = "username";
+export const AUTO_COMPLETE_EMAIL = "email";
+export const AUTO_COMPLETE_PASSWORD = "password";
+export const AUTO_COMPLETE_NEW_PASSWORD = "new-password";
+export const AUTO_COMPLETE_SMS_OTP = "sms-otp";
+export const IMPORTANT_FOR_AUTOFILL_YES = "yes";
 
 // RMAKER USER AUTH — update outcomes (UI + provisioning callers)
 export const RMAKER_USER_AUTH_UPDATE_RESULT_UPDATED = "updated";
@@ -505,13 +547,70 @@ export const CONFIG_FETCH_TIMEOUT_MS = 10000;
 export const QR_CODE_TYPE = "qr";
 export const QR_PROVISION_CONNECT_TIMEOUT_MS = 15000;
 export const QR_PROVISION_CONNECT_TIMEOUT_ERROR = "DEVICE_CONNECTION_TIMEOUT";
+/**
+ * Max wait for each post-connect provisioning step (version info,
+ * capabilities, PoP, session init). A hung native call otherwise leaves the
+ * scan screen spinning forever with all controls disabled.
+ */
+export const QR_PROVISION_STEP_TIMEOUT_MS = 10000;
+/**
+ * Max wait for tearing down a device left connected by a previous scan before
+ * starting a new connection to the same peripheral.
+ */
+export const QR_PROVISION_DISCONNECT_TIMEOUT_MS = 3000;
+/**
+ * Attempts for creating the provisioning device. The native create runs a BLE
+ * scan for the device's advertisement; a device that was just disconnected can
+ * miss the first scan window, so allow one retry.
+ */
+export const QR_PROVISION_CREATE_ATTEMPTS = 2;
 
 /**
- * Max wait for the node to report online after Wi-Fi credentials are applied
- * (RMNG chal-resp `waitForOnline`). Timer starts only after successful Wi-Fi
- * provisioning — not during association / credential send.
+ * Overall app budget for node-online wait + MQTT reconnect retries during
+ * "Setting up the Node" (1 minute). Enforced in the adaptor because the SDK
+ * timeout may never start if `connectMQTT` / subscribe hangs first.
  */
 export const PROVISION_WAIT_FOR_ONLINE_TIMEOUT_MS = 60_000;
+/**
+ * How many times to run `waitForNodeOnline` (with MQTT reconnect between
+ * failures) before surfacing a provision error.
+ */
+export const PROVISION_WAIT_FOR_ONLINE_MAX_ATTEMPTS = 5;
+/**
+ * Per-attempt online wait inside the overall 1-minute budget
+ */
+export const PROVISION_WAIT_FOR_ONLINE_ATTEMPT_TIMEOUT_MS = 10_000;
+/**
+ * Brief pause after a forced MQTT reconnect before the next online wait.
+ */
+export const PROVISION_WAIT_FOR_ONLINE_RETRY_DELAY_MS = 2_000;
+/**
+ * Technical progress `description` values emitted during RMNeo post-provision
+ * setup (wait-for-online / MQTT reconnect / timezone). Mapped to i18n in the
+ * provision UI — do not show these strings raw to the user.
+ */
+export const PROVISION_SETUP_PROGRESS_MESSAGES = {
+  CHECKING_NODE_ONLINE: "Checking node online status",
+  TRYING_RECONNECT: "Trying reconnect",
+  UPDATING_NODE_TIMEZONE: "Updating node timezone",
+  COMPLETE: "Complete",
+} as const;
+/**
+ * Stable error tag thrown when RMNeo node-online wait (+ retries) times out.
+ * Mapped to i18n in the provision UI — do not show this string raw.
+ */
+export const PROVISION_NODE_ONLINE_TIMEOUT_ERROR =
+  "PROVISION_NODE_ONLINE_TIMEOUT";
+/**
+ * SDK `ProvErrorCodes.NODE_ONLINE_TIMEOUT` string (when the SDK timer does fire).
+ */
+export const SDK_NODE_ONLINE_TIMEOUT_ERROR = "NODE_ONLINE_TIMEOUT";
+/**
+ * SDK `ProvErrorCodes.NO_PROVISION_STATE_TO_RESUME` — a Wi-Fi retry was asked
+ * for with no completed association to resume from.
+ */
+export const SDK_NO_PROVISION_STATE_TO_RESUME_ERROR =
+  "NO_PROVISION_STATE_TO_RESUME";
 export const CAMERA_TYPE_FRONT = "front";
 export const CAMERA_TYPE_BACK = "back";
 
@@ -615,6 +714,20 @@ export const LANGUAGE_REGIONAL_MAP: Record<string, SupportedLanguageCode> = {
   "zh-TW": LANGUAGE_CODE_ZH,
   "zh-HK": LANGUAGE_CODE_ZH,
 };
+// AUTOMATION CARD CONDITION TAG SYMBOLS (display-only; picker/create flows keep their own labels)
+/** Display symbol for equal condition on the automation card When tag. */
+export const AUTOMATION_CONDITION_SYMBOL_EQUAL = "=";
+/** Display symbol for not-equal condition on the automation card When tag. */
+export const AUTOMATION_CONDITION_SYMBOL_NOT_EQUAL = "!=";
+/** Display symbol for greater-than condition on the automation card When tag. */
+export const AUTOMATION_CONDITION_SYMBOL_GREATER_THAN = ">";
+/** Display symbol for less-than condition on the automation card When tag. */
+export const AUTOMATION_CONDITION_SYMBOL_LESS_THAN = "<";
+/** Display symbol for greater-than-or-equal condition on the automation card When tag. */
+export const AUTOMATION_CONDITION_SYMBOL_GREATER_THAN_OR_EQUAL = ">=";
+/** Display symbol for less-than-or-equal condition on the automation card When tag. */
+export const AUTOMATION_CONDITION_SYMBOL_LESS_THAN_OR_EQUAL = "<=";
+
 /** RMNG+Matter compressed endpoint topology keys (`endpoint.c.s.<cluster>.c|a.<id>`). */
 export const MATTER_TOPOLOGY_KEY_C = "c";
 export const MATTER_TOPOLOGY_KEY_S = "s";

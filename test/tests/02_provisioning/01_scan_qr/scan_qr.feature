@@ -13,10 +13,8 @@ Feature: Scan QR provisioning
     And user login with "registered user 1" and "registered user 1 password"
     Then user should land on the home screen
     When user taps "add device"
-    Then user should be on add device selection screen
-    And device provisioning qr should be displayed for scan
-    When user taps "scan qr"
     Then user should be on scan qr screen
+    And device provisioning qr should be displayed for scan
     When user scans the qr code
     Then user should be on connect wifi screen
     When user taps "join other network"
@@ -41,7 +39,5 @@ Feature: Scan QR provisioning
     When user login with "registered user 1" and "registered user 1 password"
     Then user should land on the home screen
     When user taps "add device"
-    Then user should be on add device selection screen
-    When user taps "scan qr"
     Then user should be on scan qr screen
     And scan qr screen elements should be present

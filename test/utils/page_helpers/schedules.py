@@ -24,13 +24,12 @@ class Schedules(BasePage):
 
     def refresh_schedules(self):
         """Refresh the schedules list so cloud-side changes are reflected."""
-        return self.refresh_list("refresh_schedules_button")
+        return self.refresh_list()
 
     def delete_all_schedules(self):
         """Remove every schedule so the create flow starts clean (fired one-time schedules stay disabled)."""
         return self.delete_all_in_edit_mode(
             "edit_schedules_button", "schedule_delete_item", "text_edit_schedules",
-            refresh_button="refresh_schedules_button",
         )
 
     def tap_add_schedule(self):
@@ -265,4 +264,4 @@ class Schedules(BasePage):
 
     def is_schedule_visible(self, name, timeout=10, attempts=1):
         """True when a schedule card with the given name is listed."""
-        return self.is_named_item_visible(f"card_schedule_{name}", "refresh_schedules_button", timeout, attempts)
+        return self.is_named_item_visible(f"card_schedule_{name}", timeout, attempts)

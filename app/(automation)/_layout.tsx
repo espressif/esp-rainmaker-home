@@ -8,6 +8,9 @@ import { Stack } from "expo-router";
 import { AutomationProvider } from "@context/automation.context";
 import { Platform } from "react-native";
 
+/** Anchor route: keeps a back target beneath deep-link / notification entries. */
+export const unstable_settings = { anchor: "Automations" };
+
 /**
  * Automation Layout
  *
@@ -21,7 +24,7 @@ export default function AutomationLayout() {
       <Stack
         screenOptions={{
           headerShown: false,
-          gestureEnabled: true,
+          gestureEnabled: false,
           gestureDirection: "horizontal",
           animation: Platform.select({
             ios: "slide_from_right",

@@ -4,17 +4,23 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useCallback } from "react";
-import { View, Text, StyleSheet, Pressable } from "react-native";
+import React from "react";
+import {
+  View,
+  Text,
+  StyleSheet,
+  Pressable,
+  TouchableOpacity,
+  ActivityIndicator,
+} from "react-native";
 import { Switch } from "tamagui";
+import { Trash2 } from "lucide-react-native";
 
 // Styles
 import { tokens } from "@shared/theme/tokens";
 import { globalStyles } from "@shared/theme/globalStyleSheet";
 
-// Hooks
-import { useTranslation } from "react-i18next";
-import { useCDF } from "@shared/hooks/useCDF";
+// Types
 import { AutomationCardProps } from "@src/types/global";
 
 // Mobx observer
@@ -22,166 +28,31 @@ import { observer } from "mobx-react-lite";
 
 // Utils
 import { testProps, stateTestProps } from "@shared/utils/testProps";
+import AutomationWhenSetSummary from "./AutomationWhenSetSummary";
 
 /**
  * AutomationCard
  *
- * A card component for displaying automation information.
- * Features:
- * - Automation name with enable/disable toggle
- * - Event description (trigger conditions)
- * - Smart action display:
- *   - Shows detailed info for 1-2 actions
- *   - Shows summary for 3+ actions (device count and action count)
- * - Touch interaction for editing
+ * Displays automation name, event/action summary, and enable toggle.
+ * In edit mode, toggle is replaced by delete (same as ScheduleCard).
  */
 const AutomationCard: React.FC<AutomationCardProps & { qaId?: string }> = ({
   automation,
   onPress,
   onToggle,
   toggleLoading = false,
+  isEditing = false,
+  onDelete,
+  deleteLoading = false,
   qaId,
 }) => {
-  const { t } = useTranslation();
-  const { store } = useCDF();
-
-  // Extract automation properties with fallbacks
   const automationName = automation.name || "Unnamed Automation";
   const isEnabled = automation.enabled || false;
 
   /**
-   * Gets device display name from store using nodeId and device name
-   * @param nodeId - Node ID from automation
-   * @param deviceName - Device name from automation event
-   * @returns Device display name or fallback to device name
+   * Forwards toggle changes when not already loading.
+   * @param value - Next enabled state
    */
-  const getDeviceDisplayName = useCallback(
-    (nodeId: string, deviceName: string) => {
-      try {
-        const node = store?.nodeStore?.nodesByIDMap?.[nodeId];
-        if (!node?.devices) {
-          return deviceName; // Fallback to device name
-        }
-
-        const device = node.devices.find(
-          (device) => device.name === deviceName,
-        );
-
-        return device?.displayName || deviceName; // Return display name or fallback
-      } catch (error) {
-        console.error(
-          "[AutomationCard] Error getting device display name:",
-          error,
-        );
-        return deviceName; // Fallback to device name
-      }
-    },
-    [store],
-  );
-
-  /**
-   * Formats event description from automation events
-   */
-  const getEventDescription = useCallback(() => {
-    // Get first event for display (automations can have multiple events)
-    const event = automation.events[0] as any;
-
-    if (event) {
-      // Node-based event (device parameter condition)
-      const deviceName = event.deviceName || "Device";
-      // Get device display name using nodeId and device name
-      const displayName = automation.nodeId
-        ? getDeviceDisplayName(automation.nodeId, deviceName)
-        : deviceName;
-      const paramName = event.param || "Parameter";
-      const condition = event.check || ">";
-      const value = event.value !== undefined ? event.value : "?";
-
-      return `${t(
-        "automation.card.if",
-      )}: ${displayName}: ${paramName} ${condition} ${value}`;
-    }
-  }, [automation, t, getDeviceDisplayName]);
-
-  /**
-   * Formats action description from automation actions
-   */
-  const getActionDescription = useCallback(() => {
-    if (!automation.actions || automation.actions.length === 0) {
-      return t("automation.card.noActions");
-    }
-
-    // If there's only one action, show it in detail
-    if (automation.actions.length === 1) {
-      const action = automation.actions[0];
-      const deviceName = action.deviceName || "Device";
-      // Get device display name using nodeId and device name
-      const displayName = action.nodeId
-        ? getDeviceDisplayName(action.nodeId, deviceName)
-        : deviceName;
-      const paramName = action.param || "Parameter";
-      const value = action.value !== undefined ? action.value : "?";
-
-      // Format boolean values
-      const displayValue =
-        typeof value === "boolean"
-          ? value
-            ? t("automation.card.on")
-            : t("automation.card.off")
-          : value;
-
-      return `${displayName}: ${paramName}: ${displayValue}`;
-    }
-
-    // Group actions by nodeId + deviceName for proper uniqueness
-    const deviceGroups = new Map<string, typeof automation.actions>();
-
-    automation.actions.forEach((action) => {
-      const deviceKey = `${action.nodeId}-${action.deviceName}`;
-      if (!deviceGroups.has(deviceKey)) {
-        deviceGroups.set(deviceKey, []);
-      }
-      deviceGroups.get(deviceKey)!.push(action);
-    });
-
-    const uniqueDeviceCount = deviceGroups.size;
-    const totalActions = automation.actions.length;
-
-    if (uniqueDeviceCount === 1) {
-      // Multiple actions on the same device (same nodeId + deviceName) - show comma-separated parameters
-      const deviceActions = Array.from(deviceGroups.values())[0];
-      const deviceName = deviceActions[0].deviceName || "Device";
-      // Get device display name using nodeId and device name
-      const displayName = deviceActions[0].nodeId
-        ? getDeviceDisplayName(deviceActions[0].nodeId, deviceName)
-        : deviceName;
-
-      const parameters = deviceActions
-        .map((action) => {
-          const paramName = action.param || "Parameter";
-          const value = action.value !== undefined ? action.value : "?";
-
-          // Format boolean values
-          const displayValue =
-            typeof value === "boolean"
-              ? value
-                ? t("automation.card.on")
-                : t("automation.card.off")
-              : value;
-
-          return `${paramName}: ${displayValue}`;
-        })
-        .join(", ");
-
-      return `${displayName}: ${parameters}`;
-    } else {
-      // Multiple actions on different devices
-      return `${uniqueDeviceCount} ${t(
-        "automation.card.devices",
-      )} (${totalActions} ${t("automation.card.actions")})`;
-    }
-  }, [automation, t, getDeviceDisplayName]);
-
   const handleToggle = (value: boolean) => {
     if (onToggle && !toggleLoading) {
       onToggle(value);
@@ -193,9 +64,9 @@ const AutomationCard: React.FC<AutomationCardProps & { qaId?: string }> = ({
       {...(qaId ? testProps(`${qaId}_${automationName}`) : {})}
       style={[styles.card, toggleLoading && styles.cardLoading]}
       onPress={onPress}
-      disabled={toggleLoading}
+      disabled={isEditing || toggleLoading}
     >
-      {/* Header with name and toggle */}
+      {/* Header with name and toggle / delete */}
       <View style={styles.header}>
         <Text
           {...testProps(`text_automation_name`)}
@@ -204,44 +75,49 @@ const AutomationCard: React.FC<AutomationCardProps & { qaId?: string }> = ({
         >
           {automationName}
         </Text>
-        <Switch
-          {...testProps("switch_automation_enabled")}
-          size="$2.5"
-          borderColor={tokens.colors.bg1}
-          borderWidth={0}
-          checked={isEnabled}
-          disabled={toggleLoading}
-          style={globalStyles.switch}
-          onCheckedChange={(value) => handleToggle(value)}
-        >
-          <Switch.Thumb
-            {...stateTestProps("automation_card", isEnabled, "enabled", "disabled")}
-            animation="quicker"
-            style={
-              isEnabled
-                ? globalStyles.switchThumbActive
-                : globalStyles.switchThumb
-            }
-          />
-        </Switch>
+        {!isEditing ? (
+          <Switch
+            {...testProps("switch_automation_enabled")}
+            size="$2.5"
+            borderColor={tokens.colors.bg1}
+            borderWidth={0}
+            checked={isEnabled}
+            disabled={toggleLoading}
+            style={globalStyles.switch}
+            onCheckedChange={(value) => handleToggle(value)}
+          >
+            <Switch.Thumb
+              {...stateTestProps(
+                "automation_card",
+                isEnabled,
+                "enabled",
+                "disabled",
+              )}
+              animation="quicker"
+              style={
+                isEnabled
+                  ? globalStyles.switchThumbActive
+                  : globalStyles.switchThumb
+              }
+            />
+          </Switch>
+        ) : (
+          <TouchableOpacity
+            {...testProps("button_delete_automation")}
+            style={styles.deleteButton}
+            onPress={onDelete}
+            disabled={deleteLoading}
+          >
+            {deleteLoading ? (
+              <ActivityIndicator size="small" color={tokens.colors.red} />
+            ) : (
+              <Trash2 size={18} color={tokens.colors.red} />
+            )}
+          </TouchableOpacity>
+        )}
       </View>
 
-      {/* Event Description */}
-      <View>
-        <Text style={styles.descriptionText} numberOfLines={2}>
-          {getEventDescription()}
-        </Text>
-      </View>
-
-      <View style={styles.separator}></View>
-
-      {/* Action Description */}
-      <View>
-        <Text style={styles.descriptionText} numberOfLines={2}>
-          {t("automation.card.set")}:{"\n"}
-          {getActionDescription()}
-        </Text>
-      </View>
+      <AutomationWhenSetSummary automation={automation} qaId="card" />
     </Pressable>
   );
 };
@@ -280,16 +156,8 @@ const styles = StyleSheet.create({
     color: tokens.colors.text_primary,
     marginRight: tokens.spacing._10,
   },
-  descriptionText: {
-    fontSize: tokens.fontSize.sm,
-    fontFamily: tokens.fonts.regular,
-    color: tokens.colors.text_secondary,
-    lineHeight: 18,
-  },
-  separator: {
-    height: 0.5,
-    marginVertical: tokens.spacing._5,
-    backgroundColor: tokens.colors.borderColor,
+  deleteButton: {
+    padding: tokens.spacing._5,
   },
 });
 

@@ -37,6 +37,7 @@ export const useSchedulesList = () => {
   tRef.current = t;
 
   const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const isFetchingRef = useRef(false);
   const [isEditing, setIsEditing] = useState(false);
   const [scheduleLoadingStates, setScheduleLoadingStates] = useState<
@@ -47,30 +48,23 @@ export const useSchedulesList = () => {
   const [scheduleName, setScheduleName] = useState("");
 
   /**
-   * Fetches latest schedule data from ESPCDFGroup instance
-   * Uses group.getSchedules() which reads from the group's nodeDetails to get latest data.
-   * The operation uses the ESPCDFGroup instance directly, ensuring we always get the latest data.
-   * Follows the same pattern as getScenes - gets data directly from the ESPCDFGroup instance.
-   * Stable callback (no deps) to avoid useFocusEffect recursion; reads store at call time.
-   * MobX stores are stable references, so we can access them via closure.
+   * Loads schedules for initial / focus fetch (shows full-screen loader).
+   * Clears the store first so UI does not briefly show stale items.
+   * Stable callback (no deps) to avoid useFocusEffect recursion.
    */
-  const fetchSchedules = useCallback(async () => {
+  const loadSchedules = useCallback(async () => {
     if (isFetchingRef.current) return;
     isFetchingRef.current = true;
     try {
       setIsLoading(true);
-      // Clear existing schedules before fetching new ones
       scheduleStore.clear();
 
-      // Get current home group - this is an ESPCDFGroup instance
       const currentHome = store.getCurrentHome();
       if (currentHome && currentHome.operations.getSchedules) {
         await currentHome.getSchedules();
       }
     } catch (error) {
       console.error("Error fetching schedules:", error);
-      // Use refs for toast and t since they might change
-      // Safety check to ensure refs are initialized
       if (toastRef.current && tRef.current) {
         toastRef.current.showError(tRef.current("schedule.errors.fallback"));
       }
@@ -79,23 +73,48 @@ export const useSchedulesList = () => {
       setIsLoading(false);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional hook deps
-  }, []); // Empty deps - MobX stores are stable and accessed via closure
+  }, []);
 
-  // Update refs when values change (after fetchSchedules is defined)
+  /**
+   * Soft refresh for pull-to-refresh / header refresh (RefreshControl only).
+   * Does not clear the list or toggle isLoading (same as automations).
+   */
+  const refreshSchedules = useCallback(async () => {
+    if (isFetchingRef.current) return;
+    isFetchingRef.current = true;
+    try {
+      setIsRefreshing(true);
+      const currentHome = store.getCurrentHome();
+      if (currentHome && currentHome.operations.getSchedules) {
+        await currentHome.getSchedules();
+      }
+    } catch (error) {
+      console.error("Error refreshing schedules:", error);
+      if (toastRef.current && tRef.current) {
+        toastRef.current.showError(tRef.current("schedule.errors.fallback"));
+      }
+    } finally {
+      isFetchingRef.current = false;
+      setIsRefreshing(false);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional hook deps
+  }, []);
+
+  // Update refs when values change (after load/refresh are defined)
   useEffect(() => {
     toastRef.current = toast;
     tRef.current = t;
   }, [toast, t]);
 
   /**
-   * Effect: Updates schedules when screen comes into focus.
-   * Empty deps so this runs only on focus change, not when fetchSchedules identity changes (avoids recursion).
+   * Effect: Loads schedules when screen comes into focus.
+   * Empty deps so this runs only on focus change.
    */
   useFocusEffect(
     useCallback(() => {
-      fetchSchedules();
+      loadSchedules();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional hook deps
-    }, []), // Empty deps - only run on focus change
+    }, []),
   );
 
   // Handle add schedule
@@ -189,11 +208,13 @@ export const useSchedulesList = () => {
   return {
     schedulesList,
     isLoading,
+    isRefreshing,
     isEditing,
     scheduleLoadingStates,
     isScheduleNameDialogVisible,
     scheduleName,
-    fetchSchedules,
+    loadSchedules,
+    refreshSchedules,
     setIsEditing,
     handleAddSchedule,
     handleScheduleNameConfirm,

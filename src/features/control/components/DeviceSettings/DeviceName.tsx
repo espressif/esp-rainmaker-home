@@ -51,14 +51,28 @@ const DeviceName: React.FC<DeviceNameProps> = ({
   const { t } = useTranslation();
   const inputRef = useRef<TextInput>(null);
 
+  /**
+   * Triggers persist when the field blurs or the keyboard Done key is pressed.
+   */
   const handleSaveDeviceName = () => {
+    if (disabled || isSaving) {
+      return;
+    }
+    void onSave();
+  };
+
+  /**
+   * Marks the field as editing so store sync cannot overwrite the draft.
+   */
+  const handleFocus = () => {
     setIsEditingName(true);
-    onSave();
   };
 
   /**
    * Validates device name before saving
    * Ensures name is not empty and triggers save
+   * @param value - Candidate device name
+   * @returns Validation result for the Input control
    */
   const deviceNameValidator = (value: string) => {
     if (!value?.trim()) {
@@ -94,6 +108,7 @@ const DeviceName: React.FC<DeviceNameProps> = ({
           value={deviceName}
           onFieldChange={(value) => setDeviceName(value)}
           validator={deviceNameValidator}
+          onFocus={handleFocus}
           onBlur={handleSaveDeviceName}
           validateOnBlur={true}
           placeholder={t("device.settings.enterDeviceNamePlaceholder")}

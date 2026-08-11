@@ -4,7 +4,13 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { View, Text } from "react-native";
+import {
+  View,
+  Text,
+  Pressable,
+  ScrollView,
+  RefreshControl,
+} from "react-native";
 import { useTranslation } from "react-i18next";
 import { LayoutPanelLeft } from "lucide-react-native";
 import { tokens } from "@shared/theme/tokens";
@@ -12,31 +18,62 @@ import { globalStyles } from "@shared/theme/globalStyleSheet";
 import { testProps } from "@shared/utils/testProps";
 
 interface SchedulesEmptyStateProps {
-  isLoading: boolean;
+  /** True while pull-to-refresh is in progress */
+  refreshing: boolean;
+  /** Pull-to-refresh handler */
+  onRefresh: () => void;
 }
 
 /**
- * SchedulesEmptyState Component
- *
- * Displays an empty state when no schedules exist.
- * Shows a loading indicator when schedules are being fetched.
+ * Empty schedules state with its own ScrollView + RefreshControl.
+ * Initial-load skeleton is owned by the Schedules screen reveal transition.
+ * @param props - Refresh flags and handler
+ * @returns Scrollable empty-state UI for the schedules screen
  */
-export const SchedulesEmptyState = ({ isLoading }: SchedulesEmptyStateProps) => {
+export const SchedulesEmptyState = ({
+  refreshing,
+  onRefresh,
+}: SchedulesEmptyStateProps) => {
   const { t } = useTranslation();
 
   return (
-    <View {...testProps("view_empty_schedules")} style={[globalStyles.sceneEmptyStateContainer]}>
-      {!isLoading && (<>
+    <ScrollView
+      {...testProps("scroll_schedules_empty")}
+      style={globalStyles.schedulesScrollView}
+      contentContainerStyle={[{ flexGrow: 1 }, { paddingBottom: 150 }]}
+      showsVerticalScrollIndicator={false}
+      bounces
+      alwaysBounceVertical
+      refreshControl={
+        <RefreshControl
+          refreshing={refreshing}
+          onRefresh={onRefresh}
+          colors={[tokens.colors.primary]}
+          tintColor={tokens.colors.primary}
+          progressViewOffset={10}
+        />
+      }
+    >
+      <Pressable
+        {...testProps("view_empty_schedules")}
+        style={globalStyles.sceneEmptyStateContainer}
+      >
         <View style={globalStyles.sceneEmptyStateIconContainerTop}>
           <LayoutPanelLeft size={35} color={tokens.colors.primary} />
         </View>
-        <Text {...testProps("text_title_empty")} style={globalStyles.emptyStateTitle}>
+        <Text
+          {...testProps("text_title_empty")}
+          style={globalStyles.emptyStateTitle}
+        >
           {t("schedule.schedules.noSchedulesYet")}
         </Text>
-        <Text {...testProps("text_description_empty")} style={globalStyles.emptyStateDescription}>
+        <Text
+          {...testProps("text_description_empty")}
+          style={globalStyles.emptyStateDescription}
+        >
           {t("schedule.schedules.noSchedulesYetDescription")}
         </Text>
-      </>)}
-    </View>
+      </Pressable>
+    </ScrollView>
   );
 };

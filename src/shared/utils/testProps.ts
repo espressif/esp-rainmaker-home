@@ -30,6 +30,14 @@ export const testProps = (id: string): Record<string, string> => {
   };
 };
 
+/**
+ * Builds test props with an on/off suffix for stateful controls.
+ * @param base - Snake_case base id (e.g. `switch_power`)
+ * @param on - When true, appends `onSuffix`; otherwise `offSuffix`
+ * @param onSuffix - Suffix when `on` is true (default `on`)
+ * @param offSuffix - Suffix when `on` is false (default `off`)
+ * @returns Same shape as {@link testProps} for the composed id
+ */
 export const stateTestProps = (
   base: string,
   on: boolean,

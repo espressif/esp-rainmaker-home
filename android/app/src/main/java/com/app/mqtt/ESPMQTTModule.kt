@@ -14,7 +14,8 @@ import java.util.UUID
 
 /**
  * React Native bridge module for AWS IoT MQTT using temporary session credentials.
- * Exposes connect, publish, subscribe, and emits the `mqttMessageReceived` event to JavaScript.
+ * Exposes connect, publish, subscribe, and emits `mqttMessageReceived` plus
+ * `mqttConnectionStatus` (`{ connected: boolean }`) to JavaScript.
  */
 class ESPMQTTModule(private val reactContext: ReactApplicationContext) :
     ReactContextBaseJavaModule(reactContext) {
@@ -41,6 +42,16 @@ class ESPMQTTModule(private val reactContext: ReactApplicationContext) :
     }
 
     private var state = State.DISCONNECTED
+
+    /**
+     * When true, status callbacks from intentional teardown (`disconnect` /
+     * `releaseAndReconnect`) are not emitted to JS — only unexpected drops
+     * and successful connects should notify the app.
+     */
+    private var suppressConnectionStatusEvents = false
+
+    /** Last `connected` value emitted on `mqttConnectionStatus` (dedupe). */
+    private var lastEmittedConnected: Boolean? = null
 
     /** Module name exposed to React Native (`NativeModules.ESPMQTTModule`). */
     override fun getName(): String = "ESPMQTTModule"
@@ -173,6 +184,7 @@ class ESPMQTTModule(private val reactContext: ReactApplicationContext) :
             return
         }
 
+        suppressConnectionStatusEvents = true
         try {
             existing.disconnect()
         } catch (e: Exception) {
@@ -183,9 +195,28 @@ class ESPMQTTModule(private val reactContext: ReactApplicationContext) :
 
             mqttManager = null
             state = State.DISCONNECTED
+            lastEmittedConnected = false
+            suppressConnectionStatusEvents = false
 
             onDone()
         }, 1000)
+    }
+
+    /**
+     * Emits `mqttConnectionStatus` to JS when [connected] differs from the
+     * last emitted value and intentional teardown is not in progress.
+     */
+    private fun emitConnectionStatus(connected: Boolean) {
+        if (suppressConnectionStatusEvents) {
+            return
+        }
+        if (lastEmittedConnected == connected) {
+            return
+        }
+        lastEmittedConnected = connected
+        val payload = Arguments.createMap()
+        payload.putBoolean("connected", connected)
+        emitEvent("mqttConnectionStatus", payload)
     }
 
     /**
@@ -242,7 +273,7 @@ class ESPMQTTModule(private val reactContext: ReactApplicationContext) :
         // instead driven entirely from JS, which re-fetches valid credentials
         // before calling `connect()` again.
         manager.setAutoReconnect(false)
-        manager.keepAlive = 30
+        manager.keepAlive = 40
 
         mqttManager = manager
 
@@ -256,6 +287,8 @@ class ESPMQTTModule(private val reactContext: ReactApplicationContext) :
             override fun refresh() {}
         }
 
+        suppressConnectionStatusEvents = false
+
         manager.connect(credentialsProvider) { status, throwable ->
 
             when (status) {
@@ -263,6 +296,7 @@ class ESPMQTTModule(private val reactContext: ReactApplicationContext) :
                 AWSIotMqttClientStatusCallback.AWSIotMqttClientStatus.Connected -> {
                     state = State.CONNECTED
                     log("Connected")
+                    emitConnectionStatus(true)
 
                     if (!isPromiseHandled) {
                         isPromiseHandled = true
@@ -282,6 +316,7 @@ class ESPMQTTModule(private val reactContext: ReactApplicationContext) :
                     state = State.DISCONNECTED
                     log("Disconnected")
                     if (throwable != null) logE("Connection lost", throwable)
+                    emitConnectionStatus(false)
                 }
 
                 else -> {
@@ -306,9 +341,11 @@ class ESPMQTTModule(private val reactContext: ReactApplicationContext) :
     fun disconnect(promise: Promise) {
 
         try {
+            suppressConnectionStatusEvents = true
             mqttManager?.disconnect()
             mqttManager = null
             state = State.DISCONNECTED
+            lastEmittedConnected = false
 
             log("Disconnected")
 
@@ -316,6 +353,8 @@ class ESPMQTTModule(private val reactContext: ReactApplicationContext) :
         } catch (e: Exception) {
             logE("disconnect() failed", e)
             promise.reject("error", e.message)
+        } finally {
+            suppressConnectionStatusEvents = false
         }
     }
 

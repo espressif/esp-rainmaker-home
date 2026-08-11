@@ -6,9 +6,10 @@
 
 import type { StyleProp, ViewStyle } from "react-native";
 import { useTranslation } from "react-i18next";
+import { observer } from "mobx-react-lite";
 import type { ESPCDFNode } from "@store";
 import { useDeviceConnected } from "@shared/hooks/useDeviceConnected";
-import { resolveOfflineBannerMessage } from "@shared/utils/connectivity";
+import { resolveNodeUnavailableMessage } from "@shared/utils/connectivity";
 import WarningBanner from "./WarningBanner";
 
 export interface DeviceOfflineBannerProps {
@@ -23,11 +24,10 @@ export interface DeviceOfflineBannerProps {
 /**
  * Renders an offline warning with last-seen timestamp when the node is unreachable.
  * Hidden while connected (cloud or local).
- *
  * @param props - Node, optional style, and QA id
  * @returns Warning banner or `null` when online / node missing
  */
-export default function DeviceOfflineBanner({
+function DeviceOfflineBanner({
   node,
   containerStyle,
   qaId = "device_offline",
@@ -39,7 +39,8 @@ export default function DeviceOfflineBanner({
     return null;
   }
 
-  const message = resolveOfflineBannerMessage(
+  const message = resolveNodeUnavailableMessage(
+    node.connectivityStatus?.isConnected,
     node.connectivityStatus?.lastConnectionTimestamp,
     t,
   );
@@ -52,3 +53,5 @@ export default function DeviceOfflineBanner({
     />
   );
 }
+
+export default observer(DeviceOfflineBanner);

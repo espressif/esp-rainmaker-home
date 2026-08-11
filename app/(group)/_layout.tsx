@@ -7,6 +7,9 @@
 import { Stack } from "expo-router";
 import { Platform } from "react-native";
 
+/** Anchor route: keeps a back target beneath deep-link / notification entries. */
+export const unstable_settings = { anchor: "Home" };
+
 /**
  * Renders the group layout UI section.
  */
@@ -15,7 +18,7 @@ export default function GroupLayout() {
     <Stack
       screenOptions={{
         headerShown: false,
-        gestureEnabled: true,
+        gestureEnabled: false,
         gestureDirection: "horizontal",
         animation: Platform.select({
           ios: "slide_from_right",
@@ -26,7 +29,7 @@ export default function GroupLayout() {
     >
       <Stack.Screen name="Home" />
       <Stack.Screen name="Rooms" />
-      <Stack.Screen name="Setting" />
+      <Stack.Screen name="Settings" />
       <Stack.Screen name="CustomizeRoomName" />
       <Stack.Screen name="CustomizeControlGroupName" />
       <Stack.Screen name="CreateRoom" />

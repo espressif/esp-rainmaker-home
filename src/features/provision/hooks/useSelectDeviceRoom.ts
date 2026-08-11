@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useState, useCallback, useMemo, useEffect } from "react";
+import { useState, useCallback, useMemo, useEffect, useRef } from "react";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { useTranslation } from "react-i18next";
 
@@ -13,8 +13,10 @@ import { useToast } from "@shared/hooks/useToast";
 import type { ESPCDFGroup, ESPCDFNode } from "@store";
 import {
   findProvisionedNodeById,
+  getPreselectedRoomIdForNode,
   getSelectableRoomsForHome,
   normalizeLocalParam,
+  shouldAddNodeToSelectedRoom,
 } from "@features/provision/utils/selectDeviceRoomHelpers";
 
 export interface UseSelectDeviceRoomReturn {
@@ -46,6 +48,8 @@ export const useSelectDeviceRoom = (): UseSelectDeviceRoomReturn => {
 
   const [selectedRoom, setSelectedRoom] = useState<ESPCDFGroup | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  /** Last Create Room `selectedRoomId` param we applied (avoid overriding later taps). */
+  const appliedCreateRoomIdRef = useRef<string | undefined>(undefined);
 
   const currentHomeId = store?.groupStore?.currentHomeId;
   const home = currentHomeId
@@ -59,16 +63,30 @@ export const useSelectDeviceRoom = (): UseSelectDeviceRoomReturn => {
 
   const rooms = useMemo(
     () => getSelectableRoomsForHome(home),
-    [home?.subGroups],
+    [home],
   );
 
-  /** Keep local selection aligned with store room instances when the list changes. */
+  /**
+   * Keep selection aligned with store rooms.
+   * Priority: Create Room return → existing tap → room that already contains node.
+   */
   useEffect(() => {
     if (rooms.length === 0) return;
 
     setSelectedRoom((prev) => {
+      const createRoomId =
+        selectedRoomId &&
+        selectedRoomId !== appliedCreateRoomIdRef.current
+          ? selectedRoomId
+          : undefined;
+      if (createRoomId) {
+        appliedCreateRoomIdRef.current = createRoomId;
+      }
+
       const targetId =
-        (selectedRoomId && !prev ? selectedRoomId : undefined) ?? prev?.id;
+        createRoomId ??
+        prev?.id ??
+        getPreselectedRoomIdForNode(rooms, nodeId);
       if (!targetId) return prev;
 
       const match = rooms.find((r) => r.id === targetId);
@@ -76,7 +94,7 @@ export const useSelectDeviceRoom = (): UseSelectDeviceRoomReturn => {
 
       return prev === match ? prev : match;
     });
-  }, [selectedRoomId, rooms]);
+  }, [selectedRoomId, rooms, nodeId]);
 
   const handleSelectRoom = useCallback((room: ESPCDFGroup) => {
     setSelectedRoom(room);
@@ -132,10 +150,14 @@ export const useSelectDeviceRoom = (): UseSelectDeviceRoomReturn => {
 
     setIsLoading(true);
     try {
-      const alreadyInRoom =
-        selectedRoom.nodeIds?.includes(provisionedNode.id) ?? false;
+      // Membership check by subgroup id (selectedRoom.id), not room name.
+      const needsAdd = shouldAddNodeToSelectedRoom(
+        rooms,
+        selectedRoom.id,
+        provisionedNode.id,
+      );
 
-      if (!alreadyInRoom) {
+      if (needsAdd) {
         try {
           await selectedRoom.addNodes([provisionedNode.id]);
           toast.showSuccess(t("device.deviceDetails.deviceAddedToRoom"));
@@ -144,29 +166,32 @@ export const useSelectDeviceRoom = (): UseSelectDeviceRoomReturn => {
           toast.showError(t("group.errors.fallback"));
           return;
         }
+
+        await syncHomeWithNodes();
+        // New Architecture (Fabric) commit-ordering guard.
+        // syncHomeWithNodes() triggers a MobX re-render of the Home screen, which
+        // is still mounted underneath this provision stack — it grows a new room
+        // tab and a new device card. If we tear the stack down (dismissTo Home) in
+        // the SAME commit as that re-render, Fabric receives an interleaved
+        // REMOVE/INSERT batch for views that are being created and reparented at
+        // once, and crashes: "addViewAt: ... View already has a parent".
+        // Deferring the navigation by a frame lets Home's update land on its own
+        // mount transaction first, so the reveal then runs against a stable tree.
+        requestAnimationFrame(() => navigateAfterRoomStep());
+        return;
       }
-      
-      await syncHomeWithNodes();
-      // New Architecture (Fabric) commit-ordering guard.
-      // syncHomeWithNodes() triggers a MobX re-render of the Home screen, which
-      // is still mounted underneath this provision stack — it grows a new room
-      // tab and a new device card. If we tear the stack down (dismissTo Home) in
-      // the SAME commit as that re-render, Fabric receives an interleaved
-      // REMOVE/INSERT batch for views that are being created and reparented at
-      // once, and crashes: "addViewAt: ... View already has a parent".
-      // Deferring the navigation by a frame lets Home's update land on its own
-      // mount transaction first, so the reveal then runs against a stable tree.
-      requestAnimationFrame(() => navigateAfterRoomStep());
+
+      navigateAfterRoomStep();
     } catch (error) {
       console.error("[SelectDeviceRoom] handleFinish error:", error);
       router.dismissTo("/(group)/Home" as any);
     } finally {
       setIsLoading(false);
-    
     }
   }, [
     navigateAfterRoomStep,
     provisionedNode,
+    rooms,
     selectedRoom,
     router,
     syncHomeWithNodes,

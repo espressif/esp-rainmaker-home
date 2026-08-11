@@ -25,7 +25,9 @@ import {
   isAIAgentFromAdvertisement,
   parseBleManufacturerAdvertisement,
 } from "./bleAdvertisement";
+import { mqttTransportUiState } from "@shared/state/mqttTransportUiState";
 import { DEVICE_TYPE_LIST } from "@/config/devices.config";
+import { getFeatures, type FeatureKey } from "@config/features.config";
 import {
   ESPCDF,
   ESPCDFDevice,
@@ -131,6 +133,20 @@ const extractDeviceType = (fullType: string | undefined): string => {
 const findDeviceConfig = (deviceType: string) => {
   if (!deviceType) return undefined;
   return DEVICE_TYPE_LIST.find((item) => item.type.includes(deviceType));
+};
+
+/**
+ * Device types to advertise as addable on the active deployment.
+ * @returns Enabled entries allowed by the current feature flags.
+ */
+export const getSupportedDeviceTypes = () => {
+  const features = getFeatures();
+  return DEVICE_TYPE_LIST.filter(
+    (device) =>
+      !device.disabled &&
+      (!("requiresFeature" in device) ||
+        features[device.requiresFeature as FeatureKey])
+  );
 };
 
 /**
@@ -549,6 +565,18 @@ const getDeviceReachability = (
   registeredTransports?: NodeRegisteredTransports | null,
   parentRegisteredTransports?: NodeRegisteredTransports | null,
 ): DeviceReachability => {
+  // Cloud-online nodes look reachable via connectivityStatus even when the
+  // app MQTT session is down; force unreachable until transport recovers.
+  if (
+    !mqttTransportUiState.connected &&
+    (cdfNode.connectivityStatus?.isConnected ?? false)
+  ) {
+    return {
+      reachable: false,
+      source: DEVICE_REACHABILITY_SOURCE_NONE,
+    };
+  }
+
   const transportSource = resolveNodeTransportsForReachability(
     cdfNode,
     registeredTransports,

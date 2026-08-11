@@ -15,7 +15,7 @@ import { useRouter, usePathname, useFocusEffect } from "expo-router";
 // components
 import { Logo } from "@shared/components";
 import { registerForNotification } from "@shared/utils/notifications";
-import { executePostLoginPipeline } from "@features/auth/utils/postLoginPipeline";
+import { executePostLoginPipeline, navigateToHomeAfterAuth } from "@features/auth/utils/postLoginPipeline";
 import { isConsentAccepted } from "@features/consent";
 import { getFeatures } from "@config/features.config";
 import { isCnRegion } from "@config/region.config";
@@ -49,11 +49,14 @@ const Index = () => {
       }
 
       if (user) {
-        await executePostLoginPipeline({
+        // Session restored: enter Home first, hydrate in the background.
+        navigateToHomeAfterAuth(router);
+        void executePostLoginPipeline({
           store,
-          router,
           syncHomeWithNodes,
           initUserCustomData,
+        }).catch((error: unknown) => {
+          console.warn("[Index] post-login pipeline failed:", error);
         });
         return;
       }
@@ -77,11 +80,10 @@ const Index = () => {
 
   useFocusEffect(
     useCallback(() => {
-      if (store && isInitialized) {
-        setTimeout(async () => {
-          authCheck();
-        }, 2000);
+      if (!store || !isInitialized) {
+        return;
       }
+      void authCheck();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional hook deps
     }, [store, isInitialized]),
   );

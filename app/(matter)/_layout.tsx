@@ -18,6 +18,7 @@ export default function MatterLayout() {
       screenOptions={{
         headerShown: false,
         animation: "slide_from_right",
+        gestureEnabled: false,
       }}
     >
       <Stack.Screen

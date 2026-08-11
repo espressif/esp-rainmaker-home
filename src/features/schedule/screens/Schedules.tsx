@@ -5,6 +5,7 @@
  */
 
 import { StyleSheet, View } from "react-native";
+import Animated from "react-native-reanimated";
 
 // Styles
 import { tokens } from "@shared/theme/tokens";
@@ -14,6 +15,9 @@ import { globalStyles } from "@shared/theme/globalStyleSheet";
 import { useTranslation } from "react-i18next";
 import { observer } from "mobx-react-lite";
 import { useSchedulesList } from "@features/schedule/hooks";
+import { useSkeletonReveal } from "@shared/hooks/useSkeletonReveal";
+import { SKELETON_REVEAL_PHASE_READY } from "@shared/utils/constants";
+import { testProps } from "@shared/utils/testProps";
 
 // Components
 import {
@@ -25,38 +29,45 @@ import {
 import {
   SchedulesHeaderActions,
   SchedulesList,
+  SchedulesEmptyState,
+  SchedulesLoadingSkeleton,
 } from "@features/schedule/components";
 
 /**
  * SchedulesScreen
  *
- * A screen component that displays and manages schedules.
- * Allows users to view, create, edit, enable, disable schedules.
- *
- * Features:
- * - Lists all available schedules
- * - Create new schedules
- * - Edit existing schedules
- * - Enable existing schedules
- * - Disable existing schedules
- * - Pull to refresh
+ * Displays and manages schedules. Initial load uses a mild skeleton collapse
+ * then content slide-up; pull-to-refresh keeps RefreshControl only.
  */
 export const SchedulesScreen = observer(() => {
   const { t } = useTranslation();
   const {
     schedulesList,
     isLoading,
+    isRefreshing,
     isEditing,
     scheduleLoadingStates,
     isScheduleNameDialogVisible,
     scheduleName,
-    fetchSchedules,
+    refreshSchedules,
     setIsEditing,
     handleAddSchedule,
     handleScheduleNameConfirm,
     handleScheduleAction,
     setIsScheduleNameDialogVisible,
   } = useSchedulesList();
+
+  const {
+    showSkeleton,
+    showContent,
+    phase,
+    skeletonAnimatedStyle,
+    contentAnimatedStyle,
+    onSkeletonLayout,
+  } = useSkeletonReveal(isLoading);
+
+  const hasSchedules = schedulesList.length > 0;
+  const showFooter = phase === SKELETON_REVEAL_PHASE_READY;
 
   return (
     <>
@@ -65,36 +76,62 @@ export const SchedulesScreen = observer(() => {
         showBack={false}
         rightSlot={
           <SchedulesHeaderActions
-            hasSchedules={schedulesList.length > 0}
+            hasSchedules={hasSchedules}
             isEditing={isEditing}
             onEditToggle={() => setIsEditing(!isEditing)}
-            onRefresh={fetchSchedules}
           />
         }
       />
 
-      <ScreenWrapper style={styles.container}>
-        <SchedulesList
-          schedules={schedulesList}
-          isLoading={isLoading}
-          isEditing={isEditing}
-          scheduleLoadingStates={scheduleLoadingStates}
-          onRefresh={fetchSchedules}
-          onScheduleAction={handleScheduleAction}
-        />
+      <ScreenWrapper style={styles.container} dismissKeyboard={false}>
+        {showSkeleton && (
+          <Animated.View
+            {...testProps("view_schedules_skeleton_reveal")}
+            style={[styles.skeletonSlot, skeletonAnimatedStyle]}
+          >
+            <View onLayout={onSkeletonLayout}>
+              <SchedulesLoadingSkeleton />
+            </View>
+          </Animated.View>
+        )}
 
-        {/* Fixed Add Schedule Button */}
-        <View style={globalStyles.footerAddButtonContainer}>
-          <Button
-            label={t("schedule.schedules.addSchedule")}
-            onPress={handleAddSchedule}
-            style={globalStyles.footerAddButton}
-            qaId="button_add_schedules"
-          />
-        </View>
+        {showContent && (
+          <Animated.View style={contentAnimatedStyle}>
+            {hasSchedules ? (
+              <SchedulesList
+                schedules={schedulesList}
+                refreshing={isRefreshing}
+                isEditing={isEditing}
+                scheduleLoadingStates={scheduleLoadingStates}
+                onRefresh={refreshSchedules}
+                onScheduleAction={handleScheduleAction}
+              />
+            ) : (
+              <View
+                {...testProps("view_schedules_empty")}
+                style={globalStyles.flex1}
+              >
+                <SchedulesEmptyState
+                  refreshing={isRefreshing}
+                  onRefresh={refreshSchedules}
+                />
+              </View>
+            )}
+          </Animated.View>
+        )}
+
+        {showFooter && (
+          <View style={globalStyles.footerAddButtonContainer}>
+            <Button
+              label={t("schedule.schedules.addSchedule")}
+              onPress={handleAddSchedule}
+              style={globalStyles.footerAddButton}
+              qaId="button_add_schedules"
+            />
+          </View>
+        )}
       </ScreenWrapper>
 
-      {/* Schedule Name Input Dialog */}
       <InputDialog
         qaId="create_schedule"
         open={isScheduleNameDialogVisible}
@@ -114,5 +151,8 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: tokens.colors.bg5,
+  },
+  skeletonSlot: {
+    width: "100%",
   },
 });

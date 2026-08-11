@@ -36,6 +36,22 @@ import {
 } from "./lib/types";
 
 /**
+ * Coerces a param value for local control state (boolean vs numeric).
+ * @param param - Device parameter that defines the control type
+ * @param value - Raw value from the device or UI
+ * @returns Normalized value for the control
+ */
+function normalizeParamControlValue(
+  param: ParamControlProps["param"],
+  value: unknown,
+): unknown {
+  if (isBooleanControlParam(param)) {
+    return coerceParamValueToBoolean(value);
+  }
+  return normalizeNumericParamValue(value);
+}
+
+/**
  * ParamControlWrap
  *
  * A wrapper component for controlling device parameter.
@@ -65,15 +81,8 @@ const ParamControlWrap = observer(
     const toast = useToast();
     const paramBounds = getParamControlBounds(param);
 
-    const normalizeParamValue = (value: unknown): unknown => {
-      if (isBooleanControlParam(param)) {
-        return coerceParamValueToBoolean(value);
-      }
-      return normalizeNumericParamValue(value);
-    };
-
     const state = useLocalObservable(() => ({
-      value: normalizeParamValue(param.value),
+      value: normalizeParamControlValue(param, param.value),
       setValue: (next: unknown) => {
         state.value = next;
       },
@@ -110,21 +119,21 @@ const ParamControlWrap = observer(
 
     useEffect(() => {
       if (!isSliderStyleParam) {
-        state.value = normalizeParamValue(param.value);
+        state.value = normalizeParamControlValue(param, param.value);
         return;
       }
 
       const debounceUpdateDelay = 3000;
 
       if (paramUpdateDelayTimeoutRef.current === null) {
-        state.value = normalizeParamValue(param.value);
+        state.value = normalizeParamControlValue(param, param.value);
       }
 
       if (paramUpdateDelayTimeoutRef.current !== null) {
         clearTimeout(paramUpdateDelayTimeoutRef.current);
       }
       paramUpdateDelayTimeoutRef.current = setTimeout(() => {
-        state.value = normalizeParamValue(param.value);
+        state.value = normalizeParamControlValue(param, param.value);
         paramUpdateDelayTimeoutRef.current = null;
       }, debounceUpdateDelay);
 
@@ -133,7 +142,7 @@ const ParamControlWrap = observer(
           clearTimeout(paramUpdateDelayTimeoutRef.current);
         }
       };
-    }, [param.value, state, state.value, isSliderStyleParam]);
+    }, [param, param.value, state, state.value, isSliderStyleParam]);
 
     const paramRef = useRef(param);
     paramRef.current = param;

@@ -4,8 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React from "react";
-import { View, Image } from "react-native";
+import React, { useCallback, useRef } from "react";
+import { View, Image, Pressable, TextInput } from "react-native";
 import { Edit3 } from "lucide-react-native";
 import { useTranslation } from "react-i18next";
 
@@ -39,6 +39,16 @@ export const UpdateDeviceNameSection: React.FC<UpdateDeviceNameSectionProps> = (
   setDeviceName,
 }) => {
   const { t } = useTranslation();
+
+  // One TextInput handle per row, keyed by device name, so the row's pencil
+  // knows which field to focus. Callback refs clear themselves to null on
+  // unmount, so removed devices leave nothing stale behind.
+  const inputRefs = useRef<Record<string, TextInput | null>>({});
+
+  const focusDeviceNameInput = useCallback((deviceNameKey: string) => {
+    inputRefs.current[deviceNameKey]?.focus();
+  }, []);
+
   return (
     <View style={styles.nameSection} {...testProps("view_name_section")}>
       {devices.map((d, index) => {
@@ -60,6 +70,9 @@ export const UpdateDeviceNameSection: React.FC<UpdateDeviceNameSectionProps> = (
                 <View style={styles.nameInputWrapper}>
                   <Input
                     key={`${provisionedNodeId ?? "node"}-${d.name}`}
+                    ref={(node) => {
+                      inputRefs.current[d.name] = node;
+                    }}
                     value={getDeviceName(d.name)}
                     placeholder={t("device.deviceDetails.enterName")}
                     onFieldChange={(val) => setDeviceName(d.name, val)}
@@ -68,13 +81,16 @@ export const UpdateDeviceNameSection: React.FC<UpdateDeviceNameSectionProps> = (
                     qaId="device_name"
                   />
                 </View>
-                <View
+                <Pressable
                   style={styles.nameEditIcon}
-                  pointerEvents="none"
+                  onPress={() => focusDeviceNameInput(d.name)}
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                  accessibilityRole="button"
+                  accessibilityLabel={t("layout.shared.edit")}
                   {...testProps("icon_edit_device_name")}
                 >
                   <Edit3 size={20} color={tokens.colors.text_secondary} />
-                </View>
+                </Pressable>
               </View>
             </View>
           </View>

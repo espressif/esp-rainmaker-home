@@ -49,8 +49,7 @@ export const HOMOGENEOUS_DEVICE_TYPE_KEY = "homogeneousDeviceType";
 /** Room tabs / room lists: normal room subgroups only (excludes `gc_` group-control names). */
 export function isRoomSubgroup(group: Pick<ESPCDFGroup, "type" | "name">): boolean {
   if (isGroupControlSubgroupName(group.name)) return false;
-  const t = group.type;
-  return t === GROUP_TYPE_ROOM;
+  return group.type === GROUP_TYPE_ROOM;
 }
 
 /** Group-control subgroup: identified by `gc_` prefix on storage name. */

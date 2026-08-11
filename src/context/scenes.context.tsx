@@ -5,7 +5,13 @@
  */
 
 
-import React, { createContext, useContext, useReducer, ReactNode } from "react";
+import React, {
+  createContext,
+  useContext,
+  useReducer,
+  useCallback,
+  ReactNode,
+} from "react";
 import { useCDF } from "@shared/hooks/useCDF";
 import { deepClone } from "@shared/utils/common";
 import { ESPCDFDevice } from "@store";
@@ -360,9 +366,10 @@ export function SceneProvider({ children }: SceneProviderProps) {
   const setNodes = (nodes: SceneNode[]) => {
     dispatch({ type: "SET_NODES", payload: nodes });
   };
-  const resetState = () => {
+  // Stable so screens can safely reset from an unmount-only effect cleanup.
+  const resetState = useCallback(() => {
     dispatch({ type: "RESET_STATE" });
-  };
+  }, []);
   const setSelectedDevice = (
     device: { nodeId: string; deviceName: string; displayName: string } | null,
   ) => {

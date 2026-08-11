@@ -11,10 +11,9 @@ import type {
   AddDeviceParams,
 } from "@store";
 import {
-  applyProvisionNodeTimezoneWithRetries,
-  markProvisionTimezoneFailed,
-} from "@shared/utils/timezone";
-import { pollUntilReady } from "@shared/utils/common";
+  captureProvisionNodeId,
+  finalizeProvisionedNode,
+} from "@shared/utils/provisionNode";
 import { ProvisionType } from "@espressif/rainmaker-base-sdk";
 
 /**
@@ -38,12 +37,7 @@ export async function addDeviceProvision(
   const nodeIdRef: { current: string | null } = { current: null };
 
   const wrappedOnProgress = (response: { status?: string; description?: string; data?: Record<string, unknown> }) => {
-    const data = response.data || {};
-    if (data.nodeId) {
-      nodeIdRef.current = data.nodeId as string;
-    } else if (response.status === "succeed" && response.description && !response.description.includes(" ") && response.description.length >= 16) {
-      nodeIdRef.current = response.description;
-    }
+    nodeIdRef.current = captureProvisionNodeId(response) ?? nodeIdRef.current;
     onProgress?.(response as Parameters<NonNullable<AddDeviceParams["onProgress"]>>[0]);
   };
 
@@ -68,53 +62,9 @@ export async function addDeviceProvision(
     return null;
   }
 
-  let node: ESPCDFNode;
-  try {
-    let pollAttempt = 0;
-    const pollResult = await pollUntilReady(
-      async () => {
-        pollAttempt++;
-        try {
-          const n = await user.getNodeDetails(nodeId);
-          if (n) {
-            return n;
-          }
-          return null;
-        } catch (e) {
-          console.error(`${LOG_PREFIX} Poll attempt ${pollAttempt}: getNodeDetails failed`, e instanceof Error ? e.message : e);
-          return null;
-        }
-      },
-      { maxAttempts: 8, intervalMs: 2000, label: "Waiting for node after provision" }
-    );
-    if (!pollResult.success || !pollResult.data) {
-      console.error(`${LOG_PREFIX} Node not available after ${pollAttempt} attempts - nodeId=${nodeId}`);
-      return null;
-    }
-    node = pollResult.data;
-  } catch (pollError) {
-    console.error(`${LOG_PREFIX} Failed to fetch node:`, pollError);
-    console.error(`${LOG_PREFIX} Poll error details:`, pollError instanceof Error ? { message: pollError.message, stack: pollError.stack } : pollError);
+  const node = await finalizeProvisionedNode(user, nodeId);
+  if (!node) {
     return null;
-  }
-
-  try {
-    const tzResult = await applyProvisionNodeTimezoneWithRetries(
-      user,
-      nodeId,
-      node,
-      (id) => user.getNodeDetails(id)
-    );
-    node = tzResult.node;
-    if (!tzResult.timezoneApplied) {
-      console.warn(
-        `${LOG_PREFIX} Timezone setTimeZone did not succeed (non-blocking); nodeId=`,
-        nodeId
-      );
-    }
-  } catch (tzError) {
-    markProvisionTimezoneFailed(nodeId);
-    console.error(`${LOG_PREFIX} Timezone setup failed (non-blocking):`, tzError);
   }
 
   callbacks.addNodesToGroup(groupId, [node]);

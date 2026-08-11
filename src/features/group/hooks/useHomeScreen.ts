@@ -9,15 +9,17 @@ import type { ESPCDFGroup } from "@store";
 import { useCDF } from "@shared/hooks/useCDF";
 import { useHomeViewModel, type UseHomeViewModelResult } from "./useHomeViewModel";
 import { useMigrationPromptViewModel } from "./useMigrationPromptViewModel";
-import { useFocusEffect, useRouter } from "expo-router";
+import { useFocusEffect } from "expo-router";
 import { useTranslation } from "react-i18next";
 import { useToast } from "@shared/hooks/useToast";
 import { getDefaultHomeTabs, compareDeviceType } from "@features/group/utils/homeScreenHelpers";
 import { ALL_DEVICES_TAB_ID, FILTER_ALL } from "@features/group/utils/constants";
+import { useAddDeviceNavigation } from "@features/provision/hooks";
 import { startNodeLocalDiscovery } from "@features/group/utils/localDiscovery";
 import { startMatterLocalDiscovery } from "@features/matter/utils/matterLocalDiscovery";
 import type { RoomTab } from "@src/types/global";
 import { getFeatures } from "@/config/features.config";
+import { DEFAULT_HOME_GROUP_NAME } from "@shared/utils/constants";
 
 export interface UseHomeScreenResult {
   isLoading: boolean;
@@ -52,8 +54,8 @@ export function useHomeScreen(): UseHomeScreenResult {
   const { store, isInitialized: isStoreInitialized, syncHomeWithNodes } = useCDF();
   const { groupStore: unifiedGroupStore, userStore: unifiedUserStore } = store;
   const unifiedUser = unifiedUserStore?.user;
-  const router = useRouter();
   const toast = useToast();
+  const goToAddDevice = useAddDeviceNavigation();
   const defaultTabs = useMemo(() => getDefaultHomeTabs(t), [t]);
   const hasInitialized = useRef(false);
   const initializeHomeRef = useRef<(() => Promise<void>) | null>(null);
@@ -108,41 +110,110 @@ export function useHomeScreen(): UseHomeScreenResult {
   const initializeHome = useCallback(async () => {
     if (hasInitialized.current) return;
     try {
+      // Keep the loading skeleton until CDF is ready; a follow-up effect
+      // re-invokes this when `isStoreInitialized` flips true.
       if (!isStoreInitialized || !unifiedGroupStore) {
-        setIsLoading(false);
         return;
       }
       hasInitialized.current = true;
-      // Kick off mDNS browses in parallel with the cloud sync. Discovery is
-      // continuous and the CDF index is rebuilt per event, so even if the
-      // first announcements arrive before the store is populated they are
-      // simply dropped and re-matched against the next periodic announcement
-      // (mDNS responders re-announce every 1-2s). Doing this in parallel
-      // shaves the cloud-sync round-trip off the time-to-"available on WLAN".
-      const syncPromise = syncHomeWithNodes(true);
+
+      // Do not await sync here — that locked Home `isLoading` (skeletons /
+      // banner dropdown) until the full group+node fetch finished. Kick sync
+      // in the background; MobX paints cards as CDF fills, and we clear the
+      // loading gate when the shared sync promise settles.
+      const alreadyHasContent =
+        Boolean(store.getCurrentHome()) ||
+        store.getNodesForCurrentHome().length > 0;
+      if (alreadyHasContent) {
+        setIsLoading(false);
+      }
+
       startNodeLocalDiscovery(store);
       startMatterLocalDiscovery(store);
-      await syncPromise;
+      void syncHomeWithNodes(true)
+        .catch((error: unknown) => {
+          console.error("Failed to initialize home:", error);
+          toast.showError(
+            t("group.errors.failedToInitializeHome"),
+            t("layout.shared.manualRefreshHelperText")
+          );
+        })
+        .finally(() => {
+          setIsLoading(false);
+        });
     } catch (error) {
       console.error("Failed to initialize home:", error);
       hasInitialized.current = false;
+      setIsLoading(false);
       toast.showError(
         t("group.errors.failedToInitializeHome"),
         t("layout.shared.manualRefreshHelperText")
       );
-    } finally {
-      setIsLoading(false);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional hook deps
-  }, [isStoreInitialized, unifiedGroupStore, syncHomeWithNodes, toast, t]);
+  }, [isStoreInitialized, unifiedGroupStore, syncHomeWithNodes, toast, t, store]);
 
   initializeHomeRef.current = initializeHome;
 
+  /**
+   * If `currentHomeId` points at a deleted home (or selection is empty while
+   * homes still exist), reselect — or create the default home instantly when
+   * the list is empty — so the banner dropdown is not stuck loading.
+   * Runs on focus after the one-shot init — delete/leave does not remount Home.
+   */
+  const recoverStaleHomeSelection = useCallback(async () => {
+    if (!isStoreInitialized || !unifiedGroupStore) return;
+    if (store.getCurrentHome()) return;
+
+    const homes = unifiedGroupStore.groupsList ?? [];
+    const hasStaleCurrentId = Boolean(unifiedGroupStore.currentHomeId);
+    if (!hasStaleCurrentId && homes.length === 0) return;
+
+    try {
+      if (homes.length > 0) {
+        await unifiedUser?.setCurrentHome?.(homes[0]);
+        return;
+      }
+
+      unifiedGroupStore.currentHomeId = null;
+      const newHome = await unifiedUser?.createHome?.({
+        name: DEFAULT_HOME_GROUP_NAME,
+      });
+      if (newHome) {
+        await unifiedUser?.setCurrentHome?.(newHome);
+        return;
+      }
+
+      await syncHomeWithNodes(true);
+    } catch (error: unknown) {
+      console.error("Failed to recover stale home selection:", error);
+    }
+  }, [
+    isStoreInitialized,
+    unifiedGroupStore,
+    store,
+    unifiedUser,
+    syncHomeWithNodes,
+  ]);
+
   useFocusEffect(
     useCallback(() => {
+      const alreadyInitialized = hasInitialized.current;
       initializeHomeRef.current?.();
-    }, [])
+      // Only recover on subsequent focuses (e.g. after delete). First focus
+      // relies on initializeHome's sync to establish selection.
+      if (alreadyInitialized) {
+        void recoverStaleHomeSelection();
+      }
+    }, [recoverStaleHomeSelection])
   );
+
+  // Retry init when the store becomes ready while Home is already focused.
+  useEffect(() => {
+    if (isStoreInitialized && !hasInitialized.current) {
+      void initializeHomeRef.current?.();
+    }
+  }, [isStoreInitialized]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -184,12 +255,10 @@ export function useHomeScreen(): UseHomeScreenResult {
   const redirectOperations = useCallback(
     (type: string) => {
       if (type === "AddDevice") {
-        router.push({
-          pathname: "/(provision)/AddDeviceSelection",
-        } as Parameters<typeof router.push>[0]);
+        goToAddDevice();
       }
     },
-    [router]
+    [goToAddDevice]
   );
 
   useFocusEffect(

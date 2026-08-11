@@ -9,7 +9,11 @@ import type { TFunction } from "i18next";
 import type { ESPCDFGroup } from "@store";
 import { ESPCDFGroupSharingRequest } from "@store";
 import type { GroupSharedUser } from "@src/types/global";
-import { SUCESS, ERROR_CODES_MAP } from "@shared/utils/constants";
+import {
+  SUCESS,
+  ERROR_CODES_MAP,
+  DEFAULT_HOME_GROUP_NAME,
+} from "@shared/utils/constants";
 import {
   getRemainingDays,
   isRequestExpired,
@@ -95,7 +99,7 @@ const norm = (s?: string) => (s || "").trim().toLowerCase();
  */
 export function useSettings(options: UseSettingsOptions): UseSettingsResult {
   const { homeId, toast, t, router } = options;
-  const { store } = useCDF();
+  const { store, syncHomeWithNodes } = useCDF();
   const user = store?.userStore?.user;
   const home = store?.groupStore?.groupsByIDMap?.[homeId as string];
 
@@ -248,9 +252,52 @@ export function useSettings(options: UseSettingsOptions): UseSettingsResult {
     }
   }, [home, homeName, t, toast]);
 
+  /**
+   * After the selected home is deleted/left, CDF removes it from the map but
+   * leaves `currentHomeId` pointing at the dead id. Reselect another home, or
+   * create the default home immediately when none remain, so Home's banner does
+   * not skeleton forever.
+   * @param removedHomeId - Id of the home that was just removed from the store
+   */
+  const reselectHomeAfterRemoval = useCallback(
+    async (removedHomeId: string) => {
+      const groupStore = store?.groupStore;
+      if (!groupStore) return;
+
+      const wasCurrent =
+        groupStore.currentHomeId === removedHomeId || !store.getCurrentHome();
+      if (!wasCurrent) return;
+
+      const nextHome = groupStore.groupsList?.[0];
+      if (nextHome) {
+        await user?.setCurrentHome?.(nextHome);
+        return;
+      }
+
+      // Last home removed — create default instantly (adaptor adds it to the store).
+      groupStore.currentHomeId = null;
+      const newHome = await user?.createHome?.({
+        name: DEFAULT_HOME_GROUP_NAME,
+      });
+      if (newHome) {
+        await user?.setCurrentHome?.(newHome);
+        return;
+      }
+
+      // Fallback when createHome is unavailable for the active SDK.
+      await syncHomeWithNodes(true);
+    },
+    [store, user, syncHomeWithNodes]
+  );
+
+  /**
+   * Deletes the home (primary) or leaves it (secondary), then reselects a
+   * remaining home when the removed one was current.
+   */
   const handleRemoveHome = useCallback(() => {
     if (!home) return;
     setIsLoading(true);
+    const removedHomeId = home.id;
     const action = isPrimary ? home.delete() : home.leave();
     const successMessage = isPrimary
       ? t("group.settings.homeRemovedSuccessfully")
@@ -258,23 +305,31 @@ export function useSettings(options: UseSettingsOptions): UseSettingsResult {
     const errorMessage = isPrimary
       ? t("group.errors.errorRemovingHome")
       : t("group.errors.errorLeavingHome");
-    
+
     action
-      .then((res: any) => {
+      .then(async (res: { status?: string; description?: string }) => {
         if (res.status === SUCESS) {
+          try {
+            await reselectHomeAfterRemoval(removedHomeId);
+          } catch (error: unknown) {
+            console.error("Failed to reselect home after removal:", error);
+          }
           toast.showSuccess(successMessage);
           router.dismiss(1);
         } else {
           toast.showError(res.description || errorMessage);
         }
       })
-      .catch((error: any) => {
-        toast.showError(errorMessage, error?.description || t("group.errors.fallback"));
+      .catch((error: { description?: string }) => {
+        toast.showError(
+          errorMessage,
+          error?.description || t("group.errors.fallback")
+        );
       })
       .finally(() => {
         setIsLoading(false);
       });
-  }, [home, isPrimary, t, toast, router]);
+  }, [home, isPrimary, t, toast, router, reselectHomeAfterRemoval]);
 
   const handleAddUser = useCallback(async () => {
     if (!home) return;

@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { Platform } from "react-native";
 import Constants from "expo-constants";
 import { getLocales } from "expo-localization";
 
@@ -23,7 +24,8 @@ export const REGION_CN = "cn" as const;
  * - `cn` / `global`: force that region. Used by the Android CN / Global
  *   product flavors, which ship a single region's cloud + legal links.
  * - `auto`: resolve at runtime. Used by the single iOS binary, which selects
- *   CN by device locale and falls back to Global otherwise.
+ *   CN by device locale and falls back to Global otherwise. On Android `auto`
+ *   never means "detect" — see {@link getActiveRegion}.
  */
 export const REGION_AUTO = "auto" as const;
 
@@ -53,9 +55,9 @@ function getConfiguredRegion(): ConfiguredRegion {
  *
  * Reads the device's Region setting (iOS: Settings → General → Language &
  * Region → Region) via expo-localization's synchronous `getLocales()`. This is
- * the runtime signal the single iOS binary uses when `APP_REGION=auto`;
- * Android builds force `cn`/`global` via product flavor, so detection never
- * runs there.
+ * the runtime signal the single iOS binary uses when `APP_REGION=auto`.
+ * Never called on Android — `getActiveRegion` short-circuits there, because
+ * the installed APK already is the region.
  * @returns Lowercased ISO 3166-1 region code, or null when unavailable
  *   (e.g. the native module is absent in a test environment).
  */
@@ -79,15 +81,29 @@ function detectDeviceRegionCode(): string | null {
 let detectedRegion: AppRegion | null = null;
 
 /**
- * Resolves the effective region for the running app, honoring an explicit
- * build-time selector first and falling back to runtime device-region
- * detection (resolved once per launch).
+ * Resolves the effective region for the running app.
+ *
+ * Resolution order:
+ * 1. An explicit `cn` / `global` build-time selector always wins.
+ * 2. Android never detects: we ship one APK per region (the `cn` / `global`
+ *    product flavors), so the installed binary already *is* the region. The
+ *    CN flavor pins `APP_REGION=cn`, therefore a leftover `auto` can only be
+ *    the Global flavor. Detecting here would let the Global APK flip to the
+ *    CN cloud, legal links and login options purely because the phone's
+ *    Region is set to China — the device setting must not override which APK
+ *    the user installed. (UI *language* is a separate concern and still
+ *    follows the device locale; see `i18n.ts`.)
+ * 3. iOS is a single binary for both regions, so `auto` resolves from the
+ *    device Region setting, once per launch.
  * @returns `cn` or `global`.
  */
 export function getActiveRegion(): AppRegion {
   const configured = getConfiguredRegion();
   if (configured === REGION_CN || configured === REGION_GLOBAL) {
     return configured;
+  }
+  if (Platform.OS === "android") {
+    return REGION_GLOBAL;
   }
   if (detectedRegion === null) {
     detectedRegion =

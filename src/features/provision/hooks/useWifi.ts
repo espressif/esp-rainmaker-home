@@ -52,7 +52,7 @@ export const useWifi = (): UseWifiReturn => {
   const toast = useToast();
   const router = useRouter();
   const { store } = useCDF();
-  const { saveNetwork, getNetworkPassword } = useWifiStorage();
+  const { getNetworkPassword } = useWifiStorage();
 
   const [wifiList, setWifiList] = useState<WifiNetwork[]>([]);
   const [selectedWifi, setSelectedWifi] = useState("");
@@ -171,16 +171,17 @@ export const useWifi = (): UseWifiReturn => {
       return;
     }
 
-    if (shouldSave && password) {
-      await saveNetwork(selectedWifi, password);
-    }
-
     await StorageAdapter.setItem(LAST_USED_WIFI_KEY, selectedWifi);
     setLastUsedSsid(selectedWifi);
 
+    // Stored only once the device accepts them, so the choice travels onward.
     router.push({
       pathname: "/(provision)/Provision",
-      params: { ssid: selectedWifi, password: password || "" },
+      params: {
+        ssid: selectedWifi,
+        password: password || "",
+        shouldSave: shouldSave ? "1" : "0",
+      },
     });
   };
 

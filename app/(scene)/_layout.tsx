@@ -7,6 +7,9 @@
 import { Stack } from "expo-router";
 import { Platform } from "react-native";
 
+/** Anchor route: keeps a back target beneath deep-link / notification entries. */
+export const unstable_settings = { anchor: "Scenes" };
+
 /**
  * Scene Layout Component
  *
@@ -18,7 +21,7 @@ export default function SceneLayout() {
     <Stack
       screenOptions={{
         headerShown: false,
-        gestureEnabled: true,
+        gestureEnabled: false,
         gestureDirection: "horizontal",
         animation: Platform.select({
           ios: "slide_from_right",
@@ -35,12 +38,6 @@ export default function SceneLayout() {
       />
       <Stack.Screen
         name="CreateScene"
-        options={{
-          headerShown: false,
-        }}
-      />
-      <Stack.Screen
-        name="SceneActions"
         options={{
           headerShown: false,
         }}

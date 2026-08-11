@@ -251,19 +251,29 @@ function automationReducer(
       };
     }
 
+    // Deletes rebuild `actions` immutably: a new reference is required so
+    // memos keyed on `state.actions` (e.g. isValidAutomation) recompute —
+    // otherwise removing the last action leaves stale derived state behind.
     case "DELETE_ACTION_VALUE": {
-      const actions = state.actions;
       const { nodeId, device, param } = action.payload;
+      const actions = { ...state.actions };
+      const nodeActions = { ...(actions[nodeId] ?? {}) };
+      const deviceActions = { ...(nodeActions[device] ?? {}) };
+
       // delete action value
-      delete actions[nodeId][device][param];
+      delete deviceActions[param];
 
       // delete device if no actions left
-      if (Object.keys(actions[nodeId][device]).length === 0) {
-        delete actions[nodeId][device];
+      if (Object.keys(deviceActions).length === 0) {
+        delete nodeActions[device];
+      } else {
+        nodeActions[device] = deviceActions;
       }
       // delete node if no devices left
-      if (Object.keys(actions[nodeId]).length === 0) {
+      if (Object.keys(nodeActions).length === 0) {
         delete actions[nodeId];
+      } else {
+        actions[nodeId] = nodeActions;
       }
 
       return {
@@ -273,12 +283,18 @@ function automationReducer(
     }
 
     case "DELETE_ACTION": {
-      const actions = state.actions;
-      delete actions[action.payload.nodeId][action.payload.device];
+      const { nodeId, device } = action.payload;
+      const actions = { ...state.actions };
+      const nodeActions = { ...(actions[nodeId] ?? {}) };
+
+      delete nodeActions[device];
       // delete node if no devices left
-      if (Object.keys(actions[action.payload.nodeId]).length === 0) {
-        delete actions[action.payload.nodeId];
+      if (Object.keys(nodeActions).length === 0) {
+        delete actions[nodeId];
+      } else {
+        actions[nodeId] = nodeActions;
       }
+
       return {
         ...state,
         actions: actions,

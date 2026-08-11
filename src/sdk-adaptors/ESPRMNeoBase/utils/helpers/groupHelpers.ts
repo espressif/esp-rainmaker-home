@@ -31,9 +31,11 @@ import {
   ESPRMNEO_SHARING_DESC_REQUEST_PROCESSED,
   ESPRMNEO_GROUP_ERR_SUBGROUP_MISSING_PARENT_ID,
 } from "../constants";
-import { bindRmneoCdfStoreSink } from "./cdfStoreSinkHelpers";
-import { clearCdfProjectedNcfg } from "./nodeHelpers";
-import { transformToESPCDFNodes } from "../../transformers/transformToESPCDFNode";
+import { applyRefreshedCdfNodeToStore, clearCdfProjectedNcfg } from "./nodeHelpers";
+import {
+  transformToESPCDFNode,
+  transformToESPCDFNodes,
+} from "../../transformers/transformToESPCDFNode";
 import { transformToESPCDFGroup } from "../../transformers/transformToESPCDFGroup";
 import { ESPRMNeoBaseAdaptorIdentifier } from "@config/sdk.identifiers";
 import {
@@ -245,7 +247,6 @@ async function pushNodeFromRootGetNode(
  * the constructor’s `registerNode` then overwrites the orchestrator binding to
  * a non-existent shadow (e.g. `params-home-r4x` instead of `params-home-6ys-r4x`),
  * so per-node MQTT control stops working while group control still works.
- *
  * @param group - Root or nested RMNeo group to walk
  * @param seenNodeIds - Mutable set of already-collected node ids
  * @param out - Mutable list of unique SDK nodes
@@ -681,11 +682,11 @@ async function runFullMqttResync(
             if (!sdkGroupContainsNodeId(home, nodeId)) continue;
             try {
                 const fresh = await home.getNode(nodeId);
-                const cdfNode = ESPCDF.instance?.nodeStore?.nodesByIDMap?.[nodeId];
-                if (cdfNode) {
-                    cdfNode._raw = fresh;
-                    bindRmneoCdfStoreSink(fresh);
-                }
+                // Rebuild CDF devices/params so DeviceCard setValue WeakRefs
+                // point at this fresh SDK node (MQTT transport lives there).
+                // Swapping only `_raw` left control on the pre-resync node with
+                // empty availableTransports → NODE_UNREACHABLE.
+                applyRefreshedCdfNodeToStore(transformToESPCDFNode(fresh));
             } catch (error) {
                 console.warn(
                     `[subgroupMembershipResync] getNode(${nodeId}) failed during subgroup resync`,

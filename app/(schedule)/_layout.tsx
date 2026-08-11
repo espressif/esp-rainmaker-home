@@ -7,6 +7,9 @@
 import { Stack } from "expo-router";
 import { Platform } from "react-native";
 
+/** Anchor route: keeps a back target beneath deep-link / notification entries. */
+export const unstable_settings = { anchor: "Schedules" };
+
 /**
  * Schedule Layout
  *
@@ -18,7 +21,7 @@ export default function ScheduleLayout() {
     <Stack
       screenOptions={{
         headerShown: false,
-        gestureEnabled: true,
+        gestureEnabled: false,
         gestureDirection: "horizontal",
         animation: Platform.select({
           ios: "slide_from_right",

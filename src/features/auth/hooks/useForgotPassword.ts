@@ -53,7 +53,7 @@ export function useForgotPassword() {
         username: email,
       });
       if (res) {
-        toast.showSuccess(t("auth.verification.heading"), undefined, { duration: 4000 });
+        toast.showSuccess(t("auth.verification.heading"), res.description || undefined, { duration: 4000 });
         router.push({
           pathname: "/(auth)/ResetPassword",
           params: { username: email },

@@ -14,6 +14,7 @@ import { observer } from "mobx-react-lite";
 import {
   ParamControlChildProps,
   comparableRoundedParamNumber,
+  snapSliderValue,
 } from "./lib/types";
 import { paramControlStyles as styles } from "./lib/styles";
 import { useDragBubble } from "./lib/useDragBubble";
@@ -39,25 +40,35 @@ const VolumeSlider = observer(
   }: ParamControlChildProps) => {
     // 1. Computed Values
     const { min, max, step = 1 } = meta;
+
+    const n = Number(value);
+    const displayValue = Number.isFinite(n)
+      ? snapSliderValue(n, min, max, step)
+      : min;
+
     // 2. Handlers
     const { isDragging, onSlideStart, onSlideTick, onSlideEnd } =
       useDragBubble();
 
+    /**
+     * Commits a snapped slider value so near-edge drags can reach min/max.
+     * @param event - Gesture event from Tamagui Slider
+     * @param newValue - Raw slider reading
+     */
     const commitValue = (
       event: GestureResponderEvent | null,
       newValue: number,
     ) => {
       onSlideTick();
       if (disabled) return;
-      const roundedValue = Math.round(newValue);
+      const snappedValue = snapSliderValue(newValue, min, max, step);
       const cur = comparableRoundedParamNumber(value);
-      if (cur !== null && roundedValue === cur) return;
-      if (roundedValue < min) return;
-      if (roundedValue > max) return;
-      onValueChange(event, roundedValue);
+      if (cur !== null && snappedValue === cur) return;
+      onValueChange(event, snappedValue);
     };
 
-    const thumbPercent = max > min ? ((value - min) / (max - min)) * 100 : 0;
+    const thumbPercent =
+      max > min ? ((displayValue - min) / (max - min)) * 100 : 0;
 
     return (
       <View
@@ -75,7 +86,7 @@ const VolumeSlider = observer(
             >
               {label}
             </Text>
-            <Text style={styles.compactValue}>{Math.round(value)}%</Text>
+            <Text style={styles.compactValue}>{displayValue}%</Text>
           </View>
         ) : (
           <>
@@ -104,7 +115,7 @@ const VolumeSlider = observer(
               ]}
             >
               <View style={styles.bubble}>
-                <Text style={styles.bubbleText}>{Math.round(value)}%</Text>
+                <Text style={styles.bubbleText}>{displayValue}%</Text>
               </View>
               <View style={styles.bubbleArrow} />
             </View>
@@ -112,7 +123,7 @@ const VolumeSlider = observer(
 
           <View style={styles.sliderContainer}>
             <Slider
-              value={[value]}
+              value={[displayValue]}
               min={min}
               max={max}
               step={step}
@@ -163,7 +174,7 @@ const VolumeSlider = observer(
                 },
               ]}
             >
-              {Math.round(value)}%
+              {displayValue}%
             </Text>
           </View>
         )}

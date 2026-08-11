@@ -61,6 +61,11 @@ export interface DeviceFallbackProps {
   /** The ESP Rainmaker node containing device information */
   node: ESPCDFNode;
   device: ESPCDFDevice;
+  /**
+   * When the panel is embedded in Control's scroll surface, disables parent
+   * scroll while a param gesture (slider, etc.) is active.
+   */
+  setScrollEnabled?: (enabled: boolean) => void;
 }
 
 export type Tab = string;
@@ -68,6 +73,11 @@ export type Tab = string;
 export interface ControlPanelProps {
   node: ESPCDFNode;
   device: ESPCDFDevice;
+  /**
+   * When the panel is embedded in Control's scroll surface, disables parent
+   * scroll while a param gesture (slider, etc.) is active.
+   */
+  setScrollEnabled?: (enabled: boolean) => void;
 }
 
 export interface ParamControlProps {
@@ -863,9 +873,8 @@ export interface DeviceNameProps {
   initialDeviceName: string;
   deviceName: string;
   setDeviceName: (name: string) => void;
-  isEditingName: boolean;
   setIsEditingName: (editing: boolean) => void;
-  onSave: () => void;
+  onSave: () => void | Promise<boolean>;
   isSaving: boolean;
   isConnected: boolean;
   disabled: boolean;
@@ -897,6 +906,12 @@ export interface AutomationCardProps {
   onToggle?: (enabled: boolean) => void;
   /** Whether the toggle is in loading state */
   toggleLoading?: boolean;
+  /** When true, shows delete instead of enable toggle */
+  isEditing?: boolean;
+  /** Callback when delete is pressed in edit mode */
+  onDelete?: () => void;
+  /** Whether delete is in progress */
+  deleteLoading?: boolean;
 }
 
 export interface AutomationDeviceCardProps {

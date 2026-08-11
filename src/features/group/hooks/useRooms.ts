@@ -7,6 +7,7 @@
 import { useState, useCallback, useMemo, useRef } from "react";
 import type { ESPCDFGroup } from "@store";
 import { getRoomSubGroups } from "@features/group/utils/roomsHelpers";
+import { reconcilePendingCreatedRoom } from "@features/group/utils/pendingCreatedRoom";
 import { useCDF } from "@shared/hooks/useCDF";
 import { useFocusEffect } from "expo-router";
 import { hasGroupLevelAccess } from "@shared/utils/groupAccess";
@@ -52,12 +53,14 @@ export function useRooms(options: UseRoomsOptions): UseRoomsResult {
     setRefreshing(true);
     try {
       await syncHomeWithNodes(true);
+      // Re-attach a just-created room if sync returned a stale groups list.
+      reconcilePendingCreatedRoom(homeId, groupStore);
     } catch (error) {
       console.error("Error fetching group:", error);
     } finally {
       setRefreshing(false);
     }
-  }, [homeId, syncHomeWithNodes]);
+  }, [homeId, syncHomeWithNodes, groupStore]);
 
   const loadRoomsRef = useRef(loadRooms);
   loadRoomsRef.current = loadRooms;

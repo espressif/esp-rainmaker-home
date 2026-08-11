@@ -30,6 +30,9 @@ module.exports = function (api) {
             '@config': './config',
             '@assets': './src/assets',
             '@integrations': './src/integrations',
+            // Expo: skeleton package imports RN linear-gradient; map to expo shim.
+            'react-native-linear-gradient':
+              './src/polyfills/react-native-linear-gradient',
           },
           extensions: ['.js', '.jsx', '.tsx', '.ts', '.json'],
         },

@@ -8,6 +8,7 @@ import Foundation
 import React
 
 private let kMqttMessageEvent = "mqttMessageReceived"
+private let kMqttConnectionStatusEvent = "mqttConnectionStatus"
 private let kIotDataManagerKey = "com.espressif.ESPMQTTModule.IoT"
 
 @objc(ESPMQTTModule)
@@ -17,13 +18,34 @@ class ESPMQTTModule: RCTEventEmitter {
   private var connectPromiseHandled = false
   /// `AWSIoTDataManager(forKey:)` is non-optional in Swift; track registration locally (matches disconnect/remove lifecycle).
   private var hasActiveIoTRegistration = false
+  /// Suppresses status events during intentional teardown (`disconnect` / `teardownIoTClient`).
+  private var suppressConnectionStatusEvents = false
+  /// Last `connected` value emitted on `mqttConnectionStatus` (dedupe).
+  private var lastEmittedConnected: Bool?
 
   override static func moduleName() -> String! {
     "ESPMQTTModule"
   }
 
   override func supportedEvents() -> [String]! {
-    [kMqttMessageEvent]
+    [kMqttMessageEvent, kMqttConnectionStatusEvent]
+  }
+
+  /// Emits `mqttConnectionStatus` when [connected] changes and teardown is not intentional.
+  private func emitConnectionStatus(connected: Bool) {
+    if suppressConnectionStatusEvents {
+      return
+    }
+    if lastEmittedConnected == connected {
+      return
+    }
+    lastEmittedConnected = connected
+    DispatchQueue.main.async { [weak self] in
+      self?.sendEvent(
+        withName: kMqttConnectionStatusEvent,
+        body: ["connected": connected]
+      )
+    }
   }
 
   override static func requiresMainQueueSetup() -> Bool {
@@ -77,12 +99,17 @@ class ESPMQTTModule: RCTEventEmitter {
   private func teardownIoTClient(completion: @escaping () -> Void) {
     let hadClient = hasActiveIoTRegistration
     if hadClient {
+      suppressConnectionStatusEvents = true
       AWSIoTDataManager(forKey: kIotDataManagerKey).disconnect()
       AWSIoTDataManager.remove(forKey: kIotDataManagerKey)
       hasActiveIoTRegistration = false
+      lastEmittedConnected = false
     }
     if hadClient {
-      DispatchQueue.main.asyncAfter(deadline: .now() + 1.0, execute: completion)
+      DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
+        self?.suppressConnectionStatusEvents = false
+        completion()
+      }
     } else {
       completion()
     }
@@ -174,7 +201,7 @@ class ESPMQTTModule: RCTEventEmitter {
     }
 
     let mqttConfig = AWSIoTMQTTConfiguration(
-      keepAliveTimeInterval: 30,
+      keepAliveTimeInterval: 40,
       baseReconnectTimeInterval: 1,
       minimumConnectionTimeInterval: 20,
       maximumReconnectTimeInterval: 128,
@@ -196,6 +223,8 @@ class ESPMQTTModule: RCTEventEmitter {
 
       let iotManager = AWSIoTDataManager(forKey: kIotDataManagerKey)
 
+      self.suppressConnectionStatusEvents = false
+
       let started = iotManager.connectUsingWebSocket(
         withClientId: clientId,
         cleanSession: true
@@ -203,11 +232,15 @@ class ESPMQTTModule: RCTEventEmitter {
         guard let self else { return }
         switch status {
         case .connected:
+          self.emitConnectionStatus(connected: true)
           if !self.connectPromiseHandled {
             self.connectPromiseHandled = true
             DispatchQueue.main.async { resolve(nil) }
           }
+        case .disconnected:
+          self.emitConnectionStatus(connected: false)
         case .connectionError, .connectionRefused, .protocolError:
+          self.emitConnectionStatus(connected: false)
           if !self.connectPromiseHandled {
             self.connectPromiseHandled = true
             self.hasActiveIoTRegistration = false
@@ -254,9 +287,12 @@ class ESPMQTTModule: RCTEventEmitter {
     queue.async { [weak self] in
       guard let self else { return }
       if self.hasActiveIoTRegistration {
+        self.suppressConnectionStatusEvents = true
         AWSIoTDataManager(forKey: kIotDataManagerKey).disconnect()
         AWSIoTDataManager.remove(forKey: kIotDataManagerKey)
         self.hasActiveIoTRegistration = false
+        self.lastEmittedConnected = false
+        self.suppressConnectionStatusEvents = false
       }
       self.connectPromiseHandled = false
       DispatchQueue.main.async { resolve(nil) }

@@ -27,6 +27,9 @@ export {
   MigrationPromptModal,
   type MigrationPromptModalProps,
 } from "./Home/MigrationPromptModal";
+export {
+  HomeDeviceSkeletonList,
+} from "./Home/HomeLoadingSkeleton";
 
 // HomeManagement screen
 export {

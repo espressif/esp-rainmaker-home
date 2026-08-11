@@ -24,7 +24,10 @@ import {
 import { paramControlStyles as styles } from "./lib/styles";
 import { tokens } from "@shared/theme/tokens";
 import { testProps } from "@shared/utils/testProps";
-import { PARAM_CONTROL_THROTTLE_MS } from "@shared/utils/constants";
+import {
+  PARAM_CONTROL_THROTTLE_MS,
+  PARAM_INCOMING_UPDATE_DEBOUNCE_MS,
+} from "@shared/utils/constants";
 
 /**
  * ParamWrap
@@ -32,7 +35,8 @@ import { PARAM_CONTROL_THROTTLE_MS } from "@shared/utils/constants";
  * Wrapper for scene/group/automation param controls. Updates local UI immediately;
  * persists or forwards values via a latest-wins throttle matching Device Control
  * (`PARAM_CONTROL_THROTTLE_MS`) so slider drags do not flood broadcasts/`setValue`.
- *
+ * Incoming store/MQTT `param.value` sync is debounced (`PARAM_INCOMING_UPDATE_DEBOUNCE_MS`)
+ * like device control, so group broadcasts do not clobber optimistic UI.
  * @param param - The device parameter to control
  * @param disabled - Whether the control is disabled
  * @param showCheckbox - Whether to show selection checkbox
@@ -51,6 +55,7 @@ const ParamWrap = observer(
     onSelect,
     children,
     onValueChange,
+    compact = false,
     qaId,
   }: ParamControlProps & { qaId?: string }) => {
     const { min, max } = getParamBounds(param);
@@ -59,6 +64,9 @@ const ParamWrap = observer(
     onValueChangeRef.current = onValueChange;
     const paramRef = useRef(param);
     paramRef.current = param;
+    const paramUpdateDelayTimeoutRef = useRef<ReturnType<
+      typeof setTimeout
+    > | null>(null);
 
     const state = useLocalObservable(() => ({
       value: param.value,
@@ -67,10 +75,45 @@ const ParamWrap = observer(
       },
     }));
 
+    /**
+     * Debounces adopting store/MQTT `param.value` into local UI so in-flight
+     * group/device updates do not clobber an optimistic write (same idea as
+     * ParamControlWrap / DeviceCard).
+     */
     useEffect(() => {
-      state.value = param.value;
+      if (paramUpdateDelayTimeoutRef.current === null) {
+        state.value = param.value;
+      }
+
+      if (paramUpdateDelayTimeoutRef.current !== null) {
+        clearTimeout(paramUpdateDelayTimeoutRef.current);
+      }
+      paramUpdateDelayTimeoutRef.current = setTimeout(() => {
+        state.value = param.value;
+        paramUpdateDelayTimeoutRef.current = null;
+      }, PARAM_INCOMING_UPDATE_DEBOUNCE_MS);
+
+      return () => {
+        if (paramUpdateDelayTimeoutRef.current !== null) {
+          clearTimeout(paramUpdateDelayTimeoutRef.current);
+        }
+      };
       // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional hook deps
-    }, [param.value]);
+    }, [param.value, state, state.value]);
+
+    /**
+     * Arms the incoming-update quiet period so a stale `param.value` is not
+     * applied immediately after an optimistic local write.
+     */
+    const armIncomingUpdateDebounce = () => {
+      if (paramUpdateDelayTimeoutRef.current !== null) {
+        clearTimeout(paramUpdateDelayTimeoutRef.current);
+      }
+      paramUpdateDelayTimeoutRef.current = setTimeout(() => {
+        state.value = paramRef.current.value;
+        paramUpdateDelayTimeoutRef.current = null;
+      }, PARAM_INCOMING_UPDATE_DEBOUNCE_MS);
+    };
 
     const throttledForward = useThrottle(
       async (value: unknown) => {
@@ -120,6 +163,7 @@ const ParamWrap = observer(
 
       if (disabled) return;
 
+      armIncomingUpdateDebounce();
       state.setValue(nextValue);
 
       if (onValueChange) {
@@ -156,6 +200,7 @@ const ParamWrap = observer(
               ...getParamBounds(param),
               dataType: param.dataType,
             },
+            compact: compact,
           },
         );
       });
@@ -166,7 +211,7 @@ const ParamWrap = observer(
     }
 
     return (
-      <View {...(qaId ? testProps(`view_${qaId}`) : {})}>
+      <View {...(qaId ? testProps(`view_${qaId}`) : {})} >
         <TouchableOpacity
           {...(qaId ? testProps(`button_${qaId}`) : {})}
           onPress={handleSelect}
