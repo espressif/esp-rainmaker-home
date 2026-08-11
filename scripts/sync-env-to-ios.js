@@ -3,13 +3,14 @@
 /**
  * Sync .env → iOS config
  * - APP.xcconfig (all variables defined here)
- * 
- * IMPORTANT: .env is the SINGLE SOURCE OF TRUTH
- * - All values are synced exactly as they appear in .env
+ *
+ * IMPORTANT:
+ * - App version comes from package.json (`version`) — not .env
+ * - .env is the source of truth for all other native/build identity values
  * - Empty values are synced if explicitly set in .env (KEY=)
- * - Variables not in .env are skipped (not synced)
- * - Do not manually edit synced files - update .env instead
- * 
+ * - Variables not in .env are skipped (not synced), except APP_VERSION
+ * - Do not manually edit synced files — update .env or package.json instead
+ *
  * Note: Info.plist references variables from APP.xcconfig using $(VARIABLE_NAME) syntax
  * and will automatically resolve values from xcconfig at build time.
  */
@@ -26,8 +27,29 @@ const ROOT = path.resolve(__dirname, '..');
 const ENV_FILE = process.env.ENVFILE || '.env';
 const PATHS = {
   env: path.isAbsolute(ENV_FILE) ? ENV_FILE : path.join(ROOT, ENV_FILE),
+  packageJson: path.join(ROOT, 'package.json'),
   xcconfig: path.join(ROOT, 'ios/APP.xcconfig'),
 };
+
+/**
+ * Read marketing version from package.json (single SoT for APP_VERSION).
+ * @returns {string}
+ */
+function readPackageVersion() {
+  const pkg = JSON.parse(read(PATHS.packageJson) || '{}');
+  return String(pkg.version ?? '');
+}
+
+/**
+ * Overlay package.json version onto the parsed env map so xcconfig sync keeps
+ * writing APP_VERSION without requiring that key in .env.
+ * @param {Record<string, string>} env
+ * @returns {Record<string, string>}
+ */
+function applyPackageVersion(env) {
+  env.APP_VERSION = readPackageVersion();
+  return env;
+}
 
 /* =====================================================
  * Small helpers
@@ -217,13 +239,16 @@ function updateXcconfig(file, env) {
  * Main
  * ===================================================== */
 function main() {
-  console.log('🔄 Syncing iOS config from .env');
+  console.log('🔄 Syncing iOS config from .env (+ package.json version)');
 
   const env = parseEnv(PATHS.env);
   if (!Object.keys(env).length) {
     console.warn('⚠️  No environment variables found');
     return;
   }
+
+  applyPackageVersion(env);
+  console.log(`  ✓ APP_VERSION = ${env.APP_VERSION} (from package.json)`);
 
   updateXcconfig(PATHS.xcconfig, env);
 

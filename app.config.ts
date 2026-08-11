@@ -175,6 +175,23 @@ function resolveCommitId(): string {
 const commitId = resolveCommitId();
 
 /**
+ * Marketing version from package.json (single source of truth). Used for
+ * `expo.version` / in-app display; native binaries are synced from the same
+ * fields via prebuild scripts (`version` + `versionCode`).
+ */
+function readPackageVersion(): string {
+  try {
+    const raw = fs.readFileSync(path.join(__dirname, "package.json"), "utf8");
+    const version = JSON.parse(raw)?.version;
+    return typeof version === "string" && version ? version : "0.0.0";
+  } catch {
+    return "0.0.0";
+  }
+}
+
+const packageVersion = readPackageVersion();
+
+/**
  * Read from the compiled google-services.json so the id always tracks the FCM
  * project baked into THIS build. The template's placeholder id is treated as
  * unset — dev builds without a real Firebase config cannot receive push anyway.
@@ -200,7 +217,7 @@ export default {
   expo: {
     name: process.env.APP_NAME || "ESP RainMaker Home",
     slug: process.env.APP_SLUG || "esp-rainmaker-home",
-    version: process.env.APP_VERSION || "6.0.0",
+    version: packageVersion,
     scheme: process.env.AGENTS_DEEP_LINK_SCHEME || "rainmaker",
     orientation: "portrait",
     icon: "./src/assets/images/logo.png",
