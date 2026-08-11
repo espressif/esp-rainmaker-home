@@ -2,7 +2,7 @@
 
 <div align="center">
 <p align="center">
-  <img src="src/assets/images/logo.png" alt="ESP RainMaker Home App" width="200"/>
+  <img src="src/assets/images/logo-bg-white.jpg" alt="ESP RainMaker Home App" width="200"/>
 </p>
 </div>
 
@@ -27,8 +27,8 @@
 
 |  | Website | Docs | Firmware |
 | :---: | :---: | :---: | :---: |
-| <img src="src/assets/images/esp-rainmaker-neo-horizontal.svg" alt="ESP RainMaker Neo" height="40"/> | [![Website](https://img.shields.io/badge/Website-0066CC?logo=espressif&logoColor=white)](https://neo.rainmaker.espressif.com) | [![Docs](https://img.shields.io/badge/Docs-6F42C1?logo=readthedocs&logoColor=white)](https://docs.neo.rainmaker.espressif.com/) | [![Firmware](https://img.shields.io/badge/Firmware-24292F?logo=github&logoColor=white)](https://github.com/espressif/esp-rainmaker-neo-firmware) |
-| <img src="src/assets/images/esp-rainmaker-classic-horizontal.svg" alt="ESP RainMaker Classic" height="40"/> | [![Website](https://img.shields.io/badge/Website-0066CC?logo=espressif&logoColor=white)](https://rainmaker.espressif.com) | [![Docs](https://img.shields.io/badge/Docs-6F42C1?logo=readthedocs&logoColor=white)](https://docs.rainmaker.espressif.com/) | [![Firmware](https://img.shields.io/badge/Firmware-24292F?logo=github&logoColor=white)](https://github.com/espressif/esp-rainmaker) |
+| <img src="src/assets/images/rainmaker-neo-wordmark-bg-white.jpg" alt="ESP RainMaker Neo" height="40" width="200"/> | [![Website](https://img.shields.io/badge/Website-0066CC?logo=espressif&logoColor=white)](https://neo.rainmaker.espressif.com) | [![Docs](https://img.shields.io/badge/Docs-6F42C1?logo=readthedocs&logoColor=white)](https://docs.neo.rainmaker.espressif.com/) | [![Firmware](https://img.shields.io/badge/Firmware-24292F?logo=github&logoColor=white)](https://github.com/espressif/esp-rainmaker-neo-firmware) |
+| <img src="src/assets/images/rainmaker-classic-wordmark-bg-white.jpg" alt="ESP RainMaker Classic" height="40" width="200"/> | [![Website](https://img.shields.io/badge/Website-0066CC?logo=espressif&logoColor=white)](https://rainmaker.espressif.com) | [![Docs](https://img.shields.io/badge/Docs-6F42C1?logo=readthedocs&logoColor=white)](https://docs.rainmaker.espressif.com/) | [![Firmware](https://img.shields.io/badge/Firmware-24292F?logo=github&logoColor=white)](https://github.com/espressif/esp-rainmaker) |
 
 ## ⚡ Quick Start
 
