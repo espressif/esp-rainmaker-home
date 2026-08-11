@@ -29,9 +29,14 @@ class AddDevice(BasePage):
         home_page.open_add_device()
         return self
 
-    def select_scan_qr_option(self):
-        """Select the Scan QR Code provisioning option."""
-        self.click("qr_code_option", timeout=10)
+    def open_selection_from_scanner(self):
+        """Reach the provisioning-option list: Add Device opens the QR scanner, which carries the only way in."""
+        if self.check_screen_displayed(timeout=2, quiet=True):
+            return self
+        scan_qr = self.get_other_page_helper("scan_qr")
+        if not scan_qr.check_screen_displayed(timeout=5, quiet=True):
+            self.open_from_home()
+        scan_qr.open_add_device_selection()
         return self
 
     def select_bluetooth_option(self):
@@ -56,7 +61,6 @@ class AddDevice(BasePage):
         required_elements = [
             "title",
             "text_add_device_selection_note",
-            "qr_code_option",
             "bluetooth_option",
             "soft_ap_option",
         ]

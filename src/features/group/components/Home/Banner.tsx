@@ -13,6 +13,7 @@ import { globalStyles } from "@shared/theme/globalStyleSheet";
 
 // Icons
 import { ChevronRight } from "lucide-react-native";
+import Skeleton from "react-native-reanimated-skeleton";
 
 // SDK
 import { ESPCDFGroup } from "@store";
@@ -21,6 +22,7 @@ import { ESPCDFGroup } from "@store";
 import { observer } from "mobx-react-lite";
 import { useTranslation } from "react-i18next";
 import { testProps } from "@shared/utils/testProps";
+import { SKELETON_ANIMATION_PULSE } from "@shared/utils/constants";
 
 // Types
 interface BannerProps {
@@ -30,6 +32,11 @@ interface BannerProps {
   activeGroup: ESPCDFGroup | null;
   /** Callback when the dropdown button is pressed */
   onDropdownPress: (position: { x: number; y: number }) => void;
+  /**
+   * When true (or when the home name is not yet available), the dropdown
+   * row shows a compact skeleton instead of the home name.
+   */
+  isHomeNameLoading?: boolean;
 }
 
 /**
@@ -46,11 +53,17 @@ const Banner: React.FC<BannerProps> = ({
   image,
   activeGroup,
   onDropdownPress,
+  isHomeNameLoading = false,
 }) => {
   const { t } = useTranslation();
   const buttonRef = React.useRef<View>(null);
+  const showHomeNameSkeleton =
+    isHomeNameLoading || !(activeGroup?.name && activeGroup.name.length > 0);
 
   const handlePress = () => {
+    if (showHomeNameSkeleton) {
+      return;
+    }
     if (buttonRef.current) {
       buttonRef.current.measure(
         (
@@ -71,19 +84,46 @@ const Banner: React.FC<BannerProps> = ({
   return (
     <View style={styles.banner} {...testProps("view_home_banner")}>
       <View style={styles.messageContainer}>
-        <Text {...testProps("text_title_home_banner")}>{t("group.home.homeBannerTitle")}</Text>
+        <Text {...testProps("text_title_home_banner")}>
+          {t("group.home.homeBannerTitle")}
+        </Text>
         <TouchableOpacity
           ref={buttonRef}
           {...testProps("button_dropdown_home_banner")}
           style={styles.smartHomeButton}
           onPress={handlePress}
+          disabled={showHomeNameSkeleton}
         >
-          <Text style={styles.smartHomeText}>{activeGroup?.name}</Text>
-          <ChevronRight color={tokens.colors.gray} size={15} />
+          {showHomeNameSkeleton ? (
+            <Skeleton
+              isLoading
+              animationType={SKELETON_ANIMATION_PULSE}
+              boneColor={tokens.colors.bg1}
+              highlightColor={tokens.colors.bg}
+              containerStyle={styles.homeNameSkeleton}
+              layout={[
+                {
+                  key: "home_dropdown_name",
+                  width: 96,
+                  height: 16,
+                  borderRadius: tokens.radius.sm,
+                },
+              ]}
+            />
+          ) : (
+            <>
+              <Text style={styles.smartHomeText}>{activeGroup?.name}</Text>
+              <ChevronRight color={tokens.colors.gray} size={15} />
+            </>
+          )}
         </TouchableOpacity>
       </View>
 
-      <Image {...testProps("image_home_banner")} source={image} style={styles.image} />
+      <Image
+        {...testProps("image_home_banner")}
+        source={image}
+        style={styles.image}
+      />
     </View>
   );
 };
@@ -106,6 +146,11 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     marginTop: 4,
+    minHeight: 20,
+  },
+  homeNameSkeleton: {
+    width: 96,
+    height: 16,
   },
   smartHomeText: {
     fontWeight: "bold",

@@ -19,11 +19,23 @@ export interface ESPMQTTConfig {
  * MQTT Transport interface - abstraction over MQTT client.
  * Used by NodeMQTTOrchestrator for all MQTT operations.
  */
+/** Status payload for transport-level MQTT connect/disconnect. */
+export type ESPMQTTConnectionStatus = { connected: boolean };
+
 export interface ESPMQTTInterface {
     // Connection
     connect(config: ESPMQTTConfig): Promise<void>;
     disconnect(): Promise<void>;
     isConnected(): Promise<boolean>;
+
+    /**
+     * Optional push notification when the native MQTT transport connects or
+     * drops. Returns an unsubscribe function. Intentional `disconnect()` /
+     * reconnect teardown must not fire `connected: false`.
+     */
+    onConnectionStatusChange?(
+        callback: (status: ESPMQTTConnectionStatus) => void
+    ): () => void;
 
     // Messaging
     publish(topic: string, payload: string | Buffer): Promise<void>;

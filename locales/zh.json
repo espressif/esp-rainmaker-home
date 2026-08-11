@@ -124,7 +124,12 @@
       "cancel": "取消",
       "save": "保存",
       "delete": "删除",
+      "unsavedChangesTitle": "未保存的更改",
+      "unsavedChangesDescription": "您有未保存的更改，离开此页面将放弃这些更改。",
+      "discardChanges": "放弃",
+      "keepEditing": "继续编辑",
       "offline": "离线",
+      "unreachable": "无法访问",
       "offlineLastSeen": "离线 - {{timeAgo}}",
       "lastSeen": {
         "seconds": "{{count}}秒前",
@@ -133,6 +138,9 @@
         "days": "{{count}}天前"
       },
       "confirm": "确认",
+      "exitAppTitle": "退出应用？",
+      "exitAppMessage": "确定要关闭应用吗？",
+      "exitAppConfirm": "退出",
       "edit": "编辑",
       "next": "下一步",
       "update": "更新",
@@ -169,7 +177,7 @@
       "deploymentBanner": {
         "change": "更换部署"
       },
-      "neoCredentialsHint": "您可以使用现有的 RainMaker 凭据登录"
+      "neoCredentialsHint": "您可以使用现有的 RainMaker Classic 凭据登录"
     },
     "signup": {
       "title": "注册",
@@ -210,7 +218,9 @@
       "invalidPhoneE164": "请输入有效的国际电话：+、国家区号及号码（最多 15 位数字）。",
       "passwordsDoNotMatch": "密码不匹配",
       "invalidCode": "请输入有效的 6 位验证码",
-      "newPasswordSameAsCurrent": "新密码不能与当前密码相同"
+      "newPasswordSameAsCurrent": "新密码不能与当前密码相同",
+      "nameMinLength": "姓名至少需要 2 个字符",
+      "nameMaxLength": "姓名不能超过 30 个字符"
     },
     "agentTerms": {
       "title": "是否要为账户添加昵称？",
@@ -280,6 +290,10 @@
       "notSet": "未设置",
       "nickname": "昵称",
       "nicknamePlaceholder": "输入您的昵称",
+      "email": "邮箱",
+      "emailPlaceholder": "邮箱",
+      "phone": "电话",
+      "phonePlaceholder": "电话",
       "userId": "用户 ID",
       "userIdPlaceholder": "用户 ID"
     },
@@ -591,6 +605,16 @@
       "title": "正在连接设备",
       "success": "设备配置成功",
       "timezoneNotSet": "当前时区未设置。日程可能不可靠。请在设备设置中设置时区。",
+      "wifiResetTitle": "Wi-Fi 重置",
+      "wifiResetMessage": "设备的 Wi-Fi 已重置。要重新输入密码并重试吗？",
+      "wifiResetFailedMessage": "无法重置设备的 Wi-Fi。请将设备恢复出厂设置后重新添加。",
+      "wifiResetRetryConfirm": "重试",
+      "wifiResetPasswordMessage": "请输入该网络的密码。",
+      "wifiResetPasswordPlaceholder": "Wi-Fi 密码",
+      "wifiResetPasswordSubmit": "连接",
+      "exitSetupTitle": "停止设置？",
+      "exitSetupMessage": "设备仍在设置中。如果现在离开，设置将无法完成，您需要重新开始。",
+      "exitSetupConfirm": "停止设置",
       "sendingCredentialsTitle": "正在发送 Wi-Fi 凭据",
       "sendingCredentialsDescription": "正在向设备发送网络凭据...",
       "confirmingConnectionTitle": "正在确认 Wi-Fi 连接",
@@ -600,19 +624,25 @@
       "verifyingDeviceAssociation": "正在验证设备关联...",
       "settingUpNode": "正在设置节点",
       "settingUpNodeDescription": "正在完成设备设置...",
+      "setup": {
+        "checkingNodeOnline": "正在等待设备上线…",
+        "tryingReconnect": "正在重新连接 MQTT ({{attempt}})…",
+        "updatingNodeTimezone": "正在为设备设置时区…",
+        "complete": "即将完成…"
+      },
       "challengeResponse": {
         "confirmingNodeAssociationTitle": "正在确认节点关联",
         "confirmingNodeAssociationDescription": "正在确认与用户的节点关联",
         "confirmingWifiConnectionTitle": "正在确认 Wi-Fi 连接",
         "confirmingWifiConnectionDescription": "正在确认与设备的 Wi-Fi 连接",
         "settingUpNodeTitle": "正在设置节点",
-        "settingUpNodeDescription": "正在根据用户的时区设置节点"
+        "settingUpNodeDescription": "正在等待设备上线…"
       },
       "onNetwork": {
         "confirmingNodeAssociationTitle": "正在确认节点关联",
         "confirmingNodeAssociationDescription": "正在通过本地网络验证设备与您账户的关联",
         "settingUpNodeTitle": "正在设置节点",
-        "settingUpNodeDescription": "正在根据用户的时区设置节点"
+        "settingUpNodeDescription": "正在等待设备上线…"
       }
     },
     "claiming": {
@@ -672,6 +702,7 @@
         "platformNotSupported": "此平台不支持二维码扫描",
         "sessionInitFailed": "初始化会话失败，请重试。",
         "scanAgain": "重新扫描",
+        "noQrCode": "我没有二维码",
         "bluetoothPermissionRequired": "需要蓝牙访问权限。请授予权限并重试。",
         "matterAuthRequired": "Matter 设备调试需要身份验证。",
         "matterCommissioningFailed": "Matter 调试失败：{{error}}"
@@ -835,9 +866,17 @@
       "noDeviceSelected": "未选择设备",
       "sessionInitFailed": "会话初始化失败",
       "provisioningFailed": "配网失败",
+      "nodeOnlineTimeout": "设备未能及时上线。请确认设备已通电并连接到 Wi-Fi，然后重试。",
+      "noProvisionStateToResume": "无法继续设置，请重新添加设备。",
       "wifiAuthFailed": "Wi-Fi 身份验证失败。",
       "networkNotFound": "未找到网络。请检查网络名称。",
       "deviceDisconnected": "设备已断开连接。请重试。",
+      "wifiStatusUnknown": "Wi-Fi 状态未知。请重试。",
+      "sessionFailed": "会话初始化失败。请重试。",
+      "configurationFailed": "应用网络配置失败。请重试。",
+      "wifiStatusFetchFailed": "无法获取 Wi-Fi 状态。请重试。",
+      "missingProvisionData": "缺少配网数据",
+      "nodeNotFound": "配网后未找到设备",
       "failedToScanNetworks": "扫描网络失败",
       "invalidCredentials": "请输入有效的凭据",
       "fallback": "出错了，请稍后重试。",
@@ -888,7 +927,7 @@
       "favourites": "收藏",
       "allScenes": "所有场景",
       "noScenesYet": "尚未添加场景",
-      "noScenesYetDescription": "创建您的第一个场景以自动化您的设备",
+      "noScenesYetDescription": "创建您的第一个场景\n 以自动化您的设备",
       "allScenesFavorites": "所有场景都是收藏的！",
       "allScenesFavoritesDescription": "添加更多场景以在此处查看，或将某些场景从收藏中移除。",
       "sceneTriggeredSuccessfully": "场景激活成功",
@@ -936,6 +975,7 @@
       "sceneTriggerFailed": "场景触发失败",
       "someSceneTriggerFailed": "部分场景触发失败",
       "sceneCreationFailed": "场景创建失败",
+      "sceneUpdateFailed": "场景更新失败",
       "someSceneDeletionFailed": "部分场景删除失败",
       "sceneDeletionFailed": "场景删除失败",
       "noScenes": "未找到场景",
@@ -954,6 +994,7 @@
       "automationMenuBottomSheetEnabled": "已启用",
       "automationMenuBottomSheetDisabled": "已禁用",
       "edit": "编辑",
+      "done": "完成",
       "delete": "删除",
       "createAutomation": "创建自动化",
       "automationNamePlaceholder": "自动化名称",
@@ -990,7 +1031,8 @@
       "title": "选择设备",
       "selectDevice": "选择一个设备以创建事件触发器",
       "selectedDevice": "已选设备",
-      "selectDifferentDevice": "选择其他设备"
+      "selectDifferentDevice": "选择其他设备",
+      "singleConditionNote": "自动化事件只能由一个条件触发，选择其他条件将替换当前已选条件。"
     },
     "eventParamSelection": {
       "title": "配置事件",
@@ -1014,7 +1056,7 @@
       "incompatibleParamsTitle": "在 {{deviceName}} 上\n未找到兼容参数"
     },
     "card": {
-      "if": "如果",
+      "when": "当",
       "set": "设置",
       "on": "开",
       "off": "关",
@@ -1058,11 +1100,12 @@
       "disable": "禁用",
       "delete": "删除",
       "noSchedulesYet": "尚未添加定时",
-      "noSchedulesYetDescription": "创建您的第一个定时以自动化您的设备",
+      "noSchedulesYetDescription": "创建您的第一个定时\n 以自动化您的设备",
       "scheduleEnabledSuccessfully": "定时启用成功",
       "scheduleDisabledSuccessfully": "定时禁用成功",
       "scheduleDeletedSuccessfully": "定时删除成功",
       "someDevicesFailedUpdate": "部分设备更新定时失败",
+      "someDevicesFailedDelete": "部分设备删除定时失败",
       "someDevicesNotConnected": "部分设备离线",
       "createSchedule": "创建定时",
       "scheduleNamePlaceholder": "定时名称",
@@ -1091,6 +1134,7 @@
       "scheduleDisableFailed": "禁用定时失败",
       "scheduleCreationFailed": "创建定时失败",
       "scheduleDeletionFailed": "删除定时失败",
+      "scheduleNotFound": "未找到定时",
       "noSchedules": "未找到定时",
       "scheduleSyncFailed": "定时同步失败",
       "fallback": "出错了，请稍后重试。"
@@ -1213,9 +1257,13 @@
       "deleteErrorTitle": "删除失败",
       "deleteErrorMessage": "删除会话失败，请重试。",
       "activateErrorTitle": "打开会话失败",
-      "activateErrorMessage": "打开会话时发生错误。"
+      "activateErrorMessage": "打开会话时发生错误。",
+      "invalidParams": "缺少助手或会话信息。",
+      "loadError": "加载会话失败。",
+      "viewTitle": "会话"
     },
     "welcomeMessage": "今天我能为您做些什么？",
+    "retry": "重试",
     "suggestions": {
       "showDevices": "可以显示我所有的设备吗？",
       "turnOnFan": "请打开卧室的风扇",

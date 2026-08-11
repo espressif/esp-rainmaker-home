@@ -177,16 +177,23 @@ const AutomationMenuBottomSheet: React.FC<AutomationMenuBottomSheetProps> = ({
 const styles = StyleSheet.create({
   backdrop: {
     flex: 1,
-    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    backgroundColor: "transparent",
     justifyContent: "flex-end",
   },
   content: {
     backgroundColor: tokens.colors.white,
     borderTopLeftRadius: tokens.radius.md,
     borderTopRightRadius: tokens.radius.md,
+    borderTopWidth: tokens.border.defaultWidth,
+    borderTopColor: tokens.colors.borderColor,
     paddingHorizontal: tokens.spacing._20,
     paddingTop: tokens.spacing._10,
     minHeight: 200,
+    shadowColor: tokens.colors.black,
+    shadowOpacity: 0.12,
+    shadowOffset: { width: 0, height: -4 },
+    shadowRadius: 12,
+    elevation: 10,
   },
   handle: {
     width: 40,

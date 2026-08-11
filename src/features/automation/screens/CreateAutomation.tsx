@@ -4,19 +4,22 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useCallback } from "react";
+import { useCallback, useEffect } from "react";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { useTranslation } from "react-i18next";
+import { getFeatures } from "@config/features.config";
 import { useToast } from "@shared/hooks/useToast";
+import { useUnsavedChangesGuard } from "@shared/hooks/useUnsavedChangesGuard";
 import { useAutomation } from "@context/automation.context";
 import { useCreateAutomation } from "@features/automation/hooks";
 import { globalStyles } from "@shared/theme/globalStyleSheet";
-import { Header, ScreenWrapper } from "@shared/components";
+import { Header, ScreenWrapper, UnsavedChangesDialog } from "@shared/components";
 import {
   CreateAutomationNameSection,
   CreateAutomationRetriggerSection,
   CreateAutomationEventsSection,
   CreateAutomationActionsSection,
+  CreateAutomationEmptyState,
   CreateAutomationActionButtons,
 } from "@features/automation/components";
 
@@ -30,6 +33,7 @@ export function CreateAutomationScreen() {
   const toast = useToast();
   const router = useRouter();
   const { resetState } = useAutomation();
+  const features = getFeatures();
   const { automationName, automationId, isEditing } = useLocalSearchParams<{
     automationName?: string;
     automationId?: string;
@@ -42,6 +46,7 @@ export function CreateAutomationScreen() {
     setRetrigger,
     loading,
     isValidAutomation,
+    hasUnsavedChanges,
     eventInfo,
     eventDevice,
     actionCards,
@@ -54,10 +59,27 @@ export function CreateAutomationScreen() {
     isEditing,
   });
 
-  const resetAndNavigateToAutomations = useCallback(() => {
-    resetState();
+  const navigateToAutomations = useCallback(() => {
     router.dismissTo("/(automation)/Automations");
-  }, [resetState, router]);
+  }, [router]);
+
+  const {
+    isDiscardDialogOpen,
+    exit: exitToAutomations,
+    requestExit: handleBackPress,
+    confirmDiscard,
+    cancelDiscard,
+  } = useUnsavedChangesGuard({
+    hasUnsavedChanges,
+    onExit: navigateToAutomations,
+  });
+
+  /**
+   * The draft lives in shared context, so resetting it while this screen is
+   * still visible blanks the form during the dismiss transition. Reset only
+   * on unmount, which fires after the screen has left (any removal path).
+   */
+  useEffect(() => () => resetState(), [resetState]);
 
   const handleAddEvent = useCallback(() => {
     router.push({
@@ -91,7 +113,7 @@ export function CreateAutomationScreen() {
         t("automation.createAutomation.automationCreated"),
         t("automation.createAutomation.automationCreatedMessage"),
       );
-      resetAndNavigateToAutomations();
+      exitToAutomations();
     } else {
       toast.showError(
         t("automation.errors.failedToCreateAutomation"),
@@ -103,7 +125,7 @@ export function CreateAutomationScreen() {
     createAutomation,
     toast,
     t,
-    resetAndNavigateToAutomations,
+    exitToAutomations,
   ]);
 
   const handleUpdateAutomation = useCallback(async () => {
@@ -120,7 +142,7 @@ export function CreateAutomationScreen() {
         t("automation.createAutomation.automationUpdated"),
         t("automation.createAutomation.automationUpdatedMessage"),
       );
-      resetAndNavigateToAutomations();
+      exitToAutomations();
     } else {
       toast.showError(
         t("automation.errors.updateFailedMessage"),
@@ -132,7 +154,7 @@ export function CreateAutomationScreen() {
     updateAutomation,
     toast,
     t,
-    resetAndNavigateToAutomations,
+    exitToAutomations,
   ]);
 
   const handleDeleteAutomation = useCallback(async () => {
@@ -142,20 +164,24 @@ export function CreateAutomationScreen() {
         t("automation.createAutomation.automationDeleted"),
         t("automation.createAutomation.automationDeletedMessage"),
       );
-      resetAndNavigateToAutomations();
+      exitToAutomations();
     } else {
       toast.showError(
         t("automation.errors.deleteFailedMessage"),
         result.description ?? t("automation.errors.fallback"),
       );
     }
-  }, [deleteAutomation, toast, t, resetAndNavigateToAutomations]);
+  }, [deleteAutomation, toast, t, exitToAutomations]);
 
   const eventDeviceShape = eventDevice
     ? { type: eventDevice.type ?? "switch", name: eventDevice.name }
     : null;
   const eventDisplayName =
     eventDevice?.displayName ?? eventInfo?.deviceName ?? "";
+  const hasEvents = state.events.length > 0;
+  const hasActions = Object.keys(state.actions).length > 0;
+  const showEventsEmpty = !hasEvents;
+  const showActionsEmpty = hasEvents && !hasActions;
 
   return (
     <>
@@ -166,7 +192,7 @@ export function CreateAutomationScreen() {
             : t("automation.createAutomation.title")
         }
         showBack={true}
-        onBackPress={resetAndNavigateToAutomations}
+        onBackPress={handleBackPress}
       />
       <ScreenWrapper style={globalStyles.container}>
         <CreateAutomationNameSection
@@ -177,37 +203,53 @@ export function CreateAutomationScreen() {
           value={state.automationName ?? ""}
           onNameChange={setAutomationName}
         />
-        <CreateAutomationRetriggerSection
-          label={t("automation.createAutomation.retrigger")}
-          description={t("automation.createAutomation.retriggerDescription")}
-          checked={state.retrigger}
-          onCheckedChange={setRetrigger}
-        />
+        {features.automationRetrigger && (
+          <CreateAutomationRetriggerSection
+            label={t("automation.createAutomation.retrigger")}
+            description={t("automation.createAutomation.retriggerDescription")}
+            checked={state.retrigger}
+            onCheckedChange={setRetrigger}
+          />
+        )}
         <CreateAutomationEventsSection
           sectionLabel={t("automation.createAutomation.event")}
-          hasEvents={state.events.length > 0}
-          emptyTitle={t("automation.createAutomation.noEventSelected")}
-          emptyDescription={t(
-            "automation.createAutomation.noEventSelectedDescription",
-          )}
+          hasEvents={hasEvents}
           eventInfo={eventInfo}
           eventDevice={eventDeviceShape}
           eventDisplayName={eventDisplayName}
           onAddEvent={handleAddEvent}
         />
-        {state.events.length > 0 && (
+        {hasEvents && (
           <CreateAutomationActionsSection
             sectionLabel={t("automation.createAutomation.actions")}
-            hasActions={Object.keys(state.actions).length > 0}
-            emptyTitle={t("automation.createAutomation.noActionsSelected")}
-            emptyDescription={t(
+            hasActions={hasActions}
+            actionCards={actionCards}
+            onAddAction={handleAddAction}
+          />
+        )}
+        {showEventsEmpty && (
+          <CreateAutomationEmptyState
+            title={t("automation.createAutomation.noEventSelected")}
+            description={t(
+              "automation.createAutomation.noEventSelectedDescription",
+            )}
+            containerTestId="view_empty_event"
+            titleTestId="text_title_empty_event"
+            descriptionTestId="text_description_empty_event"
+          />
+        )}
+        {showActionsEmpty && (
+          <CreateAutomationEmptyState
+            title={t("automation.createAutomation.noActionsSelected")}
+            description={t(
               "automation.createAutomation.noActionsSelectedDescription",
               {
                 action: state.isEditing ? "update" : "create",
               },
             )}
-            actionCards={actionCards}
-            onAddAction={handleAddAction}
+            containerTestId="view_empty_actions"
+            titleTestId="text_title_empty_automations"
+            descriptionTestId="text_description_empty_automations"
           />
         )}
         <CreateAutomationActionButtons
@@ -226,6 +268,12 @@ export function CreateAutomationScreen() {
           onDelete={handleDeleteAutomation}
         />
       </ScreenWrapper>
+      <UnsavedChangesDialog
+        open={isDiscardDialogOpen}
+        onDiscard={confirmDiscard}
+        onKeepEditing={cancelDiscard}
+        qaId="create_automation_unsaved_changes"
+      />
     </>
   );
 }

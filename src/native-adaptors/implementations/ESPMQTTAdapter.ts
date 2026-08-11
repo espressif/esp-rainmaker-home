@@ -14,6 +14,7 @@ import {
 const { ESPMQTTModule } = NativeModules;
 
 const MQTT_MESSAGE_EVENT = "mqttMessageReceived";
+const MQTT_CONNECTION_STATUS_EVENT = "mqttConnectionStatus";
 
 const topicHandlers = new Map<
     string,
@@ -21,10 +22,16 @@ const topicHandlers = new Map<
 >();
 
 let bridgeSubscription: EmitterSubscription | null = null;
+let connectionBridgeSubscription: EmitterSubscription | null = null;
 
 /** Optional post-dispatch observers (sdk-adaptors register; keeps layering clean). */
 type MqttMessageHook = (topic: string, message: string) => void;
 const mqttMessageHooks = new Set<MqttMessageHook>();
+
+/** Transport connection-status observers. */
+type MqttConnectionStatus = { connected: boolean };
+type MqttConnectionHook = (status: MqttConnectionStatus) => void;
+const mqttConnectionHooks = new Set<MqttConnectionHook>();
 
 /**
  * Registers a hook invoked after each native MQTT message is dispatched to
@@ -34,6 +41,21 @@ export function addMqttMessageHook(hook: MqttMessageHook): () => void {
     mqttMessageHooks.add(hook);
     return () => {
         mqttMessageHooks.delete(hook);
+    };
+}
+
+/**
+ * Registers a listener for native MQTT transport connect/disconnect.
+ * Returns an unsubscribe function.
+ */
+export function addMqttConnectionListener(
+    hook: MqttConnectionHook
+): () => void {
+    mqttConnectionHooks.add(hook);
+    ensureConnectionBridgeListener();
+    return () => {
+        mqttConnectionHooks.delete(hook);
+        removeConnectionBridgeListenerIfIdle();
     };
 }
 
@@ -133,12 +155,49 @@ function ensureBridgeListener(): void {
     );
 }
 
+function ensureConnectionBridgeListener(): void {
+    if (connectionBridgeSubscription != null) {
+        return;
+    }
+    const emitter = new NativeEventEmitter(ESPMQTTModule);
+    connectionBridgeSubscription = emitter.addListener(
+        MQTT_CONNECTION_STATUS_EVENT,
+        (event: { connected?: boolean }) => {
+            const status: MqttConnectionStatus = {
+                connected: event?.connected === true,
+            };
+            console.log(
+                `[MQTT_CONN_CB] native mqttConnectionStatus received connected=${status.connected} hooks=${mqttConnectionHooks.size}`
+            );
+            logMqttJson("mqtt.connectionStatus", status);
+            for (const hook of mqttConnectionHooks) {
+                try {
+                    hook(status);
+                } catch (error) {
+                    console.warn(
+                        "[MQTT_CONN_CB] mqtt connection hook failed:",
+                        error
+                    );
+                }
+            }
+        }
+    );
+}
+
 function removeBridgeListenerIfIdle(): void {
     if (topicHandlers.size > 0) {
         return;
     }
     bridgeSubscription?.remove();
     bridgeSubscription = null;
+}
+
+function removeConnectionBridgeListenerIfIdle(): void {
+    if (mqttConnectionHooks.size > 0) {
+        return;
+    }
+    connectionBridgeSubscription?.remove();
+    connectionBridgeSubscription = null;
 }
 
 function payloadToString(payload: string | Buffer): string {
@@ -172,6 +231,7 @@ export const ESPMQTTAdapter: ESPMQTTInterface = {
     isConnected: async () => {
         return ESPMQTTModule.isConnected();
     },
+    onConnectionStatusChange: (callback) => addMqttConnectionListener(callback),
     publish: async (topic: string, payload: string | Buffer) => {
         const body = payloadToString(payload);
         logMqttJson("mqtt.publish", { topic, payload: body });

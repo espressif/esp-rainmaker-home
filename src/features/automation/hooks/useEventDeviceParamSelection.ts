@@ -76,8 +76,15 @@ export function useEventDeviceParamSelection(
       getNodeParamsEventForDevice(
         state.events,
         state.selectedEventDevice?.deviceName,
+        state.selectedEventDevice?.nodeId,
+        state.nodeId,
       ),
-    [state.events, state.selectedEventDevice?.deviceName],
+    [
+      state.events,
+      state.selectedEventDevice?.deviceName,
+      state.selectedEventDevice?.nodeId,
+      state.nodeId,
+    ],
   );
 
   const activeEventParam = persistedNodeParamsEvent?.param ?? null;
@@ -92,7 +99,12 @@ export function useEventDeviceParamSelection(
     );
     if (!device) return {};
 
-    const storedEvent = getNodeParamsEventForDevice(state.events, device.name);
+    const storedEvent = getNodeParamsEventForDevice(
+      state.events,
+      device.name,
+      nodeId,
+      state.nodeId,
+    );
     const withStoredOrDefaults = (device.params ?? []).map((param) => ({
       ...param,
       value:
@@ -105,7 +117,12 @@ export function useEventDeviceParamSelection(
     );
 
     return { selectedDevice: device, params: filtered ?? [] };
-  }, [state.selectedEventDevice, state.events, store.nodeStore.nodesByIDMap]);
+  }, [
+    state.selectedEventDevice,
+    state.events,
+    state.nodeId,
+    store.nodeStore.nodesByIDMap,
+  ]);
 
   const disableActionButton =
     !selectedDevice || paramSheetVisible || persistedNodeParamsEvent == null;
@@ -135,6 +152,8 @@ export function useEventDeviceParamSelection(
       const stored = getNodeParamsEventForDevice(
         state.events,
         selectedDevice?.name,
+        state.selectedEventDevice?.nodeId,
+        state.nodeId,
       );
       if (stored?.param === param.name) {
         setDraftCondition(stored.check);
@@ -146,7 +165,12 @@ export function useEventDeviceParamSelection(
       setSelectedParam(param);
       setParamSheetVisible(true);
     },
-    [state.events, selectedDevice?.name],
+    [
+      state.events,
+      selectedDevice?.name,
+      state.selectedEventDevice?.nodeId,
+      state.nodeId,
+    ],
   );
 
   const handleParamSheetClose = useCallback(() => {

@@ -13,6 +13,8 @@ import { testProps } from "@shared/utils/testProps";
 
 interface ProvisioningStepProps {
   description: string;
+  /** Optional live detail under the step title (e.g. setting-up sub-status). */
+  detail?: string;
   status: ProvisionStatus;
   error?: string;
 }
@@ -22,6 +24,7 @@ interface ProvisioningStepProps {
  */
 export const ProvisioningStep: React.FC<ProvisioningStepProps> = ({
   description,
+  detail,
   status,
   error,
 }) => {
@@ -62,6 +65,11 @@ export const ProvisioningStep: React.FC<ProvisioningStepProps> = ({
       {getStatusIcon()}
       <View {...testProps("view_content_provision")} style={styles.stepContent}>
         <Text {...testProps("text_description_provision")} style={styles.stepDescription}>{description}</Text>
+        {!!detail && (
+          <Text {...testProps("text_detail_provision")} style={styles.stepDetail}>
+            {detail}
+          </Text>
+        )}
         {error && status === "failed" && (
           <Text {...testProps("text_error_provision")} style={styles.stepError}>{error}</Text>
         )}
@@ -85,6 +93,13 @@ const styles = StyleSheet.create({
   stepDescription: {
     fontSize: tokens.fontSize.sm,
     color: tokens.colors.gray,
+  },
+  stepDetail: {
+    fontSize: tokens.fontSize.xs,
+    color: tokens.colors.lightGray,
+    marginTop: tokens.spacing._5,
+    fontFamily: tokens.fonts.regular,
+    fontWeight: "300",
   },
   stepError: {
     fontSize: tokens.fontSize.xs,

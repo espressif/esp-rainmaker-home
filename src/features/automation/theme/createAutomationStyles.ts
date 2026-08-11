@@ -78,9 +78,6 @@ export const createAutomationStyles = StyleSheet.create({
   disabledButton: {
     opacity: 0.5,
   },
-  eventContainer: {
-    flex: 1,
-  },
   buttonContainer: {
     marginTop: "auto",
     flexDirection: "column",

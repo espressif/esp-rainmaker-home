@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useState } from "react";
+import { useState, useEffect, useMemo } from "react";
 import StorageAdapter  from "@native-adaptors/implementations/ESPAsyncStorage";
 
 // Icons
@@ -34,6 +34,7 @@ import { ESPCDFAPIError } from "@store";
 import { getFeatures } from "@/config/features.config";
 import { getResolvedActiveSdk, isRmneoStackSdkId } from "@config/sdk.config";
 import { getPreAuthRoute } from "@features/landing";
+import { resetStackTo } from "@shared/utils/navigation";
 
 // Tokens
 import { tokens } from "@shared/theme/tokens";
@@ -60,9 +61,53 @@ export const useUser = () => {
   const toast = useToast();
 
   const [isLoading, setIsLoading] = useState(false);
+  const [isProfileLoading, setIsProfileLoading] = useState(true);
   const [showLogoutDialog, setShowLogoutDialog] = useState(false);
   const user = store?.userStore.user;
   const features = getFeatures();
+
+  /** True once CDF userInfo has an id or email (name alone is not enough on Neo). */
+  const hasProfileIdentity = useMemo(
+    () =>
+      Boolean(
+        user?.userInfo?.email?.trim() || user?.userInfo?.id?.trim(),
+      ),
+    [user?.userInfo?.email, user?.userInfo?.id],
+  );
+
+  /**
+   * Maps async userInfo hydration into My Profile skeletons.
+   * Clears as soon as identity fields appear, or when a refresh settles
+   * (so a failed hydrate does not leave bones forever). Separate from logout
+   * `isLoading`.
+   */
+  useEffect(() => {
+    if (hasProfileIdentity) {
+      setIsProfileLoading(false);
+      return;
+    }
+    if (!user) {
+      setIsProfileLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    setIsProfileLoading(true);
+    void user
+      .getUserInfo()
+      .catch((error: unknown) => {
+        console.error("[useUser] Failed to refresh profile identity:", error);
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setIsProfileLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user, hasProfileIdentity]);
 
   // Logout copy depends on the active stack: the RainMaker stack (base +
   // Matter) also signs out account-configured agents, so it carries the
@@ -210,7 +255,10 @@ export const useUser = () => {
       setTimeout(() => {
         // Post-logout redirect goes through the shared helper so a user who
         // has already picked a backend lands on Login (not Landing again).
-        router.replace(getPreAuthRoute() as never);
+        // Resets the stack: the tab that logout was triggered from sits on top
+        // of Home, so a plain `replace` would strand the signed-in Home
+        // underneath Login and back would show it with no data.
+        resetStackTo(router, getPreAuthRoute() as never);
       }, 100);
     } catch (error) {
       console.error("Logout error:", error);
@@ -230,6 +278,8 @@ export const useUser = () => {
     userOperations,
     integrations,
     isLoading,
+    /** Profile card hydration — drives ProfileLoadingSkeleton on My Profile. */
+    isProfileLoading: isProfileLoading && !hasProfileIdentity,
     showLogoutDialog,
     setShowLogoutDialog,
     logoutMessage,

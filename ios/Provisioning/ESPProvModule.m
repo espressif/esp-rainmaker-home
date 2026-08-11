@@ -49,6 +49,9 @@ RCT_EXTERN_METHOD(provision:(NSString *)deviceName
                   passphrase:(NSString *)passphrase
                   resolve:(RCTPromiseResolveBlock)resolve
                   reject:(RCTPromiseRejectBlock)reject)
+RCT_EXTERN_METHOD(resetWifiStatus:(NSString *)deviceName
+                  resolve:(RCTPromiseResolveBlock)resolve
+                  reject:(RCTPromiseRejectBlock)reject)
 RCT_EXTERN_METHOD(disconnect:(NSString *)deviceName)
 @end
 

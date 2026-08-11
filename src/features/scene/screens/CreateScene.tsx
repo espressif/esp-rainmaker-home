@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { View, Text } from "react-native";
 
 // Styles
@@ -16,20 +16,25 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { useTranslation } from "react-i18next";
 import { useCDF } from "@shared/hooks/useCDF";
 import { useToast } from "@shared/hooks/useToast";
+import {
+  useUnsavedChangesGuard,
+  useDraftBaseline,
+} from "@shared/hooks/useUnsavedChangesGuard";
 import { useScene } from "@context/scenes.context";
 
 // Icons
 import { ShieldAlert } from "lucide-react-native";
 
 // Components
-import { ScreenWrapper, Header } from "@shared/components";
+import { ScreenWrapper, Header, UnsavedChangesDialog } from "@shared/components";
 import {
   SceneNameInput,
   SceneActionsList,
+  SceneCreateEmptyState,
   SceneActionButtons,
 } from "@features/scene/components";
 
-import { generateRandomId } from "@shared/utils/common";
+import { generateRandomId, stableStringify } from "@shared/utils/common";
 import { testProps } from "@shared/utils/testProps";
 import {
   create,
@@ -87,6 +92,45 @@ const CreateScene = () => {
   // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional hook deps
   }, [sceneName]);
 
+  // Flips in the same batch as the mount-effect dispatches above (scene id,
+  // name param), so the unsaved-changes baseline never captures a
+  // half-initialized draft. In edit mode the scene is loaded before this
+  // screen is pushed, so the baseline is the loaded scene as-is.
+  const [isDraftReady, setIsDraftReady] = useState(false);
+  useEffect(() => {
+    setIsDraftReady(true);
+  }, []);
+
+  const hasUnsavedChanges = useDraftBaseline(
+    stableStringify({
+      name: (state.sceneName ?? "").trim(),
+      actions: state.actions,
+    }),
+    isDraftReady,
+  );
+
+  const navigateToScenes = useCallback(() => {
+    router.dismissTo("/(scene)/Scenes");
+  }, [router]);
+
+  const {
+    isDiscardDialogOpen,
+    exit: exitToScenes,
+    requestExit: handleBackPress,
+    confirmDiscard,
+    cancelDiscard,
+  } = useUnsavedChangesGuard({
+    hasUnsavedChanges,
+    onExit: navigateToScenes,
+  });
+
+  /**
+   * The draft lives in shared context, so resetting it while this screen is
+   * still visible blanks the form during the dismiss transition. Reset only
+   * on unmount, which fires after the screen has left (any removal path).
+   */
+  useEffect(() => () => resetState(), [resetState]);
+
   const disableActionButton = useMemo(() => {
     return shouldDisableActionButton(
       loading.save,
@@ -106,8 +150,7 @@ const CreateScene = () => {
 
   const handleCreateSuccess = () => {
     toast.showSuccess(t("scene.createScene.sceneCreatedSuccessfully"));
-    resetState();
-    router.dismissTo("/(scene)/Scenes");
+    exitToScenes();
     setLoading((prev) => ({ ...prev, save: false }));
   };
 
@@ -119,8 +162,7 @@ const CreateScene = () => {
 
   const handleUpdateSuccess = () => {
     toast.showSuccess(t("scene.createScene.sceneUpdatedSuccessfully"));
-    resetState();
-    router.dismissTo("/(scene)/Scenes");
+    exitToScenes();
     setLoading((prev) => ({ ...prev, save: false }));
   };
 
@@ -132,8 +174,7 @@ const CreateScene = () => {
 
   const handleDeleteSuccess = () => {
     toast.showSuccess(t("scene.createScene.sceneDeletedSuccessfully"));
-    resetState();
-    router.dismissTo("/(scene)/Scenes");
+    exitToScenes();
     setLoading((prev) => ({ ...prev, delete: false }));
   };
 
@@ -213,10 +254,7 @@ const CreateScene = () => {
     } as any);
   };
 
-  const handleBackPress = () => {
-    resetState();
-    router.dismissTo("/(scene)/Scenes");
-  };
+  const sceneActions = getSceneActions();
 
   return (
     <>
@@ -254,14 +292,19 @@ const CreateScene = () => {
 
         {/* SCENE ACTIONS */}
         <SceneActionsList
-          actions={getSceneActions()}
+          actions={sceneActions}
           onAddPress={handleAddDeviceAction}
           title={t("scene.createScene.sceneActions")}
-          emptyStateTitle={t("scene.createScene.noActionsSelected")}
-          emptyStateDescription={t(
-            "scene.createScene.noActionsSelectedDescription",
-          )}
         />
+
+        {sceneActions.length === 0 && (
+          <SceneCreateEmptyState
+            title={t("scene.createScene.noActionsSelected")}
+            description={t(
+              "scene.createScene.noActionsSelectedDescription",
+            )}
+          />
+        )}
 
         {/* ACTION BUTTONS */}
         <SceneActionButtons
@@ -279,6 +322,12 @@ const CreateScene = () => {
           deleteLabel={t("layout.shared.delete")}
         />
       </ScreenWrapper>
+      <UnsavedChangesDialog
+        open={isDiscardDialogOpen}
+        onDiscard={confirmDiscard}
+        onKeepEditing={cancelDiscard}
+        qaId="create_scene_unsaved_changes"
+      />
     </>
   );
 };

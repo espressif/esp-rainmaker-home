@@ -249,6 +249,7 @@ export const DEVICE_TYPE_LIST = [
     defaultIcon: "ai-assistant",
     disabled: false,
     controlPanel: "ai-agent",
+    requiresFeature: "aiAgent",
   },
   {
     label: "Camera",
@@ -274,6 +275,7 @@ export const DEVICE_TYPE_LIST = [
     },
     defaultIcon: "rvc",
     disabled: false,
+    requiresFeature: "matterCommissioning",
   },
   {
     label: "Matter Controller",
@@ -287,5 +289,6 @@ export const DEVICE_TYPE_LIST = [
     defaultIcon: "matter-controller",
     disabled: false,
     settingsOnly: true,
+    requiresFeature: "matterCommissioning",
   },
 ];

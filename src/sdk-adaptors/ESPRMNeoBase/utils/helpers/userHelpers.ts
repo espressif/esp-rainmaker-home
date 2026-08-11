@@ -84,14 +84,13 @@ export async function mapRmneoUserInfoToCdf(
     userInfo.userAttributes[ESPRMNEO_USER_ATTR_CUSTOM_PHONE] ||
     undefined;
 
+  // Neo has no display-name API — omit name/nickname/username; only map present attributes.
   return {
     id: userId,
-    name: email,
+    name: "",
     email: email || "",
-    nickname: email || undefined,
-    phone,
-    username: email,
-  } as ESPCDFUserInfo & { username?: string };
+    ...(phone ? { phone } : {}),
+  };
 }
 
 /**

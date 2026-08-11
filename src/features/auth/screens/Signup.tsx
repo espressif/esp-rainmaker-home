@@ -5,12 +5,21 @@
  */
 
 import { useMemo, useRef } from "react";
-import { View, Text, TouchableOpacity, TextInput } from "react-native";
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  TextInput,
+  ScrollView,
+  KeyboardAvoidingView,
+  Platform,
+} from "react-native";
 import { useRouter } from "expo-router";
 import { useTranslation } from "react-i18next";
 
 import { getAuthAllowedUsernameTypes } from "@features/auth/utils/authHelper";
 import { globalStyles } from "@shared/theme/globalStyleSheet";
+import { useDeploymentBranding } from "@features/landing";
 
 import { useSignup } from "@features/auth/hooks";
 
@@ -23,6 +32,13 @@ import {
 } from "@shared/components";
 import { ConsentCheckbox, AppVersionText } from "@features/auth/components";
 import { testProps } from "@shared/utils/testProps";
+import {
+  AUTO_COMPLETE_NEW_PASSWORD,
+  AUTO_COMPLETE_USERNAME,
+  IMPORTANT_FOR_AUTOFILL_YES,
+  TEXT_CONTENT_TYPE_NEW_PASSWORD,
+  TEXT_CONTENT_TYPE_USERNAME,
+} from "@shared/utils/constants";
 
 /**
  * Renders the signup screen UI section.
@@ -53,6 +69,10 @@ export function SignupScreen() {
   const passwordInputRef = useRef<TextInput>(null);
   const confirmPasswordInputRef = useRef<TextInput>(null);
 
+  // Same deployment mark as Login, so signing up for ESP RainMaker Classic /
+  // Neo shows that deployment's logo rather than the generic app lockup.
+  const { deploymentLabel, deploymentWordmark } = useDeploymentBranding();
+
   const usernameFieldProps = useMemo(() => {
     const allowsPhone = getAuthAllowedUsernameTypes().includes("phone");
     return {
@@ -81,16 +101,29 @@ export function SignupScreen() {
         style={globalStyles.screenWrapper}
         qaId="screen_wrapper_signup"
       >
-        <View
-          {...testProps("view_signup")}
-          style={globalStyles.scrollViewContent}
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          style={globalStyles.authKeyboardView}
+          keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 20}
         >
-          <Logo qaId="logo_signup" />
-
-          <View
-            {...testProps("view_input_signup")}
-            style={globalStyles.inputContainer}
+          <ScrollView
+            {...testProps("view_signup")}
+            contentContainerStyle={[
+              globalStyles.scrollViewContent,
+              globalStyles.authScrollViewContentWithPadding,
+            ]}
+            keyboardShouldPersistTaps="handled"
           >
+            <Logo
+              qaId="logo_signup"
+              caption={deploymentLabel}
+              captionSource={deploymentWordmark}
+            />
+
+            <View
+              {...testProps("view_input_signup")}
+              style={globalStyles.inputContainer}
+            >
             <Input
               icon="mail-open"
               placeholder={usernameFieldProps.placeholder}
@@ -99,6 +132,11 @@ export function SignupScreen() {
               validateOnBlur={true}
               inputMode={usernameFieldProps.inputMode}
               keyboardType={usernameFieldProps.keyboardType}
+              autoCapitalize="none"
+              autoCorrect={false}
+              textContentType={TEXT_CONTENT_TYPE_USERNAME}
+              autoComplete={AUTO_COMPLETE_USERNAME}
+              importantForAutofill={IMPORTANT_FOR_AUTOFILL_YES}
               returnKeyType="next"
               onSubmitEditing={() => {
                 if (isEmailValid) {
@@ -116,6 +154,11 @@ export function SignupScreen() {
               onFieldChange={handlePasswordChange}
               validator={passwordValidator}
               validateOnBlur={true}
+              autoCapitalize="none"
+              autoCorrect={false}
+              textContentType={TEXT_CONTENT_TYPE_NEW_PASSWORD}
+              autoComplete={AUTO_COMPLETE_NEW_PASSWORD}
+              importantForAutofill={IMPORTANT_FOR_AUTOFILL_YES}
               returnKeyType="next"
               onSubmitEditing={() => {
                 if (isPasswordValid) {
@@ -133,6 +176,11 @@ export function SignupScreen() {
               onFieldChange={handleConfirmPasswordChange}
               validator={confirmPasswordValidator}
               validateOnBlur={true}
+              autoCapitalize="none"
+              autoCorrect={false}
+              textContentType={TEXT_CONTENT_TYPE_NEW_PASSWORD}
+              autoComplete={AUTO_COMPLETE_NEW_PASSWORD}
+              importantForAutofill={IMPORTANT_FOR_AUTOFILL_YES}
               returnKeyType="go"
               onSubmitEditing={() => {
                 if (isFormValid) {
@@ -161,18 +209,19 @@ export function SignupScreen() {
             />
           </View>
 
-          <TouchableOpacity
-            {...testProps("button_signin")}
-            onPress={() => router.dismissTo("/(auth)/Login")}
-          >
-            <Text
-              {...testProps("text_navigate_to_signin")}
-              style={globalStyles.linkText}
+            <TouchableOpacity
+              {...testProps("button_signin")}
+              onPress={() => router.dismissTo("/(auth)/Login")}
             >
-              {t("auth.signup.navigateToSignIn")}
-            </Text>
-          </TouchableOpacity>
-        </View>
+              <Text
+                {...testProps("text_navigate_to_signin")}
+                style={globalStyles.linkText}
+              >
+                {t("auth.signup.navigateToSignIn")}
+              </Text>
+            </TouchableOpacity>
+          </ScrollView>
+        </KeyboardAvoidingView>
         <AppVersionText testId="text_app_version_signup" />
       </ScreenWrapper>
     </>

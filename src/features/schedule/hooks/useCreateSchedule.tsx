@@ -4,12 +4,17 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useTranslation } from "react-i18next";
 import { useSchedule } from "@context/schedules.context";
 import { useCDF } from "@shared/hooks/useCDF";
 import { useToast } from "@shared/hooks/useToast";
+import {
+  useUnsavedChangesGuard,
+  useDraftBaseline,
+} from "@shared/hooks/useUnsavedChangesGuard";
+import { stableStringify } from "@shared/utils/common";
 import { LoadingState } from "@src/types/global";
 import {
   convertDaysBitmapToArray,
@@ -51,6 +56,10 @@ export const useCreateSchedule = () => {
     save: false,
     delete: false,
   });
+  // Flips in the same batch as the init-effect dispatches below (edit-mode
+  // load / create-mode defaults), so the unsaved-changes baseline never
+  // captures a half-initialized draft.
+  const [isDraftReady, setIsDraftReady] = useState(false);
 
   // Convert days bitmap to array for UI
   const selectedDays = useMemo(() => {
@@ -90,6 +99,7 @@ export const useCreateSchedule = () => {
     };
 
     initSchedule();
+    setIsDraftReady(true);
   // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional hook deps
   }, [paramScheduleId]);
 
@@ -100,6 +110,37 @@ export const useCreateSchedule = () => {
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional hook deps
   }, [paramScheduleName]);
+
+  const hasUnsavedChanges = useDraftBaseline(
+    stableStringify({
+      name: (state.scheduleName ?? "").trim(),
+      triggers: state.triggers,
+      actions: state.actions,
+    }),
+    isDraftReady,
+  );
+
+  const navigateToSchedules = useCallback(() => {
+    router.dismissTo("/(schedule)/Schedules");
+  }, [router]);
+
+  const {
+    isDiscardDialogOpen,
+    exit: exitToSchedules,
+    requestExit: handleBackPress,
+    confirmDiscard,
+    cancelDiscard,
+  } = useUnsavedChangesGuard({
+    hasUnsavedChanges,
+    onExit: navigateToSchedules,
+  });
+
+  /**
+   * The draft lives in shared context, so resetting it while this screen is
+   * still visible blanks the form during the dismiss transition. Reset only
+   * on unmount, which fires after the screen has left (any removal path).
+   */
+  useEffect(() => () => resetState(), [resetState]);
 
   // Handle save schedule
   const handleSave = async () => {
@@ -117,8 +158,7 @@ export const useCreateSchedule = () => {
 
       const success = await handleSaveSchedule();
       if (success) {
-        resetState();
-        router.dismissTo("/(schedule)/Schedules");
+        exitToSchedules();
       }
     } finally {
       setLoading((prev) => ({ ...prev, save: false }));
@@ -131,8 +171,7 @@ export const useCreateSchedule = () => {
     try {
       const success = await handleDeleteSchedule();
       if (success) {
-        resetState();
-        router.dismissTo("/(schedule)/Schedules");
+        exitToSchedules();
       }
     } finally {
       setLoading((prev) => ({ ...prev, delete: false }));
@@ -144,12 +183,6 @@ export const useCreateSchedule = () => {
     router.push({
       pathname: "/(schedule)/ScheduleDeviceSelection",
     } as any);
-  };
-
-  // Handle back press
-  const handleBackPress = () => {
-    resetState();
-    router.dismissTo("/(schedule)/Schedules");
   };
 
   // Handle day toggle
@@ -227,6 +260,10 @@ export const useCreateSchedule = () => {
     warning,
     disableActionButton,
     scheduleActions: getScheduleActions(),
+    // Unsaved changes
+    isDiscardDialogOpen,
+    confirmDiscard,
+    cancelDiscard,
     // Handlers
     handleSave,
     handleDelete,

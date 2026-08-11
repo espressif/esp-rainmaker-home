@@ -16,6 +16,7 @@ import {
   MS_PER_MINUTE,
   MS_PER_SECOND,
 } from "@shared/utils/constants";
+import { mqttTransportUiState } from "@shared/state/mqttTransportUiState";
 
 export type LastSeenUnit =
   | typeof LAST_SEEN_UNIT_SECONDS
@@ -26,7 +27,6 @@ export type LastSeenUnit =
 /**
  * Normalizes a connectivity timestamp to epoch milliseconds.
  * Values below {@link EPOCH_SECONDS_MAX} are treated as seconds.
- *
  * @param timestamp - Raw last-connection timestamp (sec or ms)
  * @returns Epoch ms, or `null` when the input is missing/invalid
  */
@@ -41,7 +41,6 @@ export function normalizeConnectionTimestampMs(
 
 /**
  * Buckets elapsed time since last connection into a count + unit for i18n.
- *
  * @param timestampMs - Last connection time in epoch ms
  * @param nowMs - Reference "now" (defaults to `Date.now()`)
  * @returns Count/unit for relative copy, or `null` if elapsed cannot be computed
@@ -77,7 +76,6 @@ export function getLastSeenAgoParts(
 
 /**
  * Builds offline copy including last-seen when available (Device Control banner, DeviceCard).
- *
  * @param lastConnectionTimestamp - Raw CDF connectivity timestamp (sec or ms)
  * @param t - i18n `t` function
  * @returns Localized offline message
@@ -98,4 +96,23 @@ export function resolveOfflineBannerMessage(
     count: parts.count,
   });
   return t("layout.shared.offlineLastSeen", { timeAgo });
+}
+
+/**
+ * Label when a node is not UI-reachable: "Unreachable" if the app MQTT session
+ * is down while the node is still cloud-online; otherwise offline / last-seen.
+ * @param isCloudOnline - Node `connectivityStatus.isConnected`
+ * @param lastConnectionTimestamp - Raw CDF last-seen timestamp
+ * @param t - i18n `t` function
+ * @returns Localized unavailable message
+ */
+export function resolveNodeUnavailableMessage(
+  isCloudOnline: boolean | undefined,
+  lastConnectionTimestamp: number | undefined | null,
+  t: TFunction,
+): string {
+  if (!mqttTransportUiState.connected && isCloudOnline) {
+    return t("layout.shared.unreachable");
+  }
+  return resolveOfflineBannerMessage(lastConnectionTimestamp, t);
 }

@@ -16,8 +16,16 @@ import { useProvision } from "@features/provision/hooks";
 import { mapStageStatusToProvisionStatus } from "@features/provision/utils/provisionHelper";
 
 // Components
-import { Header, ScreenWrapper, Button } from "@shared/components";
-import { ProvisioningStep } from "@features/provision/components";
+import {
+  Header,
+  ScreenWrapper,
+  Button,
+  ConfirmationDialog,
+} from "@shared/components";
+import {
+  ProvisioningStep,
+  WifiResetRetryDialog,
+} from "@features/provision/components";
 
 // Utils
 import { testProps } from "@shared/utils/testProps";
@@ -31,12 +39,32 @@ import { testProps } from "@shared/utils/testProps";
  */
 const Provision = () => {
   const { t } = useTranslation();
-  const { stages, isComplete, stepsScrollViewRef, handleContinue } =
-    useProvision();
+  const {
+    stages,
+    isComplete,
+    stepsScrollViewRef,
+    handleContinue,
+    isExitSetupDialogOpen,
+    handleConfirmExitSetup,
+    handleCancelExitSetup,
+    isWifiResetPromptOpen,
+    wifiResetErrorMessage,
+    handleConfirmWifiReset,
+    handleDismissWifiResetPrompt,
+    isWifiResetPasswordPromptOpen,
+    retrySsid,
+    handleRetryWithPassword,
+    handleCancelWifiResetPassword,
+    isRetrying,
+  } = useProvision();
 
   // Render
   return (
     <>
+      {/*
+        No `onBackPress`: the chevron falls through to `router.back()` so the
+        guard in `useProvision` intercepts it the same as the system back.
+      */}
       <Header
         label={t("device.provision.title")}
         showBack
@@ -72,14 +100,28 @@ const Provision = () => {
             {...testProps("scroll_provision")}
             showsVerticalScrollIndicator={false}
           >
-            {stages.map((stage) => (
-              <ProvisioningStep
-                key={stage.id}
-                description={stage.title}
-                status={mapStageStatusToProvisionStatus(stage.status)}
-                error={stage.error}
-              />
-            ))}
+            {stages.map((stage, index) => {
+              // Sub-status (checking online / reconnect / timezone) only on the
+              // active setting-up step — hidden for every other step.
+              const isActiveSettingUpStep =
+                index === stages.length - 1 &&
+                stage.status === "pending" &&
+                stages
+                  .slice(0, index)
+                  .every((prior) => prior.status === "success");
+
+              return (
+                <ProvisioningStep
+                  key={stage.id}
+                  description={stage.title}
+                  detail={
+                    isActiveSettingUpStep ? stage.description : undefined
+                  }
+                  status={mapStageStatusToProvisionStatus(stage.status)}
+                  error={stage.error}
+                />
+              );
+            })}
           </ScrollView>
 
           <Button
@@ -95,6 +137,46 @@ const Provision = () => {
           />
         </View>
       </ScreenWrapper>
+
+      {/* Back mid-run is intercepted in `useProvision`; this is the only exit offered. */}
+      <ConfirmationDialog
+        open={isExitSetupDialogOpen}
+        title={t("device.provision.exitSetupTitle")}
+        description={t("device.provision.exitSetupMessage")}
+        confirmText={t("device.provision.exitSetupConfirm")}
+        cancelText={t("layout.shared.cancel")}
+        onConfirm={handleConfirmExitSetup}
+        onCancel={handleCancelExitSetup}
+        qaId="provision_exit_setup"
+      />
+
+      {/*
+        Wrong Wi-Fi password. Same two steps as the native apps: ask whether to
+        retry at all, and only then collect the password.
+      */}
+      <ConfirmationDialog
+        open={isWifiResetPromptOpen}
+        title={t("device.provision.wifiResetTitle")}
+        description={[
+          wifiResetErrorMessage,
+          t("device.provision.wifiResetMessage"),
+        ]
+          .filter(Boolean)
+          .join(" ")}
+        confirmText={t("device.provision.wifiResetRetryConfirm")}
+        cancelText={t("layout.shared.cancel")}
+        onConfirm={handleConfirmWifiReset}
+        onCancel={handleDismissWifiResetPrompt}
+        qaId="provision_wifi_reset"
+      />
+
+      <WifiResetRetryDialog
+        open={isWifiResetPasswordPromptOpen}
+        ssid={retrySsid}
+        isRetrying={isRetrying}
+        onRetry={handleRetryWithPassword}
+        onCancel={handleCancelWifiResetPassword}
+      />
     </>
   );
 };

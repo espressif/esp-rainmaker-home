@@ -7,7 +7,7 @@
 import { useRouter } from "expo-router";
 import { useTranslation } from "react-i18next";
 import { useCDF } from "@shared/hooks/useCDF";
-import { QrCode, Bluetooth, HouseWifi, Wifi } from "lucide-react-native";
+import { Bluetooth, HouseWifi, Wifi } from "lucide-react-native";
 import { tokens } from "@shared/theme/tokens";
 import { testProps } from "@shared/utils/testProps";
 import { getFeatures } from "@config/features.config";
@@ -39,19 +39,8 @@ export const useAddDeviceSelection = (): UseAddDeviceSelectionReturn => {
 
   const features = getFeatures();
 
+  // No QR option: only reached from the scanner's "no QR code" button.
   const deviceOptions: DeviceOption[] = [
-    {
-      icon: (
-        <QrCode
-          {...testProps("icon_qr_code")}
-          size={24}
-          color={tokens.colors.primary}
-        />
-      ),
-      label: t("device.addDeviceSelection.qrOption"),
-      description: t("device.addDeviceSelection.qrDescription"),
-      onClick: () => router.push("/(provision)/ScanQR"),
-    },
     {
       icon: (
         <Bluetooth

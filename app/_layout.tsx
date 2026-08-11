@@ -54,7 +54,7 @@ const config = createTamagui(defaultConfig);
 const stackScreenOptions = {
   headerShown: false,
   animation: "slide_from_right" as const,
-  gestureEnabled: true,
+  gestureEnabled: false,
   gestureDirection: "horizontal" as const,
 };
 

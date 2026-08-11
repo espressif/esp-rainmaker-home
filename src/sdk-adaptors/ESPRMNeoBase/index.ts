@@ -182,17 +182,18 @@ export class ESPRMNeoBaseSDKAdaptor implements ESPSDKAdaptor {
      *
      * Enforces the signup password policy before requesting the code.
      * @param input - Request payload carrying `username` and `password`.
-     * @returns CDF response confirming the code was sent.
+     * @returns CDF response using the API message when present (it carries the
+     * backend's "existing users should log in instead" hint), else a default.
      * @throws Error when the password policy fails, or a normalized error on API failure.
      */
     async getSignUpCode(input: ESPSDKAdaptorAPIRequest<ESPCDFGetSignUpCodeRequestPayload>): Promise<ESPSDKAdaptorAPIResponse> {
         const { username, password } = input.request as { username: string, password: string };
         assertSignupPasswordPolicy(password);
         try {
-            await this._authInstance.sendSignUpCode(username, password);
+            const response = await this._authInstance.sendSignUpCode(username, password);
             return {
                 status: SUCESS,
-                description: ESPRMNEO_AUTH_DESC_SIGNUP_CODE_SENT,
+                description: response.message || ESPRMNEO_AUTH_DESC_SIGNUP_CODE_SENT,
             };
         } catch (error) {
             throwNormalizedRmneoError(error, ESPRMNEO_AUTH_ERR_SEND_SIGNUP_CODE);

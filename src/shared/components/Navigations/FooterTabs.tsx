@@ -43,6 +43,14 @@ interface FooterTabsProps {
   qaId?: string;
 }
 
+/** Route-group segments, which Expo Router strips from the URL. */
+const ROUTE_GROUP_SEGMENT = /\/\([^)]+\)/g;
+
+/** `/(group)/Home` -> `/Home`, matching what `usePathname()` reports. */
+function toPathname(route: string): string {
+  return route.replace(ROUTE_GROUP_SEGMENT, "");
+}
+
 /**
  * FooterTabs
  *
@@ -60,17 +68,21 @@ const FooterTabs: React.FC<FooterTabsProps> = ({ tabs }) => {
   const insets = useSafeAreaInsets();
 
   // Handlers
-  const handleTabPress = (route: RelativePathString, label: string) => {
-    // Don't navigate if already on the current route
-    if (pathname.includes(label) || pathname === route) {
+  const handleTabPress = (route: RelativePathString, isActive: boolean) => {
+    if (isActive) {
       return;
     }
-    router.replace(route);
+    // `navigate`, not `replace`: each tab group owns a Stack, so this pushes
+    // the target group or pops back to it with its history intact. `replace`
+    // swapped the single root entry, leaving back nothing to pop — which is
+    // what made the system back button close the app.
+    router.navigate(route);
   };
 
   // Render helpers
   const renderTab = (tab: Tab) => {
-    const isActive = pathname.includes(tab.label);
+    // Match on route, not the localized label, which never matches outside English.
+    const isActive = pathname === toPathname(tab.route);
     const iconColor = isActive ? tokens.colors.primary : tokens.colors.gray;
 
     return (
@@ -78,7 +90,7 @@ const FooterTabs: React.FC<FooterTabsProps> = ({ tabs }) => {
         {...testProps(`button_tab_${tab.label.toLowerCase()}`)}
         key={tab.route}
         style={styles.item}
-        onPress={() => handleTabPress(tab.route, tab.label)}
+        onPress={() => handleTabPress(tab.route, isActive)}
       >
         <tab.Icon style={{ color: iconColor }} size={28} />
         <Text

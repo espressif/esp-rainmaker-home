@@ -5,6 +5,51 @@ All notable changes to the ESP RainMaker Home app will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [6.0.1]
+
+### Fixed
+
+- **App region**
+  - Disable App region detection in Android
+
+- **Navigation & State**
+  - Fixed home auto-creation on deletion
+  - Prevented duplicate screen pushes from rapid clicks
+  - Improved back-button and exit handling across the app
+
+- **Schedule, Scene & Automation Flows**
+  - Added skeleton loaders for all three screens
+  - Unified Edit/Done header actions across lists
+  - Improved empty states and pull-to-refresh support
+  - Added unsaved changes handling
+  - Added edit mode with delete actions for Automations
+
+- **Device & MQTT**
+  - Improved RMNeo provisioning with stale shadow purging and group membership handling
+  - Added MQTT transport status with "Unreachable" state
+  - Improved MQTT reconnect on app resume
+  - Increased keep-alive timeout from 30s to 40s
+
+- **Wi-Fi Provisioning**
+  - Added Wi-Fi reset feature with two-step retry prompt
+  - Credentials saved only after device acceptance
+
+- **User Authentication**
+  - Removed post-login waiting period, added skeleton loader
+  - Fixed iOS keyboard auto-complete for Login button
+
+- **RMNeo related**
+  - Hidden unsupported Delete Account option
+  - Added success/error message handling in auth flows
+  - Improved provisioning flows and room preselection
+
+- **Localization & Build**
+  - Fixed raw translation key toasts across functions
+  - Added missing translation keys
+  - Added i18n build guard for missing/duplicate keys
+
+- Various other bug fixes and stability improvements
+
 ## [6.0.0]
 
 > **Naming:** **ESP RainMaker Neo** (RMNeo) is the product name for this stack.

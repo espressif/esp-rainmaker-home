@@ -4,22 +4,13 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-
-import React, { useMemo, useState } from "react";
-import {
-  View,
-  StyleSheet,
-  ScrollView,
-  RefreshControl,
-  Text,
-  Dimensions,
-} from "react-native";
+import React, { useMemo } from "react";
+import { View, StyleSheet, Text, Dimensions } from "react-native";
 
 // Styles
 import { tokens } from "@shared/theme/tokens";
 
 // Hooks
-import { useToast } from "@shared/hooks/useToast";
 import { useTranslation } from "react-i18next";
 
 // State Management
@@ -32,7 +23,10 @@ import { ControlPanelProps } from "@src/types/global";
 import { ESPRM_TEMPERATURE_PARAM_TYPE } from "@shared/utils/constants";
 
 // Components
-import { RoundedSlider, DevicePanelNoParamsEmptyState } from "@features/control/components";
+import {
+  RoundedSlider,
+  DevicePanelNoParamsEmptyState,
+} from "@features/control/components";
 
 // Utils
 import { testProps } from "@shared/utils/testProps";
@@ -43,18 +37,13 @@ import { testProps } from "@shared/utils/testProps";
  * A simple control panel for temperature sensor devices that displays:
  * - Current temperature reading with segmented circular gauge
  * - Read-only temperature display
- * @param node - The ESPRMNode representing the temperature sensor
- * @param device - The ESPRMDevice representing the temperature sensor
- * @returns Scrollable panel with gauge, current reading, and pull-to-refresh
+ *
+ * Content-only (no nested ScrollView): Control owns the shared scroll + pull-to-refresh.
+ * @param props - Node and device for the temperature sensor
+ * @returns Gauge and current reading for the temperature device
  */
 const Temperature: React.FC<ControlPanelProps> = ({ node, device }) => {
-  // Hooks
-  const toast = useToast();
   const { t } = useTranslation();
-
-  // State
-  const [refreshing, setRefreshing] = useState(false);
-  const [scrollEnabled] = useState(true);
 
   // Computed Values
   const isConnected = node.connectivityStatus?.isConnected || false;
@@ -71,9 +60,12 @@ const Temperature: React.FC<ControlPanelProps> = ({ node, device }) => {
   // Get current temperature value
   const temperature = temperatureParam?.value || "";
 
-  // Get temperature colors
+  /**
+   * Segment colors for the temperature gauge.
+   * @param _temp - Current temperature (unused; palette is fixed)
+   * @returns Fill and empty segment colors
+   */
   const getTemperatureColors = (_temp: number) => {
-    // Colors for temperature segments
     return {
       fillColor: "#EC4899", // Pink
       emptyColor: "#E5E7EB", // Light gray
@@ -82,32 +74,22 @@ const Temperature: React.FC<ControlPanelProps> = ({ node, device }) => {
 
   const colors = getTemperatureColors(temperature);
 
-  // Handlers
-  const handleRefresh = async () => {
-    setRefreshing(true);
-    try {
-      const params = await device?.getParams();
-      if (device && params) {
-        device.params = params;
-      }
-    } catch {
-      toast.showError(
-        t("layout.shared.errorHeader"),
-        t("device.errors.failedToRefreshDeviceState"),
-      );
-    } finally {
-      setRefreshing(false);
-    }
-  };
-
-  const getTemperaturePercentage = (temperature: number) => {
+  /**
+   * Maps a temperature reading onto the circular gauge percentage range.
+   * @param temperatureValue - Celsius reading
+   * @returns Percentage for the gauge (5–100)
+   */
+  const getTemperaturePercentage = (temperatureValue: number) => {
     const minTemp = -2; // Coldest temperature (5%)
     const maxTemp = 60; // Hottest temperature (100%)
     const minPercentage = 5; // Minimum percentage for coldest temp
     const maxPercentage = 100; // Maximum percentage for hottest temp
 
     // Clamp temperature to the range
-    const clampedTemp = Math.max(minTemp, Math.min(maxTemp, temperature));
+    const clampedTemp = Math.max(
+      minTemp,
+      Math.min(maxTemp, temperatureValue),
+    );
 
     // Calculate percentage
     const tempRange = maxTemp - minTemp;
@@ -116,7 +98,8 @@ const Temperature: React.FC<ControlPanelProps> = ({ node, device }) => {
     if (tempRange === 0) return minPercentage; // Avoid division by zero
 
     const percentage =
-      minPercentage + ((clampedTemp - minTemp) / tempRange) * percentageRange;
+      minPercentage +
+      ((clampedTemp - minTemp) / tempRange) * percentageRange;
 
     return Math.round(percentage);
   };
@@ -139,12 +122,12 @@ const Temperature: React.FC<ControlPanelProps> = ({ node, device }) => {
     const progressBarRadius = progressBarSize * 0.4;
 
     // Center content size is 50% of the size
-    const centerContentSize = progressBarSize * 0.55;
+    const centerContentSizeValue = progressBarSize * 0.55;
 
     return {
       radius: Math.round(progressBarRadius),
       size: Math.round(progressBarSize),
-      centerContentSize: Math.round(centerContentSize),
+      centerContentSize: Math.round(centerContentSizeValue),
     };
   }, []);
 
@@ -158,20 +141,7 @@ const Temperature: React.FC<ControlPanelProps> = ({ node, device }) => {
       style={[styles.container, { opacity: isConnected ? 1 : 0.5 }]}
       {...testProps("view_temperature")}
     >
-      <ScrollView
-        style={styles.content}
-        contentContainerStyle={styles.contentContainer}
-        scrollEnabled={scrollEnabled}
-        showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={handleRefresh}
-            enabled={isConnected}
-          />
-        }
-        {...testProps("scroll_temperature")}
-      >
+      <View style={styles.content} {...testProps("scroll_temperature")}>
         {/* Temperature Display */}
         <View
           style={styles.temperatureContainer}
@@ -238,32 +208,24 @@ const Temperature: React.FC<ControlPanelProps> = ({ node, device }) => {
             </View>
           </RoundedSlider>
         </View>
-      </ScrollView>
+      </View>
     </View>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
-    flex: 1,
     backgroundColor: tokens.colors.bg5,
   },
   content: {
-    flex: 1,
     backgroundColor: tokens.colors.bg5,
     padding: tokens.spacing._20,
     borderRadius: tokens.radius.md,
-  },
-  contentContainer: {
-    display: "flex",
-    flexDirection: "column",
     alignItems: "center",
     justifyContent: "center",
-    minHeight: "100%",
     paddingVertical: tokens.spacing._20,
   },
   temperatureContainer: {
-    flex: 1,
     justifyContent: "center",
     alignItems: "center",
     width: "100%",
@@ -304,28 +266,12 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: tokens.colors.gray,
   },
-  autoCoolingButton: {
-    backgroundColor: tokens.colors.primary,
-    paddingVertical: tokens.spacing._5,
-    paddingHorizontal: tokens.spacing._15,
-    borderRadius: tokens.radius.sm,
-    marginTop: tokens.spacing._10,
-  },
-  autoCoolingText: {
-    color: tokens.colors.white,
-    fontSize: tokens.fontSize.md,
-    fontWeight: "600",
-  },
   degreeSymbol: {
     fontSize: 15,
     fontWeight: "700",
     color: tokens.colors.black,
     lineHeight: 15,
     marginTop: 2,
-  },
-  degreeContainer: {
-    flexDirection: "row",
-    alignItems: "baseline",
   },
   temperatureDisplay: {
     flexDirection: "row",

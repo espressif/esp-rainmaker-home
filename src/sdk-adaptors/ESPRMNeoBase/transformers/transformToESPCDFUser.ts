@@ -181,10 +181,10 @@ export function transformToESPCDFUser(
       try {
         // Todo: Not working as expected — possible SDK issue; revisit later.
         const auth = ESPRMNeoBase.getAuthInstance();
-        await auth.changePassword(oldPassword, newPassword);
+        const response = await auth.changePassword(oldPassword, newPassword);
         return {
           status: STATUS_SUCCESS,
-          description: ESPRMNEO_USER_DESC_PASSWORD_CHANGED,
+          description: response?.message || ESPRMNEO_USER_DESC_PASSWORD_CHANGED,
         };
       } catch (error) {
         Logger.error(ESPRMNEO_USER_LOG_CHANGE_PASSWORD_ERROR, error);

@@ -16,10 +16,6 @@
     "by": "id",
     "value": "button_edit_schedules"
   },
-  "refresh_schedules_button": {
-    "by": "id",
-    "value": "button_refresh_schedules"
-  },
   "schedule_delete_item": {
     "by": "id",
     "value": "button_delete_schedule"

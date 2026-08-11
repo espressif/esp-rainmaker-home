@@ -10,6 +10,7 @@ import { Check, Trash2 } from "lucide-react-native";
 import { tokens } from "@shared/theme/tokens";
 import { globalStyles } from "@shared/theme/globalStyleSheet";
 import { ActionButton } from "@shared/components";
+import { useKeyboardVisible } from "@shared/hooks/useKeyboardVisible";
 import { testProps } from "@shared/utils/testProps";
 import { createAutomationStyles as styles } from "../../theme/createAutomationStyles";
 
@@ -29,6 +30,7 @@ export interface CreateAutomationActionButtonsProps {
 
 /**
  * Renders the create automation action buttons UI section.
+ * Hidden while the keyboard is open so the footer does not ride up over inputs.
  */
 export const CreateAutomationActionButtons: React.FC<
   CreateAutomationActionButtonsProps
@@ -45,6 +47,12 @@ export const CreateAutomationActionButtons: React.FC<
   onUpdate,
   onDelete,
 }) => {
+  const isKeyboardVisible = useKeyboardVisible();
+
+  if (isKeyboardVisible) {
+    return null;
+  }
+
   return (
     <View style={[globalStyles.actionButtonContainer, styles.buttonContainer]}>
       {!isEditing && (

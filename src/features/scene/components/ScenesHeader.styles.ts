@@ -8,11 +8,6 @@ import { StyleSheet } from "react-native";
 import { tokens } from "@shared/theme/tokens";
 
 export const styles = StyleSheet.create({
-  rightSlot: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: tokens.spacing._15,
-  },
   editButton: {
     color: tokens.colors.primary,
     fontSize: tokens.fontSize.md,

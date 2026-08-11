@@ -26,7 +26,6 @@ export interface HomeDeviceListProps {
  * Single Home scroll surface: optional header + device cards + pull-to-refresh.
  * Refresh works from header chrome as well as over device cards.
  * `bounces` / `alwaysBounceVertical` keep short content pullable on iOS.
- *
  * @param props - Devices, refresh handlers, optional header/empty slots
  * @returns FlatList filling the remaining Home screen area
  */

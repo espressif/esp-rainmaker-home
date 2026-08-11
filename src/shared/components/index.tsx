@@ -46,6 +46,7 @@ export { default as ScreenWrapper } from "./Layout/ScreenWrapper";
 // Modals
 export { default as EditModal } from "./Modals/EditModal";
 export { default as ConfirmationDialog } from "./Modals/ConfirmationDialog";
+export { default as UnsavedChangesDialog } from "./Modals/UnsavedChangesDialog";
 
 // Navigation
 export { default as FooterTabs } from "./Navigations/FooterTabs";

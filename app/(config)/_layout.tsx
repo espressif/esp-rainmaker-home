@@ -16,7 +16,7 @@ export default function ConfigLayout() {
         headerShown: false,
         presentation: "fullScreenModal",
         animation: "slide_from_bottom",
-        gestureEnabled: true,
+        gestureEnabled: false,
       }}
     >
       <Stack.Screen name="ConfigScan" />

@@ -52,16 +52,15 @@ export function useResetPassword() {
   };
 
   const handlePasswordChange = (value: string, isValid: boolean) => {
-    const newPwd = value.trim();
-    setNewPassword(newPwd);
+    setNewPassword(value);
     setIsPasswordValid(isValid);
     if (confirmPassword.trim()) {
-      setIsConfirmPasswordValid(confirmPassword.trim() === newPwd);
+      setIsConfirmPasswordValid(confirmPassword === value);
     }
   };
 
   const handleConfirmPasswordChange = (value: string, isValid: boolean) => {
-    setConfirmPassword(value.trim());
+    setConfirmPassword(value);
     setIsConfirmPasswordValid(isValid);
   };
 
@@ -101,7 +100,7 @@ export function useResetPassword() {
         username: usernameFromRoute,
       });
       if (res) {
-        toast.showSuccess(t("auth.verification.heading"));
+        toast.showSuccess(t("auth.verification.heading"), res.description || undefined);
         setCountdown(60);
       }
     } catch (error: unknown) {
@@ -143,7 +142,7 @@ export function useResetPassword() {
         verificationCode: code,
       });
       if (res) {
-        toast.showSuccess(t("auth.forgotPassword.resetSuccess"), undefined, { duration: 4000 });
+        toast.showSuccess(t("auth.forgotPassword.resetSuccess"), res.description || undefined, { duration: 4000 });
         const { router } = await import("expo-router");
         router.dismissTo({
           pathname: "/(auth)/Login",

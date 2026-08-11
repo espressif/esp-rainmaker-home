@@ -72,10 +72,14 @@ The region keys must keep an identical key set across the two regions (same keys
 
 ### Version Information
 
-| Variable               | Description                       |
-| ---------------------- | --------------------------------- |
-| `APP_VERSION`          | Semantic version shown in the app |
-| `ANDROID_VERSION_CODE` | Android integer version code      |
+App marketing version and Android version code live in **`package.json`** (not `.env`):
+
+| Field          | Description                                      | Example   |
+| -------------- | ------------------------------------------------ | --------- |
+| `version`      | Semantic version (`expo.version`, native name)   | `"6.0.1"` |
+| `versionCode`  | Android integer `versionCode` (synced on prebuild) | `51`    |
+
+Prebuild sync scripts (`scripts/sync-env-to-android.js`, `scripts/sync-env-to-ios.js`) read these fields and write `APP_VERSION` / `ANDROID_VERSION_CODE` into native config. Bump both in `package.json` for a release, then run prebuild.
 
 ---
 

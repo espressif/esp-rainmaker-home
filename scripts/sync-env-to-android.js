@@ -6,12 +6,13 @@
  * - settings.gradle
  * - build.gradle
  * - google-services.json
- * 
- * IMPORTANT: .env is the SINGLE SOURCE OF TRUTH
- * - All values are synced exactly as they appear in .env
+ *
+ * IMPORTANT:
+ * - App version comes from package.json (`version`, `versionCode`) — not .env
+ * - .env is the source of truth for all other native/build identity values
  * - Empty values are synced if explicitly set in .env (KEY=)
- * - Variables not in .env are skipped (not synced)
- * - Do not manually edit synced files - update .env instead
+ * - Variables not in .env are skipped (not synced), except version fields
+ * - Do not manually edit synced files — update .env or package.json instead
  */
 
 const fs = require('fs');
@@ -26,6 +27,7 @@ const ROOT = path.resolve(__dirname, '..');
 const ENV_FILE = process.env.ENVFILE || '.env';
 const PATHS = {
   env: path.isAbsolute(ENV_FILE) ? ENV_FILE : path.join(ROOT, ENV_FILE),
+  packageJson: path.join(ROOT, 'package.json'),
   gradleProps: path.join(ROOT, 'android/gradle.properties'),
   buildGradle: path.join(ROOT, 'android/app/build.gradle'),
   settingsGradle: path.join(ROOT, 'android/settings.gradle'),
@@ -36,6 +38,31 @@ const PATHS = {
   // creds go ONLY here — never gradle.properties (which is committed).
   keystoreProps: path.join(ROOT, 'android/keystore.properties'),
 };
+
+/**
+ * Read marketing version + Android versionCode from package.json (single SoT).
+ * @returns {{ version: string, versionCode: string }}
+ */
+function readPackageVersion() {
+  const pkg = JSON.parse(read(PATHS.packageJson) || '{}');
+  return {
+    version: String(pkg.version ?? ''),
+    versionCode: String(pkg.versionCode ?? ''),
+  };
+}
+
+/**
+ * Overlay package.json version fields onto the parsed env map so gradle sync
+ * keeps writing APP_VERSION / ANDROID_VERSION_CODE without requiring .env keys.
+ * @param {Record<string, string>} env
+ * @returns {Record<string, string>}
+ */
+function applyPackageVersion(env) {
+  const { version, versionCode } = readPackageVersion();
+  env.APP_VERSION = version;
+  env.ANDROID_VERSION_CODE = versionCode;
+  return env;
+}
 
 /* =====================================================
  * Env → Gradle mapping
@@ -289,7 +316,7 @@ function syncKeystoreProperties(env) {
  * Main
  * ===================================================== */
 function main() {
-  console.log('🔄 Syncing Android config from .env');
+  console.log('🔄 Syncing Android config from .env (+ package.json version)');
 
   const env = parseEnv(PATHS.env);
   if (!Object.keys(env).length) return;
@@ -301,6 +328,10 @@ function main() {
   if (!('THIRD_PARTY_AUTH_REDIRECT_URL' in env) && 'ANDROID_THIRD_PARTY_AUTH_REDIRECT_URL' in env) {
     env.THIRD_PARTY_AUTH_REDIRECT_URL = env.ANDROID_THIRD_PARTY_AUTH_REDIRECT_URL;
   }
+
+  applyPackageVersion(env);
+  console.log(`  ✓ APP_VERSION = ${env.APP_VERSION} (from package.json)`);
+  console.log(`  ✓ ANDROID_VERSION_CODE = ${env.ANDROID_VERSION_CODE} (from package.json versionCode)`);
 
   syncGradleProperties(PATHS.gradleProps, env);
   syncKeystoreProperties(env);

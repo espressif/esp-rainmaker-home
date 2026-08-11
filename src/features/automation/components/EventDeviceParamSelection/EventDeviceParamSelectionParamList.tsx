@@ -43,10 +43,7 @@ export const EventDeviceParamSelectionParamList: React.FC<
                 activeEventParam === item.name
                   ? tokens.colors.primary
                   : tokens.colors.borderColor,
-              backgroundColor:
-                activeEventParam === item.name
-                  ? tokens.colors.primary + "10"
-                  : "transparent",
+              backgroundColor: tokens.colors.white,
             }}
             leftSlot={
               <Text

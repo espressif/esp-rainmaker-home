@@ -16,10 +16,6 @@
     "by": "id",
     "value": "button_edit_scenes"
   },
-  "refresh_scenes_button": {
-    "by": "id",
-    "value": "button_refresh_scenes"
-  },
   "scene_delete_item": {
     "by": "id",
     "value": "button_delete_scene_item"

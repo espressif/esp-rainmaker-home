@@ -4,8 +4,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React from "react";
-import { View } from "react-native";
+import React, { useRef } from "react";
+import { View, Pressable, TextInput } from "react-native";
+import { useTranslation } from "react-i18next";
 import { Edit3 } from "lucide-react-native";
 import { tokens } from "@shared/theme/tokens";
 import { ContentWrapper, Input } from "@shared/components";
@@ -20,11 +21,25 @@ export interface CreateAutomationNameSectionProps {
 }
 
 /**
- * Renders the create automation name section UI section.
+ * Create-automation name field with a pencil that focuses the input when pressed.
+ * @param title - Section title shown above the field
+ * @param placeholder - Placeholder for the name input
+ * @param value - Current automation name
+ * @param onNameChange - Called when the name text changes
  */
 export const CreateAutomationNameSection: React.FC<
   CreateAutomationNameSectionProps
 > = ({ title, placeholder, value, onNameChange }) => {
+  const { t } = useTranslation();
+  const inputRef = useRef<TextInput>(null);
+
+  /**
+   * Focuses the automation name input so the pencil acts as an edit affordance.
+   */
+  const focusNameInput = () => {
+    inputRef.current?.focus();
+  };
+
   return (
     <ContentWrapper
       qaId="automation_name"
@@ -36,6 +51,7 @@ export const CreateAutomationNameSection: React.FC<
     >
       <View style={styles.inputContainer}>
         <Input
+          ref={inputRef}
           qaId="automation_name"
           placeholder={placeholder}
           value={value}
@@ -45,13 +61,16 @@ export const CreateAutomationNameSection: React.FC<
           paddingHorizontal={false}
           marginBottom={false}
         />
-        <View style={styles.editIcon}>
-          <Edit3
-            {...testProps("icon_edit_automation_name")}
-            size={20}
-            color={tokens.colors.text_secondary}
-          />
-        </View>
+        <Pressable
+          style={styles.editIcon}
+          onPress={focusNameInput}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          accessibilityRole="button"
+          accessibilityLabel={t("layout.shared.edit")}
+          {...testProps("icon_edit_automation_name")}
+        >
+          <Edit3 size={20} color={tokens.colors.text_secondary} />
+        </Pressable>
       </View>
     </ContentWrapper>
   );

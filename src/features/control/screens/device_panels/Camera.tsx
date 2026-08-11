@@ -5,15 +5,9 @@
  */
 
 import React, { useState, useMemo, useEffect } from "react";
-import {
-  View,
-  StyleSheet,
-  ScrollView,
-  RefreshControl,
-} from "react-native";
+import { View, StyleSheet } from "react-native";
 import * as ScreenOrientation from "expo-screen-orientation";
 import * as NavigationBar from "expo-navigation-bar";
-
 
 // Hooks
 import { useTranslation } from "react-i18next";
@@ -23,11 +17,18 @@ import { useCameraWebRTC } from "@shared/hooks/useCameraWebRTC";
 import { observer } from "mobx-react-lite";
 
 // Components
-import { VideoPlayer, DeviceParamsRenderer, WarningBanner } from "@shared/components";
+import {
+  VideoPlayer,
+  DeviceParamsRenderer,
+  WarningBanner,
+} from "@shared/components";
 
 // Utils
 import { testProps } from "@shared/utils/testProps";
-import { filterDeviceParamsByType, buildParamsMap } from "@shared/utils/deviceParams";
+import {
+  filterDeviceParamsByType,
+  buildParamsMap,
+} from "@shared/utils/deviceParams";
 
 // Types
 import { ControlPanelProps } from "@src/types/global";
@@ -48,18 +49,20 @@ import { tokens } from "@shared/theme/tokens";
  * - WebRTC video streaming via AWS Kinesis Video Streams
  * - Display of all other device parameters
  * - Warning banner for connection and channel name issues
- * @param props - Component props
- * @param props.node - The ESPRMNode representing the camera device
- * @param props.device - The ESPRMDevice representing the camera device
+ *
+ * Content-only (no nested ScrollView): Control owns the shared scroll + pull-to-refresh.
+ * @param props - Node, device, and optional parent scroll lock callback
  * @returns The rendered camera control panel component
  */
-const Camera: React.FC<ControlPanelProps> = ({ node, device }) => {
+const Camera: React.FC<ControlPanelProps> = ({
+  node,
+  device,
+  setScrollEnabled,
+}) => {
   // Hooks
   const { t } = useTranslation();
 
   // State
-  const [refreshing, setRefreshing] = useState(false);
-  const [scrollEnabled, setScrollEnabled] = useState(true);
   const [isFullscreen, setIsFullscreen] = useState(false);
 
   // Computed Values
@@ -108,27 +111,12 @@ const Camera: React.FC<ControlPanelProps> = ({ node, device }) => {
     return null;
   }, [isConnected, channelName, t]);
 
-  // Handlers
   /**
-   * Handles the refresh action for device parameters.
-   * Fetches the latest device parameters from the device and updates
-   * the local device state. Manages the refreshing state during the operation.
-   * @returns Promise that resolves when the refresh operation completes
+   * Locks Control's shared ScrollView while a param gesture is active.
+   * @param updating - True while the control is being interacted with
    */
-  const handleRefresh = async () => {
-    setRefreshing(true);
-    try {
-      const params = await device?.getParams();
-      if (device && params) {
-        device.params = params;
-      }
-    } catch (error) {
-      if(__DEV__) {
-        console.error("Failed to refresh device state:", error);
-      }
-    } finally {
-      setRefreshing(false);
-    }
+  const onSetUpdating = (updating: boolean) => {
+    setScrollEnabled?.(!updating);
   };
 
   /**
@@ -199,28 +187,11 @@ const Camera: React.FC<ControlPanelProps> = ({ node, device }) => {
   }, []);
 
   return (
-    <View
-      style={styles.container}
-      {...testProps("view_camera")}
-    >
-      <ScrollView
-        scrollEnabled={scrollEnabled}
-        showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={handleRefresh}
-            enabled={isConnected}
-          />
-        }
-        {...testProps("scroll_camera")}
-      >
+    <View style={styles.container} {...testProps("view_camera")}>
+      <View {...testProps("scroll_camera")}>
         {/* Warning Banner */}
         {warningMessage && (
-          <WarningBanner
-            message={warningMessage}
-            qaId="camera_warning"
-          />
+          <WarningBanner message={warningMessage} qaId="camera_warning" />
         )}
 
         {/* Video Player */}
@@ -245,20 +216,16 @@ const Camera: React.FC<ControlPanelProps> = ({ node, device }) => {
           params={filteredParams}
           allParams={device?.params || []}
           isConnected={isConnected}
-          onSetUpdating={(s) => {
-            setScrollEnabled(!s);
-          }}
+          onSetUpdating={onSetUpdating}
           paramsMap={paramsMap}
         />
-      </ScrollView>
-
+      </View>
     </View>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
-    flex: 1,
     width: "100%",
   },
 });

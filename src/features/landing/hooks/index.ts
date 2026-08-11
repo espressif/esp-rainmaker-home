@@ -6,3 +6,5 @@
 
 export { useLanding } from "./useLanding";
 export type { UseLandingReturn } from "./useLanding";
+export { useDeploymentBranding } from "./useDeploymentBranding";
+export type { UseDeploymentBrandingReturn } from "./useDeploymentBranding";

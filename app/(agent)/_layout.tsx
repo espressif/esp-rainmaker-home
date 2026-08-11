@@ -7,7 +7,6 @@
 import { Stack } from "expo-router";
 import { Platform } from "react-native";
 
-
 /**
  * Renders the agent layout UI section.
  */
@@ -16,7 +15,7 @@ export default function AgentLayout() {
     <Stack
       screenOptions={{
         headerShown: false,
-        gestureEnabled: true,
+        gestureEnabled: false,
         gestureDirection: "horizontal",
         animation: Platform.select({
           ios: "slide_from_right",

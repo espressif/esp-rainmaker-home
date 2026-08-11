@@ -23,6 +23,13 @@ import { useResetPassword } from "@features/auth/hooks";
 import { ScreenWrapper, Header, Input, Button } from "@shared/components";
 import { ResendCodeButton, AppVersionText } from "@features/auth/components";
 import { testProps } from "@shared/utils/testProps";
+import {
+  AUTO_COMPLETE_NEW_PASSWORD,
+  AUTO_COMPLETE_SMS_OTP,
+  IMPORTANT_FOR_AUTOFILL_YES,
+  TEXT_CONTENT_TYPE_NEW_PASSWORD,
+  TEXT_CONTENT_TYPE_ONE_TIME_CODE,
+} from "@shared/utils/constants";
 
 /**
  * Renders the reset password screen UI section.
@@ -110,6 +117,11 @@ export function ResetPasswordScreen() {
                 ]}
                 keyboardType="numeric"
                 maxLength={6}
+                autoCapitalize="none"
+                autoCorrect={false}
+                textContentType={TEXT_CONTENT_TYPE_ONE_TIME_CODE}
+                autoComplete={AUTO_COMPLETE_SMS_OTP}
+                importantForAutofill={IMPORTANT_FOR_AUTOFILL_YES}
                 returnKeyType="next"
                 onSubmitEditing={() => {
                   if (isCodeValid) {
@@ -134,6 +146,11 @@ export function ResetPasswordScreen() {
                 validator={passwordValidator}
                 validateOnChange={true}
                 debounceDelay={500}
+                autoCapitalize="none"
+                autoCorrect={false}
+                textContentType={TEXT_CONTENT_TYPE_NEW_PASSWORD}
+                autoComplete={AUTO_COMPLETE_NEW_PASSWORD}
+                importantForAutofill={IMPORTANT_FOR_AUTOFILL_YES}
                 returnKeyType="next"
                 onSubmitEditing={() => {
                   if (isPasswordValid) {
@@ -154,6 +171,11 @@ export function ResetPasswordScreen() {
                 validator={confirmPasswordValidator}
                 validateOnChange={true}
                 debounceDelay={500}
+                autoCapitalize="none"
+                autoCorrect={false}
+                textContentType={TEXT_CONTENT_TYPE_NEW_PASSWORD}
+                autoComplete={AUTO_COMPLETE_NEW_PASSWORD}
+                importantForAutofill={IMPORTANT_FOR_AUTOFILL_YES}
                 returnKeyType="go"
                 onSubmitEditing={() => {
                   if (isFormValid) {

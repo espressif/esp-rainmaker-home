@@ -124,6 +124,7 @@ export const createPasswordValidator =
 
 /**
  * Creates a confirm password validator. Pure function - no side effects.
+ * Matches confirm password exactly as entered (no trimming).
  */
 export const createConfirmPasswordValidator =
   (getPasswordToMatch: () => string, t: TFunction) =>
@@ -205,7 +206,6 @@ export const createNewPasswordValidator =
 /**
  * Surfaces a user-visible auth error string from CDF / adaptor throws.
  * Prefers `description` (adaptor contract), then `message` (SDK Error).
- *
  * @param error - Caught value from an auth store call
  * @returns First non-empty description/message, or `undefined`
  */

@@ -17,15 +17,18 @@ import { Header, ScreenWrapper, DangerButton } from "@shared/components";
 import { SettingsItem, SettingsSection } from "@features/user/components";
 import { testProps } from "@shared/utils/testProps";
 import { CDF_EXTERNAL_PROPERTIES } from "@shared/utils/constants";
+import { getFeatures } from "@config/features.config";
 
 /**
  * Renders the account security UI section.
+ * Delete Account is SDK-gated (unavailable on Neo).
  */
 const AccountSecurity: React.FC = () => {
   const router = useRouter();
   const { store } = useCDF();
   const { t } = useTranslation();
   const [isThirdPartyLogin, setIsThirdPartyLogin] = useState(false);
+  const { accountDeletion } = getFeatures();
 
   useEffect(() => {
     setIsThirdPartyLogin(
@@ -33,10 +36,16 @@ const AccountSecurity: React.FC = () => {
     );
   }, [store]);
 
+  /**
+   * Navigates to the change-password flow.
+   */
   const handleChangePassword = () => {
     router.push("/(auth)/ChangePassword");
   };
 
+  /**
+   * Navigates to the delete-account flow when the SDK supports it.
+   */
   const handleDeleteAccount = () => {
     router.push("/(user)/DeleteAccount");
   };
@@ -68,17 +77,19 @@ const AccountSecurity: React.FC = () => {
           </SettingsSection>
         )}
 
-        <View
-          {...testProps("view_account_security")}
-          style={styles.deleteSection}
-        >
-          <DangerButton
-            icon={<Trash2 size={20} color={tokens.colors.red} />}
-            title={t("user.accountSecurity.deleteAccount")}
-            onPress={handleDeleteAccount}
-            qaId="delete_account"
-          />
-        </View>
+        {accountDeletion && (
+          <View
+            {...testProps("view_account_security")}
+            style={styles.deleteSection}
+          >
+            <DangerButton
+              icon={<Trash2 size={20} color={tokens.colors.red} />}
+              title={t("user.accountSecurity.deleteAccount")}
+              onPress={handleDeleteAccount}
+              qaId="delete_account"
+            />
+          </View>
+        )}
       </ScreenWrapper>
     </>
   );

@@ -39,6 +39,12 @@ class ScanQr(BasePage):
                 return True
         return False
 
+    def open_add_device_selection(self):
+        """Tap 'no QR code' to reach the Bluetooth/SoftAP/On Network list, which this screen now gates."""
+        self.grant_runtime_permissions_if_needed()
+        self.click("no_qr_code_button", timeout=10)
+        return self
+
     def is_permission_prompt_visible(self, timeout=0.5):
         """Return True when an in-app camera or BLE permission prompt is shown."""
         for locator in _PERMISSION_LOCATORS:

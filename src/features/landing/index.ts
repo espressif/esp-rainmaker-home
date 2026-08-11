@@ -5,7 +5,7 @@
  */
 
 export { LandingScreen } from "./screens";
-export { useLanding } from "./hooks";
+export { useLanding, useDeploymentBranding } from "./hooks";
 export { PLATFORM_OPTIONS } from "./config/platformOptions";
 export type {
   PlatformKind,

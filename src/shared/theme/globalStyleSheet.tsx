@@ -959,7 +959,6 @@ export const globalStyles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     padding: 32,
-    marginTop: "35%",
   },
   scheduleActionsEmptyStateIconContainer: {
     backgroundColor: tokens.colors.white,

@@ -19,6 +19,7 @@ import {
   Logo,
 } from "@shared/components";
 import { InfoItem } from "@features/user/components";
+import { useDeploymentBranding } from "@features/landing";
 import { getActiveRegionLabelKey } from "@config/region.config";
 import { getDisplayVersion } from "@shared/utils/appVersion";
 
@@ -28,6 +29,10 @@ import { getDisplayVersion } from "@shared/utils/appVersion";
 const AboutUs: React.FC = () => {
   const { t } = useTranslation();
   const appVersion = getDisplayVersion();
+
+  // Same deployment mark as the auth screens, so About names the deployment
+  // the user is actually signed in to rather than the generic app lockup.
+  const { deploymentLabel, deploymentWordmark } = useDeploymentBranding();
 
   const handleWebsiteClick = async () => {
     try {
@@ -52,7 +57,11 @@ const AboutUs: React.FC = () => {
         qaId="screen_wrapper_about_us"
       >
         <View style={styles.logoContainer}>
-          <Logo qaId="logo_about_us" />
+          <Logo
+            qaId="logo_about_us"
+            caption={deploymentLabel}
+            captionSource={deploymentWordmark}
+          />
         </View>
 
         <ContentWrapper

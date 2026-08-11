@@ -4,21 +4,13 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-
-import React, { useMemo, useState } from "react";
-import {
-  View,
-  StyleSheet,
-  ScrollView,
-  RefreshControl,
-  Text,
-} from "react-native";
+import React, { useMemo } from "react";
+import { View, StyleSheet, Text } from "react-native";
 
 // Styles
 import { tokens } from "@shared/theme/tokens";
 
 // Hooks
-import { useToast } from "@shared/hooks/useToast";
 import { useDeviceConnected } from "@shared/hooks/useDeviceConnected";
 import { useTranslation } from "react-i18next";
 import { useCDF } from "@shared/hooks/useCDF";
@@ -52,14 +44,16 @@ import {
  * A control panel for switch devices that supports:
  * - Power toggle (ON/OFF)
  * - Simple and clean interface
- * - Refresh functionality
- * @param node - The ESPRMNode representing the switch device
- * @param device - The ESPRMDevice representing the switch device
- * @returns Simple scroll view with power/toggle param and refresh
+ *
+ * Content-only (no nested ScrollView): Control owns the shared scroll + pull-to-refresh.
+ * @param props - Node, device, and optional parent scroll lock callback
+ * @returns Power/toggle param UI for the switch device
  */
-const Switch: React.FC<ControlPanelProps> = ({ node, device }) => {
-  // Hooks
-  const toast = useToast();
+const Switch: React.FC<ControlPanelProps> = ({
+  node,
+  device,
+  setScrollEnabled,
+}) => {
   const { t } = useTranslation();
   const { store } = useCDF();
 
@@ -67,11 +61,6 @@ const Switch: React.FC<ControlPanelProps> = ({ node, device }) => {
   const storeDevice =
     storeNode.devices?.find((d) => d.name === device.name) ?? device;
 
-  // State
-  const [refreshing, setRefreshing] = useState(false);
-  const [scrollEnabled, setScrollEnabled] = useState(true);
-
-  // Computed Values
   const isConnected = useDeviceConnected(storeNode);
 
   // Device Parameters - Look for power/toggle parameters
@@ -86,7 +75,8 @@ const Switch: React.FC<ControlPanelProps> = ({ node, device }) => {
     [storeNode],
   );
   const matterEndpoint = useMemo(
-    () => resolveMatterEndpointFromDevice(storeDevice, powerParam?.name ?? "Power"),
+    () =>
+      resolveMatterEndpointFromDevice(storeDevice, powerParam?.name ?? "Power"),
     [storeDevice, powerParam?.name],
   );
   useMatterDeviceStateSync(matterNodeId, [matterEndpoint], { power: powerParam });
@@ -94,23 +84,12 @@ const Switch: React.FC<ControlPanelProps> = ({ node, device }) => {
   // Get current power state
   const isPowerOn = Boolean(powerParam?.value);
 
-  // Handlers
-  const handleRefresh = async () => {
-    setRefreshing(true);
-    try {
-      const params = await storeDevice?.getParams();
-      if (storeDevice && params) {
-        storeDevice.params = params;
-      }
-    } catch (error) {
-      console.error("Error refreshing device state:", error);
-      toast.showError(
-        t("layout.shared.errorHeader"),
-        t("device.errors.failedToRefreshDeviceState"),
-      );
-    } finally {
-      setRefreshing(false);
-    }
+  /**
+   * Locks Control's shared ScrollView while a param gesture is active.
+   * @param updating - True while the control is being interacted with
+   */
+  const onSetUpdating = (updating: boolean) => {
+    setScrollEnabled?.(!updating);
   };
 
   if (storeDevice?.params?.length === 0) {
@@ -120,26 +99,10 @@ const Switch: React.FC<ControlPanelProps> = ({ node, device }) => {
   // Render
   return (
     <View
-      style={[
-        styles.container,
-        { backgroundColor: tokens.colors.bg5 },
-      ]}
+      style={[styles.container, { backgroundColor: tokens.colors.bg5 }]}
       {...testProps("view_switch")}
     >
-      <ScrollView
-        style={styles.content}
-        contentContainerStyle={styles.contentContainer}
-        scrollEnabled={scrollEnabled}
-        showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={handleRefresh}
-            enabled={isConnected}
-          />
-        }
-        {...testProps("scroll_refresh_switch")}
-      >
+      <View style={styles.content} {...testProps("scroll_refresh_switch")}>
         {/* Power Control */}
         {powerParam && (
           <View
@@ -150,9 +113,7 @@ const Switch: React.FC<ControlPanelProps> = ({ node, device }) => {
               key={powerParam.name}
               param={powerParam}
               disabled={!isConnected}
-              setUpdating={(s) => {
-                setScrollEnabled(!s);
-              }}
+              setUpdating={onSetUpdating}
             >
               <PowerButton />
             </ParamControlWrap>
@@ -176,31 +137,24 @@ const Switch: React.FC<ControlPanelProps> = ({ node, device }) => {
             </View>
           </View>
         )}
-      </ScrollView>
+      </View>
     </View>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
-    flex: 1,
     backgroundColor: tokens.colors.bg5,
   },
   content: {
-    flex: 1,
     backgroundColor: tokens.colors.white,
     padding: tokens.spacing._10,
     borderRadius: tokens.radius.md,
-  },
-  contentContainer: {
-    display: "flex",
-    flexDirection: "column",
     alignItems: "center",
     justifyContent: "center",
-    height: "100%",
+    minHeight: 200,
   },
   powerButtonContainer: {
-    flex: 1,
     maxHeight: 200,
     justifyContent: "center",
     alignItems: "center",

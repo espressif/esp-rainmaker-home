@@ -5,7 +5,7 @@
  */
 
 
-import { createContext, useContext, useReducer } from "react";
+import { createContext, useContext, useReducer, useCallback } from "react";
 import { useCDF } from "@shared/hooks/useCDF";
 import { ESPCDFDevice } from "@store";
 import { deepClone, generateRandomId } from "@shared/utils/common";
@@ -573,9 +573,10 @@ export function ScheduleProvider({ children }: ScheduleProviderProps) {
     dispatch({ type: "SET_NODES", payload: nodes });
   };
 
-  const resetState = () => {
+  // Stable so screens can safely reset from an unmount-only effect cleanup.
+  const resetState = useCallback(() => {
     dispatch({ type: "RESET_STATE" });
-  };
+  }, []);
 
   const setSelectedDevice = (
     device: { nodeId: string; deviceName: string; displayName: string } | null,
@@ -620,6 +621,11 @@ export function ScheduleProvider({ children }: ScheduleProviderProps) {
 
     Object.entries(state.actions).forEach(([nodeId, deviceActions]) => {
       const node = store.nodeStore.nodesByIDMap[nodeId];
+      // Node gone, or actions still name a device the node no longer has
+      // (e.g. Light→Switch after re-provision of the same nodeId).
+      if (!node) {
+        return;
+      }
       const deviceNameMap = (node.devices || []).reduce(
         (acc: Record<string, any>, device: any) => {
           acc[device.name] = device;
@@ -629,13 +635,16 @@ export function ScheduleProvider({ children }: ScheduleProviderProps) {
       );
 
       const scheduleActions = Object.entries(deviceActions)
-        .filter(([_, action]) => action !== undefined)
+        .filter(
+          ([deviceName, action]) =>
+            action !== undefined && deviceNameMap?.[deviceName],
+        )
         .map(([deviceName, action]) => {
           return {
             nodeId,
             action: action as Record<string, any>,
-            device: deviceNameMap?.[deviceName] as ESPCDFDevice,
-            displayDeviceName: deviceNameMap?.[deviceName]?.displayName || "",
+            device: deviceNameMap[deviceName] as ESPCDFDevice,
+            displayDeviceName: deviceNameMap[deviceName]?.displayName || "",
           } as ScheduleAction;
         }) as ScheduleAction[];
       actions.push(...scheduleActions);

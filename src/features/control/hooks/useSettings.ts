@@ -5,6 +5,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useNavigation, usePreventRemove } from "@react-navigation/native";
 import { router, useLocalSearchParams, useRouter } from "expo-router";
 import { useTranslation } from "react-i18next";
 import { getFeatures } from "@config/features.config";
@@ -16,8 +17,6 @@ import {
 } from "@shared/utils/matterController";
 import { updateRmakerUserAuthForNode } from "@shared/utils/userAuthServiceHelper";
 import {
-  SAVE_DEVICE_NAME_STATUS_FAILED,
-  SAVE_DEVICE_NAME_STATUS_NO_PARAM,
   SAVE_DEVICE_NAME_STATUS_SUCCESS,
   SETTINGS_SECTION_NAME,
   RMAKER_AUTH_TOAST_KIND_UPDATED,
@@ -53,9 +52,13 @@ export interface UseSettingsReturn {
   settingsDisabled: boolean;
   deviceName: string;
   setDeviceName: (name: string) => void;
+  /** Marks the name field dirty and updates local draft text. */
+  handleDeviceNameChange: (name: string) => void;
   isEditingName: boolean;
   setIsEditingName: (editing: boolean) => void;
   isSavingName: boolean;
+  /** True when the draft name differs from the persisted display name. */
+  isDeviceNameDirty: boolean;
   validSection: string[];
   otaInfo: OTAInfo;
   isCheckingUpdate: boolean;
@@ -66,7 +69,7 @@ export interface UseSettingsReturn {
   showAddToControlGroup: boolean;
   settingsQuickActions: SettingsQuickActionItem[];
   otaFeatureEnabled: boolean;
-  handleSaveDeviceName: () => Promise<void>;
+  handleSaveDeviceName: () => Promise<boolean>;
   handleCheckForUpdates: () => Promise<void>;
   handleStartUpdate: () => Promise<void>;
   handleRemoveDevice: () => void;
@@ -83,6 +86,7 @@ export interface UseSettingsReturn {
 export const useSettings = (): UseSettingsReturn => {
   const { store } = useCDF();
   const routerNav = useRouter();
+  const navigation = useNavigation();
   const { t } = useTranslation();
   const toast = useToast();
   const { id, device: deviceParam } = useLocalSearchParams<{
@@ -153,6 +157,18 @@ export const useSettings = (): UseSettingsReturn => {
     }
   }, [device, displayName, isEditingName]);
 
+  /**
+   * Updates the draft device name and locks out store-driven overwrites while editing.
+   * @param name - Latest text from the name field
+   */
+  const handleDeviceNameChange = useCallback((name: string) => {
+    setIsEditingName(true);
+    setDeviceName(name);
+  }, []);
+
+  const isDeviceNameDirty =
+    !settingsDisabled && deviceName.trim() !== displayName.trim();
+
   const readmeUrl = useMemo(() => getNodeReadmeUrl(node), [node]);
 
   const homeIdForControlGroup = useMemo(() => {
@@ -208,40 +224,68 @@ export const useSettings = (): UseSettingsReturn => {
 
   /**
    * Persists an edited device name via Matter metadata or the name param.
+   * Skips the network call when the draft matches the current display name.
+   * @returns True when leave navigation may proceed (saved or unchanged)
    */
-  const handleSaveDeviceName = useCallback(async () => {
-    if (!deviceName.trim()) {
+  const handleSaveDeviceName = useCallback(async (): Promise<boolean> => {
+    if (settingsDisabled || isSavingName) {
+      return false;
+    }
+
+    const trimmed = deviceName.trim();
+    if (!trimmed) {
       toast.showError(t("device.validation.deviceNameCannotBeEmpty"));
-      return;
+      return false;
     }
 
     if (!node) {
-      return;
+      return false;
     }
 
+    if (trimmed === displayName.trim()) {
+      setIsEditingName(false);
+      return true;
+    }
+
+    setIsEditingName(true);
     setIsSavingName(true);
     try {
-      const outcome = await saveDeviceDisplayName(
-        node,
-        device,
-        deviceName.trim(),
-      );
+      const outcome = await saveDeviceDisplayName(node, device, trimmed);
 
       if (outcome === SAVE_DEVICE_NAME_STATUS_SUCCESS) {
         toast.showSuccess(t("device.settings.deviceNameUpdatedSuccessfully"));
-        return;
+        setIsEditingName(false);
+        return true;
       }
-      if (outcome === SAVE_DEVICE_NAME_STATUS_NO_PARAM) {
-        toast.showError(t("device.errors.failedToUpdateDeviceName"));
-        return;
-      }
-      if (outcome === SAVE_DEVICE_NAME_STATUS_FAILED) {
-        toast.showError(t("device.errors.failedToUpdateDeviceName"));
-      }
+
+      toast.showError(t("device.errors.failedToUpdateDeviceName"));
+      return false;
     } finally {
       setIsSavingName(false);
     }
-  }, [device, deviceName, node, t, toast]);
+  }, [
+    device,
+    deviceName,
+    displayName,
+    isSavingName,
+    node,
+    settingsDisabled,
+    t,
+    toast,
+  ]);
+
+  const saveDeviceNameRef = useRef(handleSaveDeviceName);
+  saveDeviceNameRef.current = handleSaveDeviceName;
+
+  // Flush a dirty rename before leaving (header back, hardware back, swipe).
+  usePreventRemove(isDeviceNameDirty && !isSavingName, ({ data }) => {
+    void (async () => {
+      const ok = await saveDeviceNameRef.current();
+      if (ok) {
+        navigation.dispatch(data.action);
+      }
+    })();
+  });
 
   /**
    * Queries the node for an available firmware update.
@@ -404,9 +448,11 @@ export const useSettings = (): UseSettingsReturn => {
     settingsDisabled,
     deviceName,
     setDeviceName,
+    handleDeviceNameChange,
     isEditingName,
     setIsEditingName,
     isSavingName,
+    isDeviceNameDirty,
     validSection,
     otaInfo,
     isCheckingUpdate,

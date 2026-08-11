@@ -8,4 +8,5 @@ export { CreateAutomationNameSection } from "./CreateAutomationNameSection";
 export { CreateAutomationRetriggerSection } from "./CreateAutomationRetriggerSection";
 export { CreateAutomationEventsSection } from "./CreateAutomationEventsSection";
 export { CreateAutomationActionsSection } from "./CreateAutomationActionsSection";
+export { CreateAutomationEmptyState } from "./CreateAutomationEmptyState";
 export { CreateAutomationActionButtons } from "./CreateAutomationActionButtons";

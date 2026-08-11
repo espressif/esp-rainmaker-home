@@ -4,8 +4,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useEffect } from "react";
-import { View, Text, StyleSheet, Pressable, Platform } from "react-native";
+import { useEffect, useState } from "react";
+import {
+  View,
+  Text,
+  StyleSheet,
+  Pressable,
+  ScrollView,
+  RefreshControl,
+} from "react-native";
 import { Stack } from "expo-router";
 
 // Styles
@@ -33,14 +40,6 @@ import CameraControl from "./device_panels/Camera";
 import { testProps } from "@shared/utils/testProps";
 import { readAttributesForNodeId } from "@shared/utils/matterAttributeRead";
 
-// iOS's interactive swipe-back gesture and the horizontal param sliders
-// (Hue/Brightness/etc.) both claim horizontal pans with no coordination
-// between them (sliders use Tamagui's JS responder system, not
-// react-native-gesture-handler), so dragging a slider also pans the whole
-// screen back. Android's stack gesture doesn't hijack drags the same way, so
-// only disable it on iOS - the header back button still works everywhere.
-const STACK_GESTURE_ENABLED = Platform.OS !== "ios";
-
 const CONTROL_PANELS: Record<string, React.FC<any>> = {
   light: LightControl,
   switch: SwitchControl,
@@ -51,13 +50,24 @@ const CONTROL_PANELS: Record<string, React.FC<any>> = {
 /**
  * Control Component
  * Main device control screen that renders different device controls based on device type.
- * Shows an offline last-seen banner above the panel when the node is unreachable.
+ * Offline banner + panel share one ScrollView so pull-to-refresh works from anywhere
+ * (same scroll surface pattern as Home / ControlGroupPanel). `dismissKeyboard={false}`
+ * avoids ScreenWrapper TouchableWithoutFeedback stealing list gestures.
  */
 const Control = () => {
   const { t } = useTranslation();
-  const { node, device, displayName, deviceConfig, handleMorePress } =
-    useControl();
+  const {
+    node,
+    device,
+    displayName,
+    deviceConfig,
+    isConnected,
+    refreshing,
+    handleRefresh,
+    handleMorePress,
+  } = useControl();
   const { store } = useCDF();
+  const [scrollEnabled, setScrollEnabled] = useState(true);
 
   // iOS parity: when entering the control screen for a Matter node, fire a
   // one-shot read of every matter param on the node so the panel paints
@@ -76,6 +86,44 @@ const Control = () => {
     void readAttributesForNodeId(user, node.id);
   }, [node?.id, node?.isMatter, store?.userStore?.user]);
 
+  /**
+   * Renders the typed control panel (or Fallback) as content inside the
+   * shared scroll surface — panels must not nest their own ScrollView.
+   * @returns Device panel element
+   */
+  const renderDeviceControl = () => {
+    if (!device) return null;
+
+    if (!deviceConfig || !deviceConfig.controlPanel) {
+      return (
+        <Fallback
+          node={node as NonNullable<typeof node>}
+          device={device}
+          setScrollEnabled={setScrollEnabled}
+        />
+      );
+    }
+
+    const ControlPanel =
+      CONTROL_PANELS[deviceConfig.controlPanel as keyof typeof CONTROL_PANELS];
+    if (!ControlPanel) {
+      return (
+        <Fallback
+          node={node as NonNullable<typeof node>}
+          device={device}
+          setScrollEnabled={setScrollEnabled}
+        />
+      );
+    }
+    return (
+      <ControlPanel
+        node={node}
+        device={device}
+        setScrollEnabled={setScrollEnabled}
+      />
+    );
+  };
+
   // Early return for missing device. The node itself may still be resolved
   // (e.g. an offline pure-Matter node whose fallback device schema doesn't
   // match up), so keep the settings gear reachable off `node` alone -
@@ -83,7 +131,7 @@ const Control = () => {
   if (!device) {
     return (
       <>
-        <Stack.Screen options={{ gestureEnabled: STACK_GESTURE_ENABLED }} />
+        <Stack.Screen options={{ gestureEnabled: false }} />
         <Header
           label={t("device.control.title")}
           showBack={true}
@@ -124,21 +172,10 @@ const Control = () => {
     );
   }
 
-  // Device control renderer
-  const renderDeviceControl = () => {
-    if (!deviceConfig || !deviceConfig.controlPanel) {
-      return <Fallback node={node as any} device={device} />;
-    }
-
-    const ControlPanel =
-      CONTROL_PANELS[deviceConfig.controlPanel as keyof typeof CONTROL_PANELS];
-    return <ControlPanel node={node} device={device} />;
-  };
-
   // Render
   return (
     <>
-      <Stack.Screen options={{ gestureEnabled: STACK_GESTURE_ENABLED }} />
+      <Stack.Screen options={{ gestureEnabled: false }} />
       <Header
         label={displayName}
         showBack={true}
@@ -158,14 +195,39 @@ const Control = () => {
         style={styles.container}
         qaId="screen_wrapper_control"
         excludeTop={true}
+        dismissKeyboard={false}
       >
         <View {...testProps("view_control")} style={globalStyles.flex1}>
-          <DeviceOfflineBanner
-            node={node}
-            qaId="device_control_offline"
-            containerStyle={styles.offlineBanner}
-          />
-          {renderDeviceControl()}
+          <ScrollView
+            style={[
+              globalStyles.flex1,
+              { backgroundColor: tokens.colors.bg5 },
+              { opacity: isConnected ? 1 : 0.5 },
+            ]}
+            contentContainerStyle={styles.scrollContent}
+            scrollEnabled={scrollEnabled}
+            showsVerticalScrollIndicator={false}
+            bounces
+            alwaysBounceVertical
+            keyboardShouldPersistTaps="handled"
+            refreshControl={
+              <RefreshControl
+                refreshing={refreshing}
+                onRefresh={handleRefresh}
+                colors={[tokens.colors.primary]}
+                tintColor={tokens.colors.primary}
+                progressViewOffset={10}
+                enabled={scrollEnabled}
+              />
+            }
+          >
+            <DeviceOfflineBanner
+              node={node}
+              qaId="device_control_offline"
+              containerStyle={styles.offlineBannerInScroll}
+            />
+            {renderDeviceControl()}
+          </ScrollView>
         </View>
       </ScreenWrapper>
     </>
@@ -181,9 +243,20 @@ const styles = StyleSheet.create({
     ...globalStyles.container,
     paddingBottom: 100,
   },
+  scrollContent: {
+    flexGrow: 1,
+    paddingBottom: tokens.spacing._15,
+    paddingTop: tokens.spacing._10,
+  },
   offlineBanner: {
     marginHorizontal: tokens.spacing._10,
     marginBottom: tokens.spacing._10,
+  },
+  /** Banner scrolls with panel content so pull works over the offline strip too. */
+  offlineBannerInScroll: {
+    marginHorizontal: tokens.spacing._10,
+    marginBottom: tokens.spacing._10,
+    alignSelf: "stretch",
   },
 });
 

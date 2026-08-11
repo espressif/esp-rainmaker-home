@@ -7,7 +7,6 @@
 import 'react-native-url-polyfill/auto';
 import 'react-native-get-random-values';
 
-import { atob as quickAtob, btoa as quickBtoa } from 'react-native-quick-base64';
 import { Buffer } from 'buffer';
 import CryptoJS from 'crypto-js';
 // import { TextEncoder, TextDecoder } from 'util';
@@ -16,8 +15,6 @@ declare const global: typeof globalThis & {
   Buffer: typeof Buffer;
   // TextEncoder: typeof TextEncoder;
   // TextDecoder: typeof TextDecoder;
-  base64ToArrayBuffer?: (data: string, removeLinebreaks?: boolean) => ArrayBuffer;
-  base64FromArrayBuffer?: (buffer: ArrayBuffer, urlSafe?: boolean) => string;
   atob: (data: string) => string;
   btoa: (data: string) => string;
   crypto: typeof crypto & {
@@ -56,13 +53,9 @@ global.Buffer = Buffer;
   }
 }
 
-// quick-base64's JS atob/btoa depend on JSI globals installed by QuickBase64.install().
-// If the native module is missing (e.g. Expo Go) or install() was skipped, assigning them
-// breaks JWT decode and anything else that uses global.atob.
-if (typeof global.base64ToArrayBuffer === 'function') {
-  global.atob = quickAtob;
-  global.btoa = quickBtoa;
-} else if (typeof globalThis.atob === 'function' && typeof globalThis.btoa === 'function') {
+// Prefer Hermes-native atob/btoa; Buffer fallback for older engines.
+// (react-native-quick-base64's atob/btoa are deprecated now that Hermes ships them.)
+if (typeof globalThis.atob === 'function' && typeof globalThis.btoa === 'function') {
   global.atob = globalThis.atob.bind(globalThis);
   global.btoa = globalThis.btoa.bind(globalThis);
 } else {
@@ -151,17 +144,3 @@ global.crypto.createHmac = (algorithm: string, key: any) => {
   const dataBytes = typeof data === 'string' ? CryptoJS.enc.Utf8.parse(data) : data;
   return CryptoJS.HmacSHA256(dataBytes, keyBytes);
 };
-
-// Import aws-amplify AFTER all polyfills are set up
-// This ensures aws-amplify loads with the required globals (Buffer, atob, crypto, etc.)
-// Without this, the first require("aws-amplify") in the SDK fails with "slice of undefined"
-try {
-  const awsAmplify = require('aws-amplify');
-  // Expose Amplify and Auth globally so SDK can access them without re-requiring
-  // This prevents module resolution issues when SDK tries to require aws-amplify
-  (global as any).__AWS_AMPLIFY__ = awsAmplify.Amplify;
-  (global as any).__AWS_AUTH__ = awsAmplify.Auth;
-  console.log('[polyfills] aws-amplify loaded successfully, Amplify and Auth exposed globally');
-} catch (error) {
-  console.warn('[polyfills] Failed to pre-load aws-amplify:', error);
-}

@@ -25,3 +25,4 @@ export {
   SelectDeviceRoomOptions,
 } from "./SelectDeviceRoom";
 export { UpdateDeviceNameSection } from "./UpdateDeviceName";
+export { WifiResetRetryDialog } from "./WifiResetRetryDialog";

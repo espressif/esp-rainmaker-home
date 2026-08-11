@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -40,7 +40,7 @@ import {
   getDeviceCardSensorReadings,
 } from "@shared/utils/deviceCardSensor";
 import { coerceParamValueToBoolean } from "@shared/utils/paramUtils";
-import { resolveOfflineBannerMessage } from "@shared/utils/connectivity";
+import { resolveNodeUnavailableMessage } from "@shared/utils/connectivity";
 
 // Constants
 import {
@@ -51,7 +51,8 @@ import {
   ESPRM_NAME_PARAM_TYPE,
   ERROR_CODES,
   MATTER_METADATA_KEY,
-  MATTER_METADATA_DEVICE_NAME_KEY
+  MATTER_METADATA_DEVICE_NAME_KEY,
+  PARAM_INCOMING_UPDATE_DEBOUNCE_MS,
 } from "@shared/utils/constants";
 
 // Styles
@@ -112,7 +113,12 @@ const DeviceCard: React.FC<DeviceCardProps> = ({
 
   const cardPowerParam = resolveDeviceCardPowerParam(storeDevice);
   const isPowerParamExisit = Boolean(cardPowerParam);
-  const isPowerOn = coerceParamValueToBoolean(cardPowerParam?.value);
+  const [isPowerOn, setIsPowerOn] = useState(() =>
+    coerceParamValueToBoolean(cardPowerParam?.value),
+  );
+  const powerUpdateDelayTimeoutRef = useRef<ReturnType<
+    typeof setTimeout
+  > | null>(null);
   const registeredTransports =
     store.subscriptionStore.registeredTransports[node.id];
   const bridgeParentNodeId = parseBridgedChildParentNodeId(storeNode.id);
@@ -153,6 +159,35 @@ const DeviceCard: React.FC<DeviceCardProps> = ({
   }, [storeDevice]);
 
   /**
+   * Debounces adopting store/MQTT `param.value` into local Switch state so an
+   * in-flight update does not clobber an optimistic power toggle (same pattern
+   * as ParamControlWrap slider incoming sync).
+   */
+  useEffect(() => {
+    if (!cardPowerParam) {
+      return;
+    }
+
+    if (powerUpdateDelayTimeoutRef.current === null) {
+      setIsPowerOn(coerceParamValueToBoolean(cardPowerParam.value));
+    }
+
+    if (powerUpdateDelayTimeoutRef.current !== null) {
+      clearTimeout(powerUpdateDelayTimeoutRef.current);
+    }
+    powerUpdateDelayTimeoutRef.current = setTimeout(() => {
+      setIsPowerOn(coerceParamValueToBoolean(cardPowerParam.value));
+      powerUpdateDelayTimeoutRef.current = null;
+    }, PARAM_INCOMING_UPDATE_DEBOUNCE_MS);
+
+    return () => {
+      if (powerUpdateDelayTimeoutRef.current !== null) {
+        clearTimeout(powerUpdateDelayTimeoutRef.current);
+      }
+    };
+  }, [cardPowerParam, cardPowerParam?.value, isPowerOn]);
+
+  /**
    * Opens Control or Settings for this device based on devices.config routing.
    * System-only types (e.g. Matter Controller) skip Control and land on Settings.
    */
@@ -168,21 +203,29 @@ const DeviceCard: React.FC<DeviceCardProps> = ({
   };
 
   /**
-   * Handle device power control
-   * Sets the power state of the device
-   * @param device - The device to control
-   * @param value - The power state to set
+   * Optimistically updates local power UI, then persists via `param.setValue`.
+   * Arms the incoming-update debounce first so the sync effect does not
+   * immediately re-apply a stale store value after a quiet period.
+   * @param value - Target power state
    */
   const handleDevicePowerControl = (value: boolean) => {
     if (!cardPowerParam) {
       return;
     }
-    cardPowerParam
-      .setValue(value)
-      .then(() => {})
-      .catch((err) => {
-        toast.showError(t(ERROR_CODES[err.code as keyof typeof ERROR_CODES]));
-      });
+
+    if (powerUpdateDelayTimeoutRef.current !== null) {
+      clearTimeout(powerUpdateDelayTimeoutRef.current);
+    }
+    powerUpdateDelayTimeoutRef.current = setTimeout(() => {
+      setIsPowerOn(coerceParamValueToBoolean(cardPowerParam.value));
+      powerUpdateDelayTimeoutRef.current = null;
+    }, PARAM_INCOMING_UPDATE_DEBOUNCE_MS);
+
+    setIsPowerOn(value);
+    cardPowerParam.setValue(value).catch((err) => {
+      setIsPowerOn(coerceParamValueToBoolean(cardPowerParam.value));
+      toast.showError(t(ERROR_CODES[err.code as keyof typeof ERROR_CODES]));
+    });
   };
 
   const isEndpointSplitDevice = /^ep_[0-9a-f]+$/i.test(device.name ?? "");
@@ -283,7 +326,8 @@ const DeviceCard: React.FC<DeviceCardProps> = ({
 
   const sensorCardDisplay = getDeviceCardSensorReadings(device).join(" · ");
   const offlineLabel = !deviceConnected
-    ? resolveOfflineBannerMessage(
+    ? resolveNodeUnavailableMessage(
+        storeNode.connectivityStatus?.isConnected,
         storeNode.connectivityStatus?.lastConnectionTimestamp,
         t,
       )
