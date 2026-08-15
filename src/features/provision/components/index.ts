@@ -19,6 +19,11 @@ export { NonPrimaryUserCard } from "./NonPrimaryUserCard";
 export { WifiPasswordInput } from "./WifiPasswordInput";
 export { default as BluetoothDisabledScreen } from "./BluetoothDisabledScreen";
 export { default as BLEPermissionScreen } from "./BLEPermissionScreen";
+export { CameraPermissionScreen } from "./CameraPermissionScreen";
+export { ConnectingStatusFooter } from "./ConnectingStatusFooter";
+export { ScanQRFlipCameraControl } from "./ScanQRFlipCameraControl";
+export type { ScanQRFlipCameraControlProps } from "./ScanQRFlipCameraControl";
+export { ScanQRFooter } from "./ScanQRFooter";
 export { JoinOtherNetworkModal } from "./JoinOtherNetworkModal";
 export {
   SelectDeviceRoomFooter,

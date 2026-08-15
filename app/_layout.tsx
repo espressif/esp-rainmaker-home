@@ -49,6 +49,12 @@ import { globalStyles } from "@shared/theme/globalStyleSheet";
 // async SDK + runtime config init
 import { cdfBootstrap, initializeApp } from "@src/integrations";
 
+// constants
+import {
+  TOAST_PROVIDER_SWIPE_DIRECTION_NEUTRAL,
+  TOAST_PROVIDER_SWIPE_THRESHOLD_DISABLED,
+} from "@shared/utils/constants";
+
 const config = createTamagui(defaultConfig);
 
 const stackScreenOptions = {
@@ -123,7 +129,10 @@ const InnerLayout = () => {
           <PaperProvider>
             <SceneProvider>
               {/* ToastProvider must wrap ScheduleProvider: ScheduleProvider uses useToast (Tamagui controller). */}
-              <ToastProvider>
+              <ToastProvider
+                swipeDirection={TOAST_PROVIDER_SWIPE_DIRECTION_NEUTRAL}
+                swipeThreshold={TOAST_PROVIDER_SWIPE_THRESHOLD_DISABLED}
+              >
                 <ScheduleProvider>
                   <Stack screenOptions={stackScreenOptions}>
                     {/* Other components */}
@@ -134,7 +143,7 @@ const InnerLayout = () => {
                     multipleToasts
                     flexDirection="column-reverse"
                     top={statusBarHeight}
-                    alignItems="center"
+                    alignItems="stretch"
                     width="100%"
                     padding={16}
                   />

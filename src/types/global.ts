@@ -977,11 +977,8 @@ export interface AutomationMenuBottomSheetProps {
 
 export type ConfigScanPhase =
   | "info"
-  | "scanning"
-  | "fetching"
   | "applying"
-  | "success"
-  | "error";
+  | "success";
 
 // ============================================================================
 // Chat Types

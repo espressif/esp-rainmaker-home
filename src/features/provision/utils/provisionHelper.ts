@@ -12,6 +12,8 @@ import {
 import {
   PROVISION_NODE_ONLINE_TIMEOUT_ERROR,
   PROVISION_SETUP_PROGRESS_MESSAGES,
+  SDK_ERROR_DESC_NODES_DO_NOT_EXIST,
+  SDK_ERROR_CODE_NODES_DO_NOT_EXIST,
   SDK_NODE_ONLINE_TIMEOUT_ERROR,
   SDK_NO_PROVISION_STATE_TO_RESUME_ERROR,
 } from "@shared/utils/constants";
@@ -216,7 +218,7 @@ export const getLocalizedErrorMessage = (
 ): string => {
   const normalizedError = rawError.toLowerCase();
 
-  // Android / app error codes (uppercase constants)
+  // Android / app / SDK error codes (exact match on extracted string)
   const androidErrorMap: Record<string, string> = {
     AUTH_FAILED: t("device.errors.wifiAuthFailed"),
     NETWORK_NOT_FOUND: t("device.errors.networkNotFound"),
@@ -226,14 +228,27 @@ export const getLocalizedErrorMessage = (
     [SDK_NO_PROVISION_STATE_TO_RESUME_ERROR]: t(
       "device.errors.noProvisionStateToResume",
     ),
+    [SDK_ERROR_CODE_NODES_DO_NOT_EXIST]: t(
+      "device.errors.nodeDoesNotExist",
+    ),
+    [SDK_ERROR_DESC_NODES_DO_NOT_EXIST]: t(
+      "device.errors.nodeDoesNotExist",
+    ),
   };
 
   if (androidErrorMap[rawError]) {
     return androidErrorMap[rawError];
   }
 
-  // iOS ESPProvisionError / Neo online-wait descriptions (case-insensitive)
+  // iOS ESPProvisionError / Neo online-wait / SDK descriptions
   const iosErrorPatterns: { keywords: string[]; message: string }[] = [
+    {
+      keywords: [
+        SDK_ERROR_DESC_NODES_DO_NOT_EXIST.toLowerCase(),
+        SDK_ERROR_CODE_NODES_DO_NOT_EXIST,
+      ],
+      message: t("device.errors.nodeDoesNotExist"),
+    },
     {
       keywords: [
         "node online",

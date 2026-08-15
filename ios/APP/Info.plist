@@ -91,6 +91,8 @@
 	</array>
 	<key>NSCameraUsageDescription</key>
 	<string>Reading QR code</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Allow $(PRODUCT_NAME) to access your photos to attach images in chat</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Microphone access is required for two-way audio during camera streaming.</string>
 	<key>NSLocalNetworkUsageDescription</key>

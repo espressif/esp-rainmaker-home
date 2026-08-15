@@ -428,7 +428,8 @@ export async function pollUntilReady<T>(
 
 /**
  * Extracts a human-readable message from various error formats.
- * Handles Error instances, strings, and objects with message/code/toString.
+ * Handles Error instances, strings, and RainMaker-style API objects
+ * (`description` / `errorCode`) without falling through to `[object Object]`.
  * @param error - Unknown error value (Error, string, or object)
  * @returns Extracted error message string
  */
@@ -441,14 +442,24 @@ export const extractErrorMessage = (error: unknown): string => {
   }
   if (error && typeof error === "object") {
     const err = error as Record<string, unknown>;
-    if (typeof err.message === "string") {
+    if (typeof err.message === "string" && err.message.trim()) {
       return err.message;
     }
-    if (typeof err.toString === "function") {
-      return String(err.toString()).replace(/^Error:\s*/i, "");
+    if (typeof err.description === "string" && err.description.trim()) {
+      return err.description;
+    }
+    if (err.errorCode != null) {
+      return String(err.errorCode);
     }
     if (err.code != null) {
       return String(err.code);
+    }
+    if (typeof err.toString === "function") {
+      const asString = String(err.toString()).replace(/^Error:\s*/i, "");
+      // Plain objects inherit Object#toString → "[object Object]"; skip that.
+      if (asString && asString !== "[object Object]") {
+        return asString;
+      }
     }
   }
   try {

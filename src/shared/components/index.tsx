@@ -53,6 +53,16 @@ export { default as FooterTabs } from "./Navigations/FooterTabs";
 export { default as Header } from "./Navigations/Header";
 export { default as Tabs } from "./Navigations/Tabs";
 
+export {
+  QrCameraScanner,
+  QrScanOverlay,
+} from "./Camera";
+export type {
+  QrCameraScannerProps,
+  QrCameraScannerHandle,
+  QrScanOverlayProps,
+} from "./Camera";
+
 // Param Controls
 export { default as ParamControlWrap } from "./ParamControls/ParamControlWrap";
 export { default as TextInput } from "./ParamControls/TextInput";

@@ -707,18 +707,18 @@
         "requestingPermission": "正在检查相机权限...",
         "noCameraPermission": "需要相机访问权限",
         "cameraPermissionRequired": "需要相机访问权限来扫描二维码。请授予权限以继续。",
-        "grantPermission": "继续",
+        "grantPermission": "请求权限",
         "bluetoothDisabled": "蓝牙已关闭",
         "bluetoothDisabledMessage": "二维码配网需要蓝牙。请在设备设置中打开蓝牙以继续。",
         "enableBluetooth": "启用蓝牙",
         "openSettings": "打开设置",
-        "invalidQRCode": "二维码无效",
-        "unableToConnectToDevice": "无法连接到设备",
-        "failedToInitializeDevice": "初始化设备失败",
+        "invalidQRCode": "不支持此二维码，请重试。",
+        "unableToConnectToDevice": "连接设备失败，请重试。",
         "androidNotImplemented": "Android 二维码扫描连接尚未实现",
         "platformNotSupported": "此平台不支持二维码扫描",
         "sessionInitFailed": "初始化会话失败，请重试。",
         "scanAgain": "重新扫描",
+        "flipCamera": "翻转",
         "noQrCode": "我没有二维码",
         "bluetoothPermissionRequired": "需要蓝牙访问权限。请授予权限并重试。",
         "matterAuthRequired": "Matter 设备调试需要身份验证。",
@@ -902,6 +902,7 @@
       "configurationFailed": "应用网络配置失败。请重试。",
       "wifiStatusFetchFailed": "无法获取 Wi-Fi 状态。请重试。",
       "missingProvisionData": "缺少配网数据",
+      "nodeDoesNotExist": "无法将此设备关联到您的账户。请将设备恢复出厂设置后，再重新添加。",
       "nodeNotFound": "配网后未找到设备",
       "failedToScanNetworks": "扫描网络失败",
       "invalidCredentials": "请输入有效的凭据",
@@ -1458,6 +1459,13 @@
     "continue": "继续",
     "confirm": "确认",
     "clear": "清除"
+  },
+  "config": {
+    "scan": {
+      "title": "部署配置",
+      "invalidQRCode": "不支持此二维码，请重试。",
+      "scanOverlay": "请仅扫描部署配置二维码"
+    }
   },
   "landing": {
     "title": "欢迎",
