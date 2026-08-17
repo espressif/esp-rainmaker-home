@@ -3,9 +3,11 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 
-"""Matter commissioning helper — drives the app Commissioning screen + the Google Play services half-sheet."""
+"""Matter commissioning helper — drives the app Commissioning screen + the platform pairing UI."""
 import logging
 import time
+
+from utils.apple_matter_sheet import AppleMatterSheet
 
 from .base import BasePage
 
@@ -20,6 +22,21 @@ class MatterCommissioning(BasePage):
         return self.is_visible("app_commissioning_screen", timeout=timeout, poll=poll)
 
     def complete_commissioning(self, timeout=240, max_retries=2):
+        """Drive the platform's out-of-app pairing UI until the device is commissioned."""
+        if self.platform == "ios":
+            return self._complete_apple_sheet(timeout)
+        return self._complete_gps_half_sheet(timeout, max_retries)
+
+    def _complete_apple_sheet(self, timeout):
+        """Apple's sheet has no queryable elements; dismiss it on failure so it can't strand the next test."""
+        sheet = AppleMatterSheet(self.driver)
+        try:
+            return sheet.complete_commissioning(timeout=timeout)
+        except Exception:
+            sheet.dismiss()
+            raise
+
+    def _complete_gps_half_sheet(self, timeout=240, max_retries=2):
         """Drive the Google Play services half-sheet to a commissioned device; cap 'Try again' retries and surface the on-screen error on give-up."""
         deadline = time.time() + timeout
         retries = 0

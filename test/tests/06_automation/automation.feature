@@ -29,7 +29,7 @@ Feature: Automation end-to-end
     And automation "Sanity Automation" should be visible
     When the device is prepared with "Brightness" set to "10"
     And the device is prepared with "Power" set to "off"
-    And the device reports "Power" as "on"
+    And the device raises the automation trigger "Power" as "on"
     Then the device log should show "Brightness" set to "50", "Hue" set to "unchanged", "Saturation" set to "unchanged" within "60" seconds
     And the app should show "Brightness" as "50", "Hue" as "unchanged", "Saturation" as "unchanged" for "E2E Light"
     When user opens the automation tab

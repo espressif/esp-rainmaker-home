@@ -99,20 +99,25 @@ class MailosaurHelper:
     
     def get_verification_code(self, email_id: str, timeout_minutes: int = 2,
                             pattern: str = r"\w+\s+(\d+)",
-                            subject_contains: str = None) -> str:
+                            subject_contains: str = None,
+                            received_after: datetime = None) -> str:
         """
         Extract verification code from email received within specified timeout
-        
+
         Args:
             email_id (str): Email address to check (must be @example.mailosaur.net)
             timeout_minutes (int): How far back to search for emails (default: 2 minutes)
             pattern (str): Regex pattern to extract verification code
             subject_contains (str): Optional subject filter to match specific email type
                                    (e.g. "delete" for delete-account verification)
-            
+            received_after (datetime): Only match emails received after this moment,
+                                   overriding the timeout_minutes lookback (anchor it
+                                   to the action that triggered the email so older
+                                   codes for the same address can never match)
+
         Returns:
             str: Extracted verification code
-            
+
         Raises:
             Exception: If verification code not found or mailosaur client unavailable
         """
@@ -134,7 +139,7 @@ class MailosaurHelper:
             
             # Search for emails received in the last N minutes
             utc = timezone("UTC")
-            search_from = datetime.now(utc) - timedelta(minutes=timeout_minutes)
+            search_from = received_after or (datetime.now(utc) - timedelta(minutes=timeout_minutes))
             
             # Get the email
             email = self.client.messages.get(
@@ -275,10 +280,12 @@ def generate_email() -> str:
 
 
 def get_verification_code(email_id: str, timeout_minutes: int = 2,
-                          subject_contains: str = None) -> str:
+                          subject_contains: str = None,
+                          received_after: datetime = None) -> str:
     """Get verification code from email"""
     return mailosaur_helper.get_verification_code(
-        email_id, timeout_minutes, subject_contains=subject_contains
+        email_id, timeout_minutes, subject_contains=subject_contains,
+        received_after=received_after
     )
 
 

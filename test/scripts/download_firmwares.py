@@ -59,6 +59,8 @@ JENKINS_FIRMWARE_JOB = os.environ.get("JENKINS_FIRMWARE_JOB", "").strip("/")
 JENKINS_USER = os.environ.get("JENKINS_USER", "")
 JENKINS_API_TOKEN = os.environ.get("JENKINS_API_TOKEN", "")
 JENKINS_TRIGGER_TOKEN = os.environ.get("JENKINS_TRIGGER_TOKEN", "")
+RMNEO_FIRMWARE_JOB = os.environ.get("RMNEO_FIRMWARE_JOB",
+                                    "job/rainmaker_firmware/job/esp-rmng-firmware").strip("/")
 
 _FIRMWARE_ROOT = os.environ.get("FIRMWARE_ROOT", "firmwares")
 FIRMWARES_DIR = Path(_FIRMWARE_ROOT) if os.path.isabs(_FIRMWARE_ROOT) else Path(__file__).resolve().parents[1] / _FIRMWARE_ROOT
@@ -227,29 +229,90 @@ def download_rmneo_matter_image(url: str = None, dest_dir: Path = None) -> Path:
     return _download_cached_image(url, dest_dir or FIRMWARES_DIR / "matter" / "rmneo")
 
 
-def download_rmneo_light(chip: str = "esp32c3", dest_root: str = None) -> Path:
-    """Fetch the latest successful esp-rmneo-firmware `light` bundle for `chip` and relabel it
-    to look like a rainmaker led_light bundle (product led_light + prov_mode ble) so the firmware
-    manager resolves it with the existing scan_qr/bluetooth scenarios. Reuses `_request`."""
-    job = os.environ.get("RMNEO_FIRMWARE_JOB", "job/rainmaker_firmware/job/esp-rmng-firmware").strip("/")
+def rmneo_jenkins_params(entry: dict) -> dict:
+    """Build parameters for esp-rmng-firmware, whose names differ from the classic job: lowercase
+    `custom_sdk_config`, `branch` rather than `esp_rainmaker_branch`, and no `prov_mode` at all."""
+    params = {
+        "chip": entry["chip"],
+        "product": "light",
+        "branch": os.environ.get("RMNEO_FIRMWARE_BRANCH", "main"),
+        "custom_sdk_config": entry.get("custom_sdk_config", ""),
+    }
+    if entry.get("idf_version"):
+        params["idf_version"] = entry["idf_version"]
+    return params
+
+
+def find_matching_rmneo_build(entry: dict) -> int:
+    """Latest successful esp-rmng-firmware build matching this variant's chip + sdkconfig; 0 if none."""
+    wanted = rmneo_jenkins_params(entry)
+    payload = json.loads(_request(
+        f"{RMNEO_FIRMWARE_JOB}/api/json?tree=builds[number,result,artifacts[fileName],"
+        f"actions[parameters[name,value]]]{{0,100}}"))
+    for build in payload.get("builds", []):
+        if build.get("result") != "SUCCESS" or not build.get("artifacts"):
+            continue
+        got = _build_params(build)
+        if got.get("product") != "light" or got.get("chip") != wanted["chip"]:
+            continue
+        if _normalize_sdk(got.get("custom_sdk_config", "")) != _normalize_sdk(wanted["custom_sdk_config"]):
+            continue
+        return build["number"]
+    return 0
+
+
+def trigger_rmneo_build(entry: dict) -> int:
+    """Trigger an esp-rmng-firmware build for this variant; returns the build number."""
+    params = rmneo_jenkins_params(entry)
+    if JENKINS_TRIGGER_TOKEN:
+        params["token"] = JENKINS_TRIGGER_TOKEN
+    request = urllib.request.Request(
+        f"{JENKINS_URL}/{RMNEO_FIRMWARE_JOB}/buildWithParameters",
+        data=urllib.parse.urlencode(params).encode(), method="POST")
+    if JENKINS_USER and JENKINS_API_TOKEN:
+        auth = base64.b64encode(f"{JENKINS_USER}:{JENKINS_API_TOKEN}".encode()).decode()
+        request.add_header("Authorization", f"Basic {auth}")
+    with urllib.request.urlopen(request, timeout=60) as response:
+        queue_url = response.headers.get("Location", "")
+    if not queue_url:
+        raise RuntimeError("Jenkins did not return a queue URL for the triggered RMNEO build")
+    print(f"  queued: {queue_url}")
+    deadline = time.time() + 900
+    while time.time() < deadline:
+        item = json.loads(_request(f"{queue_url.rstrip('/')}/api/json"))
+        if (item.get("executable") or {}).get("number"):
+            return int(item["executable"]["number"])
+        time.sleep(10)
+    raise TimeoutError("Queued RMNEO build did not start in time")
+
+
+def download_rmneo_light(chip: str = "esp32c3", dest_root: str = None, entry: dict = None,
+                         allow_trigger: bool = True) -> Path:
+    """Fetch an esp-rmng-firmware `light` bundle and relabel it as a rainmaker led_light bundle
+    (product led_light + prov_mode ble + deployment rmneo) so the firmware manager resolves it with
+    the existing scenarios. Reuses a build matching the variant's sdkconfig, else triggers one —
+    the same reuse-else-trigger contract the classic matrix uses."""
+    entry = entry or {"name": f"rmneo-{chip}-light", "chip": chip, "custom_sdk_config": ""}
+    chip = entry["chip"]
+    job = RMNEO_FIRMWARE_JOB
     dest_root = Path(dest_root or FIRMWARES_DIR)
 
-    builds = json.loads(_request(f"{job}/api/json?tree=builds[number,result,actions[parameters[name,value]]]{{0,60}}"))
-    number = next(
-        (b["number"] for b in builds.get("builds", [])
-         if b.get("result") == "SUCCESS"
-         and _build_params(b).get("product") == "light"
-         and _build_params(b).get("chip") == chip),
-        0,
-    )
+    number = find_matching_rmneo_build(entry)
+    if number:
+        print(f"  reusing successful RMNEO build #{number} for {entry['name']}")
+    elif allow_trigger:
+        print(f"  no RMNEO build matches {entry['name']}; triggering")
+        number = trigger_rmneo_build(entry)
+        wait_for_build(number, job=job)
     if not number:
-        raise RuntimeError(f"No successful esp-rmng-firmware light/{chip} build found")
+        raise RuntimeError(f"No successful esp-rmng-firmware build found for {entry['name']}")
     arts = json.loads(_request(f"{job}/{number}/api/json?tree=artifacts[relativePath]"))
     tgz = next((a["relativePath"] for a in arts.get("artifacts", []) if a["relativePath"].endswith(".tar.gz")), None)
     if not tgz:
         raise RuntimeError(f"esp-rmng-firmware build #{number} has no .tar.gz artifact")
 
-    bundle_dir = dest_root / f"rmneo_light_{chip}"
+    suffix = "_onnetwork" if "onnetwork" in entry.get("name", "") else ""
+    bundle_dir = dest_root / f"rmneo_light_{chip}{suffix}"
     tmp = dest_root / "_extract"
     for path in (bundle_dir, tmp):
         if path.exists():
@@ -287,6 +350,22 @@ def _local_ctrl(security: int) -> str:
         "CONFIG_ESP_RMAKER_LOCAL_CTRL_AUTO_ENABLE=y\n"
         f"CONFIG_ESP_RMAKER_LOCAL_CTRL_SECURITY_{security}=y"
     )
+
+
+RMNEO_FIRMWARE_MATRIX = [
+    {
+        # Firmware defaults already give PoP (APP_NETWORK_POP_TYPE_RANDOM) and local-ctrl sec2.
+        "name": "rmneo-esp32c3-light",
+        "chip": "esp32c3",
+        "custom_sdk_config": "",
+    },
+    {
+        # ESP_RMAKER_LOCAL_CTRL_CHAL_RESP_ENABLE defaults to n on IDF builds.
+        "name": "rmneo-esp32c3-onnetwork-chalresp",
+        "chip": "esp32c3",
+        "custom_sdk_config": "CONFIG_ESP_RMAKER_LOCAL_CTRL_CHAL_RESP_ENABLE=y",
+    },
+]
 
 
 FIRMWARE_MATRIX = [
@@ -438,11 +517,12 @@ def trigger_build(entry: dict) -> int:
     raise TimeoutError("Triggered build did not leave the Jenkins queue in 30 min")
 
 
-def wait_for_build(number: int, timeout: int = 3600) -> None:
+def wait_for_build(number: int, timeout: int = 3600, job: str = None) -> None:
+    job = (job or JENKINS_FIRMWARE_JOB).strip("/")
     print(f"  build #{number} running ...")
     deadline = time.time() + timeout
     while time.time() < deadline:
-        build = json.loads(_request(f"{JENKINS_FIRMWARE_JOB}/{number}/api/json?tree=result,building"))
+        build = json.loads(_request(f"{job}/{number}/api/json?tree=result,building"))
         if not build.get("building"):
             if build.get("result") == "SUCCESS":
                 return
@@ -515,9 +595,20 @@ def main() -> int:
         try:
             if not (JENKINS_USER and JENKINS_API_TOKEN):
                 raise RuntimeError("JENKINS_USER/JENKINS_API_TOKEN unset")
-            download_rmneo_light()
+            failures = []
+            for entry in RMNEO_FIRMWARE_MATRIX:
+                if args.only and entry["name"] != args.only:
+                    continue
+                print(f"\n=== {entry['name']} ===")
+                try:
+                    print(f"  -> {download_rmneo_light(entry=entry, allow_trigger=not args.skip_existing)}")
+                except Exception as error:
+                    print(f"  FAILED: {error}")
+                    failures.append(entry["name"])
             if RMNEO_MATTER_FW_URL:
                 download_rmneo_matter_image()
+            if failures:
+                raise RuntimeError(f"RMNEO variants failed: {', '.join(failures)}")
         except Exception as error:
             print(f"RMNEO firmware refresh failed ({error}); using pre-placed RMNEO firmware in FIRMWARE_ROOT")
         return 0

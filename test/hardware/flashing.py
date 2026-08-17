@@ -6,11 +6,9 @@
 """Firmware flashing and hard-reset orchestration using esptool."""
 from __future__ import annotations
 
-import json
 import logging
 import os
 import subprocess
-import tempfile
 from typing import List
 
 from hardware.config import HardwareConfig
@@ -66,11 +64,6 @@ BAUD_RATE = 921600
 _FLASH_TIMEOUT_SECONDS = 45
 # The nvs erase is quick; 20s (with a retry) covers a slow-to-enter-download board.
 _HARD_RESET_TIMEOUT_SECONDS = 20
-# Reading/writing small cert partitions at default baud; 60s covers a slow board.
-_CERT_OP_TIMEOUT_SECONDS = 60
-
-# Cert partitions preserved across deployment switches on a shared chip.
-_CERT_PARTITION_LABELS = ("fctry", "esp_secure_cert")
 
 
 class FlashingService:
@@ -230,171 +223,3 @@ class FlashingService:
             parts.append(segment.path)
 
         return " ".join(parts)
-
-    @staticmethod
-    def _store_root() -> str:
-        """Root of the on-disk cert backup store."""
-        return os.path.join(os.path.expanduser("~"), ".esp_cert_store")
-
-    def _chip_deployment_dir(self, mac: str, deployment: str) -> str:
-        """Per-chip, per-deployment directory holding that deployment's cert backups."""
-        return os.path.join(self._store_root(), mac, deployment)
-
-    @staticmethod
-    def _load_json(path: str):
-        """Read a JSON file; None on any error (missing/corrupt)."""
-        try:
-            with open(path) as handle:
-                return json.load(handle)
-        except (OSError, ValueError):
-            return None
-
-    @staticmethod
-    def _write_json(path: str, data) -> None:
-        """Write a JSON file, creating parent directories as needed."""
-        os.makedirs(os.path.dirname(path), exist_ok=True)
-        with open(path, "w") as handle:
-            json.dump(data, handle, indent=2)
-
-    def _run_esptool_best_effort(self, command: str, timeout: int, description: str) -> bool:
-        """Run an esptool command with the flash()/hard_reset() retry-once + timeout pattern; True on success, never raises."""
-        output = ""
-        for attempt in range(2):
-            try:
-                result = subprocess.run(
-                    command,
-                    shell=True,
-                    capture_output=True,
-                    text=True,
-                    timeout=timeout,
-                    check=False,
-                )
-            except subprocess.TimeoutExpired:
-                logger.warning("cert-store %s attempt %s/2 timed out", description, attempt + 1)
-                continue
-            output = f"{result.stdout or ''}\n{result.stderr or ''}".strip()
-            if result.returncode == 0:
-                return True
-            logger.warning(
-                "cert-store %s attempt %s/2 failed: %s",
-                description, attempt + 1, output[-300:],
-            )
-        return False
-
-    def _device_cert_regions(self, resource: EspResource, image: "FirmwareImage | None" = None) -> dict:
-        """{label: (offset, size)} for cert partitions present either in image's partition table or on the device."""
-        regions: dict = {}
-        if image is not None:
-            pt = next((s for s in image.segments
-                       if "partition" in os.path.basename(s.path).lower()), None)
-            if pt:
-                for label in _CERT_PARTITION_LABELS:
-                    region = _partition_region_from_table(pt.path, label)
-                    if region:
-                        regions[label] = region
-            return regions
-        chip = resource.chip_type.lower()
-        tmp_path = None
-        try:
-            handle, tmp_path = tempfile.mkstemp(suffix=".bin")
-            os.close(handle)
-            command = (
-                f"{self.esptool_path} --chip {chip} --port {resource.port} "
-                f"read_flash 0x8000 0xC00 {tmp_path}"
-            )
-            if self._run_esptool_best_effort(
-                command, _CERT_OP_TIMEOUT_SECONDS,
-                f"read partition table for {resource.mac_address}",
-            ):
-                for label in _CERT_PARTITION_LABELS:
-                    region = _partition_region_from_table(tmp_path, label)
-                    if region:
-                        regions[label] = region
-        finally:
-            if tmp_path and os.path.exists(tmp_path):
-                try:
-                    os.remove(tmp_path)
-                except OSError:
-                    pass
-        return regions
-
-    def backup_certs(self, resource: EspResource, deployment: str, image: "FirmwareImage | None" = None) -> None:
-        """Best-effort, idempotent read-back of this deployment's cert partitions to the on-disk store; never raises."""
-        try:
-            regions = self._device_cert_regions(resource, image=image)
-            if not regions:
-                logger.info("cert-store: no cert partitions to back up for %s/%s",
-                            resource.mac_address, deployment)
-                return
-            target_dir = self._chip_deployment_dir(resource.mac_address, deployment)
-            os.makedirs(target_dir, exist_ok=True)
-            chip = resource.chip_type.lower()
-            stored = self._load_json(os.path.join(target_dir, "regions.json")) or {}
-            for label, (offset, size) in regions.items():
-                bin_path = os.path.join(target_dir, f"{label}.bin")
-                if os.path.exists(bin_path):
-                    stored[label] = [offset, size]
-                    continue
-                command = (
-                    f"{self.esptool_path} --chip {chip} --port {resource.port} "
-                    f"read_flash {hex(offset)} {hex(size)} {bin_path}"
-                )
-                logger.info("cert-store: backing up %s @%s (size %s) for %s -> %s",
-                            label, hex(offset), hex(size), resource.mac_address, deployment)
-                if self._run_esptool_best_effort(
-                    command, _CERT_OP_TIMEOUT_SECONDS,
-                    f"backup {label} for {resource.mac_address}",
-                ):
-                    stored[label] = [offset, size]
-            self._write_json(os.path.join(target_dir, "regions.json"), stored)
-        except Exception as exc:
-            logger.warning("cert-store backup_certs failed for %s/%s: %s",
-                           resource.mac_address, deployment, exc)
-
-    def restore_certs(self, resource: EspResource, deployment: str) -> bool:
-        """Best-effort write-back of a deployment's stored cert partitions onto the chip; True if any written, never raises."""
-        try:
-            target_dir = self._chip_deployment_dir(resource.mac_address, deployment)
-            regions = self._load_json(os.path.join(target_dir, "regions.json"))
-            if not regions:
-                return False
-            chip = resource.chip_type.lower()
-            written = False
-            for label, region in regions.items():
-                bin_path = os.path.join(target_dir, f"{label}.bin")
-                if not os.path.exists(bin_path):
-                    continue
-                offset = region[0]
-                command = (
-                    f"{self.esptool_path} --chip {chip} --port {resource.port} "
-                    f"write_flash {hex(offset)} {bin_path}"
-                )
-                logger.info("cert-store: restoring %s @%s for %s <- %s",
-                            label, hex(offset), resource.mac_address, deployment)
-                if self._run_esptool_best_effort(
-                    command, _CERT_OP_TIMEOUT_SECONDS,
-                    f"restore {label} for {resource.mac_address}",
-                ):
-                    written = True
-            return written
-        except Exception as exc:
-            logger.warning("cert-store restore_certs failed for %s/%s: %s",
-                           resource.mac_address, deployment, exc)
-            return False
-
-    def prepare_certs(self, resource: EspResource, target_deployment: str, image: "FirmwareImage | None" = None) -> bool:
-        """Preserve certs across a deployment switch on a shared chip — back up the outgoing deployment then restore the target; True if any target cert written, never raises."""
-        try:
-            tracking_path = os.path.join(self._store_root(), "chip_deployment.json")
-            tracked = self._load_json(tracking_path) or {}
-            mac = resource.mac_address
-            prev = tracked.get(mac)
-            if prev and prev != target_deployment:
-                self.backup_certs(resource, prev, image=None)
-            tracked[mac] = target_deployment
-            self._write_json(tracking_path, tracked)
-            return self.restore_certs(resource, target_deployment)
-        except Exception as exc:
-            logger.warning("cert-store prepare_certs failed for %s -> %s: %s",
-                           resource.mac_address, target_deployment, exc)
-            return False

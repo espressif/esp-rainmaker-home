@@ -713,7 +713,7 @@
                                             <div class="spark-row">
                                                 <span class="spark-label">Last 5 releases</span>
                                                 {% for _ in range(5 - test.history_releases|length) %}<span class="spark empty">·</span>{% endfor %}
-                                                {% for h in test.history_releases|reverse %}{% set sc = 'pass' if h.outcome == 'passed' else ('skip' if h.outcome == 'skipped' else 'fail') %}<span class="spark {{ sc }}" title="v{{ h.version }} | {{ h.outcome }}">{{ '✓' if h.outcome == 'passed' else ('–' if h.outcome == 'skipped' else '✗') }}</span>{% endfor %}
+                                                {% for h in test.history_releases|reverse %}{% set sc = 'pass' if h.outcome == 'passed' else ('skip' if h.outcome == 'skipped' else 'fail') %}<span class="spark {{ sc }}" title="{{ h.branch }} | v{{ h.version }} | {{ h.outcome }}{{ ' | ' ~ h.ts if h.ts }}">{{ '✓' if h.outcome == 'passed' else ('–' if h.outcome == 'skipped' else '✗') }}</span>{% endfor %}
                                             </div>
                                         </div>
                                     </div>

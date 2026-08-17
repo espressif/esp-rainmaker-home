@@ -158,23 +158,38 @@ def read_device_app_version(platform: str, identifier: str, udid: Optional[str] 
     return ""
 
 
+def normalize_branch(name) -> str:
+    """Branch name without remote prefixes; '' for a detached checkout's literal 'HEAD'."""
+    value = str(name or "").strip()
+    for prefix in ("remotes/", "origin/"):
+        if value.startswith(prefix):
+            value = value[len(prefix):]
+    return "" if value == "HEAD" else value
+
+
+def is_release_branch(name) -> bool:
+    """True only for release/* branches, so a bugfix/release-crash style name never counts."""
+    return normalize_branch(name).startswith("release/")
+
+
 def git_ref_info() -> dict:
     """Branch/MR info from CI env vars, falling back to local git branch."""
     import subprocess
     from pathlib import Path
     branch = os.environ.get("CI_COMMIT_REF_NAME") or os.environ.get("GIT_BRANCH") or ""
     info = {
-        "branch": branch,
+        "branch": normalize_branch(branch),
+        "target_branch": normalize_branch(os.environ.get("CI_MERGE_REQUEST_TARGET_BRANCH_NAME", "")),
         "mr_iid": os.environ.get("CI_MERGE_REQUEST_IID", "").strip(),
         "mr_title": os.environ.get("CI_MERGE_REQUEST_TITLE", "").strip(),
     }
     if not info["branch"]:
         try:
             repo_root = Path(__file__).resolve().parents[2]
-            info["branch"] = subprocess.run(
+            info["branch"] = normalize_branch(subprocess.run(
                 ["git", "rev-parse", "--abbrev-ref", "HEAD"],
                 cwd=str(repo_root), capture_output=True, text=True, timeout=5,
-            ).stdout.strip()
+            ).stdout.strip())
         except Exception:
             pass
     return info

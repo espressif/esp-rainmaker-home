@@ -41,6 +41,9 @@ try:
 except ImportError:
     JINJA2_AVAILABLE = False
 
+from utils.common_utils import is_release_branch, normalize_branch
+from utils.test_history_store import matches_context, normalize_store
+
 logger = logging.getLogger(__name__)
 
 
@@ -233,15 +236,15 @@ class ReportGenerator:
         return dict(categories)
 
     def _load_test_history(self) -> Dict:
-        """Load persisted per-test run history (nodeid -> list of run records)."""
+        """Load persisted history as schema 2 ({'runs': ..., 'releases': ...}); older files are upgraded on read."""
         try:
             reports_dir = os.path.expanduser(self.config.get('local_hosting', {}).get('reports_dir', 'reports/html'))
             p = Path(reports_dir).parent / 'test_history.json'
             if p.exists():
-                return json.loads(p.read_text())
+                return normalize_store(json.loads(p.read_text()))
         except Exception as e:
             logger.warning("Could not load test history: %s", e)
-        return {}
+        return normalize_store({})
 
     @staticmethod
     def _test_root() -> Path:
@@ -409,39 +412,25 @@ class ReportGenerator:
                         entry[key] = fw[key]
 
     @staticmethod
-    def _attach_history(test: Dict, history: List, platform: str = "",
+    def _attach_history(test: Dict, history: Dict, platform: str = "",
                         deployment: str = "", active_sdk: str = "") -> None:
-        entries = history.get(test.get('nodeid', ''), [])
-        if platform:
-            entries = [e for e in entries if (e.get('platform') or '') == platform]
-        # Deployment/SDK-specific: keep only prior runs matching this run's deployment + active SDK; older untagged records are excluded.
-        def _norm(value) -> str:
-            return str(value or '').strip().lower()
-        dep, sdk = _norm(deployment), _norm(active_sdk)
-        if dep or sdk:
-            entries = [
-                e for e in entries
-                if (not dep or _norm(e.get('deployment')) == dep)
-                and (not sdk or _norm(e.get('active_sdk')) == sdk)
-            ]
-        test['history_runs'] = list(reversed(entries))[:5]
-        # Releases: release-branch/tag runs only (branch normalized for origin/); a non-release run never appears, empty if none.
-        def _is_release(branch: str) -> bool:
-            name = str(branch or '').strip()
-            for prefix in ('remotes/', 'origin/'):
-                if name.startswith(prefix):
-                    name = name[len(prefix):]
-            return name.startswith('release/') or re.match(r'^v?\d+\.\d+', name) is not None
-        releases = [e for e in reversed(entries) if _is_release(e.get('branch'))]
-        unique_releases = []
-        seen_versions = set()
+        nodeid = test.get('nodeid', '')
+        runs = [e for e in history.get('runs', {}).get(nodeid, [])
+                if matches_context(e, platform, deployment, active_sdk)]
+        test['history_runs'] = list(reversed(runs))[:5]
+        # Releases live in their own store so a burst of MR runs can't trim them away,
+        # and are keyed by source branch: one row per release/*, newest run of that branch.
+        releases = [e for e in history.get('releases', {}).get(nodeid, [])
+                    if is_release_branch(e.get('branch'))
+                    and matches_context(e, platform, deployment, active_sdk)]
+        latest_per_branch = {}
         for entry in releases:
-            version = entry.get('version')
-            if version in seen_versions:
-                continue
-            seen_versions.add(version)
-            unique_releases.append(entry)
-        test['history_releases'] = unique_releases[:5]
+            branch = normalize_branch(entry.get('branch'))
+            current = latest_per_branch.get(branch)
+            if current is None or str(entry.get('ts_iso') or '') >= str(current.get('ts_iso') or ''):
+                latest_per_branch[branch] = entry
+        ordered = sorted(latest_per_branch.values(), key=lambda e: str(e.get('ts_iso') or ''))
+        test['history_releases'] = ordered[-5:]
     
     def _calculate_summary_stats(self, test_results: List[Dict]) -> Dict[str, Any]:
         """Calculate summary statistics"""

@@ -436,7 +436,6 @@ def _provision_reserved_chip(cloud, helper, hardware_session, resource_manager, 
     image = resource_manager.firmware.resolve_image(requirement, metadata)
     resource_manager.serial_logger.stop(resource)
     resource_manager.update_status(resource.mac_address, ResourceStatus.FLASHING)
-    resource_manager.flasher.prepare_certs(resource, request.config.getoption("--deployment"), image)
     resource_manager.flasher.flash(resource, image)
     resource_manager.flasher.hard_reset(resource, image)
     resource.build_metadata = metadata
@@ -575,7 +574,11 @@ def reserve_online_device(request, helper, hardware_session, resource_manager, h
     hardware_session["baseline_params"] = (sel_node.get("params") or {}).get(fw_name, {})
     hardware_session["node_id"] = chosen_node or sel_node.get("node_id")
     hardware_session["fw_name"] = fw_name
-    aliases = [a for a in (sel_node.get("name"),) if a and a != device_name]
+    param_name = (sel_node.get("params") or {}).get(fw_name, {}).get("Name")
+    aliases = []
+    for candidate in (param_name, sel_node.get("name"), "Light"):
+        if candidate and candidate != device_name and candidate not in aliases:
+            aliases.append(candidate)
     helper.home.ensure_device_name(device_name, aliases)
 
 

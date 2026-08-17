@@ -140,7 +140,6 @@ def _flash_device(request, hardware_session, resource_manager, product, transpor
     artifact_dir = hardware_session["artifact_dir"]
     resource_manager.update_status(resource.mac_address, ResourceStatus.FLASHING)
     resource_manager.serial_logger.stop(resource)
-    resource_manager.flasher.prepare_certs(resource, request.config.getoption("--deployment"), firmware_image)
     resource_manager.flasher.flash(resource, firmware_image)
     resource_manager.flasher.hard_reset(resource, firmware_image)
     resource.build_metadata = metadata

@@ -36,11 +36,8 @@ rmneo:
     rmneo_matter: false
     scene: false
     third_party: false
-    on_network: false
     softap: false
     delete_account: false
-    change_password: false
-    forgot_password: false
   # registered_users is keyed by device model so parallel Android/iOS runs use
   # separate credential pools and never sign in with each other's account.
   # Filled in automatically on first run (--model picks the bucket); pre-seed

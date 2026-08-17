@@ -10,7 +10,7 @@ Feature: Forgot Password
   Scenario: Reset password with valid email
     When user requests resets password with "registered user 1"
     And user taps "send code"
-    Then user should see title "A verification code is on the way"
+    Then user should see the code-sent title
     And user should land on the reset password page
     When user enters verification code "correct"
     And user enters new password "registered user 1 password" and confirm password "registered user 1 password"
@@ -19,7 +19,6 @@ Feature: Forgot Password
     Then user should be on login screen
 
   @regression
-  @testing
   Scenario: Forgot password with unregistered email
     When user requests resets password with "unregistered user"
     And user taps "send code"

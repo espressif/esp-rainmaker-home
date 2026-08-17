@@ -8,6 +8,10 @@ Pytest plugin for automatic test report generation and email distribution.
 """
 import json
 import os
+import functools
+import http.server
+import socketserver
+import threading
 import logging
 import re
 import socket
@@ -20,7 +24,9 @@ from pathlib import Path
 from typing import Dict, List, Optional
 from datetime import datetime
 
-from utils.common_utils import read_app_version, read_device_app_version, resolve_single_artifact, git_ref_info
+from utils.common_utils import (read_app_version, read_device_app_version, resolve_single_artifact,
+                                git_ref_info, is_release_branch)
+from utils.test_history_store import MAX_RUNS_PER_TEST, merge_release, normalize_store
 
 
 @contextmanager
@@ -52,7 +58,7 @@ logger = logging.getLogger(__name__)
 
 try:
     from utils.artifact_host import ArtifactHost, initialize_artifact_host
-    from utils.report_generator import ReportGenerator
+    from utils.report_generator import _primary_ip, ReportGenerator
     from utils.email_sender import get_email_sender_from_config
     UTILITIES_AVAILABLE = True
 except ImportError as e:
@@ -182,12 +188,20 @@ class PytestReportPlugin:
             self.device_model = session.config.getoption("--model", default=None)
         except Exception:
             pass
+        self._live_last = 0
+        self._live_interval = int((self.config.get("report", {}) or {}).get("live_refresh_seconds", 60))
+        self._start_live_server()
         # Make run_id unique per process so parallel Android+iOS runs never share
         # a run directory (second-resolution timestamps collide). The model slug
         # keeps it readable; the PID guarantees uniqueness if models match.
         model_slug = re.sub(r"[^A-Za-z0-9]+", "", (self.device_model or "").split(",")[0]) or "dev"
         self.run_id = f"{datetime.now().strftime('%H%M%S_%d%m%Y')}_{model_slug}_{os.getpid()}"
         self.start_time = time.time()
+        hosting = self.config.get("local_hosting", {}) or {}
+        base_url = hosting.get("base_url") or f"http://{_primary_ip()}:{hosting.get('http_server_port', 8000)}"
+        live_url = f"{base_url}/html/{self.live_page}"
+        logger.info("Live report: %s (refreshes every %ss)", live_url, self._live_interval)
+        print(f"Live report: {live_url}")
         if self.artifact_host:
             try:
                 self.artifact_host.current_run_id = self.run_id
@@ -341,7 +355,100 @@ class PytestReportPlugin:
                 test_result['artifacts']['appium_log_url'] = self.appium_log_url
 
             self.test_results.append(test_result)
+            self._write_live_report()
     
+
+    @property
+    def live_page(self):
+        """Run-scoped live page name so parallel runs never overwrite each other."""
+        return f"live_{getattr(self, 'run_id', None) or os.getpid()}.html"
+
+    def _write_live_report(self):
+        """Rebuild the live page from the results collected so far.
+
+        The report was only generated at sessionfinish, so a long run showed nothing until
+        it was over. This reuses the real generator, so the live page is the same report
+        the reader will get at the end, just partial and refreshing itself.
+        """
+        if not self.report_generator or not self.test_results:
+            return
+        now = time.time()
+        if now - getattr(self, "_live_last", 0) < getattr(self, "_live_interval", 60):
+            return
+        self._live_last = now
+        try:
+            path = self.report_generator.generate_report(
+                test_results=list(self.test_results),
+                run_id="live",
+                test_lab=self.config.get("report", {}).get("test_lab", "Pune"),
+                chipset=self.config.get("report", {}).get("chipset", "Mobile Devices"),
+                execution_time="in progress",
+            )
+            if not path:
+                return
+            page = Path(path).parent / self.live_page
+            body = Path(path).read_text(encoding="utf-8", errors="replace")
+            stamp = datetime.now().strftime("%d %b %H:%M:%S")
+            interval = getattr(self, "_live_interval", 60)
+            banner = (
+                '<meta http-equiv="refresh" content="{}">'
+                '<div style="position:sticky;top:0;z-index:99;background:#1b7f4b;color:#fff;'
+                'padding:6px 12px;font:13px -apple-system,sans-serif">'
+                'RUN IN PROGRESS &middot; {} tests so far &middot; updated {} '
+                '&middot; refreshes every {}s</div>'
+            ).format(interval, len(self.test_results), stamp, interval)
+            idx = body.find("<body")
+            if idx != -1:
+                end = body.find(">", idx)
+                body = body[:end + 1] + banner + body[end + 1:]
+            else:
+                body = banner + body
+            page.write_text(body, encoding="utf-8")
+        except Exception as live_error:
+            logger.debug("Live report not updated: {}".format(live_error))
+
+    def _teardown_live_report(self, report_path):
+        """Replace this run's live page with a redirect to the final report so stale in-progress pages never linger."""
+        try:
+            final = Path(report_path)
+            live = final.parent / self.live_page
+            live.write_text(
+                '<meta http-equiv="refresh" content="0;url={}">'.format(final.name),
+                encoding="utf-8")
+        except Exception as teardown_error:
+            logger.debug("Live report teardown skipped: {}".format(teardown_error))
+
+    def _start_live_server(self):
+        """Serve the reports directory if nothing is listening on the configured port."""
+        try:
+            hosting = self.config.get("local_hosting", {}) or {}
+            port = int(hosting.get("http_server_port", 8000))
+            reports_dir = self.report_generator.reports_dir if self.report_generator else None
+            if not reports_dir:
+                return
+            probe = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            probe.settimeout(1)
+            already_up = probe.connect_ex(("127.0.0.1", port)) == 0
+            probe.close()
+            if already_up:
+                logger.info("Live report: reusing the server already on port %s", port)
+            else:
+                handler = functools.partial(
+                    http.server.SimpleHTTPRequestHandler, directory=str(reports_dir)
+                )
+                handler.log_message = lambda *a, **k: None
+
+                class Quiet(socketserver.TCPServer):
+                    allow_reuse_address = True
+
+                    def handle_error(self, request, client_address):
+                        pass
+
+                server = Quiet(("0.0.0.0", port), handler)
+                threading.Thread(target=server.serve_forever, daemon=True).start()
+        except Exception as server_error:
+            logger.debug("Live report server not started: {}".format(server_error))
+
     def pytest_sessionfinish(self, session, exitstatus):
         """Called when test session finishes"""
         if not UTILITIES_AVAILABLE:
@@ -461,6 +568,7 @@ class PytestReportPlugin:
                 )
                 
                 if report_path:
+                    self._teardown_live_report(report_path)
                     # Generate report URL
                     if self.artifact_host:
                         report_url = self.artifact_host.get_artifact_url(report_path)
@@ -584,30 +692,39 @@ class PytestReportPlugin:
         self._active_sdk_value = active_sdk
         return active_sdk
 
-    def _update_test_history(self, max_per_test: int = 20):
+    def _update_test_history(self, max_per_test: int = MAX_RUNS_PER_TEST):
         """Append this run's per-test outcomes to the shared test_history.json (trimmed)."""
         try:
             reports_dir = os.path.expanduser(self.config.get('local_hosting', {}).get('reports_dir', 'reports/html'))
             hist_path = Path(reports_dir).parent / 'test_history.json'
-            ts = datetime.now().strftime("%d-%m-%Y %H:%M")
+            now = datetime.now()
+            ts = now.strftime("%d-%m-%Y %H:%M")
             version = self._app_version()
-            branch = (git_ref_info() or {}).get("branch", "")
+            ref = git_ref_info() or {}
+            branch = ref.get("branch", "")
             platform = self._platform_label()
             deployment = self._deployment_name()
             active_sdk = self._active_sdk()
             with _reports_lock(hist_path.parent):
-                history = json.loads(hist_path.read_text()) if hist_path.exists() else {}
+                raw = json.loads(hist_path.read_text()) if hist_path.exists() else {}
+                store = normalize_store(raw)
+                runs, releases = store["runs"], store["releases"]
                 for t in self.test_results:
                     nid = t.get('nodeid', '')
                     if not nid:
                         continue
-                    history.setdefault(nid, []).append(
-                        {"ts": ts, "outcome": t.get('outcome', 'unknown'), "version": version,
-                         "branch": branch, "platform": platform, "run_id": self.run_id,
-                         "deployment": deployment, "active_sdk": active_sdk}
-                    )
-                    history[nid] = history[nid][-max_per_test:]
-                _atomic_write_text(hist_path, json.dumps(history, indent=2))
+                    record = {"ts": ts, "ts_iso": now.isoformat(timespec="seconds"),
+                              "outcome": t.get('outcome', 'unknown'), "version": version,
+                              "branch": branch, "target_branch": ref.get("target_branch", ""),
+                              "platform": platform, "run_id": self.run_id,
+                              "deployment": deployment, "active_sdk": active_sdk,
+                              "pipeline_id": os.environ.get("CI_PIPELINE_ID", ""),
+                              "mr_iid": ref.get("mr_iid", "")}
+                    runs.setdefault(nid, []).append(record)
+                    runs[nid] = runs[nid][-max_per_test:]
+                    if is_release_branch(branch):
+                        releases[nid] = merge_release(releases.get(nid, []), record)
+                _atomic_write_text(hist_path, json.dumps(store, indent=2))
         except Exception as e:
             logger.warning("Could not update test history: %s", e)
 
