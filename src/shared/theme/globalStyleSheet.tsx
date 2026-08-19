@@ -3214,12 +3214,6 @@ export const globalStyles = StyleSheet.create({
     textAlign: "center",
     marginTop: tokens.spacing._20,
   },
-  configScanErrorText: {
-    fontSize: 16,
-    color: tokens.colors.red,
-    textAlign: "center",
-    marginBottom: tokens.spacing._20,
-  },
   configScanButton: {
     backgroundColor: tokens.colors.primary,
     paddingVertical: tokens.spacing._10,
@@ -3874,5 +3868,122 @@ export const globalStyles = StyleSheet.create({
     fontFamily: tokens.fonts.medium,
     color: tokens.colors.white,
     textAlign: "center",
+  },
+
+  // QR scan screen styles
+  scanQrContainer: {
+    flex: 1,
+    backgroundColor: tokens.colors.black,
+  },
+  scanQrContent: {
+    flex: 1,
+  },
+  permissionScreen: {
+    flex: 1,
+  },
+  permissionContentCenter: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    alignSelf: "center",
+  },
+  /** Pinned footer: same marginTop auto pattern as UpdateDeviceName / SelectDeviceRoom. */
+  permissionFooter: {
+    marginTop: "auto",
+    width: "100%",
+    flexDirection: "column",
+    alignItems: "stretch",
+    gap: tokens.spacing._10,
+    paddingTop: tokens.spacing._10,
+    paddingBottom: tokens.spacing._20,
+  },
+  permissionFooterButton: {
+    width: "100%",
+    minHeight: 48,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  permissionFooterButtonText: {
+    color: tokens.colors.text_primary,
+    fontFamily: tokens.fonts.medium,
+    fontSize: tokens.fontSize.sm,
+  },
+  scanQrHeader: {
+    backgroundColor: "transparent",
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 10,
+  },
+  buttonIcon: {
+    marginRight: tokens.spacing._10,
+  },
+  cameraFlipTopBar: {
+    position: "absolute",
+    top: tokens.spacing._15,
+    right: tokens.spacing._15,
+    zIndex: 20,
+  },
+  cameraFlipButton: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: tokens.spacing._10,
+    paddingHorizontal: tokens.spacing._10,
+    borderRadius: tokens.radius.md,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    minWidth: 56,
+    gap: tokens.spacing._5,
+  },
+  cameraFlipLabel: {
+    color: tokens.colors.white,
+    fontSize: tokens.fontSize.xs,
+    fontFamily: tokens.fonts.medium,
+  },
+  connectingStatusButton: {
+    width: "100%",
+    minHeight: 48,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: tokens.colors.white,
+    borderRadius: tokens.radius.sm,
+    paddingVertical: tokens.spacing._10,
+    paddingHorizontal: tokens.spacing._20,
+  },
+  connectingStatusTextWrap: {
+    overflow: "hidden",
+    position: "relative",
+  },
+  connectingStatusText: {
+    color: tokens.colors.primary,
+    fontSize: tokens.fontSize.md,
+    fontFamily: tokens.fonts.medium,
+  },
+  connectingShimmerSweep: {
+    ...StyleSheet.absoluteFillObject,
+    width: 56,
+  },
+  connectingShimmerGradient: {
+    flex: 1,
+    width: 56,
+  },
+  // box-none: only the label takes touches, not the whole band.
+  noQrCodeRow: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 20,
+    paddingHorizontal: tokens.spacing._15,
+    paddingBottom: tokens.spacing._20,
+  },
+  noQrCodeFooterButton: {
+    width: "100%",
+    minHeight: 48,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
   },
 });

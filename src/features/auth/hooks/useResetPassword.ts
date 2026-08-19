@@ -100,7 +100,9 @@ export function useResetPassword() {
         username: usernameFromRoute,
       });
       if (res) {
-        toast.showSuccess(t("auth.verification.heading"), res.description || undefined);
+        toast.showSuccess(
+          res.description || t("auth.verification.heading")
+        );
         setCountdown(60);
       }
     } catch (error: unknown) {

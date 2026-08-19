@@ -83,7 +83,11 @@ export function useSignup() {
         password: password,
       });
       if (res) {
-        toast.showSuccess(t("auth.verification.heading"), res.description || undefined, { duration: 4000 });
+        toast.showSuccess(
+          res.description || t("auth.verification.heading"),
+          undefined,
+          { duration: 4000 }
+        );
         router.push({
           pathname: "/(auth)/ConfirmationCode",
           params: { email, password },

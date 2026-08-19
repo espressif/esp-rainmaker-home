@@ -10,6 +10,7 @@ export { useSelectDeviceRoom } from "./useSelectDeviceRoom";
 export { useAddDeviceSelection, type DeviceOption } from "./useAddDeviceSelection";
 export { useAddDeviceNavigation } from "./useAddDeviceNavigation";
 export { useScanBLE, type UseScanBLEReturn } from "./useScanBLE";
+export { useScanQR, type UseScanQRReturn } from "./useScanQR";
 export { useClaiming } from "./useClaiming";
 export { usePOP } from "./usePOP";
 export { useWifi } from "./useWifi";

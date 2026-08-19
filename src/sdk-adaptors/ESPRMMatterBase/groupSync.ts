@@ -153,7 +153,7 @@ export async function getMatterGroupById(
   );
 }
 
-/** Matter adapter: sync homes and nodes via Matter SDK group APIs. */
+/** Matter adapter: sync homes and nodes via Matter SDK group APIs. Awaits selected-home nodes; other homes sync in background. */
 export async function syncHomeWithNodes(
   user: ESPCDFUser,
   callbacks: GroupStoreCallbacks,
@@ -179,18 +179,27 @@ export async function syncHomeWithNodes(
     await esprmSetCurrentHome(user, callbacks, selected);
   }
 
-  runNodeSyncForAllGroups(finalValid, selected, callbacks, esprmUser);
+  // Await the selected home's nodes so callers treat settle as authoritative
+  // for the current-home list. Other homes stay fire-and-forget after primary.
+  await runNodeSyncForAllGroups(finalValid, selected, callbacks, esprmUser);
 
   return selected;
 }
 
-/** Primary first (await), then others async. For each home: home nodes + room nodes via addNodesToGroup. */
-function runNodeSyncForAllGroups(
+/**
+ * Loads nodes for the primary home (awaited), then kicks off other homes in the
+ * background. Each home: home nodes + room nodes via `addNodesToGroup`.
+ * @param allHomes - Homes to sync nodes for
+ * @param primary - Selected home whose nodes must finish before this resolves
+ * @param callbacks - Group-store mutators used to attach fetched nodes
+ * @param esprmUser - Matter SDK user used when fetching group node details
+ */
+async function runNodeSyncForAllGroups(
   allHomes: ESPCDFGroup[],
   primary: ESPCDFGroup | null,
   callbacks: GroupStoreCallbacks,
   esprmUser: ESPRMUser,
-): void {
+): Promise<void> {
   const fetchAndAddForGroup = async (group: ESPCDFGroup) => {
     try {
       const nodes = await fetchNodesForGroup(group, esprmUser);
@@ -210,12 +219,15 @@ function runNodeSyncForAllGroups(
   };
 
   if (primary) {
-    fetchHomeAndRooms(primary).then(() => {
-      const others = allHomes.filter((h) => h.id !== primary.id);
-      others.forEach((home) => fetchHomeAndRooms(home));
+    await fetchHomeAndRooms(primary);
+    const others = allHomes.filter((h) => h.id !== primary.id);
+    others.forEach((home) => {
+      void fetchHomeAndRooms(home);
     });
   } else {
-    allHomes.forEach((home) => fetchHomeAndRooms(home));
+    allHomes.forEach((home) => {
+      void fetchHomeAndRooms(home);
+    });
   }
 }
 

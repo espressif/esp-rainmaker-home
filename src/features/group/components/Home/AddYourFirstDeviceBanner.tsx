@@ -12,6 +12,7 @@ import {
   Image,
   TouchableOpacity,
   Pressable,
+  ActivityIndicator,
 } from "react-native";
 
 // Styles
@@ -28,10 +29,13 @@ import { useTranslation } from "react-i18next";
 import { Plus } from "lucide-react-native";
 
 import { testProps } from "@shared/utils/testProps";
+import { HOME_REDIRECT_ADD_DEVICE } from "@features/group/utils/constants";
 // Types
 interface AddYourFirstDeviceBannerProps {
   /** Navigation callback for different operations */
   redirectOperations: (operation: string) => void;
+  /** True while add-device navigation is in flight — disables the + button. */
+  isNavigating?: boolean;
   /** QA automation identifier */
   qaId?: string;
 }
@@ -45,6 +49,7 @@ interface AddYourFirstDeviceBannerProps {
  */
 const AddYourFirstDeviceBanner: React.FC<AddYourFirstDeviceBannerProps> = ({
   redirectOperations,
+  isNavigating = false,
   qaId,
 }) => {
   const { t } = useTranslation();
@@ -95,9 +100,17 @@ const AddYourFirstDeviceBanner: React.FC<AddYourFirstDeviceBannerProps> = ({
       <TouchableOpacity
         {...testProps("button_add_device_banner")}
         style={styles.addButton}
-        onPress={() => redirectOperations("AddDevice")}
+        disabled={isNavigating}
+        onPress={() => {
+          if (isNavigating) return;
+          redirectOperations(HOME_REDIRECT_ADD_DEVICE);
+        }}
       >
-        <Plus {...testProps("icon_add_device")} size={24} color={tokens.colors.white} />
+        {isNavigating ? (
+          <ActivityIndicator size="small" color={tokens.colors.white} />
+        ) : (
+          <Plus {...testProps("icon_add_device")} size={24} color={tokens.colors.white} />
+        )}
       </TouchableOpacity>
     </Pressable>
   );

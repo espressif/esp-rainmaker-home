@@ -13,6 +13,7 @@ import {
 } from "@config/sdk.config";
 import { CONFIG_FETCH_TIMEOUT_MS } from "@shared/utils/constants";
 import {
+  CONFIG_SCAN_INVALID_PAYLOAD_ERROR,
   CONFIG_SCAN_URL_SCHEME_HTTP,
   CONFIG_SCAN_URL_SCHEME_HTTPS,
 } from "@features/config/constants";
@@ -268,9 +269,7 @@ export async function resolveConfigFromScan(
   }
 
   if (!isHttpOrHttpsUrl(trimmed)) {
-    throw new Error(
-      "Invalid scan: expected JSON configuration or an http(s) URL."
-    );
+    throw new Error(CONFIG_SCAN_INVALID_PAYLOAD_ERROR);
   }
 
   const fetched = await fetchJsonFromUrl(trimmed);

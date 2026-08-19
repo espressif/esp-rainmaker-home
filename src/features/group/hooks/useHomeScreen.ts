@@ -9,12 +9,16 @@ import type { ESPCDFGroup } from "@store";
 import { useCDF } from "@shared/hooks/useCDF";
 import { useHomeViewModel, type UseHomeViewModelResult } from "./useHomeViewModel";
 import { useMigrationPromptViewModel } from "./useMigrationPromptViewModel";
-import { useFocusEffect } from "expo-router";
+import { useFocusEffect, useRouter } from "expo-router";
 import { useTranslation } from "react-i18next";
 import { useToast } from "@shared/hooks/useToast";
 import { getDefaultHomeTabs, compareDeviceType } from "@features/group/utils/homeScreenHelpers";
-import { ALL_DEVICES_TAB_ID, FILTER_ALL } from "@features/group/utils/constants";
+import { ALL_DEVICES_TAB_ID, FILTER_ALL, HOME_ADD_DEVICE_NAV_LOCK_RESET_MS, HOME_REDIRECT_ADD_DEVICE } from "@features/group/utils/constants";
 import { useAddDeviceNavigation } from "@features/provision/hooks";
+import {
+  PROVISION_ADD_DEVICE_SELECTION_ROUTE,
+  PROVISION_SCAN_QR_ROUTE,
+} from "@features/provision/constants";
 import { startNodeLocalDiscovery } from "@features/group/utils/localDiscovery";
 import { startMatterLocalDiscovery } from "@features/matter/utils/matterLocalDiscovery";
 import type { RoomTab } from "@src/types/global";
@@ -23,6 +27,8 @@ import { DEFAULT_HOME_GROUP_NAME } from "@shared/utils/constants";
 
 export interface UseHomeScreenResult {
   isLoading: boolean;
+  /** True while a push to Scan QR / add-device is in flight (Home only). */
+  isNavigatingToAddDevice: boolean;
   refreshing: boolean;
   selectedRoom: RoomTab;
   setSelectedRoom: (tab: RoomTab) => void;
@@ -55,12 +61,19 @@ export function useHomeScreen(): UseHomeScreenResult {
   const { groupStore: unifiedGroupStore, userStore: unifiedUserStore } = store;
   const unifiedUser = unifiedUserStore?.user;
   const toast = useToast();
+  const router = useRouter();
   const goToAddDevice = useAddDeviceNavigation();
   const defaultTabs = useMemo(() => getDefaultHomeTabs(t), [t]);
   const hasInitialized = useRef(false);
   const initializeHomeRef = useRef<(() => Promise<void>) | null>(null);
+  const isNavigatingToAddDeviceRef = useRef(false);
+  const addDeviceNavResetTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
+  const addDeviceNavFrameRef = useRef<number | null>(null);
 
   const [isLoading, setIsLoading] = useState(true);
+  const [isNavigatingToAddDevice, setIsNavigatingToAddDevice] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [selectedRoom, setSelectedRoom] = useState<RoomTab>(
     defaultTabs[0] ?? { label: "", id: ALL_DEVICES_TAB_ID }
@@ -117,14 +130,14 @@ export function useHomeScreen(): UseHomeScreenResult {
       }
       hasInitialized.current = true;
 
-      // Do not await sync here — that locked Home `isLoading` (skeletons /
-      // banner dropdown) until the full group+node fetch finished. Kick sync
-      // in the background; MobX paints cards as CDF fills, and we clear the
-      // loading gate when the shared sync promise settles.
-      const alreadyHasContent =
-        Boolean(store.getCurrentHome()) ||
-        store.getNodesForCurrentHome().length > 0;
-      if (alreadyHasContent) {
+      // Do not await sync here — that locked Home until every home's nodes
+      // finished. Kick sync in the background; RM/Matter adaptors await the
+      // *selected* home's nodes before the shared promise settles, so clearing
+      // `isLoading` in `.finally` means the empty-state gate is authoritative.
+      // Only skip the skeleton when devices are already in CDF — a selected
+      // home with zero nodes yet must not flash the "no device" CTA.
+      const alreadyHasDevices = store.getNodesForCurrentHome().length > 0;
+      if (alreadyHasDevices) {
         setIsLoading(false);
       }
 
@@ -252,23 +265,70 @@ export function useHomeScreen(): UseHomeScreenResult {
 
   const handleCloseTooltip = useCallback(() => setTooltipVisible(false), []);
 
+  /**
+   * Clears the Home add-device tap lock when focus returns or a push stalls.
+   */
+  const clearAddDeviceNavigating = useCallback(() => {
+    if (addDeviceNavResetTimeoutRef.current) {
+      clearTimeout(addDeviceNavResetTimeoutRef.current);
+      addDeviceNavResetTimeoutRef.current = null;
+    }
+    if (addDeviceNavFrameRef.current != null) {
+      cancelAnimationFrame(addDeviceNavFrameRef.current);
+      addDeviceNavFrameRef.current = null;
+    }
+    isNavigatingToAddDeviceRef.current = false;
+    setIsNavigatingToAddDevice(false);
+  }, []);
+
+  /**
+   * Home-only add-device entry: show the header spinner first, then push Scan QR
+   * on the next frames so the loader is visible before the heavy screen loads.
+   * @param type - Redirect operation key (`HOME_REDIRECT_ADD_DEVICE`, …)
+   */
   const redirectOperations = useCallback(
     (type: string) => {
-      if (type === "AddDevice") {
-        goToAddDevice();
-      }
+      if (type !== HOME_REDIRECT_ADD_DEVICE) return;
+      if (isNavigatingToAddDeviceRef.current) return;
+
+      isNavigatingToAddDeviceRef.current = true;
+      setIsNavigatingToAddDevice(true);
+
+      // Same-tick `router.push` blocks JS before React can paint the spinner.
+      addDeviceNavFrameRef.current = requestAnimationFrame(() => {
+        addDeviceNavFrameRef.current = requestAnimationFrame(() => {
+          addDeviceNavFrameRef.current = null;
+          if (!isNavigatingToAddDeviceRef.current) return;
+          goToAddDevice();
+        });
+      });
+
+      addDeviceNavResetTimeoutRef.current = setTimeout(() => {
+        clearAddDeviceNavigating();
+      }, HOME_ADD_DEVICE_NAV_LOCK_RESET_MS);
     },
-    [goToAddDevice]
+    [goToAddDevice, clearAddDeviceNavigating]
   );
 
   useFocusEffect(
     useCallback(() => {
       setTooltipVisible(false);
-    }, [])
+      clearAddDeviceNavigating();
+      // Warm add-device routes so the first + tap does less JS work mid-transition.
+      router.prefetch(PROVISION_SCAN_QR_ROUTE);
+      router.prefetch(PROVISION_ADD_DEVICE_SELECTION_ROUTE);
+      return () => {
+        if (addDeviceNavResetTimeoutRef.current) {
+          clearTimeout(addDeviceNavResetTimeoutRef.current);
+          addDeviceNavResetTimeoutRef.current = null;
+        }
+      };
+    }, [clearAddDeviceNavigating, router])
   );
 
   return {
     isLoading,
+    isNavigatingToAddDevice,
     refreshing,
     selectedRoom,
     setSelectedRoom,

@@ -29,6 +29,25 @@ export {
 
 // CONSTANTS
 export const TOAST_ANIMATION_DURATION = "200ms";
+/** Pixels a toast must travel before swipe dismisses it. */
+export const TOAST_SWIPE_DISMISS_THRESHOLD = 50;
+/** Horizontal inset from screen edges for the custom toast overlay. */
+export const TOAST_EDGE_PADDING = 16;
+/**
+ * Mirrors `Header` top padding: iOS uses a fraction of window height;
+ * Android uses safe-area inset plus this extra.
+ */
+export const HEADER_IOS_TOP_RATIO = 0.06;
+export const HEADER_ANDROID_INSET_EXTRA = 10;
+/** Approximate header content row height (back / title touch target). */
+export const HEADER_CONTENT_HEIGHT_IOS = 44;
+export const HEADER_CONTENT_HEIGHT_ANDROID = 48;
+/**
+ * Tamagui ToastProvider only supports one swipe axis. Custom toast UI owns
+ * gestures; keep provider swipe disabled so it cannot cancel / snap back.
+ */
+export const TOAST_PROVIDER_SWIPE_DIRECTION_NEUTRAL = "left" as const;
+export const TOAST_PROVIDER_SWIPE_THRESHOLD_DISABLED = 10000;
 export const REJECTED_STATUS = "rejected";
 export const FULFILLED_STATUS = "fulfilled";
 
@@ -657,8 +676,31 @@ export const SDK_NODE_ONLINE_TIMEOUT_ERROR = "NODE_ONLINE_TIMEOUT";
  */
 export const SDK_NO_PROVISION_STATE_TO_RESUME_ERROR =
   "NO_PROVISION_STATE_TO_RESUME";
+/**
+ * SDK `errorCode` when user↔node mapping verify fails because the
+ * node id from the device is unknown to this backend/project.
+ */
+export const SDK_ERROR_CODE_NODES_DO_NOT_EXIST = "100015";
+/** SDK `description` paired with `SDK_ERROR_CODE_NODES_DO_NOT_EXIST`. */
+export const SDK_ERROR_DESC_NODES_DO_NOT_EXIST = "Nodes do not exist";
 export const CAMERA_TYPE_FRONT = "front";
 export const CAMERA_TYPE_BACK = "back";
+/**
+ * expo-camera `pictureSize` for QR scanners. Lower than default `High` so
+ * AVCaptureSession uses a lighter preset (preview + barcode frames).
+ */
+export const CAMERA_PICTURE_SIZE_QR = "640x480";
+/**
+ * Delay before mounting `CameraView` after navigation / gate checks settle.
+ * iOS starts AVCapture during the transition if mounted immediately → jank.
+ */
+export const QR_CAMERA_MOUNT_DELAY_IOS_MS = 220;
+/** Android can mount promptly after interactions. */
+export const QR_CAMERA_MOUNT_DELAY_ANDROID_MS = 0;
+/** Brief unmount gap when remounting after Scan Again. */
+export const QR_CAMERA_REMOUNT_GAP_MS = 50;
+/** Guide frame width as a fraction of window width. */
+export const QR_SCANNER_GUIDE_WIDTH_RATIO = 0.8;
 
 // Constants for challenge-response communication
 export const ESP_CHALLENGE_RESPONSE_CONSTANTS = {
