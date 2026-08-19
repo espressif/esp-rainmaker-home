@@ -58,3 +58,28 @@ export const TS_PAGE_RESULT_COUNT = 200;
 export const TS_MAX_PAGE_FETCHES = 20;
 /** Week starts on Monday, matching the app-wide week alignment. */
 export const CHART_WEEK_START_DAY_INDEX = 1;
+
+// RainMaker cloud command-response (cmd-resp) framework — used to trigger
+// device-side actions such as JPEG snapshot capture on camera nodes.
+/** Framework command id (0x1001) carried by every cmd-resp request. */
+export const CAMERA_SNAPSHOT_COMMAND_ID = 4097;
+/** Device-side response timeout (seconds) the cmd-resp framework waits for. */
+export const NODE_CMD_DEFAULT_TIMEOUT = 1000;
+/** Camera command name understood by the firmware. */
+export const CAMERA_CMD_JPEG_CAPTURE = "jpeg-capture";
+/** `jpeg-capture` arg that tells the device to upload the snapshot, not just capture it. */
+export const CAMERA_CMD_ARG_UPLOAD = "--upload";
+
+// Status-polling cadence for an in-flight command request.
+export const NODE_CMD_POLL_INTERVAL_MS = 2000;
+export const NODE_CMD_POLL_MAX_ATTEMPTS = 15;
+/** `pollUntilReady` label for camera snapshot cmd-resp status waits. */
+export const NODE_CMD_POLL_LABEL_SNAPSHOT = "camera snapshot cmd-resp";
+
+// Terminal statuses reported by cmd-resp request lookup.
+export const NODE_CMD_STATUS_SUCCESS = "success";
+export const NODE_CMD_STATUS_FAILURE = "failure";
+export const NODE_CMD_STATUS_TIMED_OUT = "timed_out";
+
+/** Threshold (bytes) above which a snapshot size is shown in MB rather than KB. */
+export const SNAPSHOT_SIZE_MB_THRESHOLD = 1024 * 1024;

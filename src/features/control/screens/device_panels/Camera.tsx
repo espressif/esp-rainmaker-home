@@ -4,14 +4,25 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useMemo, useEffect } from "react";
-import { View, StyleSheet } from "react-native";
+import React, { useState, useMemo, useEffect, useRef } from "react";
+import {
+  View,
+  Text,
+  Pressable,
+  StyleSheet,
+  ActivityIndicator,
+} from "react-native";
 import * as ScreenOrientation from "expo-screen-orientation";
 import * as NavigationBar from "expo-navigation-bar";
+import { useRouter, type Href } from "expo-router";
+import { Images, Camera as CameraIcon } from "lucide-react-native";
 
 // Hooks
 import { useTranslation } from "react-i18next";
+import { useCDF } from "@shared/hooks/useCDF";
 import { useCameraWebRTC } from "@shared/hooks/useCameraWebRTC";
+import { getLocalTransport } from "@shared/utils/camera/getLocalTransport";
+import { useCameraCommand } from "../../hooks/useCameraCommand";
 
 // State Management
 import { observer } from "mobx-react-lite";
@@ -61,12 +72,13 @@ const Camera: React.FC<ControlPanelProps> = ({
 }) => {
   // Hooks
   const { t } = useTranslation();
+  const router = useRouter();
 
   // State
   const [isFullscreen, setIsFullscreen] = useState(false);
 
   // Computed Values
-  const isConnected = node.connectivityStatus?.isConnected || false ;
+  const isConnected = node.connectivityStatus?.isConnected || false;
   const nodeId = node.id;
 
   // Get channel parameter for video streaming
@@ -74,6 +86,19 @@ const Camera: React.FC<ControlPanelProps> = ({
     (param) => param.type === ESPRM_CHANNEL_PARAM_TYPE
   );
   const channelName = channelParam?.value as string | null;
+
+  // Streaming is gated on having a KVS channel — NOT on the cloud MQTT
+  // `isConnected` flag. KVS viewer signaling works whenever the device is
+  // present on its signaling channel, so a camera that is "cloud-offline"
+  // (MQTT) can still be streamed. (Local-control signaling will extend this.)
+  const canStream = !!channelName;
+
+  // Local-control (LAN) signaling config when the node is locally reachable;
+  // null → cloud KVS only. Reads the live, discovery-tracked registeredTransports
+  // so LAN availability updates reactively (observer re-renders) — no app restart.
+  const { store } = useCDF();
+  const registeredTransports = store.subscriptionStore.registeredTransports[nodeId];
+  const localTransport = getLocalTransport(node, registeredTransports);
 
   // WebRTC hook
   const {
@@ -86,7 +111,16 @@ const Camera: React.FC<ControlPanelProps> = ({
     connectionState,
     stats,
     setStatsUpdatesEnabled,
-  } = useCameraWebRTC(nodeId, channelName);
+    isMicEnabled,
+    toggleMic,
+    isSpeakerMuted,
+    toggleSpeaker,
+  } = useCameraWebRTC(nodeId, channelName, localTransport);
+
+  // Snapshot capture (cloud command-response) — requires cloud connectivity.
+  const { capturing, captureSnapshot } = useCameraCommand(nodeId);
+
+  const autoStartAttemptedRef = useRef(false);
 
   // filtered params (excluding channel and hidden params)
   const filteredParams = useMemo(() => {
@@ -102,14 +136,11 @@ const Camera: React.FC<ControlPanelProps> = ({
 
   // Warning message computation
   const warningMessage = useMemo(() => {
-    if (!isConnected) {
-      return t("device.errors.deviceNotConnected");
-    }
     if (!channelName) {
       return t("device.camera.errors.channelNameRequired");
     }
     return null;
-  }, [isConnected, channelName, t]);
+  }, [channelName, t]);
 
   /**
    * Locks Control's shared ScrollView while a param gesture is active.
@@ -127,7 +158,7 @@ const Camera: React.FC<ControlPanelProps> = ({
    */
   const handlePlayPress = () => {
     // Early return if conditions are not met (warning will be shown in UI)
-    if (!isConnected || !channelName) {
+    if (!canStream) {
       return;
     }
 
@@ -171,6 +202,19 @@ const Camera: React.FC<ControlPanelProps> = ({
     }
   };
 
+  /**
+   * Auto-start the video stream when the panel opens and a channel is available,
+   * so the user does not need to tap play first. Runs once per mount; manual stop
+   * via the player is respected until the user leaves the screen.
+   */
+  useEffect(() => {
+    if (!canStream || autoStartAttemptedRef.current) {
+      return;
+    }
+    autoStartAttemptedRef.current = true;
+    void startStreaming();
+  }, [canStream, startStreaming]);
+
   // Cleanup: restore portrait orientation and white navigation bar when component unmounts
   useEffect(() => {
     return () => {
@@ -207,9 +251,50 @@ const Camera: React.FC<ControlPanelProps> = ({
             connectionState={connectionState}
             stats={stats}
             setStatsUpdatesEnabled={setStatsUpdatesEnabled}
-            disabled={!isConnected}
+            disabled={!canStream}
+            onStop={stopStreaming}
+            isMicEnabled={isMicEnabled}
+            onMicToggle={toggleMic}
+            isSpeakerMuted={isSpeakerMuted}
+            onSpeakerToggle={toggleSpeaker}
           />
         </View>
+
+        {/* Capture a new snapshot on the device (cloud command-response) */}
+        <Pressable
+          style={[
+            styles.captureButton,
+            (capturing || !isConnected) && styles.captureButtonDisabled,
+          ]}
+          onPress={captureSnapshot}
+          disabled={capturing || !isConnected}
+          {...testProps("button_capture_snapshot")}
+        >
+          {capturing ? (
+            <ActivityIndicator size="small" color={tokens.colors.white} />
+          ) : (
+            <CameraIcon size={18} color={tokens.colors.white} />
+          )}
+          <Text style={styles.captureButtonText}>
+            {capturing
+              ? t("device.camera.capture.capturing")
+              : t("device.camera.capture.button")}
+          </Text>
+        </Pressable>
+
+        {/* Gallery entry — view captured snapshots / recordings */}
+        <Pressable
+          style={styles.galleryButton}
+          onPress={() =>
+            router.push(
+              (`/(control)/Gallery?id=${nodeId}&device=${encodeURIComponent(device?.name ?? "")}`) as Href
+            )
+          }
+          {...testProps("button_open_gallery")}
+        >
+          <Images size={18} color={tokens.colors.primary} />
+          <Text style={styles.galleryButtonText}>{t("device.camera.gallery")}</Text>
+        </Pressable>
 
         {/* Other Parameters */}
         <DeviceParamsRenderer
@@ -227,6 +312,41 @@ const Camera: React.FC<ControlPanelProps> = ({
 const styles = StyleSheet.create({
   container: {
     width: "100%",
+  },
+  galleryButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    marginHorizontal: 16,
+    marginTop: 12,
+    paddingVertical: 12,
+    borderRadius: 10,
+    backgroundColor: tokens.colors.lightGray,
+  },
+  galleryButtonText: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: tokens.colors.primary,
+  },
+  captureButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    marginHorizontal: 16,
+    marginTop: 12,
+    paddingVertical: 12,
+    borderRadius: 10,
+    backgroundColor: tokens.colors.primary,
+  },
+  captureButtonDisabled: {
+    opacity: 0.5,
+  },
+  captureButtonText: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: tokens.colors.white,
   },
 });
 

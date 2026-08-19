@@ -7,6 +7,19 @@ const { getDefaultConfig } = require('expo/metro-config');
 
 const config = getDefaultConfig(__dirname);
 
+// Local modules (e.g. @modules/kvs) live outside node_modules source tree;
+// watch them so Metro picks up edits without a full restart.
+config.watchFolders = [
+  ...(config.watchFolders ?? []),
+  path.resolve(__dirname, 'modules'),
+];
+
+// npm workspaces (`modules/*`): resolve peers/deps from the app root so
+// nested workspace installs do not pull duplicate React / AWS copies.
+config.resolver.nodeModulesPaths = [
+  path.resolve(__dirname, 'node_modules'),
+];
+
 // MQTT.js: resolve package "exports" so React Native gets dist/mqtt.esm.js
 // (Node build pulls `url` and other stdlib). Required for Expo SDK ≤ 53.
 config.resolver.unstable_enablePackageExports = true;

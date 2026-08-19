@@ -4,8 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useCallback } from "react";
-import { View, Text } from "react-native";
+import React, { useState, useCallback, useEffect, useRef } from "react";
+import { View, Text, Pressable, StyleSheet } from "react-native";
 import { Portal } from "react-native-paper";
 import { StatusBar } from "expo-status-bar";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -20,6 +20,10 @@ import { videoPlayerStyles } from "@shared/theme/VideoPlayerStyle";
 // Components
 import Controls from "./Controls";
 import Stats from "./Stats";
+import MediaOverlay from "./MediaOverlay";
+
+// Constants
+import { CAMERA_CONTROLS_AUTO_HIDE_MS } from "@shared/utils/constants";
 
 // Utils
 import { testProps } from "@shared/utils/testProps";
@@ -48,10 +52,42 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
   stats = null,
   setStatsUpdatesEnabled,
   disabled = false,
+  onStop,
+  isMicEnabled = false,
+  onMicToggle,
+  isSpeakerMuted = false,
+  onSpeakerToggle,
 }) => {
   const { t } = useTranslation();
   const [showStats, setShowStats] = useState(false);
+  const [showControls, setShowControls] = useState(false);
   const insets = useSafeAreaInsets();
+  const hideTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Whether the in-video media overlay (stop-square + audio toggles) is usable.
+  const hasMediaControls = isPlaying && !!onStop;
+
+  // Auto-hide the media overlay a few seconds after it is shown.
+  useEffect(() => {
+    if (hideTimerRef.current) {
+      clearTimeout(hideTimerRef.current);
+      hideTimerRef.current = null;
+    }
+    if (showControls) {
+      hideTimerRef.current = setTimeout(() => setShowControls(false), CAMERA_CONTROLS_AUTO_HIDE_MS);
+    }
+    return () => {
+      if (hideTimerRef.current) {
+        clearTimeout(hideTimerRef.current);
+        hideTimerRef.current = null;
+      }
+    };
+  }, [showControls]);
+
+  // Hide the overlay whenever playback stops.
+  useEffect(() => {
+    if (!isPlaying) setShowControls(false);
+  }, [isPlaying]);
 
   // Handle stats button press (info icon)
   const handleStatsPress = useCallback(() => {
@@ -63,6 +99,12 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
     if (showStats) {
       setShowStats(false);
     }
+  }, [showStats]);
+
+  // Tap on the playing video toggles the media overlay (and dismisses stats).
+  const handleVideoTap = useCallback(() => {
+    if (showStats) setShowStats(false);
+    setShowControls((prev) => !prev);
   }, [showStats]);
 
   // Portrait mode video player (fits to parent container) - Only show when not fullscreen
@@ -97,6 +139,27 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
               mirror={false}
               zOrder={0}
             />
+          )}
+
+          {/* Tap-to-show media overlay (stop-square + audio toggles) */}
+          {hasMediaControls && (
+            <>
+              <Pressable
+                style={StyleSheet.absoluteFill}
+                onPress={handleVideoTap}
+                {...testProps("video_tap_catcher")}
+              />
+              {showControls && (
+                <MediaOverlay
+                  isFullscreen={false}
+                  onStop={onStop!}
+                  isMicEnabled={isMicEnabled}
+                  onMicToggle={onMicToggle ?? (() => {})}
+                  isSpeakerMuted={isSpeakerMuted}
+                  onSpeakerToggle={onSpeakerToggle ?? (() => {})}
+                />
+              )}
+            </>
           )}
         </View>
       </View>
@@ -174,6 +237,28 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
           />
         )}
 
+        {/* Tap-to-show media overlay (stop-square + audio toggles) */}
+        {hasMediaControls && (
+          <>
+            <Pressable
+              style={StyleSheet.absoluteFill}
+              onPress={handleVideoTap}
+              {...testProps("video_tap_catcher_fullscreen")}
+            />
+            {showControls && (
+              <MediaOverlay
+                isFullscreen={true}
+                onStop={onStop!}
+                isMicEnabled={isMicEnabled}
+                onMicToggle={onMicToggle ?? (() => {})}
+                isSpeakerMuted={isSpeakerMuted}
+                onSpeakerToggle={onSpeakerToggle ?? (() => {})}
+                safeAreaInsets={insets}
+              />
+            )}
+          </>
+        )}
+
         {/* Controls Component - overlay in fullscreen */}
         <Controls
           isPlaying={isPlaying}
@@ -187,6 +272,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
           onFullscreenPress={onFullscreenPress}
           onLongPress={undefined}
           onStatsPress={handleStatsPress}
+          safeAreaInsets={insets}
         />
 
         {/* Stats Component */}

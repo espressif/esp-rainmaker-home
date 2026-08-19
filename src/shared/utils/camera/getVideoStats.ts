@@ -18,6 +18,16 @@ interface ExtendedRTCPeerConnection extends RTCPeerConnection {
 }
 
 /**
+ * Previous inbound-rtp sample, used to derive an instantaneous bitrate from the
+ * delta of cumulative `bytesReceived` over the delta of the report timestamps.
+ * Reset when the stream stops (null peer connection) or restarts (byte counter
+ * goes backwards). Single active camera stream at a time, so module-level state
+ * is sufficient.
+ */
+let lastBitrateSample: { timestamp: number; bytesReceived: number } | null =
+  null;
+
+/**
  * Get stats from peer connection
  * Responsibility: Fetch and parse WebRTC stats from RTCPeerConnection
  * This function extracts video and network statistics from WebRTC stats reports.
@@ -31,6 +41,7 @@ export const getVideoStats = async (
   peerConnection: ExtendedRTCPeerConnection | RTCPeerConnection | null
 ): Promise<VideoStats | null> => {
   if (!peerConnection) {
+    lastBitrateSample = null;
     return null;
   }
 
@@ -64,7 +75,13 @@ export const getVideoStats = async (
       if (report.type === "track" && report.kind === "video") {
         videoStats = report;
       }
-      if (report.type === "inbound-rtp" && report.mediaType === "video") {
+      // react-native-webrtc / current WebRTC spec label the media type on
+      // inbound-rtp as `kind`; older impls used `mediaType`. Match either so
+      // stats populate (matching only `mediaType` left this null → "loading").
+      if (
+        report.type === "inbound-rtp" &&
+        (report.kind === "video" || report.mediaType === "video")
+      ) {
         inboundRtpStats = report;
       }
     }
@@ -95,11 +112,28 @@ export const getVideoStats = async (
       }
     }
 
-    // Calculate bitrate (simplified - using current bytes received)
-    // In a real implementation, we'd track bytes over time
-    const durationSeconds = 1; // For per-second calculation
-    const bitrate =
-      durationSeconds > 0 ? (bytesReceived * 8) / durationSeconds / 1000 : 0; // kbps
+    // Instantaneous bitrate (kbps) from the delta of cumulative bytesReceived
+    // over the delta of report timestamps. bytesReceived is a running total, so
+    // a single sample can't be a rate — diff it against the previous sample.
+    const sampleTimestamp =
+      typeof inboundRtpStats?.timestamp === "number" &&
+      inboundRtpStats.timestamp > 0
+        ? inboundRtpStats.timestamp
+        : Date.now();
+    let bitrate = 0;
+    if (
+      lastBitrateSample &&
+      sampleTimestamp > lastBitrateSample.timestamp &&
+      bytesReceived >= lastBitrateSample.bytesReceived
+    ) {
+      const deltaBytes = bytesReceived - lastBitrateSample.bytesReceived;
+      const deltaSeconds =
+        (sampleTimestamp - lastBitrateSample.timestamp) / 1000;
+      if (deltaSeconds > 0) {
+        bitrate = (deltaBytes * 8) / deltaSeconds / 1000; // kbps
+      }
+    }
+    lastBitrateSample = { timestamp: sampleTimestamp, bytesReceived };
 
     // Calculate packet loss percentage
     const totalPackets = packetsReceived + packetsLost;

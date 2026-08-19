@@ -279,4 +279,33 @@ export const videoPlayerStyles = StyleSheet.create({
     marginTop: 16,
     paddingLeft:10,
   },
+  // In-video media overlay (tap-to-show, auto-hide): stop-square + audio toggles
+  mediaOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  overlayStopButton: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: "rgba(0,0,0,0.55)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  overlayToggleRow: {
+    position: "absolute",
+    bottom: 12,
+    alignSelf: "center",
+    flexDirection: "row",
+    gap: 16,
+  },
+  overlayToggleButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: "rgba(0,0,0,0.55)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
 });

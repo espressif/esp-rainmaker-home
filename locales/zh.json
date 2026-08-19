@@ -549,6 +549,16 @@
       "bridge": "桥接",
       "controller": "控制器"
     },
+    "camera": {
+      "gallery": "摄像头图库",
+      "capture": {
+        "button": "拍摄摄像头快照",
+        "capturing": "正在拍摄…",
+        "submitted": "文件上传请求已提交",
+        "failed": "拍摄快照失败",
+        "timedOut": "拍摄超时"
+      }
+    },
     "addDeviceSelection": {
       "title": "添加设备",
       "note": "请阅读快速用户指南并选择一种方式添加设备",
