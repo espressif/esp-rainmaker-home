@@ -8,4 +8,5 @@ export { ChatScreen } from "./Chat";
 export { ChatSettingsScreen } from "./ChatSettings";
 export { ConfigureScreen } from "./Configure";
 export { SettingsScreen } from "./Settings";
+export { AgentScanScreen } from "./AgentScan";
 export { ViewConversationScreen } from "./ViewConversation";

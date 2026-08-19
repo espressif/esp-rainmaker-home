@@ -19,8 +19,13 @@ import {
   deleteConversationId,
   connectToolWithOAuth,
   connectToolWithTokens,
+  buildConnectorId,
   getToolConnectionStatus,
+  isConnectableRemoteTool,
+  isRainmakerMcpRemoteTool,
+  toTokenConnectOAuthMetadata,
   type AgentConfig,
+  type AgentConfigResponse,
   type MessageDisplayConfig,
   type OAuthMetadata,
 } from '@features/agent/utils';
@@ -32,8 +37,13 @@ import {
   type ConnectedConnector,
 } from '@features/agent/utils/apiHelper';
 import { DEFAULT_AGENT_ID, OAUTH_REDIRECT_URI } from '@/config/agent.config';
-import { CUSTOM_DATA_KEYS } from '@features/agent/utils/constants';
+import {
+  AGENT_TOOL_AUTH_TYPE_OAUTH,
+  CUSTOM_DATA_KEYS,
+} from '@features/agent/utils/constants';
 import { useCDF } from '@shared/hooks/useCDF';
+
+type AgentConfigTool = NonNullable<AgentConfigResponse['tools']>[number];
 /**
  * Hook for managing agent-related operations
  * Provides centralized state and functions for agent management, configuration, connectors, and conversations
@@ -286,11 +296,90 @@ export const useAgent = () => {
   }, []);
 
   /**
-   * Get tool connection status
+   * Remote OAuth tools from agent config that require a connector (connect UI only).
+   */
+  const getConnectableRemoteTools = useCallback((): AgentConfigTool[] => {
+    const tools = agentConfig?.tools ?? [];
+    return tools.filter(isConnectableRemoteTool);
+  }, [agentConfig?.tools]);
+
+  /**
+   * Builds connector id for a remote tool (`connectorUrl::clientId`).
+   */
+  const getConnectorIdForTool = useCallback((tool: AgentConfigTool): string | undefined => {
+    if (!tool.url || !tool.oauthMetadata?.clientId) {
+      return undefined;
+    }
+    return buildConnectorId(tool.url, tool.oauthMetadata.clientId);
+  }, []);
+
+  /**
+   * Connection status for a remote OAuth tool matched against stored connectors.
+   */
+  const getRemoteToolConnectionStatus = useCallback(
+    (tool: AgentConfigTool) => {
+      return getToolConnectionStatus(
+        tool.url ?? '',
+        connectors,
+        tool.oauthMetadata?.clientId
+      );
+    },
+    [connectors]
+  );
+
+  /**
+   * Connect a remote OAuth tool (token exchange for RainMaker MCP, OAuth flow otherwise).
+   */
+  const connectRemoteTool = useCallback(
+    async (tool: AgentConfigTool): Promise<void> => {
+      if (!tool.url) {
+        throw new Error('Tool URL is required');
+      }
+
+      setConnectingToolUrl(tool.url);
+      try {
+        if (isRainmakerMcpRemoteTool(tool)) {
+          await connectToolWithTokens(
+            store,
+            tool.url,
+            toTokenConnectOAuthMetadata(tool.oauthMetadata)
+          );
+          await loadConnectors();
+          return;
+        }
+
+        if (tool.authType !== AGENT_TOOL_AUTH_TYPE_OAUTH || !tool.oauthMetadata) {
+          throw new Error('OAuth metadata not available for this connector');
+        }
+
+        const registeredUris = tool.oauthMetadata.registeredRedirectUris ?? [];
+        if (
+          registeredUris.length > 0 &&
+          !registeredUris.includes(OAUTH_REDIRECT_URI)
+        ) {
+          throw new Error(
+            'This connector is not configured for the mobile app OAuth redirect. Contact the agent administrator.'
+          );
+        }
+
+        const redirectUri = OAUTH_REDIRECT_URI;
+        const clientId = tool.oauthMetadata.clientId || '';
+
+        await connectToolWithOAuth(tool.url, tool.oauthMetadata, redirectUri, clientId);
+        await loadConnectors();
+      } finally {
+        setConnectingToolUrl(null);
+      }
+    },
+    [store, loadConnectors]
+  );
+
+  /**
+   * Get tool connection status by URL and OAuth client id.
    */
   const getToolConnectionStatusHook = useCallback(
-    (toolUrl: string, expectedConnectorId?: string): { isConnected: boolean; isExpired: boolean } => {
-      return getToolConnectionStatus(toolUrl, connectors, expectedConnectorId);
+    (toolUrl: string, clientId?: string): { isConnected: boolean; isExpired: boolean } => {
+      return getToolConnectionStatus(toolUrl, connectors, clientId);
     },
     [connectors]
   );
@@ -516,6 +605,10 @@ export const useAgent = () => {
     connectingToolUrl,
     disconnectingToolUrl,
     loadConnectors,
+    getConnectableRemoteTools,
+    getConnectorIdForTool,
+    getRemoteToolConnectionStatus,
+    connectRemoteTool,
     getToolConnectionStatus: getToolConnectionStatusHook,
     connectTool,
     connectToolWithTokensDirect,

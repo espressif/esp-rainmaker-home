@@ -4,259 +4,188 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useMemo } from "react";
-import { View, Text, TouchableOpacity, Dimensions } from "react-native";
-import { marked } from "marked";
-import RenderHTML from "react-native-render-html";
+import React, { useMemo, useState } from "react";
+import { View, Text, Image, Pressable } from "react-native";
+import { useTranslation } from "react-i18next";
+import { ImageIcon } from "lucide-react-native";
 import { tokens } from "@shared/theme/tokens";
 import { globalStyles } from "@shared/theme/globalStyleSheet";
 import { getFontSizes } from "@features/agent/utils/chat/fontSizes";
-import { formatTimestamp } from "@features/agent/utils/chatHelper";
+import { ChatMessageContent } from "./ChatMessageContent";
+import { ChatToolCallMessage } from "./ChatToolCallMessage";
+import { ChatSystemMessage } from "./ChatSystemMessage";
 import { ChatJsonViewer } from "./ChatJsonViewer";
 import { ChatQuestionSuggestions } from "./ChatQuestionSuggestions";
-import type { ChatMessage as ChatMessageType } from "@src/types/global";
+import { ChatThinkingIndicator } from "./ChatThinkingIndicator";
+import { ChatMediaPreviewModal } from "./ChatMediaPreviewModal";
+import {
+  AGENT_CHAT_MESSAGE_TYPE_SYSTEM,
+  AGENT_CHAT_MESSAGE_TYPE_THINKING,
+  AGENT_CHAT_MESSAGE_TYPE_THINKING_INDICATOR,
+  AGENT_WS_MESSAGE_TYPE_HANDSHAKE,
+  AGENT_WS_MESSAGE_TYPE_HANDSHAKE_ACK,
+  AGENT_WS_MESSAGE_TYPE_TOOL_CALL_INFO,
+  AGENT_WS_MESSAGE_TYPE_TOOL_RESULT_INFO,
+  AGENT_WS_MESSAGE_TYPE_USAGE_INFO,
+  AGENT_WS_MESSAGE_TYPE_TIMEOUT,
+} from "@shared/utils/constants";
+import type { ChatMessage as ChatMessageType, ChatMediaAttachment } from "@src/types/global";
 
 interface ChatMessageProps {
   item: ChatMessageType;
   fontSize: number;
-  expandedJsonMessages: Set<string>;
-  isDefaultAgent: boolean;
   isConnected: boolean;
-  onToggleJson: (messageId: string) => void;
   onQuestionPress: (question: string) => void;
+  suggestionPrompts?: string[];
+  showSuggestionPrompts?: boolean;
 }
 
 /**
- * Chat message component that handles all message types
+ * Chat message component that renders user-dashboard-style bubbles and tool cards.
+ * @param props - Message item and interaction callbacks.
+ * @returns Message row UI for a single chat entry.
  */
 export const ChatMessage: React.FC<ChatMessageProps> = ({
   item,
   fontSize,
-  expandedJsonMessages,
-  isDefaultAgent,
   isConnected,
-  onToggleJson,
   onQuestionPress,
+  suggestionPrompts = [],
+  showSuggestionPrompts = false,
 }) => {
+  const { t } = useTranslation();
+  const [previewUri, setPreviewUri] = useState<string | null>(null);
   const fontSizes = getFontSizes(fontSize);
-  const isAssistant = item.messageType === "assistant" && !item.isUser;
-  const isThinking = item.messageType === "thinking";
-  const isToolCall = item.messageType === "tool_call_info";
-  const isToolResult = item.messageType === "tool_result_info";
-  const isUsageInfo = item.messageType === "usage_info";
-  const isHandshake = item.messageType === "handshake";
-  const isHandshakeAck = item.messageType === "handshake_ack";
-  const isTimeout = item.messageType === "timeout";
+  const isAssistant =
+    item.messageType === "assistant" && !item.isUser;
+  const isThinking = item.messageType === AGENT_CHAT_MESSAGE_TYPE_THINKING;
+  const isToolCall = item.messageType === AGENT_WS_MESSAGE_TYPE_TOOL_CALL_INFO;
+  const isToolResult = item.messageType === AGENT_WS_MESSAGE_TYPE_TOOL_RESULT_INFO;
+  const isUsageInfo = item.messageType === AGENT_WS_MESSAGE_TYPE_USAGE_INFO;
+  const isHandshake = item.messageType === AGENT_WS_MESSAGE_TYPE_HANDSHAKE;
+  const isHandshakeAck = item.messageType === AGENT_WS_MESSAGE_TYPE_HANDSHAKE_ACK;
+  const isTimeout = item.messageType === AGENT_WS_MESSAGE_TYPE_TIMEOUT;
+  const isSystem = item.messageType === AGENT_CHAT_MESSAGE_TYPE_SYSTEM;
   const hasJsonData = item.jsonData !== undefined && item.jsonData !== null;
 
-  // Check if this is the locally added welcome message (see
-  // `addDefaultWelcomeMessage`); id-based so it works in every locale.
+  const jsonMessageTitle = useMemo(() => {
+    if (isUsageInfo) {
+      return t("chat.jsonMessageUsageInfo");
+    }
+    if (isHandshake) {
+      return t("chat.jsonMessageHandshake");
+    }
+    if (isHandshakeAck) {
+      return t("chat.jsonMessageHandshakeAck");
+    }
+    return t("chat.jsonMessageDetails");
+  }, [isUsageInfo, isHandshake, isHandshakeAck, t]);
+
   const isWelcomeMessage =
     isAssistant && !item.isUser && item.id.startsWith("welcome-");
 
-  // Get screen width for RenderHTML
-  const screenWidth = useMemo(() => Dimensions.get("window").width, []);
-
-  // Convert markdown to HTML for assistant messages
-  const htmlContent = useMemo(() => {
-    if (isAssistant) {
-      // marked.parse() returns a string synchronously
-      return marked.parse(item.text, { breaks: true }) as string;
-    }
-    return null;
-  }, [item.text, isAssistant]);
-
-  // HTML styles for RenderHTML
-  const htmlStyles = useMemo(() => {
-    const textColor = item.isUser ? tokens.colors.bg1 : tokens.colors.text_primary;
-    const codeBg = item.isUser ? "rgba(255,255,255,0.2)" : tokens.colors.bg3;
-    const linkColor = item.isUser ? tokens.colors.bg1 : tokens.colors.primary;
-    
-    return {
-      body: {
-        color: textColor,
-        fontSize: fontSizes.base,
-        lineHeight: fontSizes.lineHeight,
-        fontFamily: tokens.fonts.regular,
-      },
-      p: {
-        marginTop: 0,
-        marginBottom: 8,
-        color: textColor,
-        fontSize: fontSizes.base,
-        lineHeight: fontSizes.lineHeight,
-      },
-      h1: {
-        fontSize: fontSizes.heading1,
-        fontWeight: "700" as const,
-        marginBottom: 8,
-        color: textColor,
-      },
-      h2: {
-        fontSize: fontSizes.heading2,
-        fontWeight: "700" as const,
-        marginBottom: 6,
-        color: textColor,
-      },
-      h3: {
-        fontSize: fontSizes.heading3,
-        fontWeight: "700" as const,
-        marginBottom: 4,
-        color: textColor,
-      },
-      code: {
-        backgroundColor: codeBg,
-        paddingHorizontal: 4,
-        paddingVertical: 2,
-        borderRadius: 4,
-        fontFamily: "monospace",
-        fontSize: fontSizes.base * 0.9,
-      },
-      pre: {
-        backgroundColor: codeBg,
-        padding: 12,
-        borderRadius: 8,
-        marginVertical: 8,
-        fontFamily: "monospace",
-      },
-      a: {
-        color: linkColor,
-        textDecorationLine: "underline" as const,
-      },
-      li: {
-        marginBottom: 4,
-        color: textColor,
-      },
-      ul: {
-        marginBottom: 8,
-      },
-      ol: {
-        marginBottom: 8,
-      },
-    };
-  }, [item.isUser, fontSizes]);
-
-
-  // Thinking messages - no background, subtle text
-  if (isThinking) {
-    return (
-      <View style={globalStyles.chatThinkingWrapper}>
-        <Text
-          style={[
-            globalStyles.chatThinkingText,
-            {
-              fontWeight: "bold",
-              marginRight: 4,
-              fontSize: fontSizes.base,
-            },
-          ]}
+  /**
+   * Renders a full-width media attachment above the user text bubble.
+   * @param media - Attachment metadata.
+   * @param index - Attachment index for React keys.
+   * @returns Media preview element.
+   */
+  const renderMediaAttachment = (
+    media: ChatMediaAttachment,
+    index: number
+  ) => {
+    if (media.localUri) {
+      return (
+        <Pressable
+          key={`${media.mediaId}-${index}`}
+          onPress={() => setPreviewUri(media.localUri ?? null)}
+          accessibilityRole="imagebutton"
+          accessibilityLabel={media.filename}
         >
-          Thinking:
+          <Image
+            source={{ uri: media.localUri }}
+            style={globalStyles.chatMessageImage}
+          />
+        </Pressable>
+      );
+    }
+
+    return (
+      <View
+        key={`${media.mediaId}-${index}`}
+        style={globalStyles.chatMessageImagePlaceholder}
+      >
+        <ImageIcon size={18} color={tokens.colors.text_secondary} />
+        <Text
+          style={globalStyles.chatMessageImagePlaceholderText}
+          numberOfLines={1}
+        >
+          {media.filename}
         </Text>
-        <View style={globalStyles.chatThinkingContainer}>
-          <Text
-            style={[
-              globalStyles.chatThinkingText,
-              { fontSize: fontSizes.base },
-            ]}
-          >
-            {item.text}
-          </Text>
+      </View>
+    );
+  };
+
+  if (item.messageType === AGENT_CHAT_MESSAGE_TYPE_THINKING_INDICATOR) {
+    return (
+      <View style={globalStyles.chatBotMessageWrapper}>
+        <View style={globalStyles.chatThinkingIndicatorWrapper}>
+          <ChatThinkingIndicator isVisible fontSize={fontSize} />
         </View>
       </View>
     );
   }
 
-  // Tool call info - single line with tool name
-  if (isToolCall) {
+  if (isThinking) {
     return (
-      <View style={globalStyles.chatToolCallWrapper}>
-        <Text
-          style={[
-            globalStyles.chatToolCallText,
-            { fontSize: fontSizes.base },
-          ]}
-        >
-          Tool: {item.toolName || item.text}
-        </Text>
+      <View style={globalStyles.chatBotMessageWrapper}>
+        <View style={globalStyles.chatAssistantMessageContainer}>
+          <ChatMessageContent
+            content={item.text}
+            isUser={false}
+            messageType={AGENT_CHAT_MESSAGE_TYPE_THINKING}
+            fontSize={fontSize}
+          />
+        </View>
       </View>
     );
   }
 
-  // Tool result info - expandable JSON
-  if (isToolResult && hasJsonData) {
-    // Extract JSON part between the first '{' and last '}'
-    let jsonContentPart: any = item.jsonData;
-    if (typeof item.text === "string") {
-      const str = item.text;
-      const start = str.indexOf("{");
-      const end = str.lastIndexOf("}");
-      if (start !== -1 && end !== -1 && end > start) {
-        const jsonStr = str.substring(start, end + 1);
-        try {
-          jsonContentPart = JSON.parse(jsonStr);
-        } catch {
-          jsonContentPart = item.jsonData; // fallback
-        }
-      }
-    }
+  if (isSystem) {
+    return <ChatSystemMessage text={item.text} fontSize={fontSize} />;
+  }
 
+  if (isToolCall || isToolResult) {
     return (
-      <View style={globalStyles.chatToolResultWrapper}>
-        <ChatJsonViewer
-          data={jsonContentPart}
+      <View style={globalStyles.chatBotMessageWrapper}>
+        <ChatToolCallMessage
+          messageText={item.text}
           messageId={item.id}
           fontSize={fontSize}
-          isExpanded={expandedJsonMessages.has(item.id)}
-          onToggle={onToggleJson}
+          jsonData={isToolResult ? item.jsonData : undefined}
+          toolName={item.toolName}
         />
       </View>
     );
   }
 
-  // Usage info, handshake, and handshake_ack - expandable JSON, no background
   if ((isUsageInfo || isHandshake || isHandshakeAck) && hasJsonData) {
-    let label = "";
-    if (isUsageInfo) {
-      label = "Usage:";
-    } else if (isHandshake) {
-      label = "Handshake:";
-    } else if (isHandshakeAck) {
-      label = "Handshake ACK:";
-    }
     return (
-      <View style={globalStyles.chatJsonMessageWrapper}>
-        {label && (
-          <Text
-            style={[
-              globalStyles.chatToolCallText,
-              { fontSize: fontSizes.base },
-            ]}
-          >
-            {label}
-          </Text>
-        )}
+      <View style={globalStyles.chatBotMessageWrapper}>
         <ChatJsonViewer
           data={item.jsonData}
           messageId={item.id}
+          title={jsonMessageTitle}
           fontSize={fontSize}
-          isExpanded={expandedJsonMessages.has(item.id)}
-          onToggle={onToggleJson}
         />
       </View>
     );
   }
 
-  // Timeout messages - error style
   if (isTimeout) {
     return (
-      <View style={globalStyles.chatMessageWrapper}>
-        <View
-          style={[
-            globalStyles.chatMessageContainer,
-            globalStyles.chatTimeoutMessage,
-          ]}
-        >
+      <View style={globalStyles.chatSystemMessageWrapper}>
+        <View style={globalStyles.chatTimeoutChip}>
           <Text
             style={[
               globalStyles.chatTimeoutMessageText,
@@ -265,110 +194,65 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
           >
             {item.text}
           </Text>
-          <Text
-            style={[
-              globalStyles.chatTimestamp,
-              globalStyles.chatBotTimestamp,
-              { fontSize: fontSizes.timestamp },
-            ]}
-          >
-            {formatTimestamp(item.timestamp)}
-          </Text>
         </View>
       </View>
     );
   }
 
-  // User and Assistant messages - with background
-  return (
-    <View>
-      <TouchableOpacity
-        activeOpacity={0.8}
-        style={[
-          globalStyles.chatMessageWrapper,
-          item.isUser
-            ? globalStyles.chatUserMessageWrapper
-            : globalStyles.chatBotMessageWrapper,
-        ]}
-        onPress={() => {
-          // Optional: you can trigger something (e.g. copy, select, info)
-        }}
-      >
-        <View
-          style={[
-            globalStyles.chatMessageContainer,
-            item.isUser
-              ? globalStyles.chatUserMessage
-              : globalStyles.chatBotMessage,
-          ]}
-        >
-          {isAssistant && htmlContent ? (
-            <View style={{ flexShrink: 1 }}>
-              <RenderHTML
-                contentWidth={screenWidth - 80}
-                source={{ html: htmlContent }}
-                tagsStyles={htmlStyles}
-                baseStyle={{
-                  color: item.isUser
-                    ? tokens.colors.bg1
-                    : tokens.colors.text_primary,
-                  fontSize: fontSizes.base,
-                  lineHeight: fontSizes.lineHeight,
-                  fontFamily: tokens.fonts.regular,
-                }}
+  if (item.isUser) {
+    const hasMedia = (item.media?.length ?? 0) > 0;
+
+    return (
+      <>
+        <View style={globalStyles.chatUserMessageWrapper}>
+          {hasMedia ? (
+            <View style={globalStyles.chatUserMediaStack}>
+              {item.media?.map((media, index) =>
+                renderMediaAttachment(media, index)
+              )}
+            </View>
+          ) : null}
+          {item.text ? (
+            <View style={globalStyles.chatUserBubble}>
+              <ChatMessageContent
+                content={item.text}
+                isUser
+                messageType="user"
+                fontSize={fontSize}
               />
             </View>
-          ) : (
-            <Text
-              style={[
-                globalStyles.chatMessageText,
-                item.isUser
-                  ? globalStyles.chatUserMessageText
-                  : globalStyles.chatBotMessageText,
-                {
-                  fontSize: fontSizes.base,
-                  lineHeight: fontSizes.lineHeight,
-                  flexShrink: 1,
-                },
-              ]}
-            >
-              {item.text}
-            </Text>
-          )}
-          <View
-            style={{
-              flexDirection: "row",
-              justifyContent: item.isUser ? "flex-end" : "flex-start",
-              marginTop: 6,
-            }}
-          >
-            <Text
-              style={[
-                globalStyles.chatTimestamp,
-                item.isUser
-                  ? globalStyles.chatUserTimestamp
-                  : globalStyles.chatBotTimestamp,
-                {
-                  fontSize: fontSizes.timestamp,
-                  color: item.isUser
-                    ? tokens.colors.white
-                    : tokens.colors.text_secondary,
-                  marginTop: 0,
-                },
-              ]}
-            >
-              {formatTimestamp(item.timestamp)}
-            </Text>
-          </View>
+          ) : null}
         </View>
-      </TouchableOpacity>
-      {/* Render suggestions after welcome message */}
-      {isWelcomeMessage && isDefaultAgent && isConnected && (
+        <ChatMediaPreviewModal
+          visible={previewUri !== null}
+          uri={previewUri}
+          onClose={() => setPreviewUri(null)}
+        />
+      </>
+    );
+  }
+
+  return (
+    <View>
+      <View style={globalStyles.chatBotMessageWrapper}>
+        <View style={globalStyles.chatAssistantMessageContainer}>
+          <ChatMessageContent
+            content={item.text}
+            isUser={false}
+            messageType={item.messageType}
+            fontSize={fontSize}
+          />
+        </View>
+      </View>
+      {isWelcomeMessage &&
+        showSuggestionPrompts &&
+        isConnected &&
+        suggestionPrompts.length > 0 && (
         <ChatQuestionSuggestions
+          questions={suggestionPrompts}
           onQuestionPress={onQuestionPress}
         />
       )}
     </View>
   );
 };
-

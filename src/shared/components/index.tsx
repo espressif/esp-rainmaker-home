@@ -82,5 +82,8 @@ export { default as DeviceAction } from "./ParamControls/DeviceAction";
 // Video Player (camera / WebRTC)
 export * from "./VideoPlayer";
 
+// Media
+export { default as ZoomableImage } from "./ZoomableImage";
+
 // Device params (generic renderer)
 export { DeviceParamsRenderer } from "./DeviceParams/DeviceParamsRenderer";

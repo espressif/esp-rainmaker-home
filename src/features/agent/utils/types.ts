@@ -46,10 +46,13 @@ export interface AgentConfigResponse {
   tools?: {
     type: string;
     name: string;
-    url: string;
-    timeout: number;
-    authType: string;
+    url?: string;
+    timeout?: number;
+    authType?: string;
+    description?: string;
+    enabledTools?: string[];
     oauthMetadata?: OAuthMetadata;
+    inputSchema?: Record<string, unknown>;
   }[];
   createdByName?: string;
 }
@@ -67,20 +70,78 @@ export interface MessageDisplayConfig {
   showHandshakeAck: boolean;
 }
 
+export interface AgentChatMediaReference {
+  type: string;
+  media_id: string;
+  s3_key: string;
+  content_type: string;
+  filename: string;
+  // Optional: for device-captured snapshots the size isn't returned by the
+  // device; the backend can derive it from the referenced S3 object.
+  size_bytes?: number;
+}
+
+export interface AgentMultimodalMessageContent {
+  text: string;
+  media: AgentChatMediaReference[];
+}
+
+export interface AgentMediaTypeConfig {
+  mime_types: string[];
+  max_size_bytes: number;
+  max_size_mb: number;
+}
+
+export interface AgentMediaConfig {
+  allowed_types: Record<string, AgentMediaTypeConfig>;
+  max_files_per_message: number;
+  all_allowed_mime_types: string[];
+}
+
+export interface AgentMediaUploadUrlRequest {
+  conversation_id: string;
+  filename: string;
+  content_type: string;
+  size_bytes: number;
+}
+
+export interface AgentMediaUploadUrlResponse {
+  upload_url: string;
+  media_id: string;
+  s3_key: string;
+  content_type: string;
+  filename: string;
+  size_bytes: number;
+  type: string;
+  expires_in: number;
+}
+
+export interface PendingChatMediaAttachment {
+  uri: string;
+  filename: string;
+  contentType: string;
+  sizeBytes: number;
+  mediaType: string;
+}
+
 export interface WebSocketMessage {
   type:
   | 'user'
   | 'assistant'
+  | 'assistant_delta'
   | 'thinking'
+  | 'thinking_delta'
   | 'tool_call_info'
   | 'tool_result_info'
+  | 'tool_request'
+  | 'tool_response'
   | 'usage_info'
   | 'transaction_end'
   | 'handshake'
   | 'handshake_ack'
   | 'timeout';
-  content_type: 'text' | 'json';
-  content: string | object;
+  content_type: 'text' | 'json' | 'multimodal';
+  content: string | object | AgentMultimodalMessageContent;
   metadata?: {
     timestamp?: number;
     sequence_number?: number;
@@ -97,6 +158,8 @@ export interface OAuthMetadata {
   scopesSupported?: string[];
   clientId?: string;
   dynamicallyRegistered?: boolean;
+  registeredRedirectUris?: string[];
+  clientSecret?: string;
 }
 
 export interface OAuthState {
@@ -222,7 +285,9 @@ export interface Agent {
  */
 export interface ConversationMessage {
   role: 'user' | 'assistant';
-  content: string;
+  content: string | AgentMultimodalMessageContent;
+  /** Media references when the API stores them on the message row (not inside content). */
+  media?: AgentChatMediaReference[];
   timestamp: number;
   toolCalls?: {
     name: string;

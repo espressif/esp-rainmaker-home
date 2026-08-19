@@ -18,6 +18,9 @@ import type {
     UsageByAgent,
     Conversation,
     ConversationListItem,
+    AgentMediaUploadUrlRequest,
+    AgentMediaUploadUrlResponse,
+    AgentMediaConfig,
 } from '@features/agent/utils/types';
 
 export type HttpMethod = 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH';
@@ -641,4 +644,58 @@ export async function sendEventMessage(agentId: string, message: string): Promis
         body: { message },
     });
     return response.reply || 'Event processed successfully';
+}
+
+/**
+ * Request a presigned S3 upload URL for agent chat media.
+ * @param agentId - Active agent identifier.
+ * @param payload - Upload metadata including conversation ID and file details.
+ * @returns Presigned upload URL and media identifiers.
+ */
+export async function getAgentMediaUploadUrl(
+    agentId: string,
+    payload: AgentMediaUploadUrlRequest
+): Promise<AgentMediaUploadUrlResponse> {
+    return apiRequest<AgentMediaUploadUrlResponse>({
+        path: `/user/agents/${agentId}/media/upload-url`,
+        method: 'POST',
+        body: payload,
+    });
+}
+
+/**
+ * Fetch upload constraints for agent chat media.
+ * @param agentId - Active agent identifier.
+ * @returns Allowed MIME types, size limits, and per-message caps.
+ */
+export async function getAgentMediaConfig(
+    agentId: string
+): Promise<AgentMediaConfig> {
+    return apiRequest<AgentMediaConfig>({
+        path: `/user/agents/${agentId}/media/config`,
+        method: 'GET',
+    });
+}
+
+/**
+ * Resolve a presigned download URL for an already-uploaded agent media object.
+ * Used to render a device-captured snapshot inline in the chat (no re-upload).
+ * @param agentId - Active agent identifier.
+ * @param conversationId - Conversation the media belongs to.
+ * @param mediaId - Media identifier returned by the device/upload.
+ * @param s3Key - S3 key of the media object (required by the API).
+ * @returns Presigned download URL.
+ */
+export async function getAgentMediaDownloadUrl(
+    agentId: string,
+    conversationId: string,
+    mediaId: string,
+    s3Key: string
+): Promise<string> {
+    const response = await apiRequest<{ download_url: string }>({
+        path: `/user/agents/${agentId}/conversations/${conversationId}/media/${mediaId}`,
+        method: 'GET',
+        params: { s3_key: s3Key },
+    });
+    return response.download_url;
 }

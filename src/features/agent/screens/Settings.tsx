@@ -4,7 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { View, ScrollView } from "react-native";
+import { useCallback, useState } from "react";
+import { View, ScrollView, type LayoutChangeEvent } from "react-native";
 import { useTranslation } from "react-i18next";
 import { RefreshControl } from "react-native";
 import { tokens } from "@shared/theme/tokens";
@@ -12,7 +13,6 @@ import { globalStyles } from "@shared/theme/globalStyleSheet";
 import {
   Header,
   ScreenWrapper,
-  Button,
   ConfirmationDialog,
 } from "@shared/components";
 import {
@@ -20,6 +20,7 @@ import {
   AgentSettingsSection,
   AgentSettingsEmptyState,
   AgentSettingsHeaderRight,
+  AgentSettingsFloatingActions,
   AgentTermsBottomSheet,
 } from "@features/agent/components";
 import { useAgentSettings } from "@features/agent/hooks";
@@ -44,19 +45,29 @@ export function SettingsScreen() {
     agentName,
     fetchAgents,
     handleAddAgent,
+    handleScanAgent,
     handleAddAgentConfirm,
+    closeAddDialog,
     handleSelectAgent,
     handleDeleteAgent,
     confirmDeleteAgent,
     handleCloseDeleteDialog,
     groupAgentsBySource,
     toggleEditing,
-    closeAddDialog,
     closeTermsBottomSheet,
     completeTermsBottomSheet,
   } = useAgentSettings();
 
   const grouped = groupAgentsBySource();
+  const [scrollViewHeight, setScrollViewHeight] = useState(0);
+
+  /**
+   * Tracks ScrollView height so content can fill the viewport and stay scrollable in empty areas.
+   * @param event - Layout event from the ScrollView.
+   */
+  const handleScrollViewLayout = useCallback((event: LayoutChangeEvent) => {
+    setScrollViewHeight(event.nativeEvent.layout.height);
+  }, []);
 
   return (
     <>
@@ -72,14 +83,21 @@ export function SettingsScreen() {
           />
         }
       />
-      <ScreenWrapper style={globalStyles.agentSettingsContainer}>
+      <ScreenWrapper
+        style={globalStyles.agentSettingsContainer}
+        dismissKeyboard={false}
+      >
         <ScrollView
           style={globalStyles.agentSettingsScrollView}
           showsVerticalScrollIndicator={false}
-          contentContainerStyle={{
-            flexGrow: 1,
-            paddingBottom: 150,
-          }}
+          contentContainerStyle={[
+            globalStyles.agentSettingsScrollContent,
+            scrollViewHeight > 0 && { minHeight: scrollViewHeight },
+          ]}
+          alwaysBounceVertical={true}
+          overScrollMode="always"
+          nestedScrollEnabled={true}
+          onLayout={handleScrollViewLayout}
           refreshControl={
             <RefreshControl refreshing={isLoading} onRefresh={fetchAgents} />
           }
@@ -134,13 +152,10 @@ export function SettingsScreen() {
           )}
         </ScrollView>
 
-        <View style={globalStyles.agentSettingsFooterButton}>
-          <Button
-            label={t("aiSettings.addNewAgent")}
-            onPress={handleAddAgent}
-            style={globalStyles.footerAddButton}
-          />
-        </View>
+        <AgentSettingsFloatingActions
+          onScanPress={handleScanAgent}
+          onAddPress={handleAddAgent}
+        />
       </ScreenWrapper>
 
       <AddAgentBottomSheet

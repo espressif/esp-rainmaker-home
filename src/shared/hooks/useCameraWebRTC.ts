@@ -39,6 +39,10 @@ import { LocalSignalingClient } from "@shared/utils/camera/localSignalingClient"
 import type { SignalingTransport, LocalTransportConfig } from "@shared/utils/camera/types";
 import { getVideoStats } from "@shared/utils/camera/getVideoStats";
 import { getAwsRegionFromToken } from "@shared/utils/camera/getAwsRegion";
+import {
+  startWebRtcLoudspeakerRouting,
+  stopWebRtcAudioRouting,
+} from "@shared/utils/camera/webrtcAudioRoute";
 import type { VideoStats } from "@src/types/global";
 
 /**
@@ -466,6 +470,9 @@ export const useCameraWebRTC = (
 
         if (state === WEBRTC_CONNECTION_STATE.CONNECTED || state === WEBRTC_CONNECTION_STATE.CONNECTING) {
           setIsStreaming(true);
+          if (state === WEBRTC_CONNECTION_STATE.CONNECTED) {
+            startWebRtcLoudspeakerRouting();
+          }
         } else if (state === WEBRTC_CONNECTION_STATE.DISCONNECTED || state === WEBRTC_CONNECTION_STATE.CLOSED) {
           setIsStreaming(false);
         } else if (state === WEBRTC_CONNECTION_STATE.FAILED) {
@@ -492,6 +499,7 @@ export const useCameraWebRTC = (
       if (event.track && event.track.kind === WEBRTC_MEDIA_KIND_AUDIO) {
         remoteAudioTrackRef.current = event.track;
         event.track.enabled = !isSpeakerMutedRef.current;
+        startWebRtcLoudspeakerRouting();
         return;
       }
 
@@ -534,6 +542,8 @@ export const useCameraWebRTC = (
    */
   const cleanupResources = useCallback((updateState: boolean = true) => {
     try {
+      stopWebRtcAudioRouting();
+
       if (updateState) {
         setIsStreaming(false);
         setVideoStream(null);

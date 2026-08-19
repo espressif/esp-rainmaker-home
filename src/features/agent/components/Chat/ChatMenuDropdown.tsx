@@ -23,11 +23,12 @@ interface ChatMenuDropdownProps {
   onNewChat: () => void;
   onSettings: () => void;
   onConversations: () => void;
+  onViewQuota: () => void;
 }
 
 /**
  * Chat menu dropdown component
- * Displays options: New Chat and Settings
+ * Displays options: New Chat, Conversations, View Quota, and Settings
  */
 export const ChatMenuDropdown: React.FC<ChatMenuDropdownProps> = ({
   visible,
@@ -35,6 +36,7 @@ export const ChatMenuDropdown: React.FC<ChatMenuDropdownProps> = ({
   onNewChat,
   onSettings,
   onConversations,
+  onViewQuota,
 }) => {
   const { t } = useTranslation();
 
@@ -50,6 +52,11 @@ export const ChatMenuDropdown: React.FC<ChatMenuDropdownProps> = ({
 
   const handleConversations = () => {
     onConversations();
+    onClose();
+  };
+
+  const handleViewQuota = () => {
+    onViewQuota();
     onClose();
   };
 
@@ -83,6 +90,18 @@ export const ChatMenuDropdown: React.FC<ChatMenuDropdownProps> = ({
           >
             <Text style={styles.menuItemText}>
               {t("chatSettings.conversations") || "Conversations"}
+            </Text>
+          </TouchableOpacity>
+
+          <View style={styles.separator} />
+
+          <TouchableOpacity
+            style={styles.menuItem}
+            onPress={handleViewQuota}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.menuItemText}>
+              {t("chat.viewQuota")}
             </Text>
           </TouchableOpacity>
 

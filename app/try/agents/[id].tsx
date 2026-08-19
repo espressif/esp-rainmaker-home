@@ -54,6 +54,68 @@ const LoadingScreen: React.FC<LoadingScreenProps> = ({ message }) => {
   );
 };
 
+type DeepLinkGateState = "loading" | "ready" | "redirected";
+
+/**
+ * Blocks rendering until CDF is initialized and a logged-in user is available.
+ * Prevents `useAgent` from throwing on cold-start deep links when the store
+ * has not finished session restore yet.
+ */
+const TryAgentsDeepLinkGate = () => {
+  const { isInitialized, store, initUserCustomData } = useCDF();
+  const router = useRouter();
+  const { t } = useTranslation();
+  const [gateState, setGateState] = useState<DeepLinkGateState>("loading");
+
+  useEffect(() => {
+    if (!isInitialized || !store) {
+      return;
+    }
+
+    let cancelled = false;
+
+    const prepare = async () => {
+      try {
+        await initUserCustomData();
+        if (cancelled) {
+          return;
+        }
+
+        const userInfo = store.userStore.user?.userInfo;
+        if (!userInfo) {
+          router.replace("/(auth)/Login");
+          setGateState("redirected");
+          return;
+        }
+
+        setGateState("ready");
+      } catch {
+        if (cancelled) {
+          return;
+        }
+        router.replace("/(auth)/Login");
+        setGateState("redirected");
+      }
+    };
+
+    void prepare();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isInitialized, store, initUserCustomData, router]);
+
+  if (gateState !== "ready") {
+    return (
+      <LoadingScreen
+        message={t("agent.try.loading") || "Loading agent configuration..."}
+      />
+    );
+  }
+
+  return <TryAgentsIdContent />;
+};
+
 /**
  * Deep Link Redirect Component
  *
@@ -70,7 +132,7 @@ const LoadingScreen: React.FC<LoadingScreenProps> = ({ message }) => {
  * - Includes timeout to prevent infinite loading
  * - Falls back to home screen if navigation fails
  */
-const TryAgentsId = () => {
+const TryAgentsIdContent = () => {
   // Hooks
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -608,7 +670,7 @@ const TryAgentsId = () => {
   );
 };
 
-export default TryAgentsId;
+export default TryAgentsDeepLinkGate;
 
 /* ------------------------------ Styles ------------------------------- */
 

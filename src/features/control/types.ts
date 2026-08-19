@@ -4,28 +4,19 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/** Payload sent with a camera jpeg-capture cmd-resp request. */
-export interface CameraCaptureCmdData {
-  cmd: string;
-  args: string[];
-}
+/**
+ * Control feature types. Camera cmd-resp shapes live in shared; re-exported
+ * here so control hooks keep importing from `@features/control/types`.
+ */
 
-/** Structural shape of the SDK createCmdRespRequest response (via CDF `T`). */
-export interface CmdRespSendResult {
-  requestId: string;
-}
-
-/** Structural shape of one SDK ESPCmdRespRequest (via CDF `T`). */
-export interface CmdRespRequestStatus {
-  status: string;
-  responseData?: unknown;
-}
-
-/** Terminal cmd-resp outcome returned once polling reaches success/failure/timeout. */
-export interface CmdRespTerminalResult {
-  status: string;
-  responseData?: unknown;
-}
+export type {
+  CameraCaptureCmdArg,
+  CameraCaptureCmdData,
+  CmdRespSendResult,
+  CmdRespRequestStatus,
+  CmdRespTerminalResult,
+  CapturedSnapshot,
+} from "@shared/utils/camera/cameraCaptureTypes";
 
 /** Return shape of `useCameraCommand`. */
 export interface UseCameraCommandReturn {

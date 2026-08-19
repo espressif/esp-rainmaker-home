@@ -4,7 +4,19 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/** Gallery feature-private constants. */
+/** Gallery feature constants (domain-only + re-exports of shared gallery/file keys). */
+
+export {
+  GALLERY_FILE_ENTITY_TYPE_NODE,
+  GALLERY_MEDIA_TYPE_IMAGE,
+  GALLERY_MEDIA_TYPE_VIDEO,
+  GALLERY_MEDIA_TYPE_OTHER,
+  GALLERY_FILTER_ALL,
+  GALLERY_NAME_PREFIX_SNAPSHOT,
+  GALLERY_NAME_PREFIX_CLIP,
+  GALLERY_IMAGE_EXTENSIONS,
+  GALLERY_VIDEO_EXTENSIONS,
+} from "@shared/utils/constants";
 
 // assumeRole user role granting temporary AWS creds for video/KVS access.
 export const ASSUME_ROLE_VIDEOSTREAM = "videostream";
@@ -20,32 +32,7 @@ export const GALLERY_SOURCE_DEVICE = "device";
 export type GallerySource = typeof GALLERY_SOURCE_CLOUD | typeof GALLERY_SOURCE_DEVICE;
 
 // RainMaker file list filters (CDF getFiles params).
-export const GALLERY_FILE_ENTITY_TYPE_NODE = "node";
 export const GALLERY_FILE_DEFAULT_RESULT_COUNT = 100;
-
-// Gallery media classification.
-export const GALLERY_MEDIA_TYPE_IMAGE = "image";
-export const GALLERY_MEDIA_TYPE_VIDEO = "video";
-export const GALLERY_MEDIA_TYPE_OTHER = "other";
-/** Grid filter that shows every media kind. */
-export const GALLERY_FILTER_ALL = "all";
-export const GALLERY_NAME_PREFIX_SNAPSHOT = "snapshot";
-export const GALLERY_NAME_PREFIX_CLIP = "clip";
-export const GALLERY_IMAGE_EXTENSIONS = [
-  "jpg",
-  "jpeg",
-  "png",
-  "webp",
-  "gif",
-  "bmp",
-] as const;
-export const GALLERY_VIDEO_EXTENSIONS = [
-  "mp4",
-  "mkv",
-  "webm",
-  "mov",
-  "m4v",
-] as const;
 
 /**
  * Presigned download URL cache TTL. Kept under the typical validity window so

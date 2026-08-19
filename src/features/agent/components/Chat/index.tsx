@@ -5,9 +5,15 @@
  */
 
 export { ChatMessage } from "./ChatMessage";
+export { ChatMessageContent } from "./ChatMessageContent";
+export { ChatToolCallMessage } from "./ChatToolCallMessage";
+export { ChatThinkingIndicator } from "./ChatThinkingIndicator";
+export { ChatSystemMessage } from "./ChatSystemMessage";
 export { ChatJsonViewer } from "./ChatJsonViewer";
 export { ChatQuestionSuggestions } from "./ChatQuestionSuggestions";
 export { ChatInput } from "./ChatInput";
+export { ChatUsageStrip } from "./ChatUsageStrip";
+export { ChatImageSourceBottomSheet } from "./ChatImageSourceBottomSheet";
 export { ChatHeader } from "./ChatHeader";
 export { ChatErrorState } from "./ChatErrorState";
 export { ChatLoadingState } from "./ChatLoadingState";

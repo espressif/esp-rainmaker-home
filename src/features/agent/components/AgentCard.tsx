@@ -4,10 +4,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-
 import React from "react";
-import { View, Text, TouchableOpacity, ActivityIndicator } from "react-native";
-import { Check } from "lucide-react-native";
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  ActivityIndicator,
+  StyleSheet,
+} from "react-native";
+import { Check, Trash2 } from "lucide-react-native";
 import { tokens } from "@shared/theme/tokens";
 import { globalStyles } from "@shared/theme/globalStyleSheet";
 import { useTranslation } from "react-i18next";
@@ -27,24 +32,27 @@ export const AgentCard: React.FC<AgentCardProps> = ({
   onDelete,
 }) => {
   const { t } = useTranslation();
+  const showSelectedStyle = isSelected && !isEditing;
+  const canDelete = canDeleteAgentBySource(agent);
 
   return (
     <TouchableOpacity
       style={[
         globalStyles.agentCard,
-        isSelected && globalStyles.agentCardSelected,
-        isSelected && globalStyles.agentCardSelectedBackground,
+        showSelectedStyle && globalStyles.agentCardSelected,
+        showSelectedStyle && globalStyles.agentCardSelectedBackground,
         globalStyles.shadowElevationForLightTheme,
       ]}
       onPress={onPress}
-      disabled={isLoading}
+      disabled={isLoading || isEditing}
+      activeOpacity={isEditing ? 1 : 0.7}
     >
       <View style={globalStyles.agentCardHeader}>
         <View style={globalStyles.agentCardInfo}>
           <Text
             style={[
               globalStyles.agentCardName,
-              isSelected && globalStyles.agentCardNameSelected,
+              showSelectedStyle && globalStyles.agentCardNameSelected,
             ]}
             numberOfLines={1}
           >
@@ -53,7 +61,7 @@ export const AgentCard: React.FC<AgentCardProps> = ({
           <Text
             style={[
               globalStyles.agentCardId,
-              isSelected && globalStyles.agentCardIdSelected,
+              showSelectedStyle && globalStyles.agentCardIdSelected,
             ]}
             numberOfLines={1}
           >
@@ -61,21 +69,22 @@ export const AgentCard: React.FC<AgentCardProps> = ({
           </Text>
         </View>
         {isEditing ? (
-          canDeleteAgentBySource(agent) && (
+          canDelete ? (
             <TouchableOpacity
-              style={globalStyles.agentCardDeleteButton}
+              style={styles.deleteButton}
               onPress={onDelete}
               disabled={isLoading}
+              accessibilityRole="button"
+              accessibilityLabel={t("layout.shared.remove")}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             >
               {isLoading ? (
                 <ActivityIndicator size="small" color={tokens.colors.red} />
               ) : (
-                <Text style={globalStyles.agentCardDeleteButtonText}>
-                  {t("layout.shared.remove")}
-                </Text>
+                <Trash2 size={18} color={tokens.colors.red} />
               )}
             </TouchableOpacity>
-          )
+          ) : null
         ) : (
           <View style={globalStyles.agentCardActions}>
             {isLoading ? (
@@ -96,12 +105,24 @@ export const AgentCard: React.FC<AgentCardProps> = ({
           </View>
         )}
       </View>
-      {/* Default tag at bottom right - always show for default agents */}
       {agent.isDefault && (
         <View style={globalStyles.agentCardDefaultTagContainer}>
-          <Text style={globalStyles.agentCardDefaultTag}>{t("aiSettings.default")}</Text>
+          <Text style={globalStyles.agentCardDefaultTag}>
+            {t("aiSettings.default")}
+          </Text>
         </View>
       )}
     </TouchableOpacity>
   );
 };
+
+const styles = StyleSheet.create({
+  deleteButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: tokens.colors.bg2,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+});

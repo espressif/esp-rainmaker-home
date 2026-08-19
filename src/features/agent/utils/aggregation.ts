@@ -76,8 +76,8 @@ export async function getAllAgents(
       result.push(defaultAgent);
     }
 
-    // Step 2: Add user agents
-    for (const agent of userAggregated) {
+    // Step 2: Add custom stored agents first so they win deduplication over API lists
+    for (const agent of customAgentsWithoutDefault) {
       const key = agent.agentId.trim().toLowerCase();
       if (!agentMap.has(key)) {
         agentMap.set(key, result.length);
@@ -85,8 +85,8 @@ export async function getAllAgents(
       }
     }
 
-    // Step 3: Add custom stored agents (without default, skip if already exists from user)
-    for (const agent of customAgentsWithoutDefault) {
+    // Step 3: Add user agents (skip when already saved locally as custom)
+    for (const agent of userAggregated) {
       const key = agent.agentId.trim().toLowerCase();
       if (!agentMap.has(key)) {
         agentMap.set(key, result.length);
@@ -172,21 +172,15 @@ export async function validateAgent(
  * @returns true if agent can be deleted, false otherwise
  */
 export function canDeleteAgentBySource(agent: AgentConfig): boolean {
-  // Check if agent is default (cannot delete)
   if (agent.isDefault) {
     return false;
   }
 
-  // Check source based on id prefix pattern:
-  // - 'user_' prefix = user agent (source: 'user')
-  // - 'template_' prefix = template/common agent (source: 'template')
-  // - 'custom_' prefix = custom agent (source: 'custom')
   if (agent.source === AGENT_SOURCE.USER || agent.source === AGENT_SOURCE.TEMPLATE) {
     return false;
   }
 
-  // Only custom agents (with 'custom_' prefix) can be deleted
-  return true;
+  return agent.source === AGENT_SOURCE.CUSTOM || !agent.source;
 }
 
 /**

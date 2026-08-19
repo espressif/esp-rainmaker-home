@@ -24,7 +24,7 @@ import { ChevronLeft, Play, ImageOff, X, Cloud, HardDrive, Trash2, Check } from 
 
 import { useGallery } from "@features/gallery/hooks/useGallery";
 import { useRecordings } from "@features/gallery/hooks/useRecordings";
-import ZoomableImage from "@features/gallery/components/ZoomableImage";
+import ZoomableImage from "@shared/components/ZoomableImage";
 import {
   GALLERY_FILTER_ALL,
   GALLERY_MEDIA_TYPE_IMAGE,

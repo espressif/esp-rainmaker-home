@@ -28,6 +28,8 @@ interface ScreenWrapperProps {
   dismissKeyboard?: boolean;
   /** Whether to exclude top safe area (when Header is used separately). Default: false */
   excludeTop?: boolean;
+  /** Whether to exclude bottom safe area (when bottom inset is handled manually). Default: false */
+  excludeBottom?: boolean;
   /** QA automation identifier */
   qaId?: string;
 }
@@ -40,13 +42,15 @@ interface ScreenWrapperProps {
  * - Status bar configuration
  * - Consistent styling
  * - Style customization support
- * - Keyboard dismissal on tap outside input fields
+ * - Keyboard dismissal on tap outside input fields (when dismissKeyboard is true)
+ * - Optional exclusion of top/bottom safe areas when handled by a parent or child
  */
 const ScreenWrapper: React.FC<ScreenWrapperProps> = ({
   style,
   children,
   dismissKeyboard = true,
   excludeTop = true,
+  excludeBottom = false,
   qaId,
 }) => {
   const handleDismissKeyboard = () => {
@@ -55,9 +59,14 @@ const ScreenWrapper: React.FC<ScreenWrapperProps> = ({
     }
   };
 
-  const safeAreaEdges: Edge[] = excludeTop
-    ? ["left", "right", "bottom"]
-    : ["top", "left", "right", "bottom"];
+  const safeAreaEdges: Edge[] = [];
+  if (!excludeTop) {
+    safeAreaEdges.push("top");
+  }
+  safeAreaEdges.push("left", "right");
+  if (!excludeBottom) {
+    safeAreaEdges.push("bottom");
+  }
 
   return (
     <SafeAreaView style={[globalStyles.container, style]} edges={safeAreaEdges}>
