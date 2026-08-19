@@ -1,9 +1,11 @@
 {
   "name": "NOVA",
   "main": "expo-router/entry",
-  "version": "6.0.1",
-  "versionCode": 51,
-  "workspaces": ["modules/*"],
+  "version": "6.1.0",
+  "versionCode": 52,
+  "workspaces": [
+    "modules/*"
+  ],
   "scripts": {
     "start": "expo start",
     "start:dev": "APP_ENV=development expo start -c",
@@ -34,12 +36,12 @@
     "prepare": "husky"
   },
   "dependencies": {
-    "@modules/kvs": "*",
     "@espressif/rainmaker-base-cdf": "2.3.0",
     "@espressif/rainmaker-base-sdk": "3.4.0",
     "@espressif/rainmaker-matter-sdk": "3.1.0",
-    "@espressif/rainmaker-neo-base-sdk": "file:local-sdks/espressif-rainmaker-neo-base-sdk-1.1.0.tgz",
+    "@espressif/rainmaker-neo-base-sdk": "1.2.0",
     "@expo/vector-icons": "^14.0.2",
+    "@modules/kvs": "*",
     "@react-native-async-storage/async-storage": "^2.1.2",
     "@react-native-community/checkbox": "^0.5.17",
     "@react-native-community/slider": "5.1.2",
