@@ -12,9 +12,17 @@ import {
 } from "@store";
 import {
   DISCOVERY_LOST_EVENT,
-  MDNS_SERVICE_TYPE_ESP_LOCAL_CTRL,
+  MDNS_SERVICE_TYPES_RAINMAKER_LOCAL_CTRL,
 } from "@shared/utils/constants";
 import { handleNodeTransportUpdate } from "@store";
+
+/** Normalized mDNS type key (native may drop the trailing dot). */
+const normalizeServiceType = (serviceType: string): string =>
+  serviceType.replace(/\.$/, "");
+
+const RAINMAKER_LOCAL_CTRL_TYPES = new Set(
+  MDNS_SERVICE_TYPES_RAINMAKER_LOCAL_CTRL.map(normalizeServiceType),
+);
 
 let discoveryLostSubscription: ReturnType<
   typeof DeviceEventEmitter.addListener
@@ -35,12 +43,14 @@ const startNodeLocalDiscovery = (store: ESPCDF) => {
     discoveryLostSubscription = DeviceEventEmitter.addListener(
       DISCOVERY_LOST_EVENT,
       (payload: { nodeId?: string; serviceType?: string }) => {
-        // Multi-browse: only react to RainMaker local-control losses; Matter
-        // losses are handled by `startMatterLocalDiscovery`.
+        // Multi-browse: only react to RainMaker local-control losses (classic
+        // `_esp_local_ctrl` or Neo `_esp_rmaker_ctrl`); Matter losses are
+        // handled by `startMatterLocalDiscovery`.
         if (
           payload?.serviceType &&
-          payload.serviceType.replace(/\.$/, "") !==
-            MDNS_SERVICE_TYPE_ESP_LOCAL_CTRL.replace(/\.$/, "")
+          !RAINMAKER_LOCAL_CTRL_TYPES.has(
+            normalizeServiceType(payload.serviceType),
+          )
         ) {
           return;
         }

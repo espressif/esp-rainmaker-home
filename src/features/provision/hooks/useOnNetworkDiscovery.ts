@@ -13,13 +13,18 @@ import { useCDF } from "@shared/hooks/useCDF";
 import { useToast } from "@shared/hooks/useToast";
 import { EspLocalDiscoveryAdapter } from "@native-adaptors/implementations/ESPDiscoveryAdapter";
 import type { ESPCDFOnNetworkDevice } from "@store";
+import { getResolvedActiveSdk, isRmneoStackSdkId } from "@config/sdk.config";
 import { buildOnNetworkProvisioningDevice } from "@features/provision/utils/onNetworkProvisioningDevice";
+import { probeOnNetworkSecurity } from "@features/provision/utils/onNetworkVersionProbe";
 import {
   DISCOVERY_LOST_EVENT,
   DISCOVERY_UPDATE_EVENT,
   MDNS_DOMAIN_LOCAL,
   MDNS_SERVICE_TYPE_ESP_LOCAL_CTRL,
   MDNS_SERVICE_TYPE_ESP_RMAKER_CHAL_RESP,
+  MDNS_SERVICE_TYPE_ESP_RMAKER_LOCAL_CTRL,
+  MDNS_TXT_CAP_CH_RESP,
+  MDNS_TXT_KEY_CAP,
   MDNS_TXT_KEY_CH_RESP,
   MDNS_TXT_KEY_NODE_ID,
   MDNS_TXT_KEY_POP_REQUIRED,
@@ -28,6 +33,46 @@ import {
   ON_NETWORK_DEFAULT_SEC_VERSION,
   ON_NETWORK_DISCOVERY_DURATION_MS,
 } from "@shared/utils/constants";
+
+/**
+ * Which mDNS service carries on-network provisionable devices for the active
+ * stack, and how their security details are obtained.
+ *
+ * - **RainMaker classic** (`rainmaker-base-sdk` / `rainmaker-matter-sdk`) keeps
+ *   the dedicated `_esp_rmaker_chal_resp._tcp` service, whose TXT records carry
+ *   `sec_version` / `pop_required` / `ch_resp` directly.
+ * - **RainMaker Neo** uses the shared `_esp_rmaker_ctrl._tcp` instance.
+ *   Its TXT records carry only `node_id` and `cap`, so each hit is filtered on
+ *   `cap` containing `ch_resp` and then probed on
+ *   `rmaker_local_ctrl/version` for `sec_ver` / `no_pop`.
+ */
+interface OnNetworkDiscoveryProfile {
+  serviceType: string;
+  /** Whether hits need the version-endpoint probe (RMNeo shared instance). */
+  probeVersionEndpoint: boolean;
+  /** Local-control service to restore on unmount, so the SDK's browse resumes. */
+  localControlServiceType: string;
+}
+
+/**
+ * Resolves the discovery profile for the active SDK stack.
+ *
+ * Read once per scan rather than memoized in state: the active stack only
+ * changes via Config Scan, which restarts the flow well before this screen.
+ */
+function resolveDiscoveryProfile(): OnNetworkDiscoveryProfile {
+  return isRmneoStackSdkId(getResolvedActiveSdk())
+    ? {
+        serviceType: MDNS_SERVICE_TYPE_ESP_RMAKER_LOCAL_CTRL,
+        probeVersionEndpoint: true,
+        localControlServiceType: MDNS_SERVICE_TYPE_ESP_RMAKER_LOCAL_CTRL,
+      }
+    : {
+        serviceType: MDNS_SERVICE_TYPE_ESP_RMAKER_CHAL_RESP,
+        probeVersionEndpoint: false,
+        localControlServiceType: MDNS_SERVICE_TYPE_ESP_LOCAL_CTRL,
+      };
+}
 
 interface UseOnNetworkDiscoveryReturn {
   /** True while a scan window is in progress. */
@@ -54,13 +99,27 @@ function parseSecVersion(raw: string | undefined): number {
   return Number.isFinite(n) ? n : ON_NETWORK_DEFAULT_SEC_VERSION;
 }
 
+/** Splits a comma-separated mDNS `cap` TXT value into tokens. */
+function parseCapabilities(raw: string | undefined): string[] {
+  if (!raw) return [];
+  return raw
+    .split(",")
+    .map((capability) => capability.trim())
+    .filter(Boolean);
+}
+
 /**
  * Build an `ESPCDFOnNetworkDevice` from the native discovery payload.
  *
- * Every event we receive here is for the chal-resp service type, so the
+ * Every event we receive here is for the profile's service type, so the
  * service-type filter has already happened at the Bonjour/NSD level. We only
- * need a usable host/port and a node id to act on it; TXT records refine the
- * record (POP requirement, security version, custom endpoint).
+ * need a usable host/port and a node id to act on it.
+ *
+ * On the legacy chal-resp service the TXT records also carry the security
+ * details (POP requirement, security version, custom endpoint). On the RMNeo
+ * shared instance they don't — the returned record carries placeholder security
+ * values that {@link resolveNeoSecurity} must overwrite from the version
+ * endpoint before the device is shown.
  */
 function buildOnNetworkDevice(
   raw: Record<string, unknown>
@@ -111,19 +170,60 @@ function buildOnNetworkDevice(
 }
 
 /**
+ * Whether a RMNeo hit is available for on-network association.
+ *
+ * The shared instance is advertised whenever *either* endpoint set is up, so a
+ * control-only node (`cap=local_ctrl`) also appears on this browse and must be
+ * skipped here. A hit with no `cap` record at all is treated as eligible, so
+ * firmware that omits it still shows up.
+ */
+function isChalRespCapable(raw: Record<string, unknown>): boolean {
+  const txt = (raw?.txt as Record<string, string>) || {};
+  const capRaw = Object.entries(txt).find(
+    ([key]) => key.toLowerCase() === MDNS_TXT_KEY_CAP,
+  )?.[1];
+  const capabilities = parseCapabilities(
+    capRaw === undefined ? undefined : String(capRaw),
+  );
+  if (capabilities.length === 0) return true;
+  return capabilities.includes(MDNS_TXT_CAP_CH_RESP);
+}
+
+/**
+ * Fills in a RMNeo device's security details from its version endpoint.
+ * @returns The device with real `secVersion` / `popRequired`, or `null` when the
+ *   probe failed. Listing a device with a guessed scheme is worse than hiding
+ *   it: the wrong security type fails the handshake, and a wrong PoP prompt
+ *   misleads the user.
+ */
+async function resolveNeoSecurity(
+  device: ESPCDFOnNetworkDevice,
+): Promise<ESPCDFOnNetworkDevice | null> {
+  const security = await probeOnNetworkSecurity(device.host, device.port);
+  if (!security) return null;
+  return {
+    ...device,
+    secVersion: security.secVersion,
+    popRequired: security.popRequired,
+  };
+}
+
+/**
  * Hook that drives the OnNetworkDiscovery screen.
  *
- * Browses the dedicated mDNS service (`_esp_rmaker_chal_resp._tcp.`) used by
- * unprovisioned RainMaker firmware that's already on Wi-Fi, builds a
- * de-duplicated device list, and routes the chosen device into either POP
- * (when `pop_required`) or directly into the on-network provision flow.
+ * Browses the mDNS service used by unprovisioned firmware that's already on
+ * Wi-Fi, builds a de-duplicated device list, and routes the chosen device into
+ * either POP (when the device requires one) or directly into the on-network
+ * provision flow. Which service is browsed — and where the security details
+ * come from — depends on the active stack; see
+ * {@link OnNetworkDiscoveryProfile}.
  *
  * Lifecycle contract: a single scan window runs on mount. The native browser
  * is stopped once the window expires; the user re-scans on demand. Discovery
  * is never auto-restarted by re-renders — `t`/`toast`/`router`/`store`
  * references that may flicker between renders are read through refs so the
- * mount effect runs exactly once. On real navigation away the hook restores
- * the SDK's `_esp_local_ctrl._tcp.` browse so post-login local control resumes.
+ * mount effect runs exactly once. On real navigation away the hook restores the
+ * active stack's local-control browse so post-login local control resumes.
  */
 export const useOnNetworkDiscovery = (): UseOnNetworkDiscoveryReturn => {
   const router = useRouter();
@@ -148,6 +248,10 @@ export const useOnNetworkDiscovery = (): UseOnNetworkDiscoveryReturn => {
   const restoreTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   /** Mirrors `isScanning` for use in stable callbacks (no closure capture). */
   const isScanningRef = useRef(true);
+  /** Profile of the most recent scan, read by the unmount restore. */
+  const profileRef = useRef<OnNetworkDiscoveryProfile>(
+    resolveDiscoveryProfile(),
+  );
 
   // Keep refs current across renders without causing effects to re-run.
   useEffect(() => {
@@ -182,26 +286,62 @@ export const useOnNetworkDiscovery = (): UseOnNetworkDiscoveryReturn => {
     setIsScanning(true);
     setDevices([]);
 
+    const profile = resolveDiscoveryProfile();
+    profileRef.current = profile;
+
     // Multi-browse: native may emit events for other concurrent browses
-    // (`_esp_local_ctrl._tcp.`, `_matter._tcp.`). Filter to chal-resp only.
-    const isChalResp = (payload: { serviceType?: unknown }) => {
+    // (`_matter._tcp.`, the SDK's local-control browse). Filter to ours only.
+    const isOurService = (payload: { serviceType?: unknown }) => {
       const s = typeof payload?.serviceType === "string" ? payload.serviceType : "";
       if (!s) return true; // older native build without discriminator → trust
-      return s.replace(/\.$/, "") === MDNS_SERVICE_TYPE_ESP_RMAKER_CHAL_RESP.replace(/\.$/, "");
+      return s.replace(/\.$/, "") === profile.serviceType.replace(/\.$/, "");
     };
+
+    /** Adds or replaces a device, keyed by node id. */
+    const upsertDevice = (next: ESPCDFOnNetworkDevice) => {
+      setDevices((prev) => {
+        const existingIdx = prev.findIndex((d) => d.nodeId === next.nodeId);
+        if (existingIdx === -1) return [...prev, next];
+        const copy = [...prev];
+        copy[existingIdx] = next;
+        return copy;
+      });
+    };
+
+    /**
+     * Node ids whose version probe is in flight or done, so a repeated mDNS
+     * announcement for the same node doesn't re-probe it.
+     */
+    const probedNodeIds = new Set<string>();
+    /** Guards against a probe resolving after this scan window was torn down. */
+    let scanAborted = false;
 
     const updateSub = DeviceEventEmitter.addListener(
       DISCOVERY_UPDATE_EVENT,
       (payload: Record<string, unknown>) => {
-        if (!isChalResp(payload)) return;
+        if (!isOurService(payload)) return;
         const next = buildOnNetworkDevice(payload);
         if (!next) return;
-        setDevices((prev) => {
-          const existingIdx = prev.findIndex((d) => d.nodeId === next.nodeId);
-          if (existingIdx === -1) return [...prev, next];
-          const copy = [...prev];
-          copy[existingIdx] = next;
-          return copy;
+
+        if (!profile.probeVersionEndpoint) {
+          upsertDevice(next);
+          return;
+        }
+
+        // RMNeo shared instance: skip control-only nodes, then resolve security
+        // from the version endpoint before listing the device.
+        if (!isChalRespCapable(payload)) return;
+        if (probedNodeIds.has(next.nodeId)) return;
+        probedNodeIds.add(next.nodeId);
+
+        void resolveNeoSecurity(next).then((resolved) => {
+          if (scanAborted) return;
+          if (!resolved) {
+            // Allow a later announcement to retry within this window.
+            probedNodeIds.delete(next.nodeId);
+            return;
+          }
+          upsertDevice(resolved);
         });
       }
     );
@@ -209,9 +349,10 @@ export const useOnNetworkDiscovery = (): UseOnNetworkDiscoveryReturn => {
     const lostSub = DeviceEventEmitter.addListener(
       DISCOVERY_LOST_EVENT,
       (payload: { nodeId?: string; serviceType?: string }) => {
-        if (!isChalResp(payload)) return;
+        if (!isOurService(payload)) return;
         const lostId = payload?.nodeId;
         if (!lostId) return;
+        probedNodeIds.delete(lostId);
         setDevices((prev) => prev.filter((d) => d.nodeId !== lostId));
       }
     );
@@ -223,7 +364,7 @@ export const useOnNetworkDiscovery = (): UseOnNetworkDiscoveryReturn => {
           /* swallowed: we use our own DeviceEventEmitter listener above */
         },
         {
-          serviceType: MDNS_SERVICE_TYPE_ESP_RMAKER_CHAL_RESP,
+          serviceType: profile.serviceType,
           domain: MDNS_DOMAIN_LOCAL,
         }
       );
@@ -251,6 +392,7 @@ export const useOnNetworkDiscovery = (): UseOnNetworkDiscoveryReturn => {
     }, ON_NETWORK_DISCOVERY_DURATION_MS);
 
     scanCleanupRef.current = () => {
+      scanAborted = true;
       updateSub.remove();
       lostSub.remove();
       adapterCleanup();
@@ -293,6 +435,13 @@ export const useOnNetworkDiscovery = (): UseOnNetworkDiscoveryReturn => {
       // navigation away leaves the timer alone, and 250 ms later we restore
       // local-control so the SDK's existing post-login local discovery
       // listener sees events again.
+      //
+      // The restored service type must match what the active stack's SDK
+      // browses (classic `_esp_local_ctrl._tcp.` vs RMNeo
+      // `_esp_rmaker_ctrl._tcp.`). Restoring the wrong one starts a
+      // browse whose events the SDK's service-type-filtered listener discards,
+      // silently killing local control until the next app launch.
+      const { localControlServiceType } = profileRef.current;
       if (restoreTimerRef.current) clearTimeout(restoreTimerRef.current);
       restoreTimerRef.current = setTimeout(() => {
         restoreTimerRef.current = null;
@@ -300,7 +449,7 @@ export const useOnNetworkDiscovery = (): UseOnNetworkDiscoveryReturn => {
         void EspLocalDiscoveryAdapter.stopDiscovery()
           .then(() =>
             EspLocalDiscoveryAdapter.startDiscovery(() => {}, {
-              serviceType: MDNS_SERVICE_TYPE_ESP_LOCAL_CTRL,
+              serviceType: localControlServiceType,
               domain: MDNS_DOMAIN_LOCAL,
             })
           )

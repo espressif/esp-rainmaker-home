@@ -243,7 +243,19 @@ export const RMAKER_USER_AUTH_UPDATE_RESULT_SKIPPED_NO_TOKEN_PARAM =
 export const RMAKER_USER_AUTH_UPDATE_RESULT_SKIPPED_NO_REFRESH_TOKEN =
   "skipped_no_refresh_token";
 
+/** Local-control service announced by RainMaker (classic) firmware. */
 export const MDNS_SERVICE_TYPE_ESP_LOCAL_CTRL = "_esp_local_ctrl._tcp.";
+/**
+ * Local-control service announced by RainMaker Neo firmware. One instance serves
+ * the `rmaker_local_ctrl` endpoints; its `cap` TXT record lists which endpoint
+ * sets are active (`local_ctrl` and/or `ch_resp`).
+ */
+export const MDNS_SERVICE_TYPE_ESP_RMAKER_LOCAL_CTRL = "_esp_rmaker_ctrl._tcp.";
+/** RainMaker local-control service types, across firmware generations. */
+export const MDNS_SERVICE_TYPES_RAINMAKER_LOCAL_CTRL = [
+  MDNS_SERVICE_TYPE_ESP_LOCAL_CTRL,
+  MDNS_SERVICE_TYPE_ESP_RMAKER_LOCAL_CTRL,
+] as const;
 /** Service announced by unprovisioned RainMaker firmware running the on-network challenge-response flow. */
 export const MDNS_SERVICE_TYPE_ESP_RMAKER_CHAL_RESP = "_esp_rmaker_chal_resp._tcp.";
 /** Operational Matter service (Matter spec, "Operational Discovery"). Instance names are `<CompressedFabricId16Hex>-<MatterNodeId16Hex>`. */
@@ -274,12 +286,46 @@ export const MDNS_TXT_KEY_NODE_ID = "node_id";
 export const MDNS_TXT_KEY_SEC_VERSION = "sec_version";
 export const MDNS_TXT_KEY_POP_REQUIRED = "pop_required";
 export const MDNS_TXT_KEY_CH_RESP = "ch_resp";
+/** Comma-separated capability list on `_esp_rmaker_ctrl._tcp` (RMNeo). */
+export const MDNS_TXT_KEY_CAP = "cap";
+/** `cap` token meaning the node serves the params/config control endpoints. */
+export const MDNS_TXT_CAP_LOCAL_CTRL = "local_ctrl";
+/**
+ * `cap` token meaning the node serves the challenge-response endpoint, i.e. it
+ * is available for on-network user-node association.
+ */
+export const MDNS_TXT_CAP_CH_RESP = "ch_resp";
+
+// RMAKER_LOCAL_CTRL PROTOCOL ENDPOINTS
+//
+// Mirrors `RMakerLocalCtrlEndpoint` in @espressif/rmneo-base-sdk. Duplicated
+// here because the product layer (features/shared) may not import `@espressif/*`
+// packages — see the `no-espressif-outside-sdk-layer` rule in
+// .dependency-cruiser.cjs. SDK-layer code should prefer the SDK's own constants.
+/** Protocomm session-security endpoint of the RMNeo shared local-control instance. */
+export const RMAKER_LOCAL_CTRL_SESSION_ENDPOINT = "rmaker_local_ctrl/session";
+/** Service-info endpoint; POST any payload to read `sec_ver` / `sec_patch_ver` / `cap`. */
+export const RMAKER_LOCAL_CTRL_VERSION_ENDPOINT = "rmaker_local_ctrl/version";
+/** Root key of the version response JSON. */
+export const RMAKER_LOCAL_CTRL_VERSION_KEY = "rmaker_local_ctrl";
+/**
+ * `cap` token in the *version* response meaning security 1 is registered
+ * without a PoP (network-provisioning capability convention).
+ */
+export const RMAKER_LOCAL_CTRL_CAP_NO_POP = "no_pop";
 
 // ON-NETWORK DISCOVERY DEFAULTS
 export const ON_NETWORK_DEFAULT_CH_RESP_ENDPOINT = "ch_resp";
 export const ON_NETWORK_DEFAULT_SEC_VERSION = 0;
 export const ON_NETWORK_HTTP_TIMEOUT_MS = 15000;
 export const ON_NETWORK_DISCOVERY_DURATION_MS = 5000;
+/**
+ * Budget for the unauthenticated `rmaker_local_ctrl/version` probe run per
+ * RMNeo hit during a scan window. Kept well under
+ * {@link ON_NETWORK_DISCOVERY_DURATION_MS} so a silent device can't hold the
+ * scan open.
+ */
+export const ON_NETWORK_VERSION_PROBE_TIMEOUT_MS = 3000;
 
 // TOAST TYPES
 export const TOAST_TYPE_SUCCESS = "success";

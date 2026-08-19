@@ -16,6 +16,7 @@ RCT_EXTERN_METHOD(connect:(NSString *)nodeId
                   securityType:(NSNumber *)securityType
                   pop:(nullable NSString *)pop
                   username:(nullable NSString *)username
+                  options:(nullable NSDictionary *)options
                   resolve:(RCTPromiseResolveBlock)resolve
                   reject:(RCTPromiseRejectBlock)reject)
 RCT_EXTERN_METHOD(sendData:(NSString *)nodeId

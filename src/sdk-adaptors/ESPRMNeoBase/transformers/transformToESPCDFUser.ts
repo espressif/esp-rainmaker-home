@@ -48,6 +48,7 @@ import {
 } from "../utils/helpers/mqttConnectionHelpers";
 import { clearAllCdfProjectedNcfg } from "../utils/helpers/nodeHelpers";
 import { provisionDevice } from "../utils/helpers/provisionHelpers";
+import { addOnNetworkDeviceProvision } from "../utils/helpers/onNetworkProvisionHelpers";
 import {
   applyRmneoAdaptorUserCustomDataPatch,
   getRmneoAdaptorUserCustomData,
@@ -515,6 +516,18 @@ export function transformToESPCDFUser(
      */
     async addDevice(user, params, callbacks) {
       return provisionDevice(user as ESPCDFUser, params, callbacks);
+    },
+
+    /**
+     * Runs on-network (LAN HTTP) challenge-response association for a device
+     * discovered on the shared `_esp_rmaker_ctrl._tcp` instance.
+     * @param user - CDF user.
+     * @param params - Discovered device, group id, and optional POP.
+     * @param callbacks - Store callbacks.
+     * @returns The provisioned node, or `null` if it never reached the cloud.
+     */
+    async addOnNetworkDevice(user, params, callbacks) {
+      return addOnNetworkDeviceProvision(user as ESPCDFUser, params, callbacks);
     },
 
     /**
