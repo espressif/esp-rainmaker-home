@@ -1,0 +1,23 @@
+{
+  "title": {
+    "by": "id",
+    "value": "title",
+    "text": "Enter Pairing Code"
+  },
+  "heading": {
+    "by": "id",
+    "value": "text_title_matter_manual"
+  },
+  "subtitle": {
+    "by": "id",
+    "value": "text_subtitle_matter_manual"
+  },
+  "pairing_code_input": {
+    "by": "id",
+    "value": "input_matter_pairing_code"
+  },
+  "continue_button": {
+    "by": "id",
+    "value": "button_continue_matter_manual"
+  }
+}

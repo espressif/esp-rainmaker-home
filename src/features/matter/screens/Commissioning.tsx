@@ -22,6 +22,8 @@ import {
   MATTER_COMMISSIONING_PHASE_LOADING,
   MATTER_COMMISSIONING_PHASE_NEEDS_CONVERSION,
   MATTER_COMMISSIONING_PHASE_PREPARING,
+  MATTER_ENTRY_METHOD_MANUAL,
+  MATTER_ROUTE_PARAM_ENTRY_METHOD,
   MATTER_ROUTE_PARAM_FABRIC_CONVERSION_CONSENT_REQUIRED,
   MATTER_ROUTE_PARAM_VALUE_FALSE,
 } from "@features/matter/constants";
@@ -47,9 +49,12 @@ export function CommissioningScreen({
   const { t } = useTranslation();
   const params = useLocalSearchParams<{
     qrData?: string;
+    [MATTER_ROUTE_PARAM_ENTRY_METHOD]?: string;
     [MATTER_ROUTE_PARAM_FABRIC_CONVERSION_CONSENT_REQUIRED]?: string;
   }>();
   const qrPayload = typeof params.qrData === "string" ? params.qrData : "";
+  const isManualEntry =
+    params[MATTER_ROUTE_PARAM_ENTRY_METHOD] === MATTER_ENTRY_METHOD_MANUAL;
 
   const fabricConversionConsentRequired = useMemo(() => {
     if (fabricConversionConsentRequiredProp !== undefined) {
@@ -124,9 +129,14 @@ export function CommissioningScreen({
               {...testProps("text_matter_commissioning_scan_again")}
               style={styles.scanAgainHint}
             >
+              {/* Unsupported first: when the deployment cannot do Matter at
+                  all, retrying the code — by either entry method — cannot
+                  help, so that hint takes precedence over both. */}
               {matterUnsupported
                 ? t("device.matter.commissioning.notSupportedHint")
-                : t("device.matter.commissioning.scanAgainHint")}
+                : isManualEntry
+                  ? t("device.matter.commissioning.enterCodeAgainHint")
+                  : t("device.matter.commissioning.scanAgainHint")}
             </Text>
           </View>
         )}

@@ -54,6 +54,11 @@ class AddDevice(BasePage):
         self.click("on_network_option", timeout=10)
         return self
 
+    def select_matter_manual_option(self):
+        """Select the Matter pairing-code (manual commissioning) option."""
+        self.click("matter_manual_option", timeout=10)
+        return self
+
     def validate_screen_elements(self):
         """Validate expected elements on the Add Device selection screen."""
         logger.info("Validating add device selection screen elements")

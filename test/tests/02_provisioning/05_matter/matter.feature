@@ -44,3 +44,12 @@ Feature: Matter device commissioning
     Then the device log should show matter "Brightness" set to "50"
     When user sets "Matter Device" "CCT" to "5000" from the matter control screen
     Then the device log should show matter "CCT" set to "5000"
+
+  @sanity @matter_only @manual_pairing
+  Scenario: Commission a Matter-only (esp-matter) light via manual pairing code
+    Given a matter "Light" device in commissioning mode
+    When user adds a device via "manual pairing code"
+    And user enters the matter pairing code
+    And user completes the Google Play services commissioning
+    Then the matter device should be commissioned successfully
+    And device "Light" should be visible on home screen
