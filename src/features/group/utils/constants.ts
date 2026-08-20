@@ -36,6 +36,12 @@ export const POWER_ACTION_OFF = "off" as const;
 /** Minimum time (ms) the loader stays visible after a power broadcast. */
 export const LOADER_VISIBLE_DURATION_MS = 1500;
 
+/** Home redirectOperations key that opens the add-device / Scan QR flow. */
+export const HOME_REDIRECT_ADD_DEVICE = "AddDevice";
+
+/** Unlock Home add-device if navigation never leaves the screen. */
+export const HOME_ADD_DEVICE_NAV_LOCK_RESET_MS = 2500;
+
 /** Icon size for All On / All Off power buttons. */
 export const POWER_ICON_SIZE = 20;
 

@@ -12,8 +12,37 @@ import ESPProvision
 class ESPLocalControlModule: NSObject {
   
   var espLocalDevice = ESPDevice(name: "espDevice", security: .unsecure, transport: .softap)
-  private let sessionPath = "esp_local_ctrl/session"
-  private let versionPath = "esp_local_ctrl/version"
+
+  /// Protocomm endpoints of the local-control protocol a node speaks.
+  ///
+  /// Defaults to the legacy `esp_local_ctrl` paths; RainMaker Neo nodes are
+  /// connected with the `rmaker_local_ctrl` paths supplied by the JS transport
+  /// through `connect(options:)`.
+  private struct LocalCtrlEndpoints {
+    var sessionPath = "esp_local_ctrl/session"
+    var versionPath = "esp_local_ctrl/version"
+    /// Root key holding `sec_patch_ver` in the version response JSON.
+    var versionKey = "local_ctrl"
+
+    /// Reads the endpoints from the optional `options` map. Missing keys keep the
+    /// legacy defaults, so callers that predate multi-protocol support are
+    /// unaffected.
+    init(options: NSDictionary?) {
+      guard let options = options else { return }
+      func read(_ key: String, _ fallback: String) -> String {
+        guard let value = options[key] as? String,
+              !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        else { return fallback }
+        return value
+      }
+      sessionPath = read("sessionPath", sessionPath)
+      versionPath = read("versionPath", versionPath)
+      versionKey = read("versionKey", versionKey)
+    }
+  }
+
+  /// Endpoints captured at `connect()` time, reused for any re-handshake.
+  private var endpoints = LocalCtrlEndpoints(options: nil)
 
   /// Normalizes `baseUrl` for ESPProvision `ESPSoftAPTransport`, which prepends `http://` when building URLs.
 
@@ -85,10 +114,13 @@ class ESPLocalControlModule: NSObject {
   ///     - Default: Unsecure connection.
   ///   - pop: (Optional) Proof of possession, required for security types `1` and `2`.
   ///   - username: (Optional) Username, required for security type `2`.
+  ///   - options: (Optional) Protocomm endpoints (`sessionPath`, `versionPath`, `versionKey`)
+  ///     selecting the local-control protocol. Defaults to the legacy `esp_local_ctrl` endpoints.
   ///   - resolve: A callback invoked with a success response when the connection is established.
   ///   - reject: A callback invoked with an error message if the connection fails.
-  @objc(connect:baseUrl:securityType:pop:username:resolve:reject:)
-  func connect(nodeId: String, baseUrl: String, securityType: NSNumber, pop: String?, username: String?, resolve: @escaping RCTPromiseResolveBlock, reject: @escaping RCTPromiseRejectBlock) {
+  @objc(connect:baseUrl:securityType:pop:username:options:resolve:reject:)
+  func connect(nodeId: String, baseUrl: String, securityType: NSNumber, pop: String?, username: String?, options: NSDictionary?, resolve: @escaping RCTPromiseResolveBlock, reject: @escaping RCTPromiseRejectBlock) {
+    endpoints = LocalCtrlEndpoints(options: options)
     // Determine the connection security type and configure the ESPDevice
     // accordingly.
     //
@@ -146,11 +178,12 @@ class ESPLocalControlModule: NSObject {
   }
 
   private func fetchSecPatchVersion(completion: @escaping (Int?) -> Void) {
-    espLocalDevice.espSoftApTransport.SendConfigData(path: versionPath, data: Data("---".utf8)) { response, _ in
+    let versionKey = endpoints.versionKey
+    espLocalDevice.espSoftApTransport.SendConfigData(path: endpoints.versionPath, data: Data("---".utf8)) { response, _ in
       guard
         let response = response,
         let json = try? JSONSerialization.jsonObject(with: response) as? [String: Any],
-        let localCtrl = json["local_ctrl"] as? [String: Any]
+        let localCtrl = json[versionKey] as? [String: Any]
       else {
         completion(nil)
         return
@@ -160,7 +193,7 @@ class ESPLocalControlModule: NSObject {
   }
 
   private func establishSession(resolve: @escaping RCTPromiseResolveBlock, reject: @escaping RCTPromiseRejectBlock) {
-    espLocalDevice.initialiseSession(sessionPath: sessionPath) { status in
+    espLocalDevice.initialiseSession(sessionPath: endpoints.sessionPath) { status in
       switch status {
       case .connected:
         resolve(["status": "success"])

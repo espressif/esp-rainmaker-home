@@ -372,6 +372,51 @@ export function transformToESPCDFUser(
         async assumeRole(request: ESPCDFAssumeRoleRequest): Promise<ESPCDFAssumeRoleResponse> {
             return await esprmUser.assumeRole(request);
         },
+
+        /**
+         * Sends a command-response request via the RainMaker SDK.
+         * @param params - SDK `ESPCmdRespSendRequest` payload (typed at the call site via `T`).
+         * @returns SDK send response (includes `requestId`).
+         */
+        async createCmdRespRequest<T>(params: T): Promise<T> {
+            return (await esprmUser.createCmdRespRequest(
+                params as Parameters<ESPRMUser["createCmdRespRequest"]>[0],
+            )) as T;
+        },
+
+        /**
+         * Looks up command-response request(s) by id via the RainMaker SDK.
+         * @param requestId - Request id returned by {@link createCmdRespRequest}.
+         * @param nodeId - Optional node id to narrow the lookup.
+         * @returns SDK request list (typed at the call site via `T`).
+         */
+        async getCmdRespRequestById<T>(requestId: string, nodeId?: string): Promise<T> {
+            return (await esprmUser.getCmdRespRequestById(requestId, nodeId)) as T;
+        },
+
+        /**
+         * Lists uploaded files for the current user via the RainMaker SDK.
+         * @param params - Optional SDK `ESPFileListParams` filters.
+         * @returns SDK paginated file result (typed at the call site via `T`).
+         */
+        async getFiles<T>(params?: T): Promise<T> {
+            return (await esprmUser.getFiles(
+                params as Parameters<ESPRMUser["getFiles"]>[0],
+            )) as T;
+        },
+
+        /**
+         * Fetches a single uploaded file by id via the RainMaker SDK.
+         * @param fileId - File id to look up.
+         * @param params - Optional SDK lookup params.
+         * @returns SDK `ESPFile` (or null), typed at the call site via `T`.
+         */
+        async getFileById<T>(fileId: string, params?: T): Promise<T> {
+            return (await esprmUser.getFileById(
+                fileId,
+                params as Parameters<ESPRMUser["getFileById"]>[1],
+            )) as T;
+        },
     };
 
     // Create ESPCDFUser instance

@@ -18,7 +18,16 @@ import ESPLocalControlAdapter from "@/src/native-adaptors/implementations/ESPLoc
  * Discovery is driven through the SDK's user event-subscription API
  * ({@link ESPRMNeoUser.subscribe}), which uses the registered
  * `ESPLocalDiscoveryAdapter` and delivers standardized `ESPDiscoveredNodeData`
- * (`{ nodeId, transportDetails: { type: "local", metadata: { baseUrl } } }`).
+ * (`{ nodeId, transportDetails: { type: "local", metadata: { baseUrl,
+ * protocol, capabilities? } } }`).
+ *
+ * The SDK browses `_esp_rmaker_ctrl._tcp` (RainMaker Neo firmware) and
+ * tags each hit with `protocol: "rmaker_local_ctrl"`, which is how the SDK's
+ * transport layer picks its local-control implementation — so the whole
+ * metadata bag must survive the CDF round-trip (see the
+ * `AVAILABLE_TRANSPORTS` case in `nodeHelpers`). Nodes advertising only
+ * `ch_resp` in their `cap` TXT record are filtered out by the SDK, since they
+ * serve on-network association rather than param control.
  *
  * Each hit is forwarded to the CDF store (`cdfCallback`, wired to
  * `subscriptionStore.transport.listen`). The CDF store is the single source of

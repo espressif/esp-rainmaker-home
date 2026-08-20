@@ -1,0 +1,35 @@
+{
+  "name": "@modules/kvs",
+  "version": "0.1.0",
+  "description": "AWS Kinesis Video Streams client suite (archived media + WebRTC signaling)",
+  "license": "Apache-2.0",
+  "private": true,
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    }
+  },
+  "files": [
+    "src",
+    "LICENSE",
+    "CHANGELOG.md",
+    "README.md"
+  ],
+  "dependencies": {
+    "@aws-sdk/client-kinesis-video": "^3.1111.0",
+    "@aws-sdk/client-kinesis-video-archived-media": "^3.1111.0",
+    "@aws-sdk/client-kinesis-video-signaling": "^3.1111.0"
+  },
+  "peerDependencies": {
+    "react-native-get-random-values": "^1.11.0",
+    "react-native-webrtc": "^124.0.0"
+  },
+  "devDependencies": {
+    "react-native-get-random-values": "^1.11.0",
+    "react-native-webrtc": "^124.0.7",
+    "typescript": "^5.3.3"
+  }
+}

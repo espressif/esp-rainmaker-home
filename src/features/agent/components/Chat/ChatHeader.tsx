@@ -20,6 +20,7 @@ interface ChatHeaderProps {
   onConfigPress: () => void;
   onNewChat: () => void;
   onOpenConversations: () => void;
+  onViewQuota: () => void;
 }
 
 /**
@@ -31,6 +32,7 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
   onConfigPress,
   onNewChat,
   onOpenConversations,
+  onViewQuota,
 }) => {
   const { t } = useTranslation();
   const router = useRouter();
@@ -104,6 +106,7 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
         onNewChat={onNewChat}
         onSettings={handleSettingsPress}
         onConversations={onOpenConversations}
+        onViewQuota={onViewQuota}
       />
     </>
   );

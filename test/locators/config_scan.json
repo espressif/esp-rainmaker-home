@@ -14,17 +14,5 @@
   "text_config_scan_success": {
     "by": "id",
     "value": "text_config_scan_success"
-  },
-  "text_config_scan_error": {
-    "by": "id",
-    "value": "text_config_scan_error"
-  },
-  "button_config_scan_retry": {
-    "by": "id",
-    "value": "button_config_scan_retry"
-  },
-  "button_config_scan_cancel": {
-    "by": "id",
-    "value": "button_config_scan_cancel"
   }
 }

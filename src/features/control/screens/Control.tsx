@@ -30,6 +30,7 @@ import { Settings } from "lucide-react-native";
 
 // Components
 import { Header, ScreenWrapper, DeviceOfflineBanner } from "@shared/components";
+import { DeviceAuthRefreshButton } from "@features/control/components";
 import Fallback from "./device_panels/Fallback";
 import LightControl from "./device_panels/Light";
 import SwitchControl from "./device_panels/Switch";
@@ -229,6 +230,13 @@ const Control = () => {
             {renderDeviceControl()}
           </ScrollView>
         </View>
+        {/* On-demand device auth-token push (mirrors the native device screen).
+            Renders only when the node exposes a refreshable auth service. The
+            ai-agent panel surfaces its own refresh affordance, so skip it here
+            to avoid a duplicate button. */}
+        {deviceConfig?.controlPanel !== "ai-agent" && (
+          <DeviceAuthRefreshButton node={node} />
+        )}
       </ScreenWrapper>
     </>
   );

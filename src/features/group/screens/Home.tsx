@@ -5,7 +5,7 @@
  */
 
 import { useMemo } from "react";
-import { Pressable, View } from "react-native";
+import { ActivityIndicator, Pressable, View } from "react-native";
 import { Plus } from "lucide-react-native";
 import { tokens } from "@shared/theme/tokens";
 import { globalStyles } from "@shared/theme/globalStyleSheet";
@@ -16,7 +16,7 @@ import { observer } from "mobx-react-lite";
 import { useHomeScreen } from "@features/group/hooks";
 import { useExitAppConfirmation } from "@shared/hooks/useExitAppConfirmation";
 import { getFeatures } from "@/config/features.config";
-import { ALL_DEVICES_TAB_ID } from "@features/group/utils/constants";
+import { ALL_DEVICES_TAB_ID, HOME_REDIRECT_ADD_DEVICE } from "@features/group/utils/constants";
 
 // Components
 import {
@@ -42,13 +42,16 @@ import { testProps } from "@shared/utils/testProps";
 /**
  * Home Screen – first screen after login.
  * Banner stays visible (dropdown shows a small skeleton while the home name
- * loads). Room/device cards use a matching skeleton grid until CDF has list
- * content; then MobX updates paint the real cards without a refresh.
+ * loads; once a name exists the dropdown unlocks even if `isLoading` is still
+ * true). Device skeletons stay until init sync settles for the current home
+ * (or devices are already in CDF); empty CTA only after that — avoids a
+ * false "no device" flash before nodes arrive.
  */
 const HomeScreen = () => {
   const { t } = useTranslation();
   const {
     isLoading,
+    isNavigatingToAddDevice,
     refreshing,
     selectedRoom,
     setSelectedRoom,
@@ -138,12 +141,20 @@ const HomeScreen = () => {
     listDevices.length === 0 &&
     !showGroupControlOnHome;
 
+  /** Block add-device until home init finishes and a home is selected. */
+  const isAddDeviceDisabled =
+    isLoading || isNavigatingToAddDevice || !selectedHome;
+
+  /** Header spinner while home init or add-device navigation is in flight. */
+  const showHeaderSpinner = isLoading || isNavigatingToAddDevice;
+
   /** Skeleton device rows, empty CTA, or null — always inside the FlatList. */
   const listEmpty = showDeviceSkeleton ? (
     <HomeDeviceSkeletonList />
   ) : showEmptyCta ? (
     <AddYourFirstDeviceBanner
       redirectOperations={redirectOperations}
+      isNavigating={isNavigatingToAddDevice}
       qaId="banner_add_first_device"
     />
   ) : null;
@@ -154,12 +165,47 @@ const HomeScreen = () => {
         label={t("group.home.title")}
         showBack={false}
         rightSlot={
-          <Pressable
-            {...testProps("button_add_device_header")}
-            onPress={() => redirectOperations("AddDevice")}
-          >
-            <Plus size={24} color={tokens.colors.primary} />
-          </Pressable>
+          showHeaderSpinner ? (
+            <View
+              {...testProps("activity_indicator_home_header")}
+              style={{
+                minWidth: 44,
+                minHeight: 44,
+                justifyContent: "center",
+                alignItems: "flex-end",
+              }}
+            >
+              <ActivityIndicator
+                size="small"
+                color={tokens.colors.primary}
+              />
+            </View>
+          ) : (
+            <Pressable
+              {...testProps("button_add_device_header")}
+              disabled={isAddDeviceDisabled}
+              hitSlop={12}
+              style={{
+                minWidth: 44,
+                minHeight: 44,
+                justifyContent: "center",
+                alignItems: "flex-end",
+              }}
+              onPress={() => {
+                if (isAddDeviceDisabled) return;
+                redirectOperations(HOME_REDIRECT_ADD_DEVICE);
+              }}
+            >
+              <Plus
+                size={24}
+                color={
+                  isAddDeviceDisabled
+                    ? tokens.colors.gray
+                    : tokens.colors.primary
+                }
+              />
+            </Pressable>
+          )
         }
         qaId="header_home"
       />

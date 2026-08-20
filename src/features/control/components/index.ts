@@ -6,6 +6,7 @@
 
 export { default as DevicePanelNoParamsEmptyState } from "./DevicePanelNoParamsEmptyState";
 export { default as AgentSelectionBottomSheet } from "./AgentSelectionBottomSheet";
+export { default as DeviceAuthRefreshButton } from "./DeviceAuthRefreshButton";
 export { RoundedSlider } from "./RoundedSlider";
 export * from "./Charts";
 

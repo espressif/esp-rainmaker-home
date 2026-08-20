@@ -549,6 +549,16 @@
       "bridge": "桥接",
       "controller": "控制器"
     },
+    "camera": {
+      "gallery": "摄像头图库",
+      "capture": {
+        "button": "拍摄摄像头快照",
+        "capturing": "正在拍摄…",
+        "submitted": "文件上传请求已提交",
+        "failed": "拍摄快照失败",
+        "timedOut": "拍摄超时"
+      }
+    },
     "addDeviceSelection": {
       "title": "添加设备",
       "note": "请阅读快速用户指南并选择一种方式添加设备",
@@ -560,6 +570,8 @@
       "softAPDescription": "使用 SoftAP 连接添加设备",
       "onNetworkOption": "网络中",
       "onNetworkDescription": "添加已连接到您 Wi-Fi 网络的设备",
+      "matterManualOption": "Matter 配对码",
+      "matterManualDescription": "通过输入配置码添加 Matter 设备",
       "sharedHomeRestriction": "不允许添加设备",
       "sharedHomeMessage": "您没有权限向“{{homeName}}”添加设备，因为这是一个共享家庭。",
       "defaultHomeName": "此家庭"
@@ -576,7 +588,12 @@
     "control": {
       "title": "设备控制",
       "deviceNotFound": "设备未找到",
-      "fallbackNoParams": "此设备未配置参数。"
+      "fallbackNoParams": "此设备未配置参数。",
+      "refreshToken": "刷新令牌",
+      "refreshingToken": "正在刷新…",
+      "tokenRefreshed": "令牌刷新成功",
+      "tokenRefreshFailed": "刷新设备令牌失败",
+      "authServiceNotFound": "此设备没有可刷新的认证服务"
     },
     "pop": {
       "title": "所有权证明",
@@ -690,18 +707,18 @@
         "requestingPermission": "正在检查相机权限...",
         "noCameraPermission": "需要相机访问权限",
         "cameraPermissionRequired": "需要相机访问权限来扫描二维码。请授予权限以继续。",
-        "grantPermission": "继续",
+        "grantPermission": "请求权限",
         "bluetoothDisabled": "蓝牙已关闭",
         "bluetoothDisabledMessage": "二维码配网需要蓝牙。请在设备设置中打开蓝牙以继续。",
         "enableBluetooth": "启用蓝牙",
         "openSettings": "打开设置",
-        "invalidQRCode": "二维码无效",
-        "unableToConnectToDevice": "无法连接到设备",
-        "failedToInitializeDevice": "初始化设备失败",
+        "invalidQRCode": "不支持此二维码，请重试。",
+        "unableToConnectToDevice": "连接设备失败，请重试。",
         "androidNotImplemented": "Android 二维码扫描连接尚未实现",
         "platformNotSupported": "此平台不支持二维码扫描",
         "sessionInitFailed": "初始化会话失败，请重试。",
         "scanAgain": "重新扫描",
+        "flipCamera": "翻转",
         "noQrCode": "我没有二维码",
         "bluetoothPermissionRequired": "需要蓝牙访问权限。请授予权限并重试。",
         "matterAuthRequired": "Matter 设备调试需要身份验证。",
@@ -742,6 +759,7 @@
         "notSupported": "{{deployment}} 不支持 Matter 配网。",
         "notSupportedGeneric": "此部署不支持 Matter 配网。",
         "notSupportedHint": "请切换到支持 Matter 的部署后再添加此设备。",
+        "enterCodeAgainHint": "请返回并重新输入配对码。",
         "convertTitle": "为此家庭启用 Matter",
         "convertMessage": "需要先为“{{homeName}}”配置 Matter Fabric 才能添加设备。是否继续转换此家庭？",
         "convertConfirm": "继续",
@@ -750,6 +768,14 @@
         "statusStartingCommissioning": "正在启动调试...",
         "statusIssuingCertificate": "正在签发用户证书...",
         "statusConvertingFabric": "正在将家庭转换为 Matter Fabric..."
+      },
+      "manual": {
+        "title": "输入配对码",
+        "heading": "输入 Matter 配对码",
+        "description": "输入 Matter 设备或其包装上印制的配置码。",
+        "placeholder": "11 位或 21 位配对码",
+        "invalidCode": "请输入有效的 11 位或 21 位 Matter 配对码。",
+        "authRequired": "请先登录后再进行 Matter 设备调试。"
       }
     },
     "wifi": {
@@ -876,6 +902,7 @@
       "configurationFailed": "应用网络配置失败。请重试。",
       "wifiStatusFetchFailed": "无法获取 Wi-Fi 状态。请重试。",
       "missingProvisionData": "缺少配网数据",
+      "nodeDoesNotExist": "无法将此设备关联到您的账户。请将设备恢复出厂设置后，再重新添加。",
       "nodeNotFound": "配网后未找到设备",
       "failedToScanNetworks": "扫描网络失败",
       "invalidCredentials": "请输入有效的凭据",
@@ -1233,6 +1260,22 @@
     "agentConfigNotFound": "未找到配置的智能体",
     "agentConfigNotFoundDescription": "找不到配置的智能体。请更新您的智能体设置。",
     "updateAgent": "更新智能体",
+    "attachImage": "附加图片",
+    "attachImageSourceTitle": "添加图片",
+    "takePhoto": "拍照",
+    "chooseFromGallery": "从相册选择",
+    "viewQuota": "查看配额",
+    "attachedImage": "已附加图片",
+    "removeAttachment": "移除附件",
+    "uploadingImage": "正在上传图片...",
+    "imagePermissionDenied": "需要相册权限才能附加图片",
+    "cameraPermissionDenied": "需要相机权限才能拍照",
+    "imageUploadFailed": "图片上传失败，请重试。",
+    "imageConversationNotReady": "会话尚未就绪，请稍后再试。",
+    "imageNotSupportedForAgent": "此智能体不支持图片附件。",
+    "mediaTypeNotAllowed": "此智能体不支持该文件类型。",
+    "mediaTooLarge": "文件过大，最大允许 {{maxSizeMb}} MB。",
+    "mediaMaxFiles": "每条消息最多可附加 {{maxFiles}} 张图片。",
     "messageDisplayConfig": {
       "title": "消息显示设置",
       "showUser": "显示用户消息",
@@ -1290,6 +1333,8 @@
     "displayName": "显示名称",
     "tools": "工具",
     "noTools": "未配置工具",
+    "enabledTools": "已启用的工具",
+    "noEnabledTools": "无已启用的工具",
     "connected": "已连接",
     "connect": "连接",
     "connecting": "正在连接...",
@@ -1340,6 +1385,16 @@
     "agentUpdated": "智能体更新成功",
     "agentDeleted": "智能体删除成功",
     "agentSetForChat": "已设置聊天智能体",
+    "scan": {
+      "title": "扫描智能体二维码",
+      "alignQRCode": "将智能体二维码对准框内",
+      "cameraPermissionRequired": "扫描智能体二维码需要相机权限，请授予权限后继续。",
+      "grantPermission": "授予权限",
+      "invalidQRCode": "无效的二维码",
+      "invalidQRCodeMessage": "此二维码不包含有效的智能体链接。",
+      "scanAgent": "扫描智能体二维码",
+      "addAgent": "添加新智能体"
+    },
     "confirmDelete": {
       "title": "删除智能体",
       "message": "您确定要删除此智能体吗？此操作无法撤销。"
@@ -1404,6 +1459,13 @@
     "continue": "继续",
     "confirm": "确认",
     "clear": "清除"
+  },
+  "config": {
+    "scan": {
+      "title": "部署配置",
+      "invalidQRCode": "不支持此二维码，请重试。",
+      "scanOverlay": "请仅扫描部署配置二维码"
+    }
   },
   "landing": {
     "title": "欢迎",

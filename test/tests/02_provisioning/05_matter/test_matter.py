@@ -17,9 +17,23 @@ scenarios("matter.feature")
 
 @when(parsers.parse('user adds a device via "{method}"'))
 def add_device_via(helper, method):
-    if method != "scan qr":
+    if method == "scan qr":
+        # Add Device opens the QR scanner directly, so there is no option to pick.
+        helper.add_device.open_from_home()
+    elif method == "manual pairing code":
+        # The provisioning-option list is only reachable from that scanner;
+        # open_selection_from_scanner() opens Add Device itself when needed.
+        helper.add_device.open_selection_from_scanner()
+        helper.add_device.select_matter_manual_option()
+    else:
         raise AssertionError(f"Unsupported matter add-device method: {method}")
-    helper.add_device.open_from_home()
+
+
+@when("user enters the matter pairing code")
+def enter_matter_pairing_code(helper, matter_device):
+    assert matter_device.manual_code, \
+        "No manual pairing code available (set MATTER_MANUAL_CODE for the static-override path)"
+    helper.matter_manual.enter_pairing_code(matter_device.manual_code)
 
 
 @when("user completes the Google Play services commissioning")

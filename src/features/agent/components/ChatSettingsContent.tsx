@@ -12,15 +12,18 @@ import {
   ActivityIndicator,
   TouchableOpacity,
 } from "react-native";
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useWindowDimensions } from "react-native";
 import { AlertCircle } from "lucide-react-native";
 import { tokens } from "@shared/theme/tokens";
 import { globalStyles } from "@shared/theme/globalStyleSheet";
 import { CollapsibleCard } from "@shared/components";
+import { isConnectableRemoteTool } from "@features/agent/utils";
 import FontSizeSlider from "./FontSizeSlider";
 import { ChatSettingsBasicInfo } from "./ChatSettingsBasicInfo";
 import { ChatSettingsToolCard } from "./ChatSettingsToolCard";
+import { ChatSettingsToolDetailBottomSheet } from "./ChatSettingsToolDetailBottomSheet";
 import { AgentConfigResponse } from "@src/types/global";
 
 type AgentConfigTool = NonNullable<AgentConfigResponse["tools"]>[number];
@@ -29,18 +32,16 @@ interface ChatSettingsContentProps {
   isLoading: boolean;
   error: string | null;
   agentConfig: AgentConfigResponse | null;
+  agentTools: AgentConfigTool[];
   fontSize: number;
   conversationId: string | null;
   onRetry: () => void;
   onFontSizeChange: (value: number) => void;
   onConnectTool: (tool: AgentConfigTool) => void;
   onDisconnectTool: (tool: AgentConfigTool) => void;
-  getToolConnectionStatus: (
-    url: string,
-    expectedConnectorId?: string,
-  ) => { isConnected: boolean } | null;
-  getExpectedConnectorId: (tool: AgentConfigTool) => string | undefined;
-  isToolInConfig: (tool: AgentConfigTool) => boolean;
+  getRemoteToolConnectionStatus: (
+    tool: AgentConfigTool,
+  ) => { isConnected: boolean; isExpired: boolean };
   connectingToolUrl: string | null;
   disconnectingToolUrl: string | null;
 }
@@ -52,20 +53,21 @@ export function ChatSettingsContent({
   isLoading,
   error,
   agentConfig,
+  agentTools,
   fontSize,
   conversationId,
   onRetry,
   onFontSizeChange,
   onConnectTool,
   onDisconnectTool,
-  getToolConnectionStatus,
-  getExpectedConnectorId,
-  isToolInConfig,
+  getRemoteToolConnectionStatus,
   connectingToolUrl,
   disconnectingToolUrl,
 }: ChatSettingsContentProps) {
   const { t } = useTranslation();
   const { width } = useWindowDimensions();
+  const [selectedTool, setSelectedTool] = useState<AgentConfigTool | null>(null);
+  const [showToolDetailSheet, setShowToolDetailSheet] = useState(false);
 
   const getCardWidth = () => {
     if (width <= 500) {
@@ -75,6 +77,22 @@ export function ChatSettingsContent({
   };
 
   const cardWidth = getCardWidth();
+
+  /**
+   * Opens the enabled-tools bottom sheet for the tapped tool card.
+   */
+  const handleToolCardPress = (tool: AgentConfigTool) => {
+    setSelectedTool(tool);
+    setShowToolDetailSheet(true);
+  };
+
+  /**
+   * Closes the enabled-tools bottom sheet and clears the selection.
+   */
+  const handleCloseToolDetailSheet = () => {
+    setShowToolDetailSheet(false);
+    setSelectedTool(null);
+  };
 
   if (isLoading) {
     return (
@@ -114,6 +132,7 @@ export function ChatSettingsContent({
   }
 
   return (
+    <>
     <ScrollView
       style={globalStyles.chatSettingsScrollView}
       showsVerticalScrollIndicator={false}
@@ -137,31 +156,31 @@ export function ChatSettingsContent({
         <Text style={globalStyles.chatSettingsSectionTitle}>
           {t("chatSettings.tools") || "Tools"}
         </Text>
-        {!agentConfig.tools || agentConfig.tools.length === 0 ? (
+        {!agentTools || agentTools.length === 0 ? (
           <Text style={globalStyles.chatSettingsEmptyText}>
             {t("chatSettings.noTools") || "No tools configured"}
           </Text>
         ) : (
           <View style={globalStyles.chatSettingsCardsGrid}>
-            {agentConfig.tools.map((tool: AgentConfigTool, index: number) => {
-              const isInTools = isToolInConfig(tool);
-              const expectedConnectorId = getExpectedConnectorId(tool);
-              const connectionStatus = isInTools
-                ? getToolConnectionStatus(tool.url, expectedConnectorId)
+            {agentTools.map((tool: AgentConfigTool, index: number) => {
+              const showConnectorActions = isConnectableRemoteTool(tool);
+              const connectionStatus = showConnectorActions
+                ? getRemoteToolConnectionStatus(tool)
                 : null;
 
               return (
                 <ChatSettingsToolCard
-                  key={tool.url ?? index}
+                  key={tool.name ?? tool.url ?? index}
                   tool={tool}
                   index={index}
                   cardWidth={cardWidth}
-                  isInTools={isInTools}
+                  isInTools={showConnectorActions}
                   connectionStatus={connectionStatus}
                   isConnecting={connectingToolUrl === tool.url}
                   isDisconnecting={disconnectingToolUrl === tool.url}
                   onConnect={onConnectTool}
                   onDisconnect={onDisconnectTool}
+                  onPress={handleToolCardPress}
                 />
               );
             })}
@@ -188,5 +207,12 @@ export function ChatSettingsContent({
         </View>
       </CollapsibleCard>
     </ScrollView>
+
+    <ChatSettingsToolDetailBottomSheet
+      visible={showToolDetailSheet}
+      tool={selectedTool}
+      onClose={handleCloseToolDetailSheet}
+    />
+    </>
   );
 }

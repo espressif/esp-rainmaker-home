@@ -2151,7 +2151,7 @@ export const globalStyles = StyleSheet.create({
   },
   chatContainer: {
     flex: 1,
-    backgroundColor: tokens.colors.bg5,
+    backgroundColor: "#F5F7F9",
     padding: 0,
     margin: 0,
   },
@@ -2211,6 +2211,11 @@ export const globalStyles = StyleSheet.create({
   chatMessagesContent: {
     padding: tokens.spacing._15,
     paddingBottom: tokens.spacing._5,
+    flexGrow: 1,
+    justifyContent: "flex-end",
+  },
+  chatInputArea: {
+    width: "100%",
   },
   chatMessagesContentEmpty: {
     flexGrow: 1,
@@ -2224,9 +2229,141 @@ export const globalStyles = StyleSheet.create({
   },
   chatUserMessageWrapper: {
     alignItems: "flex-end",
+    marginBottom: tokens.spacing._5,
+    paddingHorizontal: tokens.spacing._10,
+    width: "100%",
+  },
+  chatUserMediaStack: {
+    width: "100%",
+    alignSelf: "stretch",
+    marginBottom: tokens.spacing._5,
+    gap: tokens.spacing._5,
   },
   chatBotMessageWrapper: {
     alignItems: "flex-start",
+    marginBottom: tokens.spacing._5,
+    paddingHorizontal: tokens.spacing._10,
+    width: "100%",
+  },
+  chatUserBubble: {
+    maxWidth: "70%",
+    backgroundColor: "#DDE3ED",
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 18,
+  },
+  chatAssistantMessageContainer: {
+    maxWidth: "100%",
+    width: "100%",
+    backgroundColor: "transparent",
+  },
+  chatPlainMessageText: {
+    color: tokens.colors.text_primary,
+  },
+  chatToolPlainText: {
+    fontFamily: "monospace",
+  },
+  chatThinkingCollapsible: {
+    width: "100%",
+  },
+  chatThinkingCollapsibleHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: tokens.spacing._5,
+  },
+  chatThinkingCollapsibleTitle: {
+    color: tokens.colors.text_secondary,
+    fontStyle: "italic",
+    userSelect: "none",
+  },
+  chatThinkingCollapsibleBody: {
+    color: tokens.colors.text_secondary,
+    fontStyle: "italic",
+    marginTop: tokens.spacing._5,
+    marginLeft: tokens.spacing._10,
+  },
+  chatToolMessageContainer: {
+    width: "100%",
+    maxWidth: "100%",
+    paddingVertical: tokens.spacing._5,
+  },
+  chatToolMessageHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: tokens.spacing._5,
+  },
+  chatToolMessageTitle: {
+    flex: 1,
+    color: tokens.colors.primary,
+    fontWeight: "400",
+  },
+  chatToolMessageCodePanel: {
+    marginTop: tokens.spacing._10,
+    backgroundColor: "#1e1e1e",
+    borderRadius: 12,
+    maxHeight: 200,
+  },
+  chatToolMessageCodeContent: {
+    padding: tokens.spacing._10,
+  },
+  chatToolMessageCodeText: {
+    color: "#d4d4d4",
+    fontFamily: "monospace",
+    lineHeight: 18,
+  },
+  chatCollapsibleMessageContainer: {
+    width: "100%",
+    maxWidth: "100%",
+    paddingVertical: tokens.spacing._5,
+  },
+  chatCollapsibleMessageHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: tokens.spacing._5,
+    width: "100%",
+  },
+  chatCollapsibleMessageTitle: {
+    flex: 1,
+    color: tokens.colors.primary,
+    fontWeight: "400",
+  },
+  chatCollapsibleMessageCodePanel: {
+    marginTop: tokens.spacing._10,
+    backgroundColor: "#1e1e1e",
+    borderRadius: 12,
+    maxHeight: 200,
+    width: "100%",
+  },
+  chatCollapsibleMessageCodeContent: {
+    padding: tokens.spacing._10,
+  },
+  chatCollapsibleMessageCodeText: {
+    color: "#d4d4d4",
+    fontFamily: "monospace",
+    lineHeight: 18,
+  },
+  chatSystemMessageWrapper: {
+    alignItems: "center",
+    marginBottom: tokens.spacing._5,
+    paddingHorizontal: tokens.spacing._10,
+  },
+  chatSystemMessageChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: tokens.spacing._5,
+    backgroundColor: tokens.colors.bg3,
+    borderRadius: 16,
+    paddingHorizontal: tokens.spacing._10,
+    paddingVertical: tokens.spacing._5,
+  },
+  chatSystemMessageText: {
+    color: tokens.colors.text_secondary,
+  },
+  chatTimeoutChip: {
+    backgroundColor: "rgba(239, 68, 68, 0.12)",
+    borderRadius: 16,
+    paddingHorizontal: tokens.spacing._15,
+    paddingVertical: tokens.spacing._5,
   },
   chatMessageContainer: {
     maxWidth: "85%",
@@ -2258,7 +2395,7 @@ export const globalStyles = StyleSheet.create({
     fontWeight: "400",
   },
   chatUserMessageText: {
-    color: tokens.colors.bg1,
+    color: tokens.colors.text_primary,
   },
   chatBotMessageText: {
     color: tokens.colors.text_primary,
@@ -2305,17 +2442,11 @@ export const globalStyles = StyleSheet.create({
     textAlign: "left",
   },
   chatInputContainer: {
-    backgroundColor: tokens.colors.bg1,
-    borderTopWidth: 1,
-    borderTopColor: tokens.colors.bg3,
-    shadowColor: tokens.colors.text_primary,
-    shadowOffset: {
-      width: 0,
-      height: -2,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 8,
+    backgroundColor: "transparent",
+    borderTopWidth: 0,
+    paddingHorizontal: tokens.spacing._10,
+    paddingTop: tokens.spacing._10,
+    paddingBottom: tokens.spacing._10,
   },
   chatInputContainerKeyboardVisible: {
     paddingBottom: tokens.spacing._5,
@@ -2357,23 +2488,37 @@ export const globalStyles = StyleSheet.create({
   chatInputWrapper: {
     flexDirection: "row",
     alignItems: "flex-end",
-    paddingHorizontal: tokens.spacing._15,
-    paddingVertical: tokens.spacing._15,
-    gap: tokens.spacing._10,
+    paddingHorizontal: tokens.spacing._5,
+    paddingVertical: tokens.spacing._5,
+    gap: tokens.spacing._5,
+    backgroundColor: tokens.colors.bg1,
+    borderRadius: 28,
+    borderWidth: 1,
+    borderColor: tokens.colors.bg2,
+    shadowColor: tokens.colors.text_primary,
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  chatInputWrapperSingleLine: {
+    alignItems: "center",
   },
   chatTextInputContainer: {
     flex: 1,
-    backgroundColor: tokens.colors.bg3,
+    backgroundColor: "transparent",
     borderRadius: tokens.radius.md,
-    paddingHorizontal: tokens.spacing._15,
-    paddingVertical: tokens.spacing._10,
-    minHeight: 44,
-    maxHeight: 108,
-    borderWidth: 1,
-    borderColor: "transparent",
+    paddingHorizontal: tokens.spacing._5,
+    minHeight: 40,
+    maxHeight: 120,
+    borderWidth: 0,
+    justifyContent: "center",
   },
   chatTextInput: {
-    flex: 1,
+    width: "100%",
     fontSize: 16,
     color: tokens.colors.text_primary,
     lineHeight: 22,
@@ -2398,9 +2543,9 @@ export const globalStyles = StyleSheet.create({
     fontWeight: "600",
   },
   chatSendButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     justifyContent: "center",
     alignItems: "center",
     marginBottom: 0,
@@ -2412,13 +2557,89 @@ export const globalStyles = StyleSheet.create({
       width: 0,
       height: 2,
     },
-    shadowOpacity: 0.3,
+    shadowOpacity: 0.25,
     shadowRadius: 4,
-    elevation: 4,
+    elevation: 3,
   },
   chatSendButtonDisabled: {
     backgroundColor: tokens.colors.bg3,
     opacity: 0.4,
+  },
+  chatAttachButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: tokens.colors.bg2,
+    borderWidth: 0,
+  },
+  chatAttachButtonDisabled: {
+    opacity: 0.4,
+  },
+  chatAttachButtonExpanded: {
+    alignSelf: "flex-start",
+  },
+  chatAttachmentPreviewScroll: {
+    marginHorizontal: tokens.spacing._10,
+    marginBottom: tokens.spacing._5,
+  },
+  chatAttachmentPreviewScrollContent: {
+    gap: tokens.spacing._10,
+    paddingTop: tokens.spacing._5,
+    paddingBottom: tokens.spacing._5,
+    paddingRight: tokens.spacing._5,
+  },
+  chatAttachmentPreviewItem: {
+    width: 72,
+    height: 72,
+  },
+  chatAttachmentPreviewImage: {
+    width: 72,
+    height: 72,
+    borderRadius: tokens.radius.md,
+    backgroundColor: tokens.colors.bg3,
+  },
+  chatAttachmentPreviewUploadingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: tokens.radius.md,
+    backgroundColor: "rgba(0,0,0,0.35)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  chatAttachmentRemoveButton: {
+    position: "absolute",
+    top: -6,
+    right: -6,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: tokens.colors.primary,
+    zIndex: 1,
+  },
+  chatMessageImage: {
+    width: "100%",
+    aspectRatio: 4 / 3,
+    maxHeight: 280,
+    borderRadius: tokens.radius.md,
+    backgroundColor: tokens.colors.bg3,
+  },
+  chatMessageImagePlaceholder: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: tokens.spacing._5,
+    width: "100%",
+    paddingHorizontal: tokens.spacing._10,
+    paddingVertical: tokens.spacing._10,
+    borderRadius: tokens.radius.md,
+    backgroundColor: tokens.colors.bg3,
+  },
+  chatMessageImagePlaceholderText: {
+    flex: 1,
+    fontSize: 12,
+    color: tokens.colors.text_secondary,
   },
   chatReconnectButton: {
     marginTop: tokens.spacing._10,
@@ -2458,8 +2679,8 @@ export const globalStyles = StyleSheet.create({
     flex: 1,
   },
   chatThinkingIndicatorWrapper: {
-    paddingHorizontal: tokens.spacing._15,
-    paddingVertical: tokens.spacing._10,
+    paddingVertical: tokens.spacing._5,
+    alignItems: "flex-start",
   },
   chatThinkingIndicatorContainer: {
     flexDirection: "row",
@@ -2734,6 +2955,67 @@ export const globalStyles = StyleSheet.create({
     color: tokens.colors.white,
     textAlign: "center",
   },
+  chatSettingsToolDetailOverlay: {
+    flex: 1,
+    justifyContent: "flex-end",
+    backgroundColor: "rgba(0, 0, 0, 0.45)",
+  },
+  chatSettingsToolDetailSheet: {
+    backgroundColor: tokens.colors.bg1,
+    borderTopLeftRadius: tokens.radius.md,
+    borderTopRightRadius: tokens.radius.md,
+    height: "50%",
+  },
+  chatSettingsToolDetailSheetContent: {
+    flex: 1,
+    paddingTop: tokens.spacing._20,
+    paddingHorizontal: tokens.spacing._20,
+  },
+  chatSettingsToolDetailHeader: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    gap: tokens.spacing._10,
+    marginBottom: tokens.spacing._15,
+  },
+  chatSettingsToolDetailTitle: {
+    flex: 1,
+    fontSize: tokens.fontSize.lg,
+    fontFamily: tokens.fonts.medium,
+    color: tokens.colors.text_primary,
+  },
+  chatSettingsToolDetailCloseButton: {
+    padding: tokens.spacing._5,
+  },
+  chatSettingsToolDetailSectionLabel: {
+    fontSize: tokens.fontSize.sm,
+    fontFamily: tokens.fonts.medium,
+    color: tokens.colors.text_secondary,
+    marginBottom: tokens.spacing._10,
+  },
+  chatSettingsToolDetailList: {
+    flex: 1,
+  },
+  chatSettingsToolDetailListContent: {
+    flexGrow: 1,
+    paddingBottom: tokens.spacing._10,
+  },
+  chatSettingsToolDetailListItem: {
+    paddingVertical: tokens.spacing._10,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: tokens.colors.bg3,
+  },
+  chatSettingsToolDetailListItemText: {
+    fontSize: tokens.fontSize.md,
+    fontFamily: tokens.fonts.regular,
+    color: tokens.colors.text_primary,
+  },
+  chatSettingsToolDetailEmptyText: {
+    fontSize: tokens.fontSize.sm,
+    fontFamily: tokens.fonts.regular,
+    color: tokens.colors.text_secondary,
+    paddingBottom: tokens.spacing._20,
+  },
 
   // Agent Settings Styles
   agentSettingsContainer: {
@@ -2743,6 +3025,10 @@ export const globalStyles = StyleSheet.create({
   },
   agentSettingsScrollView: {
     flex: 1,
+  },
+  agentSettingsScrollContent: {
+    flexGrow: 1,
+    paddingBottom: 100,
   },
   agentSettingsEditButtonContainer: {
     padding: tokens.spacing._10,
@@ -2927,12 +3213,6 @@ export const globalStyles = StyleSheet.create({
     color: tokens.colors.text_primary,
     textAlign: "center",
     marginTop: tokens.spacing._20,
-  },
-  configScanErrorText: {
-    fontSize: 16,
-    color: tokens.colors.red,
-    textAlign: "center",
-    marginBottom: tokens.spacing._20,
   },
   configScanButton: {
     backgroundColor: tokens.colors.primary,
@@ -3588,5 +3868,122 @@ export const globalStyles = StyleSheet.create({
     fontFamily: tokens.fonts.medium,
     color: tokens.colors.white,
     textAlign: "center",
+  },
+
+  // QR scan screen styles
+  scanQrContainer: {
+    flex: 1,
+    backgroundColor: tokens.colors.black,
+  },
+  scanQrContent: {
+    flex: 1,
+  },
+  permissionScreen: {
+    flex: 1,
+  },
+  permissionContentCenter: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    alignSelf: "center",
+  },
+  /** Pinned footer: same marginTop auto pattern as UpdateDeviceName / SelectDeviceRoom. */
+  permissionFooter: {
+    marginTop: "auto",
+    width: "100%",
+    flexDirection: "column",
+    alignItems: "stretch",
+    gap: tokens.spacing._10,
+    paddingTop: tokens.spacing._10,
+    paddingBottom: tokens.spacing._20,
+  },
+  permissionFooterButton: {
+    width: "100%",
+    minHeight: 48,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  permissionFooterButtonText: {
+    color: tokens.colors.text_primary,
+    fontFamily: tokens.fonts.medium,
+    fontSize: tokens.fontSize.sm,
+  },
+  scanQrHeader: {
+    backgroundColor: "transparent",
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 10,
+  },
+  buttonIcon: {
+    marginRight: tokens.spacing._10,
+  },
+  cameraFlipTopBar: {
+    position: "absolute",
+    top: tokens.spacing._15,
+    right: tokens.spacing._15,
+    zIndex: 20,
+  },
+  cameraFlipButton: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: tokens.spacing._10,
+    paddingHorizontal: tokens.spacing._10,
+    borderRadius: tokens.radius.md,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    minWidth: 56,
+    gap: tokens.spacing._5,
+  },
+  cameraFlipLabel: {
+    color: tokens.colors.white,
+    fontSize: tokens.fontSize.xs,
+    fontFamily: tokens.fonts.medium,
+  },
+  connectingStatusButton: {
+    width: "100%",
+    minHeight: 48,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: tokens.colors.white,
+    borderRadius: tokens.radius.sm,
+    paddingVertical: tokens.spacing._10,
+    paddingHorizontal: tokens.spacing._20,
+  },
+  connectingStatusTextWrap: {
+    overflow: "hidden",
+    position: "relative",
+  },
+  connectingStatusText: {
+    color: tokens.colors.primary,
+    fontSize: tokens.fontSize.md,
+    fontFamily: tokens.fonts.medium,
+  },
+  connectingShimmerSweep: {
+    ...StyleSheet.absoluteFillObject,
+    width: 56,
+  },
+  connectingShimmerGradient: {
+    flex: 1,
+    width: 56,
+  },
+  // box-none: only the label takes touches, not the whole band.
+  noQrCodeRow: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 20,
+    paddingHorizontal: tokens.spacing._15,
+    paddingBottom: tokens.spacing._20,
+  },
+  noQrCodeFooterButton: {
+    width: "100%",
+    minHeight: 48,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
   },
 });

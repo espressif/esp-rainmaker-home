@@ -10,7 +10,12 @@ import { ESPCDFUser } from '@store';
 import { getAgentConfig as fetchAgentConfig } from './apiHelper';
 import type { ConnectedConnector } from '@src/types/global';
 import { AGENTS_WEBSOCKET_BASE_URL, DEFAULT_AGENT_ID, RAINMAKER_MCP_CONNECTOR_URL } from '@/config/agent.config';
-import { TOKEN_STORAGE_KEYS } from './constants';
+import {
+  AGENT_TOOL_AUTH_TYPE_OAUTH,
+  AGENT_TOOL_TYPE_REMOTE,
+  RAINMAKER_MCP_TOOL_NAME,
+  TOKEN_STORAGE_KEYS,
+} from './constants';
 import { getSelectedAgentId } from './storage';
 import type { AgentConfigResponse } from './types';
 import type { ToolConnectionStatus } from '@src/types/global';
@@ -145,36 +150,141 @@ export const getWebSocketUrl = async (user: ESPCDFUser): Promise<string | null> 
   }
 };
 
+type RemoteToolRef = {
+  type?: string;
+  name?: string;
+  url?: string;
+};
+
+/**
+ * RainMaker MCP remote tools reuse the app's Cognito session (token passthrough)
+ * instead of the web OAuth code flow, which requires HTTPS redirect URIs registered at DCR.
+ * @param tool - Remote tool entry from agent config
+ * @returns True when the tool is a RainMaker MCP connector
+ */
+export function isRainmakerMcpRemoteTool(tool: RemoteToolRef): boolean {
+  if (tool.type && tool.type !== AGENT_TOOL_TYPE_REMOTE) {
+    return false;
+  }
+
+  if (tool.name === RAINMAKER_MCP_TOOL_NAME) {
+    return true;
+  }
+
+  if (!tool.url) {
+    return false;
+  }
+
+  return (
+    tool.url === RAINMAKER_MCP_CONNECTOR_URL ||
+    tool.url.includes('mcp.rainmaker.espressif.com') ||
+    tool.url.includes('esp-rainmaker-mcp')
+  );
+}
+
+/**
+ * Builds oauth metadata payload for token-passthrough connector connect.
+ * @param oauthMetadata - Tool oauthMetadata from agent config
+ * @returns Subset used by connectToolWithTokens
+ */
+export function toTokenConnectOAuthMetadata(
+  oauthMetadata?: {
+    tokenEndpoint?: string;
+    clientId?: string;
+    resource?: string;
+  }
+):
+  | {
+      tokenEndpoint?: string;
+      clientId?: string;
+      resource?: string;
+    }
+  | undefined {
+  if (!oauthMetadata) {
+    return undefined;
+  }
+
+  return {
+    tokenEndpoint: oauthMetadata.tokenEndpoint,
+    clientId: oauthMetadata.clientId,
+    resource: oauthMetadata.resource,
+  };
+}
+
+type AgentConfigTool = NonNullable<AgentConfigResponse['tools']>[number];
+
+/**
+ * Whether a tool entry requires user connector OAuth (connect/disconnect UI).
+ * @param tool - Agent config tool entry
+ * @returns True when the tool is a remote OAuth connector
+ */
+export function isConnectableRemoteTool(tool: AgentConfigTool): boolean {
+  return (
+    tool.type === AGENT_TOOL_TYPE_REMOTE &&
+    tool.authType === AGENT_TOOL_AUTH_TYPE_OAUTH &&
+    Boolean(tool.url) &&
+    Boolean(tool.oauthMetadata?.clientId)
+  );
+}
+
+/**
+ * Builds the connector id used by the agents API (`connectorUrl::clientId`).
+ * @param connectorUrl - Remote tool / MCP endpoint URL
+ * @param clientId - OAuth client id from tool oauthMetadata
+ * @returns Connector id string
+ */
+export function buildConnectorId(connectorUrl: string, clientId: string): string {
+  return `${connectorUrl}::${clientId}`;
+}
+
+/**
+ * Finds a stored connector that matches a remote tool's oauthMetadata.
+ * @param toolUrl - Remote tool URL
+ * @param clientId - OAuth client id from tool oauthMetadata
+ * @param connectors - User's stored connectors
+ * @returns Matching connector, if any
+ */
+export function findConnectorForRemoteTool(
+  toolUrl: string,
+  clientId: string,
+  connectors: ConnectedConnector[]
+): ConnectedConnector | undefined {
+  if (!Array.isArray(connectors) || connectors.length === 0) {
+    return undefined;
+  }
+
+  const expectedConnectorId = buildConnectorId(toolUrl, clientId);
+  return connectors.find((connector) => connector.connectorId === expectedConnectorId);
+}
+
 /**
  * Retrieves tool connection status for downstream consumers.
+ * Connected means the connector exists with a valid token: hasToken && !isExpired.
+ * @param toolUrl - Remote tool URL
+ * @param connectors - User's stored connectors
+ * @param clientId - OAuth client id from tool oauthMetadata
+ * @returns Connection status
  */
 export function getToolConnectionStatus(
   toolUrl: string,
   connectors: ConnectedConnector[],
-  expectedConnectorId?: string
+  clientId?: string
 ): ToolConnectionStatus {
-  // Ensure connectors is an array
-  if (!Array.isArray(connectors) || connectors.length === 0) {
+  if (!toolUrl || !clientId || !Array.isArray(connectors) || connectors.length === 0) {
     return { isConnected: false, isExpired: false };
   }
 
-  let connector: ConnectedConnector | undefined;
-
-  if (toolUrl === RAINMAKER_MCP_CONNECTOR_URL && expectedConnectorId) {
-    // For MCP connector, match by connectorId
-    connector = connectors.find(
-      (c) => c.connectorId === expectedConnectorId
-    );
-  }
-
-  // If connector exists in array, it's connected
+  const connector = findConnectorForRemoteTool(toolUrl, clientId, connectors);
   if (!connector) {
     return { isConnected: false, isExpired: false };
   }
 
+  const isExpired = connector.isExpired ?? false;
+  const hasToken = connector.hasToken ?? false;
+
   return {
-    isConnected: true,
-    isExpired: false,
+    isConnected: hasToken && !isExpired,
+    isExpired,
   };
 }
 

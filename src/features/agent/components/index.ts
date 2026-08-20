@@ -10,11 +10,13 @@ export { AgentInfoSection } from "./AgentInfoSection";
 export { AgentSettingsSection } from "./AgentSettingsSection";
 export { AgentSettingsEmptyState } from "./AgentSettingsEmptyState";
 export { AgentSettingsHeaderRight } from "./AgentSettingsHeaderRight";
+export { AgentSettingsFloatingActions } from "./AgentSettingsFloatingActions";
 export { ConfigureChatCard } from "./ConfigureChatCard";
 export { ConfigureDeviceCard } from "./ConfigureDeviceCard";
 export { ChatSettingsContent } from "./ChatSettingsContent";
 export { ChatSettingsBasicInfo } from "./ChatSettingsBasicInfo";
 export { ChatSettingsToolCard } from "./ChatSettingsToolCard";
+export { ChatSettingsToolDetailBottomSheet } from "./ChatSettingsToolDetailBottomSheet";
 export { default as AddAgentBottomSheet } from "./AddAgentBottomSheet";
 export { default as MessageDisplayConfigBottomSheet } from "./MessageDisplayConfigBottomSheet";
 export { default as FontSizeSlider } from "./FontSizeSlider";
@@ -23,10 +25,12 @@ export {
   ChatErrorState,
   ChatHeader,
   ChatInput,
+  ChatUsageStrip,
   ChatJsonViewer,
   ChatLoadingState,
   ChatMenuDropdown,
   ChatMessage,
+  ChatThinkingIndicator,
   ChatQuestionSuggestions,
 } from "./Chat";
 export { default as AgentTermsBottomSheet } from "./Modals/AgentTermsBottomSheet";

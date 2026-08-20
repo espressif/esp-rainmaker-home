@@ -82,6 +82,7 @@
 	<key>NSBonjourServices</key>
 	<array>
 		<string>_esp_local_ctrl._tcp</string>
+		<string>_esp_rmaker_ctrl._tcp</string>
 		<string>_esp_rmaker_chal_resp._tcp</string>
 		<string>_matter._tcp</string>
 		<string>_matterc._udp</string>
@@ -90,6 +91,10 @@
 	</array>
 	<key>NSCameraUsageDescription</key>
 	<string>Reading QR code</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Allow $(PRODUCT_NAME) to access your photos to attach images in chat</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Microphone access is required for two-way audio during camera streaming.</string>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>App requires access to local network in order to control your devices locally.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>

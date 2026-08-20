@@ -5,7 +5,24 @@
  */
 
 import { extractJsonData } from "../chatHelper";
+import {
+  buildToolMessageText,
+  getExecutingToolPrefix,
+  getToolResultPrefix,
+} from "./messageContentParser";
 import type { WebSocketMessage, MessageDisplayConfig } from "@features/agent/utils";
+import {
+  AGENT_WS_MESSAGE_TYPE_ASSISTANT,
+  AGENT_WS_MESSAGE_TYPE_HANDSHAKE,
+  AGENT_WS_MESSAGE_TYPE_HANDSHAKE_ACK,
+  AGENT_WS_MESSAGE_TYPE_THINKING,
+  AGENT_WS_MESSAGE_TYPE_TIMEOUT,
+  AGENT_WS_MESSAGE_TYPE_TOOL_CALL_INFO,
+  AGENT_WS_MESSAGE_TYPE_TOOL_RESULT_INFO,
+  AGENT_WS_MESSAGE_TYPE_TRANSACTION_END,
+  AGENT_WS_MESSAGE_TYPE_USAGE_INFO,
+  AGENT_WS_MESSAGE_TYPE_USER,
+} from "@shared/utils/constants";
 
 export interface ProcessedMessage {
   action: "add" | "update_state" | "timeout" | "handshake_ack" | "skip";
@@ -18,6 +35,7 @@ export interface ProcessedMessage {
   shouldFlushThinking?: boolean;
   shouldSetThinking?: boolean;
   shouldSetConversationDone?: boolean;
+  shouldEndStreamingBubble?: boolean;
 }
 
 /**
@@ -35,7 +53,7 @@ export const processWebSocketMessage = (
   const { type, content, content_type } = message;
 
   // Handle timeout - special case that needs navigation
-  if (type === "timeout") {
+  if (type === AGENT_WS_MESSAGE_TYPE_TIMEOUT) {
     let timeoutMessage = "Chat Session timed out. Please reconnect.";
 
     // Extract message from content if available
@@ -77,7 +95,7 @@ export const processWebSocketMessage = (
   }
 
   // Handle handshake_ack - extract conversationId and jsonData
-  if (type === "handshake_ack") {
+  if (type === AGENT_WS_MESSAGE_TYPE_HANDSHAKE_ACK) {
     let conversationId: string | null = null;
     let jsonData: any = null;
 
@@ -115,7 +133,7 @@ export const processWebSocketMessage = (
   }
 
   // Handle transaction_end - mark conversation as done
-  if (type === "transaction_end") {
+  if (type === AGENT_WS_MESSAGE_TYPE_TRANSACTION_END) {
     return {
       action: "update_state",
       messageType: "transaction_end",
@@ -134,34 +152,34 @@ export const processWebSocketMessage = (
   let isUserMessage = false;
 
   switch (type) {
-    case "user":
+    case AGENT_WS_MESSAGE_TYPE_USER:
       shouldDisplay = messageDisplayConfig.showUser;
       isUserMessage = true;
       break;
-    case "assistant":
+    case AGENT_WS_MESSAGE_TYPE_ASSISTANT:
       shouldDisplay = messageDisplayConfig.showAssistant;
       break;
-    case "thinking":
+    case AGENT_WS_MESSAGE_TYPE_THINKING:
       shouldDisplay = messageDisplayConfig.showThinking;
       break;
-    case "tool_call_info":
+    case AGENT_WS_MESSAGE_TYPE_TOOL_CALL_INFO:
       shouldDisplay = messageDisplayConfig.showToolCallInfo;
       break;
-    case "tool_result_info":
+    case AGENT_WS_MESSAGE_TYPE_TOOL_RESULT_INFO:
       shouldDisplay = messageDisplayConfig.showToolResultInfo;
       break;
-    case "usage_info":
+    case AGENT_WS_MESSAGE_TYPE_USAGE_INFO:
       shouldDisplay = messageDisplayConfig.showUsageInfo;
       break;
-    case "handshake":
+    case AGENT_WS_MESSAGE_TYPE_HANDSHAKE:
       shouldDisplay = true;
       break;
     default:
-      shouldDisplay = true;
+      shouldDisplay = false;
   }
 
   // Handle thinking messages - append to array instead of displaying immediately
-  if (type === "thinking") {
+  if (type === AGENT_WS_MESSAGE_TYPE_THINKING) {
     const textContent =
       typeof content === "string" ? content : JSON.stringify(content);
     return {
@@ -181,7 +199,7 @@ export const processWebSocketMessage = (
   }
 
   // Handle tool_call_info - extract tool name
-  if (type === "tool_call_info") {
+  if (type === AGENT_WS_MESSAGE_TYPE_TOOL_CALL_INFO) {
     let toolName = "";
 
     if (typeof content === "string") {
@@ -217,15 +235,16 @@ export const processWebSocketMessage = (
 
     return {
       action: "add",
-      messageType: "tool_call_info",
-      text: toolName,
+      messageType: AGENT_WS_MESSAGE_TYPE_TOOL_CALL_INFO,
+      text: buildToolMessageText(getExecutingToolPrefix(), toolName, content),
       isUser: false,
       toolName,
+      shouldEndStreamingBubble: true,
     };
   }
 
   // Handle tool_result_info - extract tool name and JSON data
-  if (type === "tool_result_info") {
+  if (type === AGENT_WS_MESSAGE_TYPE_TOOL_RESULT_INFO) {
     let toolName = "";
     let jsonData: any = null;
 
@@ -270,8 +289,8 @@ export const processWebSocketMessage = (
 
     return {
       action: "add",
-      messageType: "tool_result_info",
-      text: "",
+      messageType: AGENT_WS_MESSAGE_TYPE_TOOL_RESULT_INFO,
+      text: buildToolMessageText(getToolResultPrefix(), toolName, jsonData),
       isUser: false,
       toolName,
       jsonData,
@@ -279,7 +298,7 @@ export const processWebSocketMessage = (
   }
 
   // Handle usage_info and handshake - JSON expandable (handshake_ack handled above)
-  if (type === "usage_info" || type === "handshake") {
+  if (type === AGENT_WS_MESSAGE_TYPE_USAGE_INFO || type === AGENT_WS_MESSAGE_TYPE_HANDSHAKE) {
     let jsonData: any = null;
 
     if (content_type === "json") {
@@ -346,8 +365,9 @@ export const processWebSocketMessage = (
     // Only set thinking to true for user messages
     // For assistant messages, don't change thinking state (keep it true if it was true)
     // This allows thinking indicator to stay visible during tool calls
-    shouldSetThinking: type === "user" ? true : undefined,
-    shouldFlushThinking: type === "assistant" && thinkingMessages.length > 0,
+    shouldSetThinking: type === AGENT_WS_MESSAGE_TYPE_USER ? true : undefined,
+    shouldFlushThinking:
+      type === AGENT_WS_MESSAGE_TYPE_ASSISTANT && thinkingMessages.length > 0,
   };
 };
 

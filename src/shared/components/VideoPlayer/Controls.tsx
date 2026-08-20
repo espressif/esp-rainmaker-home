@@ -38,6 +38,7 @@ const Controls: React.FC<ControlsProps> = ({
     onFullscreenPress,
     onLongPress,
     onStatsPress,
+    safeAreaInsets,
 }) => {
     // Map connection state string to ConnectionState enum
     const getConnectionStateEnum = (): ConnectionState => {
@@ -57,13 +58,28 @@ const Controls: React.FC<ControlsProps> = ({
 
     // Fullscreen mode: Top-right controls (Close button + Connection State Badge)
     if (isFullscreen) {
-        // Show play button when not connected or not playing
-        const showPlayButton = connectionState === "disconnected" || (!isPlaying && !hasVideoStream && !error) || isLoading;
+        // Show play button when not connected, not playing, loading, OR errored
+        // (so an error is recoverable in place — tapping play retries instead of
+        // forcing the user back to the device list).
+        const showPlayButton =
+            connectionState === "disconnected" ||
+            !!error ||
+            (!isPlaying && !hasVideoStream) ||
+            isLoading;
 
         return (
             <View style={[videoPlayerStyles.controlsFullscreenContainer, disabled && { opacity: 0.7 }]}>
-                {/* Top-right controls container */}
-                <View style={videoPlayerStyles.fullscreenTopRightControls}>
+                {/* Top-right controls container — offset by safe-area insets so
+                    the buttons stay clear of the notch / nav bar in landscape. */}
+                <View
+                    style={[
+                        videoPlayerStyles.fullscreenTopRightControls,
+                        {
+                            top: 16 + (safeAreaInsets?.top ?? 0),
+                            right: 16 + (safeAreaInsets?.right ?? 0),
+                        },
+                    ]}
+                >
                     {/* Connection State Badge */}
                     <ConnectionStateBadge
                         state={getConnectionStateEnum()}
@@ -135,8 +151,9 @@ const Controls: React.FC<ControlsProps> = ({
 
             {/* Right-aligned controls */}
             <View style={videoPlayerStyles.portraitControlsRow}>
-                {/* Play Button - Show when not playing or loading */}
-                {(!isPlaying && !hasVideoStream && !error) || isLoading ? (
+                {/* Play Button - show when not playing, loading, OR errored
+                    (tapping it retries the stream in place). */}
+                {(!isPlaying && !hasVideoStream) || !!error || isLoading ? (
                     <TouchableOpacity
                         style={videoPlayerStyles.portraitPlayButton}
                         onPress={onPlayPress}

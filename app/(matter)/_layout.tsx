@@ -28,6 +28,13 @@ export default function MatterLayout() {
           headerShown: false,
         }}
       />
+      <Stack.Screen
+        name="ManualCommissioning"
+        options={{
+          title: "ManualCommissioning",
+          headerShown: false,
+        }}
+      />
     </Stack>
   );
 }

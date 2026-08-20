@@ -58,3 +58,24 @@ export const TS_PAGE_RESULT_COUNT = 200;
 export const TS_MAX_PAGE_FETCHES = 20;
 /** Week starts on Monday, matching the app-wide week alignment. */
 export const CHART_WEEK_START_DAY_INDEX = 1;
+
+// RainMaker cloud command-response (cmd-resp) — canonical defs in `@shared/utils/constants`.
+export {
+  CAMERA_SNAPSHOT_COMMAND_ID,
+  NODE_CMD_DEFAULT_TIMEOUT,
+  CAMERA_CMD_JPEG_CAPTURE,
+  CAMERA_CMD_ARG_UPLOAD,
+  CAMERA_CMD_ARG_QUALITY,
+  CAMERA_CMD_ARG_RES,
+  CAMERA_CMD_ARG_AGENT_ID,
+  CAMERA_CMD_ARG_CONV_ID,
+  CAMERA_CAPTURE_QUALITY,
+  CAMERA_CAPTURE_RESOLUTION,
+  NODE_CMD_POLL_INTERVAL_MS,
+  NODE_CMD_POLL_MAX_ATTEMPTS,
+  NODE_CMD_POLL_LABEL_SNAPSHOT,
+  NODE_CMD_STATUS_SUCCESS,
+  NODE_CMD_STATUS_FAILURE,
+  NODE_CMD_STATUS_TIMED_OUT,
+  SNAPSHOT_SIZE_MB_THRESHOLD,
+} from "@shared/utils/constants";

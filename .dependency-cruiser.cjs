@@ -8,6 +8,7 @@
  * | §1  | Product UI via `@store`, not sdk-adaptors | `no-sdk-adaptors-in-product-layer` |
  * | §2B | `src/shared` → no `src/features` | `no-shared-to-features` |
  * | §1–2 | Store/adaptors/integrations/tasks/config/context → no features | `no-features-from-lower-layers` |
+ * | —   | `modules/*` leaf packages: no reverse / no deep imports | `no-modules-reverse-imports`, `no-modules-deep-imports` |
  *
  * **Not enforceable by dependency-cruiser** (use ESLint, review, or tests):
  * - JSDoc, magic strings, `getFeatures()` vs raw env (§3–4).
@@ -56,6 +57,28 @@ module.exports = {
         path: "^(src/sdk-adaptors|src/native-adaptors|src/integrations|src/tasks|src/store|src/context|config)/",
       },
       to: { path: "^src/features/" },
+    },
+    {
+      name: "no-modules-reverse-imports",
+      severity: "error",
+      comment:
+        "`modules/*` must not import from the app (`src`, `app`, `config`) — modules stay leaf packages.",
+      from: { path: "^modules/" },
+      to: { path: "^(src|app|config)/" },
+    },
+    {
+      name: "no-modules-deep-imports",
+      severity: "error",
+      comment:
+        "Consume `@modules/<name>` via the package root only — no deep imports into `modules/<name>/src/…`.",
+      from: {
+        path: "^(src|app|config|modules)/",
+        pathNot: "^modules/[^/]+/src/",
+      },
+      to: {
+        path: "^modules/[^/]+/src/",
+        pathNot: "^modules/[^/]+/src/index\\.tsx?$",
+      },
     },
   ],
   options: {

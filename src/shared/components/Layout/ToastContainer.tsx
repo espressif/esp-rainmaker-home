@@ -4,206 +4,257 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React from "react";
-import { View, StyleSheet, Platform } from "react-native";
+import React, { useEffect, useRef, useState } from "react";
+import { Dimensions, View, StyleSheet } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 // Third Party Imports
-import { Toast, useToastState } from "@tamagui/toast";
+import { useToastController, useToastState } from "@tamagui/toast";
 import { Text } from "tamagui";
 import { Check, AlertTriangle, Info, X } from "lucide-react-native";
+import { Gesture, GestureDetector } from "react-native-gesture-handler";
+import Animated, {
+  runOnJS,
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+} from "react-native-reanimated";
 
 // Styles
 import { tokens } from "@shared/theme/tokens";
 
-// Constants
+// Constants / layout
 import {
+  TOAST_EDGE_PADDING,
+  TOAST_SWIPE_DISMISS_THRESHOLD,
   TOAST_TYPE_ERROR,
+  TOAST_TYPE_INFO,
   TOAST_TYPE_SUCCESS,
   TOAST_TYPE_WARNING,
 } from "@shared/utils/constants";
+import { getToastTopOffset } from "@shared/utils/headerLayout";
 
 import { testProps } from "@shared/utils/testProps";
-// Types
+
 interface ToastCustomData {
   type?: "success" | "error" | "warning" | "info";
 }
 
 /**
- * ToastContainer
+ * Maps toast type to accent + text colors (brand colors unchanged).
+ * @param type - Toast variant key
+ * @returns Theme colors for that variant
+ */
+const getToastTheme = (type: string) => {
+  const accentByType: Record<string, string> = {
+    [TOAST_TYPE_SUCCESS]: tokens.colors.green,
+    [TOAST_TYPE_ERROR]: tokens.colors.red,
+    [TOAST_TYPE_WARNING]: tokens.colors.orange,
+    [TOAST_TYPE_INFO]: tokens.colors.primary,
+  };
+
+  return {
+    accentColor: accentByType[type] ?? tokens.colors.primary,
+    backgroundColor: tokens.colors.white,
+    titleColor: tokens.colors.text_primary,
+    messageColor: tokens.colors.text_secondary,
+  };
+};
+
+/**
+ * Returns the status icon for a toast type.
+ * @param type - Toast variant key
+ * @param color - Icon stroke color
+ * @returns Lucide icon element
+ */
+const ToastIcon = ({ type, color }: { type: string; color: string }) => {
+  const props = { color, size: 18, strokeWidth: 2.5 } as const;
+  if (type === TOAST_TYPE_SUCCESS) return <Check {...props} />;
+  if (type === TOAST_TYPE_WARNING) return <AlertTriangle {...props} />;
+  if (type === TOAST_TYPE_INFO) return <Info {...props} />;
+  return <X {...props} />;
+};
+
+/**
+ * Custom toast overlay driven by Tamagui's imperative state only.
  *
- * A component for displaying toast notifications.
- * Features:
- * - Multiple toast types (success, error, warning)
- * - Animated entrance/exit
- * - Custom styling per type
- * - Platform-specific adjustments
+ * Does not render Tamagui `<Toast>` — that component's pan responder snaps the
+ * card back on release (adjust → then dismiss). We own swipe + unmount so a
+ * dismiss gesture leaves the card where it is and removes it immediately.
  */
 export const ToastContainer: React.FC = () => {
   const currentToast = useToastState();
+  const { hide } = useToastController();
+  const insets = useSafeAreaInsets();
+  const { height: windowHeight } = Dimensions.get("window");
+  const [dismissedId, setDismissedId] = useState<string | null>(null);
+  const toastIdRef = useRef<string | null>(null);
 
-  if (!currentToast || currentToast.isHandledNatively) return null;
+  const translateX = useSharedValue(0);
+  const translateY = useSharedValue(0);
+
+  const toastId = currentToast?.id ?? null;
+  toastIdRef.current = toastId;
+
+  const isVisible =
+    !!currentToast &&
+    !currentToast.isHandledNatively &&
+    currentToast.hide !== true &&
+    dismissedId !== toastId;
+
+  useEffect(() => {
+    translateX.value = 0;
+    translateY.value = 0;
+  }, [toastId, translateX, translateY]);
+
+  // Duration auto-dismiss (previously owned by Tamagui <Toast>).
+  useEffect(() => {
+    if (!isVisible || !toastId || !currentToast) return;
+    const duration = currentToast.duration;
+    if (!duration || duration <= 0) return;
+
+    const timer = setTimeout(() => {
+      setDismissedId(toastId);
+      hide();
+    }, duration);
+
+    return () => clearTimeout(timer);
+  }, [toastId, isVisible, currentToast, hide]);
+
+  /**
+   * Marks this toast id dismissed locally, then clears Tamagui state.
+   * Local flag unmounts before Tamagui's delayed null so there is no snap-back frame.
+   */
+  const dismissToast = () => {
+    const id = toastIdRef.current;
+    if (id) {
+      setDismissedId(id);
+    }
+    hide();
+  };
+
+  const panGesture = Gesture.Pan()
+    .onUpdate((e) => {
+      translateX.value = e.translationX;
+      translateY.value = Math.min(0, e.translationY);
+    })
+    .onEnd((e) => {
+      const shouldDismiss =
+        Math.abs(e.translationX) > TOAST_SWIPE_DISMISS_THRESHOLD ||
+        e.translationY < -TOAST_SWIPE_DISMISS_THRESHOLD;
+
+      if (shouldDismiss) {
+        // Do not spring back — leave offset and unmount immediately.
+        runOnJS(dismissToast)();
+        return;
+      }
+
+      translateX.value = withSpring(0);
+      translateY.value = withSpring(0);
+    });
+
+  const swipeStyle = useAnimatedStyle(() => ({
+    transform: [
+      { translateX: translateX.value },
+      { translateY: translateY.value },
+    ],
+  }));
+
+  if (!isVisible || !currentToast) {
+    return null;
+  }
 
   const customData = currentToast.customData as ToastCustomData | undefined;
   const type = customData?.type || TOAST_TYPE_SUCCESS;
-
-  // Get theme-aware colors and styles based on toast type
-  const getToastTheme = () => {
-    switch (type) {
-      case TOAST_TYPE_SUCCESS:
-        return {
-          iconColor: tokens.colors.green,
-          backgroundColor: tokens.colors.white,
-          borderColor: tokens.colors.green,
-          titleColor: tokens.colors.text_primary,
-          messageColor: tokens.colors.text_secondary,
-          shadowColor: tokens.colors.green,
-        };
-      case TOAST_TYPE_ERROR:
-        return {
-          iconColor: tokens.colors.red,
-          backgroundColor: tokens.colors.white,
-          borderColor: tokens.colors.red,
-          titleColor: tokens.colors.text_primary,
-          messageColor: tokens.colors.text_secondary,
-          shadowColor: tokens.colors.red,
-        };
-      case TOAST_TYPE_WARNING:
-        return {
-          iconColor: tokens.colors.orange,
-          backgroundColor: tokens.colors.white,
-          borderColor: tokens.colors.orange,
-          titleColor: tokens.colors.text_primary,
-          messageColor: tokens.colors.text_secondary,
-          shadowColor: tokens.colors.orange,
-        };
-      case "info":
-        return {
-          iconColor: tokens.colors.primary,
-          backgroundColor: tokens.colors.white,
-          borderColor: tokens.colors.primary,
-          titleColor: tokens.colors.text_primary,
-          messageColor: tokens.colors.text_secondary,
-          shadowColor: tokens.colors.primary,
-        };
-      default:
-        return {
-          iconColor: tokens.colors.primary,
-          backgroundColor: tokens.colors.white,
-          borderColor: tokens.colors.primary,
-          titleColor: tokens.colors.text_primary,
-          messageColor: tokens.colors.text_secondary,
-          shadowColor: tokens.colors.primary,
-        };
-    }
-  };
-
-  const toastTheme = getToastTheme();
-
-  // Enhanced animations and positioning
-  const getToastPosition = () => {
-    return {
-      enterStyle: {
-        opacity: 0,
-        scale: 0.95,
-        y: -30,
-        x: 0,
-      },
-      exitStyle: {
-        opacity: 0,
-        scale: 0.95,
-        y: -30,
-        x: 0,
-      },
-      y: Platform.OS === "ios" ? 60 : 20, // Better positioning for different platforms
-    };
-  };
-
-  const position = getToastPosition();
+  const theme = getToastTheme(type);
+  const hasMessage = !!currentToast.message;
 
   return (
-    <Toast
-      animation="quick"
-      key={currentToast.id}
-      duration={currentToast.duration}
-      enterStyle={position.enterStyle}
-      exitStyle={position.exitStyle}
-      opacity={1}
-      scale={1}
-      y={position.y}
-      viewportName={currentToast.viewportName}
-      backgroundColor={toastTheme.backgroundColor}
-      borderRadius={tokens.radius.md}
-      borderWidth={2}
-      borderColor={toastTheme.borderColor}
-      paddingHorizontal={tokens.spacing._20}
-      paddingVertical={tokens.spacing._15}
+    <View
+      pointerEvents="box-none"
       style={[
-        styles.toast,
+        styles.overlay,
         {
-          shadowColor: toastTheme.shadowColor,
+          // inset/header-top + header content
+          paddingTop: getToastTopOffset(insets.top, windowHeight),
+          paddingHorizontal: TOAST_EDGE_PADDING,
         },
       ]}
     >
-      <View style={styles.container}>
-        <View
+      <GestureDetector gesture={panGesture}>
+        <Animated.View
           style={[
-            styles.iconContainer,
-            { backgroundColor: toastTheme.iconColor },
+            styles.toastBody,
+            {
+              backgroundColor: theme.backgroundColor,
+              borderColor: theme.accentColor,
+            },
+            swipeStyle,
           ]}
         >
-          {type === "success" ? (
-            <Check color={tokens.colors.white} size={20} />
-          ) : type === "warning" ? (
-            <AlertTriangle color={tokens.colors.white} size={20} />
-          ) : type === "info" ? (
-            <Info color={tokens.colors.white} size={20} />
-          ) : (
-            <X color={tokens.colors.white} size={20} />
-          )}
-        </View>
-        <View style={styles.content}>
-          <Text
-            color={toastTheme.titleColor}
-            fontWeight="600"
-            fontSize={tokens.fontSize.md}
-            style={styles.title}
-            {...testProps("toast_title")}
+          <View
+            style={[
+              styles.container,
+              hasMessage ? styles.alignStart : styles.alignCenter,
+            ]}
           >
-            {currentToast.title}
-          </Text>
-          {!!currentToast.message && (
-            <Text
-              color={toastTheme.messageColor}
-              fontSize={tokens.fontSize.sm}
-              style={styles.message}
-              {...testProps("toast_message")}
+            <View
+              style={[
+                styles.iconContainer,
+                { backgroundColor: `${theme.accentColor}1A` },
+              ]}
             >
-              {currentToast.message}
-            </Text>
-          )}
-        </View>
-      </View>
-    </Toast>
+              <ToastIcon type={type} color={theme.accentColor} />
+            </View>
+            <View style={styles.content}>
+              <Text
+                color={theme.titleColor}
+                fontSize={tokens.fontSize.md}
+                style={styles.title}
+                {...testProps("toast_title")}
+              >
+                {currentToast.title}
+              </Text>
+              {hasMessage && (
+                <Text
+                  color={theme.messageColor}
+                  fontSize={tokens.fontSize.sm}
+                  style={styles.message}
+                  {...testProps("toast_message")}
+                >
+                  {currentToast.message}
+                </Text>
+              )}
+            </View>
+          </View>
+        </Animated.View>
+      </GestureDetector>
+    </View>
   );
 };
 
-/* ------------------------------ Styles ------------------------------- */
 const styles = StyleSheet.create({
-  toast: {
+  overlay: {
+    ...StyleSheet.absoluteFillObject,
     zIndex: 10000,
-    shadowOffset: {
-      width: 0,
-      height: 4,
-    },
-    shadowOpacity: 0.15,
-    shadowRadius: 8,
-    elevation: 8,
-    marginHorizontal: tokens.spacing._15,
+    elevation: 10000,
+  },
+  toastBody: {
+    width: "100%",
+    borderRadius: tokens.radius.md,
+    borderWidth: tokens.border.defaultWidth,
+    paddingHorizontal: tokens.spacing._15,
+    paddingVertical: tokens.spacing._15,
   },
   container: {
     flexDirection: "row",
-    alignItems: "flex-start",
     width: "100%",
+  },
+  alignStart: {
+    alignItems: "flex-start",
+  },
+  alignCenter: {
+    alignItems: "center",
   },
   iconContainer: {
     width: 32,
@@ -211,22 +262,20 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     justifyContent: "center",
     alignItems: "center",
-    marginRight: tokens.spacing._15,
-    marginTop: 2, // Slight alignment adjustment
+    marginRight: tokens.spacing._10,
   },
   content: {
     flex: 1,
-    paddingTop: 2,
+    minWidth: 0,
   },
   title: {
+    fontFamily: tokens.fonts.medium,
     lineHeight: 22,
-    letterSpacing: -0.2,
   },
   message: {
-    marginTop: 4,
+    fontFamily: tokens.fonts.regular,
+    marginTop: 2,
     lineHeight: 20,
-    opacity: 0.8,
-    letterSpacing: -0.1,
     flexWrap: "wrap",
   },
 });

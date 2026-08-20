@@ -22,3 +22,13 @@ export const CLIENT_OUTPUTS_DASHBOARD_URL_FIELD = "FrontendUrl";
 /** Accepted URL scheme prefixes for Config Scan remote fetch. */
 export const CONFIG_SCAN_URL_SCHEME_HTTP = "http://";
 export const CONFIG_SCAN_URL_SCHEME_HTTPS = "https://";
+
+/** Hold on camera after a hit so the guide→QR morph is visible before fetch. */
+export const CONFIG_QR_LOCK_MS = 360;
+
+/**
+ * Thrown when a scanned payload is neither JSON config nor an http(s) URL.
+ * Used to map the failure to the shared invalid-QR toast copy.
+ */
+export const CONFIG_SCAN_INVALID_PAYLOAD_ERROR =
+  "Invalid scan: expected JSON configuration or an http(s) URL.";

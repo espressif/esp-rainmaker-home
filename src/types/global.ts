@@ -977,15 +977,22 @@ export interface AutomationMenuBottomSheetProps {
 
 export type ConfigScanPhase =
   | "info"
-  | "scanning"
-  | "fetching"
   | "applying"
-  | "success"
-  | "error";
+  | "success";
 
 // ============================================================================
 // Chat Types
 // ============================================================================
+
+export interface ChatMediaAttachment {
+  type: string;
+  mediaId: string;
+  s3Key: string;
+  contentType: string;
+  filename: string;
+  sizeBytes: number;
+  localUri?: string;
+}
 
 export interface ChatMessage {
   id: string;
@@ -995,8 +1002,9 @@ export interface ChatMessage {
   messageType?: string;
   isCollapsed?: boolean;
   toolName?: string; // For tool_call_info and tool_result_info
-  jsonData?: any; // For JSON messages
+  jsonData?: unknown; // For JSON messages
   isJsonExpanded?: boolean; // For JSON expandable state
+  media?: ChatMediaAttachment[];
 }
 
 // ============================================================================
@@ -1365,6 +1373,16 @@ export interface VideoPlayerProps {
   setStatsUpdatesEnabled?: (enabled: boolean, isPlaying: boolean) => void;
   /** Whether controls are disabled */
   disabled?: boolean;
+  /** Stops the stream (in-video stop-square button) */
+  onStop?: () => void;
+  /** Whether the mic (audio send) is on */
+  isMicEnabled?: boolean;
+  /** Toggles the mic */
+  onMicToggle?: () => void;
+  /** Whether incoming device audio is muted */
+  isSpeakerMuted?: boolean;
+  /** Toggles incoming-audio mute */
+  onSpeakerToggle?: () => void;
 }
 
 /**
@@ -1403,6 +1421,8 @@ export interface ControlsProps {
   onLongPress?: () => void;
   /** Callback when stats info button is pressed */
   onStatsPress?: () => void;
+  /** Safe-area insets, used to keep fullscreen controls clear of the notch/nav bar in landscape */
+  safeAreaInsets?: { top: number; right: number; bottom: number; left: number };
 }
 
 /**

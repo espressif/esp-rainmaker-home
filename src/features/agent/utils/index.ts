@@ -17,6 +17,11 @@ export type {
   AggregatedAgent,
   AgentValidationResult,
   AgentSource,
+  PendingChatMediaAttachment,
+  AgentMultimodalMessageContent,
+  AgentChatMediaReference,
+  AgentMediaConfig,
+  AgentMediaTypeConfig,
 } from './types';
 
 // Export all constants
@@ -47,8 +52,15 @@ export {
   getAgentConfigFromCache,
   saveAgentConfigToCache,
   getAgentNameFromCache,
+  buildConnectorId,
+  findConnectorForRemoteTool,
   getToolConnectionStatus,
+  isRainmakerMcpRemoteTool,
+  isConnectableRemoteTool,
+  toTokenConnectOAuthMetadata,
 } from './api';
+
+export { getAgentToolEnabledTools } from './settingHelper';
 
 // Export OAuth functions
 export {

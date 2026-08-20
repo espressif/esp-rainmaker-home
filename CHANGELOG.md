@@ -5,6 +5,43 @@ All notable changes to the ESP RainMaker Home app will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [6.1.0]
+ 
+### Added
+ 
+- **Camera & WebRTC**
+  - Live view for camera devices over WebRTC, with both cloud and local-network paths
+  - Device gallery for snapshots and clips with viewer and multi-select delete
+  - Workspace-local Kinesis Video Streams client for archived media and signaling
+  - Native permissions and polyfills required for WebRTC on iOS and Android
+ 
+- **Agent chat**
+  - Camera snapshot tool: ask an agent to capture a fresh photo from a paired camera in the chat
+  - Attach photos and files from camera, gallery, or connected devices in a chat
+  - Add and configure agents by scanning a QR code
+  - Refresh device authentication from the control screen for command-response devices
+ 
+- **ESP RainMaker Neo**
+  - Provision RMNeo devices over the local network, in addition to the existing BLE flow
+ 
+- **[Matter] Manual commissioning**
+  - Add Matter devices by entering the manual pairing code, alongside QR scan
+ 
+### Enhanced
+ 
+- **QR scan and Add Device**
+  - Unified QR scanner across Add Device and Config Scan, with camera switch and scan freeze
+  - Faster scanner launch with clearer camera-permission prompts
+  - Config Scan failures now offer a retry action, matching Add Device
+ 
+- **Home**
+  - Home no longer briefly flashes an empty state before devices finish loading
+  - Safer navigation into Add Device from the empty-state banner
+ 
+- **Notifications and copy**
+  - Notifications can be dismissed with a swipe; headers are aligned
+  - Clearer wording across sign-in and setup screens
+  
 ## [6.0.1]
 
 ### Fixed

@@ -21,6 +21,8 @@ import { useTranslation } from "react-i18next";
 import { ChatMessage } from "@features/agent/components";
 import { useAgentChat } from "@features/agent/hooks";
 import { getConversationByAgent } from "@features/agent/utils/apiHelper";
+import { mapConversationMessage } from "@features/agent/utils/chat/conversationContent";
+import { resolveChatMediaDownloadUrls } from "@features/agent/utils/chat/mediaUpload";
 import type {
   ChatMessage as ChatMessageType,
   ConversationMessage,
@@ -40,9 +42,6 @@ export function ViewConversationScreen() {
 
   const {
     fontSize,
-    expandedJsonMessages,
-    toggleJsonExpansion,
-    isDefaultAgent,
     isConnected,
   } = useAgentChat();
 
@@ -68,53 +67,63 @@ export function ViewConversationScreen() {
         conversationId as string,
       );
 
-      const mapped: ChatMessageType[] =
-        conv.messages?.flatMap((msg: ConversationMessage, index: number) => {
-          const baseId = `${conv.conversationId}-${index}-${msg.timestamp || Date.now()}`;
-          const list: ChatMessageType[] = [
-            {
-              id: `${baseId}-main`,
-              text: msg.content || "",
-              isUser: msg.role === "user",
-              timestamp: new Date(msg.timestamp || Date.now()),
-              messageType: msg.role === "user" ? "user" : "assistant",
-            },
-          ];
-
-          // Tool calls -> tool_call_info messages
-          if (msg.toolCalls && msg.toolCalls.length > 0) {
-            msg.toolCalls.forEach((tool, tIndex) => {
-              list.push({
-                id: `${baseId}-toolcall-${tIndex}`,
-                text: tool.name,
-                isUser: false,
+      const mapped: ChatMessageType[] = (
+        await Promise.all(
+          conv.messages?.map(async (msg: ConversationMessage, index: number) => {
+            const baseId = `${conv.conversationId}-${index}-${msg.timestamp || Date.now()}`;
+            const mappedContent = mapConversationMessage(msg);
+            const media = await resolveChatMediaDownloadUrls(
+              agentId as string,
+              conversationId as string,
+              mappedContent.media
+            );
+            const list: ChatMessageType[] = [
+              {
+                id: `${baseId}-main`,
+                text: mappedContent.text,
+                isUser: msg.role === "user",
                 timestamp: new Date(msg.timestamp || Date.now()),
-                messageType: "tool_call_info",
-                toolName: tool.name,
-                jsonData: {
-                  input: tool.input,
-                  toolUseId: tool.toolUseId,
-                },
-              } as ChatMessageType);
-            });
-          }
+                messageType: msg.role === "user" ? "user" : "assistant",
+                media,
+              },
+            ];
 
-          // Tool results -> tool_result_info messages
-          if (msg.toolResults && msg.toolResults.length > 0) {
-            msg.toolResults.forEach((toolResult, rIndex) => {
-              list.push({
-                id: `${baseId}-toolresult-${rIndex}`,
-                text: "",
-                isUser: false,
-                timestamp: new Date(msg.timestamp || Date.now()),
-                messageType: "tool_result_info",
-                jsonData: toolResult.result,
-              } as ChatMessageType);
-            });
-          }
+            // Tool calls -> tool_call_info messages
+            if (msg.toolCalls && msg.toolCalls.length > 0) {
+              msg.toolCalls.forEach((tool, tIndex) => {
+                list.push({
+                  id: `${baseId}-toolcall-${tIndex}`,
+                  text: tool.name,
+                  isUser: false,
+                  timestamp: new Date(msg.timestamp || Date.now()),
+                  messageType: "tool_call_info",
+                  toolName: tool.name,
+                  jsonData: {
+                    input: tool.input,
+                    toolUseId: tool.toolUseId,
+                  },
+                } as ChatMessageType);
+              });
+            }
 
-          return list;
-        }) || [];
+            // Tool results -> tool_result_info messages
+            if (msg.toolResults && msg.toolResults.length > 0) {
+              msg.toolResults.forEach((toolResult, rIndex) => {
+                list.push({
+                  id: `${baseId}-toolresult-${rIndex}`,
+                  text: "",
+                  isUser: false,
+                  timestamp: new Date(msg.timestamp || Date.now()),
+                  messageType: "tool_result_info",
+                  jsonData: toolResult.result,
+                } as ChatMessageType);
+              });
+            }
+
+            return list;
+          }) ?? []
+        )
+      ).flat();
 
       setMessages(mapped);
     } catch (err: any) {
@@ -138,19 +147,13 @@ export function ViewConversationScreen() {
       <ChatMessage
         item={item}
         fontSize={fontSize}
-        expandedJsonMessages={expandedJsonMessages}
-        isDefaultAgent={isDefaultAgent}
         isConnected={isConnected}
-        onToggleJson={toggleJsonExpansion}
         onQuestionPress={() => {}}
       />
     ),
     [
       fontSize,
-      expandedJsonMessages,
-      isDefaultAgent,
       isConnected,
-      toggleJsonExpansion,
     ],
   );
 

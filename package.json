@@ -1,8 +1,11 @@
 {
   "name": "NOVA",
   "main": "expo-router/entry",
-  "version": "6.0.1",
-  "versionCode": 51,
+  "version": "6.1.0",
+  "versionCode": 52,
+  "workspaces": [
+    "modules/*"
+  ],
   "scripts": {
     "start": "expo start",
     "start:dev": "APP_ENV=development expo start -c",
@@ -23,7 +26,7 @@
     "web": "expo start --web",
     "test": "jest --watchAll",
     "lint": "expo lint",
-    "lint:arch": "depcruise src config app --config .dependency-cruiser.cjs --validate --output-type err",
+    "lint:arch": "depcruise src config app modules --config .dependency-cruiser.cjs --validate --output-type err",
     "lint:i18n": "node scripts/check-i18n.js",
     "typecheck": "tsc --noEmit",
     "check:arch": "npm run lint:arch",
@@ -33,13 +36,12 @@
     "prepare": "husky"
   },
   "dependencies": {
-    "@aws-sdk/client-kinesis-video": "^3.700.0",
-    "@aws-sdk/client-kinesis-video-signaling": "^3.700.0",
     "@espressif/rainmaker-base-cdf": "2.3.0",
     "@espressif/rainmaker-base-sdk": "3.4.0",
     "@espressif/rainmaker-matter-sdk": "3.1.0",
-    "@espressif/rainmaker-neo-base-sdk": "1.1.0",
+    "@espressif/rainmaker-neo-base-sdk": "1.2.0",
     "@expo/vector-icons": "^14.0.2",
+    "@modules/kvs": "*",
     "@react-native-async-storage/async-storage": "^2.1.2",
     "@react-native-community/checkbox": "^0.5.17",
     "@react-native-community/slider": "5.1.2",
@@ -61,8 +63,10 @@
     "expo-clipboard": "~55.0.13",
     "expo-constants": "~55.0.15",
     "expo-dev-client": "~55.0.30",
+    "expo-file-system": "~55.0.22",
     "expo-font": "~55.0.6",
     "expo-haptics": "~55.0.14",
+    "expo-image-picker": "~55.0.20",
     "expo-linear-gradient": "~55.0.13",
     "expo-linking": "~55.0.14",
     "expo-localization": "~55.0.16",
@@ -92,6 +96,7 @@
     "react-native-color-picker": "^0.6.0",
     "react-native-gesture-handler": "~2.30.0",
     "react-native-get-random-values": "^1.11.0",
+    "react-native-incall-manager": "^4.2.1",
     "react-native-markdown-display": "^7.0.2",
     "react-native-pager-view": "^8.0.1",
     "react-native-paper": "^5.13.2",

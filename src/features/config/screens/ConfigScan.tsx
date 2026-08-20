@@ -10,13 +10,15 @@ import {
   ConfigScanPermissionView,
   ConfigScanLoadingView,
   ConfigScanSuccessView,
-  ConfigScanErrorView,
   ConfigScanScannerView,
 } from "@features/config/components";
 import { useConfigScan } from "@features/config/hooks";
 
 /**
  * Renders the config scan screen UI section.
+ *
+ * Invalid QR payloads stay on the scanner with toast, freeze, red border, and
+ * Scan Again (same pattern as provision ScanQR).
  */
 export function ConfigScanScreen() {
   const { t } = useTranslation();
@@ -24,12 +26,10 @@ export function ConfigScanScreen() {
 
   const {
     phase,
-    errorMessage,
     showScanner,
     permission,
     requestPermission,
     handleScan,
-    handleRetry,
     handleUpdateConfig,
     handleCancel,
     handleBackFromScanner,
@@ -59,15 +59,11 @@ export function ConfigScanScreen() {
     );
   }
 
-  if (phase === "fetching" || phase === "applying") {
-    const message =
-      phase === "fetching"
-        ? t("config.scan.fetching")
-        : t("config.scan.applying");
+  if (phase === "applying") {
     return (
       <ConfigScanLoadingView
         title={title}
-        message={message}
+        message={t("config.scan.applying")}
         onCancel={handleCancel}
       />
     );
@@ -75,17 +71,6 @@ export function ConfigScanScreen() {
 
   if (phase === "success") {
     return <ConfigScanSuccessView />;
-  }
-
-  if (phase === "error") {
-    return (
-      <ConfigScanErrorView
-        title={title}
-        errorMessage={errorMessage}
-        onRetry={handleRetry}
-        onCancel={handleCancel}
-      />
-    );
   }
 
   return (

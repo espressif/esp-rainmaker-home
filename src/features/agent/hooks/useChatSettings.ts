@@ -7,18 +7,13 @@
 import { useState, useCallback } from "react";
 import { useFocusEffect } from "expo-router";
 import { useTranslation } from "react-i18next";
-import {
-  saveChatFontSize,
-  type OAuthMetadata,
-} from "@features/agent/utils";
+import { saveChatFontSize } from "@features/agent/utils";
 import { useToast } from "@shared/hooks/useToast";
 import { useAgent } from "./useAgent";
 import { useAgentChat } from "./useAgentChat";
 import { AgentConfigResponse } from "@src/types/global";
 
 type AgentConfigTool = NonNullable<AgentConfigResponse["tools"]>[number];
-
-const RAINMAKER_MCP_CONNECTOR_URL = "https://mcp.rainmaker.espressif.com/api/mcp";
 
 /**
  * useChatSettings hook
@@ -37,9 +32,8 @@ export function useChatSettings() {
     connectingToolUrl,
     disconnectingToolUrl,
     loadConnectors,
-    getToolConnectionStatus,
-    connectTool,
-    connectToolWithTokensDirect,
+    getRemoteToolConnectionStatus,
+    connectRemoteTool,
     disconnectTool,
     conversationId,
     loadConversationId,
@@ -57,6 +51,7 @@ export function useChatSettings() {
 
   const isLoading = isLoadingConfig || isLoadingConnectors;
   const error = configError;
+  const agentTools = agentConfig?.tools ?? [];
 
   useFocusEffect(
     useCallback(() => {
@@ -91,7 +86,7 @@ export function useChatSettings() {
 
   const handleDisconnectTool = useCallback(
     (tool: AgentConfigTool) => {
-      setDisconnectToolUrl(tool.url);
+      setDisconnectToolUrl(tool.url ?? null);
       setDisconnectToolName(tool.name || "Tool");
       setDisconnectToolClientId(tool.oauthMetadata?.clientId);
       setDisconnectToolAuthType(tool.authType);
@@ -152,36 +147,7 @@ export function useChatSettings() {
   const handleConnectTool = useCallback(
     async (tool: AgentConfigTool) => {
       try {
-        if (tool.url === RAINMAKER_MCP_CONNECTOR_URL) {
-          const oauthMetadata = tool.oauthMetadata
-            ? {
-              tokenEndpoint: tool.oauthMetadata.tokenEndpoint,
-              clientId: tool.oauthMetadata.clientId,
-              resource: tool.oauthMetadata.resource,
-            }
-            : undefined;
-
-          await connectToolWithTokensDirect(tool.url, oauthMetadata);
-
-          toast.showSuccess(
-            t("chatSettings.connectSuccess") || "Connected successfully",
-            t("chatSettings.connectSuccessMessage") ||
-            "Tool connected successfully"
-          );
-          return;
-        }
-
-        if (tool.authType !== "oauth" || !tool.oauthMetadata) {
-          throw new Error("OAuth metadata not available for this connector");
-        }
-
-        const fallbackClientId = tool.oauthMetadata.clientId || "";
-
-        await connectTool(
-          tool.url,
-          tool.oauthMetadata as OAuthMetadata,
-          fallbackClientId
-        );
+        await connectRemoteTool(tool);
 
         toast.showSuccess(
           t("chatSettings.connectSuccess") || "Connected successfully",
@@ -201,32 +167,12 @@ export function useChatSettings() {
         );
       }
     },
-    [connectTool, connectToolWithTokensDirect, toast, t]
-  );
-
-  const getExpectedConnectorId = useCallback(
-    (tool: AgentConfigTool): string | undefined => {
-      if (
-        tool.url === RAINMAKER_MCP_CONNECTOR_URL &&
-        tool.oauthMetadata?.clientId
-      ) {
-        return `${RAINMAKER_MCP_CONNECTOR_URL}::${tool.oauthMetadata.clientId}`;
-      }
-      return undefined;
-    },
-    []
-  );
-
-  const isToolInConfig = useCallback(
-    (tool: AgentConfigTool) =>
-      agentConfig?.tools?.some(
-        (toolItem: AgentConfigTool) => toolItem.url === tool.url
-      ) ?? false,
-    [agentConfig?.tools]
+    [connectRemoteTool, toast, t]
   );
 
   return {
     agentConfig,
+    agentTools,
     isLoading,
     error,
     fontSize,
@@ -241,9 +187,7 @@ export function useChatSettings() {
     confirmDisconnectTool,
     closeDisconnectDialog,
     handleConnectTool,
-    getToolConnectionStatus,
-    getExpectedConnectorId,
-    isToolInConfig,
+    getRemoteToolConnectionStatus,
     connectingToolUrl,
   };
 }

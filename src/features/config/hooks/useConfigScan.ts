@@ -7,24 +7,30 @@
 import { useState, useContext, useRef, useCallback } from "react";
 import { useRouter } from "expo-router";
 import { useCameraPermissions } from "expo-camera";
+import { useTranslation } from "react-i18next";
 import { runtimeConfigManager } from "@config/runtime.config";
 import type { SDKConfig } from "@config/runtime.config";
 import asyncStorageAdapter from "@native-adaptors/implementations/ESPAsyncStorage";
 import { AppRestartContext } from "@context/appRestart.context";
+import { CONFIG_SCAN_INVALID_PAYLOAD_ERROR } from "@features/config/constants";
 import { resolveConfigFromScan } from "@features/config/utils/configScan";
 import { getPreAuthRoute } from "@features/landing/utils/currentDeployment";
+import { useToast } from "@shared/hooks/useToast";
 import { resetStackTo } from "@shared/utils/navigation";
 import type { ConfigScanPhase } from "@src/types/global";
 
 export interface UseConfigScanReturn {
   phase: ConfigScanPhase;
-  errorMessage: string;
   showScanner: boolean;
   setShowScanner: (show: boolean) => void;
   permission: { granted: boolean } | null;
   requestPermission: () => void;
-  handleScan: (scannedValue: string) => Promise<void>;
-  handleRetry: () => void;
+  /**
+   * Resolves and applies a scanned config.
+   * @returns `true` when accepted; `false` when invalid / failed (scanner shows
+   * red border + Scan Again).
+   */
+  handleScan: (scannedValue: string) => Promise<boolean>;
   handleUpdateConfig: () => void;
   handleCancel: () => void;
   handleBackFromScanner: () => void;
@@ -39,14 +45,18 @@ export interface UseConfigScanReturn {
  *
  * Applying a deployment rebuilds the SDK layer in place, falling back to a
  * process relaunch.
+ *
+ * Invalid or failed scans return `false` so the scanner can freeze, vibrate,
+ * show a red border, and offer Scan Again (same pattern as provision ScanQR).
  */
 export function useConfigScan(): UseConfigScanReturn {
   const router = useRouter();
+  const { t } = useTranslation();
+  const toast = useToast();
   const { restartApp, reinitializeSdk } = useContext(AppRestartContext);
   const [permission, requestPermission] = useCameraPermissions();
 
   const [phase, setPhase] = useState<ConfigScanPhase>("info");
-  const [errorMessage, setErrorMessage] = useState("");
   const [showScanner, setShowScanner] = useState(false);
   const scannedRef = useRef(false);
   const switchingRef = useRef(false);
@@ -74,18 +84,20 @@ export function useConfigScan(): UseConfigScanReturn {
     }
   }, [router, reinitializeSdk, restartApp]);
 
-  /* 
-  * Handle scan
-  * @param scannedValue - The scanned value to handle
-  * @returns void
-  */
+  /**
+   * Resolves and applies a scanned config. On failure, toasts and returns
+   * `false` so the scanner can keep the frozen frame with failure UI.
+   * @param scannedValue - Raw QR payload (JSON or http(s) URL)
+   * @returns Whether the scan was accepted
+   */
   const handleScan = useCallback(
-    async (scannedValue: string) => {
-      if (scannedRef.current) return;
+    async (scannedValue: string): Promise<boolean> => {
+      if (scannedRef.current) return false;
       scannedRef.current = true;
-      setPhase("fetching");
 
       try {
+        // Resolve while the camera is still mounted so invalid payloads can
+        // toast without flashing the loading screen.
         const json = await resolveConfigFromScan(scannedValue);
 
         setPhase("applying");
@@ -104,23 +116,26 @@ export function useConfigScan(): UseConfigScanReturn {
         // Success view goes up before the rebuild: it is slower than a relaunch was.
         setPhase("success");
         await applyDeploymentSwitch();
+        return true;
       } catch (e) {
-        setPhase("error");
-        setErrorMessage(e instanceof Error ? e.message : String(e));
+        const raw = e instanceof Error ? e.message : String(e);
+        toast.showError(
+          raw === CONFIG_SCAN_INVALID_PAYLOAD_ERROR || !raw
+            ? t("config.scan.invalidQRCode")
+            : raw,
+        );
+        // Keep / restore the scanner so it can show red border + Scan Again.
+        setPhase("info");
         scannedRef.current = false;
+        return false;
       }
     },
-    [applyDeploymentSwitch],
+    [applyDeploymentSwitch, t, toast],
   );
 
-  // Handle retry
-  const handleRetry = useCallback(() => {
-    setPhase("scanning");
-    setErrorMessage("");
-    scannedRef.current = false;
-  }, []);
-
-  // Handle update config
+  /**
+   * Opens the camera scanner (requests permission when needed).
+   */
   const handleUpdateConfig = useCallback(() => {
     if (!permission?.granted) {
       requestPermission();
@@ -128,6 +143,9 @@ export function useConfigScan(): UseConfigScanReturn {
     setShowScanner(true);
   }, [permission?.granted, requestPermission]);
 
+  /**
+   * Dismisses Config Scan back to the previous route, or the pre-auth entry.
+   */
   const handleCancel = useCallback(() => {
     // `router.back()` is a silent no-op when there is nothing to pop (e.g. the
     // stack was reset by a programmatic restart, or this screen is the entry
@@ -140,12 +158,12 @@ export function useConfigScan(): UseConfigScanReturn {
     router.replace(getPreAuthRoute() as never);
   }, [router]);
 
+  /**
+   * Leaves the scanner and clears scan locks so the next open starts clean.
+   */
   const handleBackFromScanner = useCallback(() => {
     setShowScanner(false);
-    // Leaving the scanner also clears any failed-scan state, so returning to
-    // it starts from a clean scanning phase rather than the error view.
     setPhase("info");
-    setErrorMessage("");
     scannedRef.current = false;
   }, []);
 
@@ -188,13 +206,11 @@ export function useConfigScan(): UseConfigScanReturn {
 
   return {
     phase,
-    errorMessage,
     showScanner,
     setShowScanner,
     permission,
     requestPermission,
     handleScan,
-    handleRetry,
     handleUpdateConfig,
     handleCancel,
     handleBackFromScanner,

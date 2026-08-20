@@ -4,20 +4,17 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import {
   View,
-  Text,
-  FlatList,
   KeyboardAvoidingView,
   Platform,
-  TouchableWithoutFeedback,
-  Keyboard,
 } from "react-native";
+import { FlatList } from "react-native-gesture-handler";
 import { useFocusEffect, useRouter } from "expo-router";
 import { useTranslation } from "react-i18next";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { GestureHandlerRootView } from "react-native-gesture-handler";
+import { GestureHandlerRootView, GestureDetector } from "react-native-gesture-handler";
 import { tokens } from "@shared/theme/tokens";
 import { globalStyles } from "@shared/theme/globalStyleSheet";
 import { ScreenWrapper, ConfirmationDialog } from "@shared/components";
@@ -27,16 +24,17 @@ import {
   ChatErrorState,
   ChatHeader,
   ChatInput,
+  ChatUsageStrip,
   ChatLoadingState,
   ChatMessage,
   MessageDisplayConfigBottomSheet,
 } from "@features/agent/components";
 import { getAgentTermsAccepted } from "@features/agent/utils/storage";
 import { useCDF } from "@shared/hooks/useCDF";
-import { useAgentChat } from "@features/agent/hooks";
+import { useAgentChat, useChatMediaAttachment, useAgentUsageReveal } from "@features/agent/hooks";
 import { loadPreviousMessages } from "@features/agent/utils/chat/messageLoader";
-import { getFontSizes } from "@features/agent/utils/chat/fontSizes";
-import { getSelectedAgentId, deleteConversationId } from "@features/agent/utils";
+import { buildChatDisplayMessages, shouldShowChatThinkingIndicator } from "@features/agent/utils/chat/messageOrdering";
+import { getSelectedAgentId, deleteConversationId, getAgentSuggestionPrompts } from "@features/agent/utils";
 import { ChatMessage as ChatMessageType } from "@src/types/global";
 
 /**
@@ -58,7 +56,6 @@ export function ChatScreen() {
     isAgentConfigNotFound,
     isProfileNotFound,
     isConnectingConnector,
-    isDefaultAgent,
     showConnectorWarningDialog,
     initializeAgent,
     handleConnectorWarningRetry,
@@ -72,20 +69,13 @@ export function ChatScreen() {
     // Input
     inputText,
     setInputText,
-    inputHeight,
-    setInputHeight,
     isKeyboardVisible,
     resetInput,
     // Messages
     messageHistory,
     setMessageHistory,
-    expandedJsonMessages,
-    isThinking,
-    isConversationDone,
-    setIsThinking,
     setIsConversationDone,
     addChatMessage,
-    toggleJsonExpansion,
     clearMessages,
     // WebSocket
     isConnected,
@@ -93,13 +83,16 @@ export function ChatScreen() {
     initializeWebSocket,
     sendMessage: sendWebSocketMessage,
     disconnect,
+    isUploadingMedia,
     // Scroll
     flatListRef,
-    enableAutoScroll,
     handleScrollBeginDrag,
     handleScrollEndDrag,
     handleMomentumScrollEnd,
     handleContentSizeChange,
+    handleScrollToIndexFailed,
+    showThinkingIndicator,
+    isTransactionActive,
   } = useAgentChat();
 
   const [showConfigBottomSheet, setShowConfigBottomSheet] = useState(false);
@@ -108,7 +101,54 @@ export function ChatScreen() {
     useState(false);
   const [currentAgentId, setCurrentAgentId] = useState<string | null>(null);
 
+  const showIndicatorInList = useMemo(
+    () =>
+      shouldShowChatThinkingIndicator(
+        showThinkingIndicator,
+        messageDisplayConfig
+      ),
+    [showThinkingIndicator, messageDisplayConfig]
+  );
+
+  const displayMessages = useMemo(
+    () => buildChatDisplayMessages(messageHistory, showIndicatorInList),
+    [messageHistory, showIndicatorInList]
+  );
+
+  const isNewConversation = useMemo(
+    () => !messageHistory.some((message) => message.isUser),
+    [messageHistory]
+  );
+
+  const suggestionPrompts = useMemo(
+    () => (currentAgentId ? getAgentSuggestionPrompts(currentAgentId) : []),
+    [currentAgentId]
+  );
+
   const user = store?.userStore.user;
+
+  const {
+    pendingAttachments,
+    canAddMoreAttachments,
+    isPickingImage,
+    isLoadingMediaConfig,
+    isImageAttachmentAllowed,
+    isImageSourcePickerVisible,
+    openImageAttachmentPicker,
+    closeImageAttachmentPicker,
+    pickImageFromCamera,
+    pickImageFromGallery,
+    removeAttachmentAt,
+    clearAttachments,
+  } = useChatMediaAttachment(currentAgentId);
+
+  const {
+    isVisible: isUsageStripVisible,
+    usage: usageQuota,
+    hideUsageStrip,
+    toggleUsageStrip,
+    doubleTapGesture,
+  } = useAgentUsageReveal();
 
   // Initialize chat
   useEffect(() => {
@@ -174,33 +214,55 @@ export function ChatScreen() {
   }, [isProfileNotFound]);
 
   const sendMessage = useCallback(
-    (messageText?: string) => {
+    async (messageText?: string) => {
       const message = messageText || inputText.trim();
-      if (!message || !isConnected) return;
+      const hasAttachment = pendingAttachments.length > 0;
 
-      resetInput();
-      enableAutoScroll();
-
-      if (messageDisplayConfig.showUser) {
-        addChatMessage(message, true, "user");
+      if ((!message && !hasAttachment) || !isConnected || isUploadingMedia || isTransactionActive) {
+        return;
       }
 
-      // Set thinking indicator immediately when sending message
-      setIsThinking(true);
+      hideUsageStrip();
+
+      const attachmentsToSend = hasAttachment ? [...pendingAttachments] : [];
       setIsConversationDone(false);
 
-      sendWebSocketMessage(message);
+      try {
+        const uploadedMedia = await sendWebSocketMessage(
+          message,
+          attachmentsToSend
+        );
+
+        resetInput();
+        clearAttachments();
+
+        if (messageDisplayConfig.showUser) {
+          addChatMessage(
+            message,
+            true,
+            "user",
+            undefined,
+            undefined,
+            uploadedMedia
+          );
+        }
+      } catch {
+        // Error toast is handled in useAgentChat; keep pending attachment.
+      }
     },
     [
       inputText,
+      pendingAttachments,
       isConnected,
+      isUploadingMedia,
+      isTransactionActive,
       messageDisplayConfig.showUser,
       addChatMessage,
       sendWebSocketMessage,
       resetInput,
-      enableAutoScroll,
-      setIsThinking,
+      clearAttachments,
       setIsConversationDone,
+      hideUsageStrip,
     ],
   );
 
@@ -255,21 +317,19 @@ export function ChatScreen() {
         <ChatMessage
           item={item}
           fontSize={fontSize}
-          expandedJsonMessages={expandedJsonMessages}
-          isDefaultAgent={isDefaultAgent}
           isConnected={isConnected}
-          onToggleJson={toggleJsonExpansion}
           onQuestionPress={sendMessage}
+          suggestionPrompts={suggestionPrompts}
+          showSuggestionPrompts={isNewConversation}
         />
       );
     },
     [
       fontSize,
-      expandedJsonMessages,
-      isDefaultAgent,
       isConnected,
-      toggleJsonExpansion,
       sendMessage,
+      suggestionPrompts,
+      isNewConversation,
     ],
   );
 
@@ -281,15 +341,17 @@ export function ChatScreen() {
         onConfigPress={() => setShowConfigBottomSheet(true)}
         onNewChat={handleNewChat}
         onOpenConversations={() => setShowConversationsBottomSheet(true)}
+        onViewQuota={toggleUsageStrip}
       />
       <KeyboardAvoidingView
         style={{ flex: 1 }}
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
-        keyboardVerticalOffset={Platform.OS === "ios" ? insets.top : 0}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        keyboardVerticalOffset={0}
       >
         <ScreenWrapper
           style={globalStyles.chatContainer}
           excludeTop={true}
+          excludeBottom={Platform.OS === "ios"}
           dismissKeyboard={false}
         >
           {isInitializing ? (
@@ -301,12 +363,11 @@ export function ChatScreen() {
               onRetry={reconnect}
             />
           ) : (
-            <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+            <GestureDetector gesture={doubleTapGesture}>
               <View style={globalStyles.chatInnerContainer}>
-                {/* Messages List */}
                 <FlatList
                   ref={flatListRef}
-                  data={messageHistory}
+                  data={displayMessages}
                   renderItem={renderMessage}
                   keyExtractor={(item) => item.id}
                   style={globalStyles.chatMessagesList}
@@ -314,15 +375,18 @@ export function ChatScreen() {
                     globalStyles.chatMessagesContent,
                     isKeyboardVisible &&
                       globalStyles.chatMessagesContentKeyboardVisible,
-                    messageHistory.length === 0 &&
+                    displayMessages.length === 0 &&
                       globalStyles.chatMessagesContentEmpty,
                   ]}
                   showsVerticalScrollIndicator={true}
                   keyboardShouldPersistTaps="handled"
-                  keyboardDismissMode="interactive"
+                  keyboardDismissMode="on-drag"
                   scrollEnabled={true}
+                  alwaysBounceVertical={true}
+                  overScrollMode="always"
                   bounces={true}
-                  removeClippedSubviews={true}
+                  nestedScrollEnabled={true}
+                  removeClippedSubviews={false}
                   maxToRenderPerBatch={10}
                   updateCellsBatchingPeriod={50}
                   windowSize={10}
@@ -331,47 +395,52 @@ export function ChatScreen() {
                   onScrollEndDrag={handleScrollEndDrag}
                   onMomentumScrollEnd={handleMomentumScrollEnd}
                   onContentSizeChange={handleContentSizeChange}
-                  ListFooterComponent={
-                    isThinking && !isConversationDone ? (
-                      <View style={globalStyles.chatThinkingIndicatorWrapper}>
-                        <View
-                          style={globalStyles.chatThinkingIndicatorContainer}
-                        >
-                          <Text
-                            style={[
-                              globalStyles.chatThinkingIndicatorText,
-                              { fontSize: getFontSizes(fontSize).base },
-                            ]}
-                          >
-                            Thinking...
-                          </Text>
-                        </View>
-                      </View>
-                    ) : null
-                  }
+                  onScrollToIndexFailed={handleScrollToIndexFailed}
                 />
 
-                {/* Input Area */}
                 <View
-                  style={
+                  style={[
+                    globalStyles.chatInputArea,
                     Platform.OS === "ios" && !isKeyboardVisible
                       ? { paddingBottom: insets.bottom }
-                      : undefined
-                  }
+                      : undefined,
+                  ]}
                 >
+                  {isUsageStripVisible && usageQuota ? (
+                    <ChatUsageStrip usage={usageQuota} />
+                  ) : null}
+
                   <ChatInput
                     inputText={inputText}
-                    inputHeight={inputHeight}
                     isConnected={isConnected}
-                    isKeyboardVisible={isKeyboardVisible}
+                    isAwaitingResponse={isTransactionActive}
+                    isUploadingMedia={isUploadingMedia}
+                    isPickingImage={isPickingImage}
+                    isLoadingMediaConfig={isLoadingMediaConfig}
+                    isImageAttachmentAllowed={isImageAttachmentAllowed}
+                    canAddMoreAttachments={canAddMoreAttachments}
+                    pendingAttachments={pendingAttachments.map((attachment) => ({
+                      uri: attachment.uri,
+                    }))}
                     onInputChange={setInputText}
-                    onInputHeightChange={setInputHeight}
-                    onSend={() => sendMessage()}
+                    onAttachImage={openImageAttachmentPicker}
+                    isImageSourcePickerVisible={isImageSourcePickerVisible}
+                    onCloseImageSourcePicker={closeImageAttachmentPicker}
+                    onPickImageFromCamera={() => {
+                      void pickImageFromCamera();
+                    }}
+                    onPickImageFromGallery={() => {
+                      void pickImageFromGallery();
+                    }}
+                    onRemoveAttachment={removeAttachmentAt}
+                    onSend={() => {
+                      void sendMessage();
+                    }}
                     onReconnect={reconnect}
                   />
                 </View>
               </View>
-            </TouchableWithoutFeedback>
+            </GestureDetector>
           )}
         </ScreenWrapper>
       </KeyboardAvoidingView>

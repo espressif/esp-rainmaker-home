@@ -12,7 +12,16 @@ import {
   getSelectedAgentId,
 } from "@features/agent/utils";
 import { getConversationByAgent } from "../apiHelper";
+import {
+  mapConversationMessage,
+} from "./conversationContent";
+import { resolveChatMediaDownloadUrls } from "./mediaUpload";
+import { parseStoredMessageContent } from "./messageContentParser";
 import { parseTimestamp } from "../chatHelper";
+import {
+  AGENT_CHAT_MESSAGE_ROLE_ASSISTANT,
+  AGENT_CHAT_MESSAGE_ROLE_USER,
+} from "@shared/utils/constants";
 import type { ChatMessage } from "@src/types/global";
 
 /**
@@ -50,13 +59,31 @@ export const loadPreviousMessages = async (
       conversation.messages.length > 0
     ) {
       // Load previous messages
-      const loadedMessages: ChatMessage[] = conversation.messages.map(
-        (msg, index) => ({
-          id: `${conversationId}-${index}-${msg.timestamp || Date.now()}`,
-          text: msg.content || "",
-          isUser: msg.role === "user",
-          timestamp: parseTimestamp(msg.timestamp),
-          messageType: msg.role === "user" ? "user" : "assistant",
+      const loadedMessages: ChatMessage[] = await Promise.all(
+        conversation.messages.map(async (msg, index) => {
+          const mappedContent = mapConversationMessage(msg);
+          const isUser = msg.role === AGENT_CHAT_MESSAGE_ROLE_USER;
+          const parsedAssistant = !isUser
+            ? parseStoredMessageContent(mappedContent.text)
+            : null;
+          const media = await resolveChatMediaDownloadUrls(
+            agentId,
+            conversationId,
+            mappedContent.media
+          );
+
+          return {
+            id: `${conversationId}-${index}-${msg.timestamp || Date.now()}`,
+            text: isUser
+              ? mappedContent.text
+              : parsedAssistant?.text || mappedContent.text,
+            isUser,
+            timestamp: parseTimestamp(msg.timestamp),
+            messageType: isUser
+              ? AGENT_CHAT_MESSAGE_ROLE_USER
+              : parsedAssistant?.messageType || AGENT_CHAT_MESSAGE_ROLE_ASSISTANT,
+            media,
+          };
         })
       );
 

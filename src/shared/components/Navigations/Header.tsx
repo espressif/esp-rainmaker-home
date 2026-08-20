@@ -25,8 +25,9 @@ import { Ionicons } from "@expo/vector-icons";
 import { tokens } from "@shared/theme/tokens";
 import { globalStyles } from "@shared/theme/globalStyleSheet";
 
-// Constants
+// Constants / layout
 import { PLATFORM_IOS } from "@shared/utils/constants";
+import { getHeaderPaddingTop } from "@shared/utils/headerLayout";
 
 import { testProps } from "@shared/utils/testProps";
 // Types
@@ -74,11 +75,7 @@ const Header: React.FC<HeaderProps> = ({
   const insets = useSafeAreaInsets();
   const { height } = Dimensions.get("window");
 
-  // Platform-specific padding: Keep iOS logic intact, use SafeAreaInsets for Android
-  const paddingTop =
-    Platform.OS === PLATFORM_IOS
-      ? height * 0.06 // Keep existing iOS logic
-      : insets.top + 10; // Use SafeAreaInsets for Android
+  const paddingTop = getHeaderPaddingTop(insets.top, height);
 
   const goBack = () => {
     // If custom back press handler is provided, use it instead of default behavior
