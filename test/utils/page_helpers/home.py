@@ -40,19 +40,26 @@ class Home(BasePage):
             raise ValueError(f"Invalid action: {action}")
         return self
 
-    def open_add_device(self):
+    def open_add_device(self, timeout=15):
         """
         Tap Add Device on home — header button when devices exist,
         or empty-state banner button when no devices are provisioned yet.
+
+        Polls for the whole window instead of probing once, because home renders as an
+        interactive skeleton before its store hydrates and neither entry point exists until
+        it does; a single 2s probe lands inside that gap and reports the button as missing.
         """
-        if self.is_visible("add_device_button", timeout=2):
-            self.click("add_device_button")
-        elif self.is_visible("add_device_banner_button", timeout=2):
-            logger.info("Using empty-state banner add device button")
-            self.click("add_device_banner_button")
-        else:
-            raise Exception("Add device entry point not found on home screen")
-        return self
+        end_time = time.monotonic() + timeout
+        while time.monotonic() < end_time:
+            if self.is_visible("add_device_button", timeout=1):
+                self.click("add_device_button")
+                return self
+            if self.is_visible("add_device_banner_button", timeout=1):
+                logger.info("Using empty-state banner add device button")
+                self.click("add_device_banner_button")
+                return self
+            time.sleep(1)
+        raise Exception(f"Add device entry point not found on home screen within {timeout}s")
 
     def open_device(self, device_name: str, timeout=10):
         """Open a provisioned device's control screen by its display name."""

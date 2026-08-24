@@ -90,9 +90,21 @@ def create_the_automation(helper):
 
 
 @then("user should see automation created successfully toast")
-def should_see_automation_created_toast(helper):
+def should_see_automation_created_toast(helper, hardware_session):
     title = helper.automations.get_success_toast(timeout=10)
     assert title == AUTOMATION_SUCCESS_TOAST, f"Unexpected automation toast: {title}"
+    hardware_session["automation_live_since"] = hardware_session["device_serial"].marker()
+
+
+@when(parsers.parse('the device raises the automation trigger "{param}" as "{value}"'))
+def raise_automation_trigger(hardware_session, param, value):
+    ds = hardware_session["device_serial"]
+    live_since = hardware_session.get("automation_live_since", 0)
+    early = [line for line in ds.lines()[live_since:] if "via : Cloud" in line]
+    assert not early, f"Automation fired before the trigger event (cloud early-fire): {early[-1].strip()}"
+    hardware_session["serial_since"] = ds.marker()
+    hardware_session.get("set_values", {}).pop(param, None)
+    ds.set_param(param, value in ("on", "true"))
 
 
 @then(parsers.parse('automation "{name}" should be visible'))

@@ -19,6 +19,7 @@ report:
   title: "ESP Rainmaker Home App Test Report"
   brand_name: "ESPRESSIF SYSTEMS"
   test_lab: "Pune"
+  live_refresh_seconds: 60
 
 email:
   smtp_server: "${EMAIL_SMTP_SERVER:-smtp.office365.com}"

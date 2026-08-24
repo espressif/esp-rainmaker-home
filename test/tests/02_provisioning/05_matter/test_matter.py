@@ -3,7 +3,7 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 
-"""BDD tests for Matter commissioning via the Google Play services half-sheet (setup in this section's conftest.py)."""
+"""BDD tests for Matter commissioning via the platform pairing UI (setup in this section's conftest.py)."""
 import logging
 
 import pytest
@@ -36,8 +36,8 @@ def enter_matter_pairing_code(helper, matter_device):
     helper.matter_manual.enter_pairing_code(matter_device.manual_code)
 
 
-@when("user completes the Google Play services commissioning")
-def complete_gps_commissioning(helper):
+@when("user completes the ecosystem commissioning")
+def complete_ecosystem_commissioning(helper):
     helper.matter_commissioning.complete_commissioning()
 
 
@@ -54,24 +54,30 @@ def matter_device_local(helper):
         "Matter device not shown as locally reachable (Available on WLAN) on the home screen"
 
 
-@then(parsers.parse('the device "{name}" should be online on the home screen'))
-def matter_device_online(helper, name):
+@then("the matter device should be visible on home screen")
+def matter_device_visible(helper, matter_light_name):
+    assert helper.home.is_device_visible(matter_light_name, timeout=60), \
+        f"Device '{matter_light_name}' should be visible on home screen"
+
+
+@then("the matter device should be online on the home screen")
+def matter_device_online(helper, matter_light_name):
     helper.home.go_home()
-    assert helper.home.is_device_online(name, timeout=120), \
-        f"Device '{name}' did not come online on the home screen within 120s"
+    assert helper.home.is_device_online(matter_light_name, timeout=120), \
+        f"Device '{matter_light_name}' did not come online on the home screen within 120s"
 
 
-@when(parsers.parse('user prepares the matter device power "{state}" for "{name}"'))
-def prepare_matter_power(helper, state, name):
+@when(parsers.parse('user prepares the matter device power "{state}"'))
+def prepare_matter_power(helper, matter_light_name, state):
     helper.home.go_home()
-    helper.home.set_card_power(name, state == "on")
+    helper.home.set_card_power(matter_light_name, state == "on")
 
 
-@when(parsers.parse('user toggles the matter device power "{state}" for "{name}" from the home screen'))
-def toggle_matter_power(helper, matter_device, state, name):
+@when(parsers.parse('user toggles the matter device power "{state}" from the home screen'))
+def toggle_matter_power(helper, matter_device, matter_light_name, state):
     helper.home.go_home()
     matter_device.mark_serial()
-    helper.home.set_card_power(name, state == "on")
+    helper.home.set_card_power(matter_light_name, state == "on")
 
 
 @then(parsers.parse('the device log should show matter "{param}" set to "{value}"'))
@@ -93,10 +99,10 @@ def verify_matter_serial(matter_device, param, value):
         raise AssertionError(f"Unsupported matter serial param: {param}")
 
 
-@when(parsers.parse('user sets "{name}" "{param}" to "{value}" from the matter control screen'))
-def matter_set_param(helper, matter_device, name, param, value):
+@when(parsers.parse('user sets matter "{param}" to "{value}" from the matter control screen'))
+def matter_set_param(helper, matter_device, matter_light_name, param, value):
     helper.home.go_home()
-    helper.home.open_device(name)
+    helper.home.open_device(matter_light_name)
     matter_device.mark_serial()
     helper.control.set_slider(param, value)
 

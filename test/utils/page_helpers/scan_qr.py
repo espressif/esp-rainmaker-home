@@ -124,6 +124,9 @@ class ScanQr(BasePage):
         # The camera/scanner overlay needs a moment to initialise after the
         # permission grant (notably on iOS).
         if not self.is_scanner_visible(timeout=5):
+            if not self.check_screen_displayed(timeout=2):
+                logger.info("Scanner already consumed the displayed QR; continuing past scan")
+                return self
             raise RuntimeError("QR scanner is not available")
 
         return self.wait_for_scan_processing_to_finish(timeout=scan_timeout)

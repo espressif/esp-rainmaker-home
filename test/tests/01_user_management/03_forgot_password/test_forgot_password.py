@@ -6,9 +6,11 @@
 import pytest
 import logging
 import time
+from datetime import datetime, timedelta, timezone
 from pytest_bdd import scenarios, given, when, then, parsers
 from utils.mailosaur_helper import generate_email, get_verification_code
 from utils.common_utils import normalize_input
+from utils.app_copy import app_i18n, request_password_recovery_copy
 
 logger = logging.getLogger(__name__)
 pytestmark = [pytest.mark.regression, pytest.mark.user_management, pytest.mark.forgot_password]
@@ -30,8 +32,15 @@ def _resolve_email(email: str, registered_user_resolver) -> str:
 
 
 @when(parsers.parse('user requests resets password with "{email}"'))
-def request_reset_password(helper, email, registered_user_resolver):
+def request_reset_password(helper, email, registered_user_resolver, pytestconfig):
     resolved_email = _resolve_email(normalize_input(email), registered_user_resolver)
+    if "unregistered" not in email:
+        try:
+            probe_email = registered_user_resolver("registered user 2")
+        except Exception:
+            probe_email = "e2e-copy-probe@example.invalid"
+        helper.forgot_password.code_sent_copy = request_password_recovery_copy(
+            pytestconfig.getoption("--deployment"), probe_email)
     helper.forgot_password.perform_forgot_password_reset(resolved_email)
     helper.forgot_password.last_reset_email = resolved_email
 
@@ -55,6 +64,13 @@ def should_see_title(helper, title):
     actual_title = helper.reset_password.get_title_text()
     assert actual_title == title, f"Expected title: {title} but found: {actual_title}"
 
+
+@then("user should see the code-sent title")
+def should_see_code_sent_title(helper):
+    expected = getattr(helper.forgot_password, "code_sent_copy", None) or app_i18n("auth.verification.heading")
+    actual_title = helper.reset_password.get_title_text()
+    assert actual_title == expected, f"Expected title: {expected} but found: {actual_title}"
+
 @then(parsers.parse('user should see forgot password error "{message}"'))
 def should_see_forgot_password_error(helper, message):
     error = helper.forgot_password.get_error_message()
@@ -66,7 +82,10 @@ def enter_verification_code(helper, code):
     if code == "correct":
         email = getattr(helper.forgot_password, "last_reset_email", None)
         assert email, "No reset email stored. Request reset code first."
-        code = get_verification_code(email)
+        code = get_verification_code(
+            email,
+            received_after=getattr(helper.forgot_password, "code_requested_at", None),
+        )
     helper.reset_password.send_keys("code_input", code, clear_first=True)
     helper.reset_password.hide_keyboard_if_visible()
 
@@ -84,8 +103,10 @@ def tap_button(helper, button_name):
     if button_name == "confirm":
         helper.reset_password.click("confirm_button")
     elif button_name == "resend":
+        helper.forgot_password.code_requested_at = datetime.now(timezone.utc) - timedelta(seconds=10)
         helper.reset_password.click("resend_button")
     elif button_name == "send code":
+        helper.forgot_password.code_requested_at = datetime.now(timezone.utc) - timedelta(seconds=10)
         helper.forgot_password.click("send_code_button")
     else:
         raise AssertionError(f"Unsupported button: {button_name}")

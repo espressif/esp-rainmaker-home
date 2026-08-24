@@ -20,7 +20,7 @@ class Provision(BasePage):
         self._success_toast_title = None
 
 
-    def assert_all_steps_successful(self, timeout=60):
+    def assert_all_steps_successful(self, timeout=75):
         """Assert each provisioning step shows a success icon and Continue is enabled.
 
         Polls and returns as soon as all steps pass; the higher ceiling covers

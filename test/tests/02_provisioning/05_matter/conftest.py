@@ -358,9 +358,16 @@ def matter_account_cleanup(pytestconfig, registered_user_resolver, registered_us
 
 
 @pytest.fixture
-def matter_device(request, resource_manager, per_test_debug_dir, helper, matter_account_cleanup):
+def matter_light_name(request, helper):
+    """Home-screen name of the commissioned Matter light, which differs by pairing ecosystem.
+    """
     if helper.driver._test_info.get("platform", "android") == "ios":
-        pytest.skip("iOS Matter commissioning (Apple pairing sheet) not yet automated")
+        return "Matter Accessory"
+    return "Matter Device" if _matter_scenario(request) == "rmneo_matter" else "Light"
+
+
+@pytest.fixture
+def matter_device(request, resource_manager, per_test_debug_dir, helper, matter_account_cleanup):
     if not MATTER_CHIP_MAC:
         pytest.skip("MATTER_CHIP_MAC not set (see test/README.md)")
     try:

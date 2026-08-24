@@ -194,7 +194,7 @@ class OauthLogin(BasePage):
     def _perform_apple_auth(self, email, password, timeout):
         """Apple web login. iOS: the native Sign in with Apple sheet. Android: the apple.com web form — email / password / SMS 2FA / 'Trust this browser?' / share-email consent — until the app regains the foreground."""
         deadline = time.time() + timeout
-        email_done = password_done = totp_done = False
+        email_done = password_done = totp_done = credentials_settled = False
         while time.time() < deadline:
             self._assert_no_redirect_chooser()
             if self.platform == "ios":
@@ -207,7 +207,7 @@ class OauthLogin(BasePage):
             if not self._in_auth_surface():
                 logger.info("Auth surface closed; oauth redirect handed back to the app")
                 return self
-            if not password_done and self._dismiss_chrome_first_run():
+            if not credentials_settled and self._dismiss_chrome_first_run():
                 continue
             blocker = self._detect_blocker()
             if blocker:
@@ -217,10 +217,10 @@ class OauthLogin(BasePage):
                 # SMS delivery + resend can burn most of the budget; guarantee time for Trust/consent/redirect.
                 deadline = max(deadline, time.time() + 90)
                 continue
-            # Trust-browser and share-email consent are strictly post-password; skip the probes until the password is in.
-            if password_done and self._apple_handle_trust_browser():
+            # Trust-browser and share-email consent follow the credential stage, whether we typed
+            if credentials_settled and self._apple_handle_trust_browser():
                 continue
-            if password_done and self._apple_handle_share_email_consent():
+            if credentials_settled and self._apple_handle_share_email_consent():
                 # Consent is the last interactive step; hand off to wait_for_login_completion for the redirect.
                 logger.info("Apple consent completed; leaving the redirect to complete undisturbed")
                 return self
@@ -229,7 +229,7 @@ class OauthLogin(BasePage):
                 if password_field is not None:
                     logger.info("Entering apple password")
                     self._type_and_submit(password_field, password, ("Next", "Continue", "Sign in", "Sign In"))
-                    password_done = True
+                    password_done = credentials_settled = True
                     time.sleep(3)
                     continue
                 if password_field is None:
@@ -243,6 +243,9 @@ class OauthLogin(BasePage):
                             self.driver.press_keycode(66)
                         time.sleep(3)
                         continue
+                    if not credentials_settled:
+                        logger.info("Apple asked for no credentials; session is remembered")
+                        credentials_settled = True
             self._tap_any(("Continue", "Trust", "I agree", "Allow", "Next"), quiet=True)
             time.sleep(1)
         return self._finish_auth("apple", timeout)
@@ -561,16 +564,19 @@ class OauthLogin(BasePage):
         if self.platform != "ios":
             self._apple_request_sms_code()
             from utils.android_sms_reader import fetch_apple_2fa_code_from_sms
+            from utils.phone_network import _resolve_adb
             udid = self.driver.capabilities.get("udid")
-            code = fetch_apple_2fa_code_from_sms(udid=udid, timeout=60)
+            # Resolve adb from config like the rest of the framework; the reader's bare "adb"
+            # default silently reads nothing wherever the SDK is not on PATH.
+            adb = _resolve_adb()
+            code = fetch_apple_2fa_code_from_sms(udid=udid, adb_path=adb, timeout=60)
             if not code and self._tap_any(("Resend code", "Resend Code", "Resend")):
                 logger.info("Apple 2FA SMS not received in first window; tapped 'Resend code' and re-waiting once")
-                code = fetch_apple_2fa_code_from_sms(udid=udid, timeout=60)
+                code = fetch_apple_2fa_code_from_sms(udid=udid, adb_path=adb, timeout=60)
             if not code:
                 raise RuntimeError(
-                    "No Apple 2FA code arrived by SMS. Ensure the device SIM's number is "
-                    "registered as a trusted phone number on the Apple account and that the "
-                    "'Cannot access your devices? -> Text' routing selected it.")
+                    "No Apple 2FA code arrived by SMS within two windows, and none is in the "
+                    "device inbox. Check the inbox before suspecting the SIM or this reader.")
             return self._android_enter_apple_2fa_code(code)
         from utils.apple_2fa_reader import read_code_with_driver
         code = read_code_with_driver(self.driver)

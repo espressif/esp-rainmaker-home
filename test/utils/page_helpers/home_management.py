@@ -40,15 +40,22 @@ class HomeManagement(BasePage):
         return self
 
     def rename_home(self, new_name):
-        """Rename the home from its Settings screen (idempotent)."""
+        """Rename the home from its Settings screen; the app saves on blur/submit, so commit explicitly and confirm the name persisted."""
         self.click("edit_home_name_button", timeout=5)
         self.send_keys("home_name_input", new_name, clear_first=True, timeout=5)
         if self.platform != "ios":
+            self.driver.press_keycode(66)
             self.hide_keyboard_if_visible()
         else:
             self.click("home_name_input", timeout=3)
-        time.sleep(1)
-        return self
+        deadline = time.time() + 10
+        current = ""
+        while time.time() < deadline:
+            current = (self.get_text("home_name_input", timeout=2) or "").strip()
+            if current == new_name:
+                return self
+            time.sleep(1)
+        raise AssertionError(f"Home rename did not persist: field shows '{current}', wanted '{new_name}'")
 
     def assert_leave_home_available(self):
         assert self.is_visible("leave_home_button", timeout=5), "Leave Home option is not available for a secondary user"
