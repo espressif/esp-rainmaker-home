@@ -6,6 +6,7 @@
 
 import type { TFunction } from "i18next";
 import {
+  APPLE_SIGN_IN_CANCELLED_ERROR_TAG,
   GOOGLE_SIGN_IN_CANCELLED_ERROR_TAG,
   OAUTH_CANCELLED_ERROR_TAG,
   OAUTH_NO_BROWSER_FOUND_ERROR_TAG,
@@ -223,11 +224,13 @@ export function shouldMonitorOAuthAppLifecycle(
  */
 export function isOAuthCancellation(error: unknown): boolean {
   if (!(error instanceof Error)) return false;
-  return (
-    error.message.includes(OAUTH_CANCELLED_ERROR_TAG) ||
-    error.message.includes(GOOGLE_SIGN_IN_CANCELLED_ERROR_TAG) ||
-    (error as { code?: unknown }).code === GOOGLE_SIGN_IN_CANCELLED_ERROR_TAG
-  );
+  const { code } = error as { code?: unknown };
+  const tags = [
+    OAUTH_CANCELLED_ERROR_TAG,
+    GOOGLE_SIGN_IN_CANCELLED_ERROR_TAG,
+    APPLE_SIGN_IN_CANCELLED_ERROR_TAG,
+  ];
+  return tags.some((tag) => code === tag || error.message.includes(tag));
 }
 
 /**

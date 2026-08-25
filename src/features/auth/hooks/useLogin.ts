@@ -64,6 +64,9 @@ import {
 import {
   isGoogleNativeLoginInProgress,
 } from "@native-adaptors/implementations/ESPGoogleSignInAdapter";
+import {
+  isAppleNativeLoginInProgress,
+} from "@native-adaptors/implementations/ESPAppleSignInAdapter";
 import { espOauthAdapter } from "@native-adaptors/implementations/ESPOauthAdapter";
 import { runtimeConfigManager } from "@config/runtime.config";
 import asyncStorageAdapter from "@native-adaptors/implementations/ESPAsyncStorage";
@@ -444,13 +447,15 @@ export function useLogin() {
         // fail on its own — so cancelling here would discard a valid login
         // (seen with SignInWithApple when the CN token exchange exceeded the
         // grace period). Let it finish; the loading overlay's close button
-        // still allows a manual cancel. The native Google picker never has a
-        // browser phase to abandon at all, so it is excluded outright — see
-        // isGoogleNativeLoginInProgress.
+        // still allows a manual cancel. The native Google picker and the
+        // system Sign in with Apple sheet never have a browser phase to abandon
+        // at all, so they are excluded outright — see
+        // isGoogleNativeLoginInProgress / isAppleNativeLoginInProgress.
         if (
           espOauthAdapter.hasReceivedAuthCode() ||
           hasReceivedWeChatAuthCode() ||
-          isGoogleNativeLoginInProgress()
+          isGoogleNativeLoginInProgress() ||
+          isAppleNativeLoginInProgress()
         ) {
           return;
         }

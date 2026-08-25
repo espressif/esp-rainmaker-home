@@ -18,6 +18,8 @@
 		5A1455762E45C0D20066A31F /* ESPWeChatModule.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A1455772E45C0D20066A31F /* ESPWeChatModule.swift */; };
 		5A1455802E45C0D40066A31F /* ESPGoogleSignInModule.m in Sources */ = {isa = PBXBuildFile; fileRef = 5A1455822E45C0D40066A31F /* ESPGoogleSignInModule.m */; };
 		5A1455812E45C0D40066A31F /* ESPGoogleSignInModule.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A1455832E45C0D40066A31F /* ESPGoogleSignInModule.swift */; };
+		5A1455902E45C0D50066A31F /* ESPAppleSignInModule.m in Sources */ = {isa = PBXBuildFile; fileRef = 5A1455922E45C0D50066A31F /* ESPAppleSignInModule.m */; };
+		5A1455912E45C0D50066A31F /* ESPAppleSignInModule.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A1455932E45C0D50066A31F /* ESPAppleSignInModule.swift */; };
 		761931A5804385B28082B351 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 94D7943BDE76E78EC62286AA /* PrivacyInfo.xcprivacy */; };
 		8728E4702E98D74800DF9B82 /* MatterExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 8728E4692E98D74800DF9B82 /* MatterExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		8728E48F2E99195700DF9B82 /* RequestHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8728E48C2E99195700DF9B82 /* RequestHandler.swift */; };
@@ -105,6 +107,8 @@
 		5A1455772E45C0D20066A31F /* ESPWeChatModule.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ESPWeChatModule.swift; sourceTree = "<group>"; };
 		5A1455822E45C0D40066A31F /* ESPGoogleSignInModule.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = ESPGoogleSignInModule.m; sourceTree = "<group>"; };
 		5A1455832E45C0D40066A31F /* ESPGoogleSignInModule.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ESPGoogleSignInModule.swift; sourceTree = "<group>"; };
+		5A1455922E45C0D50066A31F /* ESPAppleSignInModule.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = ESPAppleSignInModule.m; sourceTree = "<group>"; };
+		5A1455932E45C0D50066A31F /* ESPAppleSignInModule.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ESPAppleSignInModule.swift; sourceTree = "<group>"; };
 		5FCBDEB1923C0A10AB78E478 /* Pods-APP.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-APP.debug.xcconfig"; path = "Target Support Files/Pods-APP/Pods-APP.debug.xcconfig"; sourceTree = "<group>"; };
 		6A65E7C5799BC48392D7652D /* Pods-APP.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-APP.release.xcconfig"; path = "Target Support Files/Pods-APP/Pods-APP.release.xcconfig"; sourceTree = "<group>"; };
 		8728E4692E98D74800DF9B82 /* MatterExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = MatterExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -188,6 +192,7 @@
 				5A1455712E45C0D10066A31F /* OAuth */,
 				5A1455782E45C0D30066A31F /* WeChat */,
 				5A1455842E45C0D40066A31F /* GoogleSignIn */,
+				5A1455942E45C0D50066A31F /* AppleSignIn */,
 				13B07FB51A68108700A75B9A /* Images.xcassets */,
 				13B07FB61A68108700A75B9A /* Info.plist */,
 				13B07FB71A68108700A75B9A /* main.m */,
@@ -240,6 +245,15 @@
 				5A1455832E45C0D40066A31F /* ESPGoogleSignInModule.swift */,
 			);
 			path = GoogleSignIn;
+			sourceTree = "<group>";
+		};
+		5A1455942E45C0D50066A31F /* AppleSignIn */ = {
+			isa = PBXGroup;
+			children = (
+				5A1455922E45C0D50066A31F /* ESPAppleSignInModule.m */,
+				5A1455932E45C0D50066A31F /* ESPAppleSignInModule.swift */,
+			);
+			path = AppleSignIn;
 			sourceTree = "<group>";
 		};
 		832341AE1AAA6A7D00B99B32 /* Libraries */ = {
@@ -665,6 +679,8 @@
 				5A1455762E45C0D20066A31F /* ESPWeChatModule.swift in Sources */,
 				5A1455802E45C0D40066A31F /* ESPGoogleSignInModule.m in Sources */,
 				5A1455812E45C0D40066A31F /* ESPGoogleSignInModule.swift in Sources */,
+				5A1455902E45C0D50066A31F /* ESPAppleSignInModule.m in Sources */,
+				5A1455912E45C0D50066A31F /* ESPAppleSignInModule.swift in Sources */,
 				13B07FBC1A68108700A75B9A /* AppDelegate.mm in Sources */,
 				F1B6027F2E30C240003DA0C4 /* ESPNotificationModule.swift in Sources */,
 				F1B602802E30C240003DA0C4 /* ESPNotificationModule.m in Sources */,
