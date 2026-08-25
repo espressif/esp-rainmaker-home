@@ -6,13 +6,23 @@
 
 import type { TFunction } from "i18next";
 import {
+  GOOGLE_SIGN_IN_CANCELLED_ERROR_TAG,
   OAUTH_CANCELLED_ERROR_TAG,
   OAUTH_NO_BROWSER_FOUND_ERROR_TAG,
 } from "@shared/utils/constants";
 import { type PostLoginPipelineHooks } from "./postLoginPipeline";
 
 export const OAUTH_FLOW_STATUS_IDLE = "idle";
-export const OAUTH_FLOW_STATUS_BROWSER_AUTH = "browser_auth";
+/**
+ * Waiting on the identity provider: the hosted browser flow, or the platform's
+ * own account sheet. The user is the bottleneck in both, so no blocking UI is
+ * shown while this is the status.
+ */
+export const OAUTH_FLOW_STATUS_PROVIDER_AUTH = "provider_auth";
+/**
+ * Signed in; the post-login pipeline is fetching homes and nodes. The only
+ * phase with real progress to report, so the only one that takes the screen.
+ */
 export const OAUTH_FLOW_STATUS_POST_LOGIN_PIPELINE = "post_login_pipeline";
 export const OAUTH_FLOW_STATUS_CANCELLED = "cancelled";
 export const OAUTH_FLOW_STATUS_FAILED = "failed";
@@ -29,7 +39,7 @@ export const OAUTH_PIPELINE_STEP_GET_USER_PROFILE = "getUserProfile";
 
 export type OAuthFlowStatus =
   | typeof OAUTH_FLOW_STATUS_IDLE
-  | typeof OAUTH_FLOW_STATUS_BROWSER_AUTH
+  | typeof OAUTH_FLOW_STATUS_PROVIDER_AUTH
   | typeof OAUTH_FLOW_STATUS_POST_LOGIN_PIPELINE
   | typeof OAUTH_FLOW_STATUS_CANCELLED
   | typeof OAUTH_FLOW_STATUS_FAILED
@@ -87,7 +97,7 @@ export function createInitialOAuthFlowState(): OAuthFlowState {
  */
 export function startOAuthAttempt(previousState: OAuthFlowState): OAuthFlowState {
   return {
-    status: OAUTH_FLOW_STATUS_BROWSER_AUTH,
+    status: OAUTH_FLOW_STATUS_PROVIDER_AUTH,
     attemptId: previousState.attemptId + 1,
   };
 }
@@ -180,10 +190,13 @@ export function failOAuthAttempt(
  * @returns True when overlay should remain visible.
  */
 export function isOAuthLoadingStatus(status: OAuthFlowStatus): boolean {
-  return (
-    status === OAUTH_FLOW_STATUS_BROWSER_AUTH ||
-    status === OAUTH_FLOW_STATUS_POST_LOGIN_PIPELINE
-  );
+  // Deliberately NOT during PROVIDER_AUTH, nor while the token is exchanged.
+  // The provider owns the screen for the first (its sheet is presented over the
+  // app, or the browser has the app backgrounded) and the second is a single
+  // short request — replacing the login screen for either just flickers. The
+  // provider button carries an inline spinner throughout; the login screen is
+  // only given up once the post-login pipeline has real progress to report.
+  return status === OAUTH_FLOW_STATUS_POST_LOGIN_PIPELINE;
 }
 
 /**
@@ -194,7 +207,27 @@ export function isOAuthLoadingStatus(status: OAuthFlowStatus): boolean {
 export function shouldMonitorOAuthAppLifecycle(
   status: OAuthFlowStatus
 ): boolean {
-  return status === OAUTH_FLOW_STATUS_BROWSER_AUTH;
+  return status === OAUTH_FLOW_STATUS_PROVIDER_AUTH;
+}
+
+/**
+ * Whether an error is the user backing out of sign-in rather than something
+ * going wrong — dismissing the native account sheet, or leaving the hosted
+ * browser without authorising.
+ *
+ * The native modules reject with their own code, which travels through the
+ * adapter and the SDK untouched, so both tags are matched here. Callers use
+ * this to report a dismissal as a cancellation instead of a failure.
+ * @param error Unknown thrown error from OAuth flow.
+ * @returns True when the user cancelled.
+ */
+export function isOAuthCancellation(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  return (
+    error.message.includes(OAUTH_CANCELLED_ERROR_TAG) ||
+    error.message.includes(GOOGLE_SIGN_IN_CANCELLED_ERROR_TAG) ||
+    (error as { code?: unknown }).code === GOOGLE_SIGN_IN_CANCELLED_ERROR_TAG
+  );
 }
 
 /**
@@ -205,9 +238,6 @@ export function shouldMonitorOAuthAppLifecycle(
  */
 export function mapOAuthErrorToMessage(error: unknown, t: TFunction): string {
   if (error instanceof Error) {
-    if (error.message.includes(OAUTH_CANCELLED_ERROR_TAG)) {
-      return t("auth.errors.oauthCancelled");
-    }
     if (error.message.includes(OAUTH_NO_BROWSER_FOUND_ERROR_TAG)) {
       return t("auth.errors.oauthNoBrowser");
     }

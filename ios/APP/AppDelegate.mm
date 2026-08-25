@@ -146,6 +146,13 @@
   if ([WXApi handleOpenURL:url delegate:self]) {
     return YES;
   }
+  // Google sign-in callback (reversed iOS client id scheme). Routed through our
+  // Swift module rather than importing the GoogleSignIn module here, so this
+  // Objective-C++ file stays free of Swift-pod imports. Only claims URLs that
+  // belong to an in-flight Google sign-in, so it is safe ahead of Linking.
+  if ([ESPGoogleSignInModule handleOpenURL:url]) {
+    return YES;
+  }
   return [super application:application openURL:url options:options] || [RCTLinkingManager application:application openURL:url options:options];
 }
 

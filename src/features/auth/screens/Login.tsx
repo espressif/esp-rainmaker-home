@@ -6,6 +6,7 @@
 
 import { ComponentProps, useMemo, useRef } from "react";
 import {
+  ActivityIndicator,
   View,
   Text,
   Image,
@@ -42,6 +43,9 @@ import {
   AUTO_COMPLETE_PASSWORD,
   AUTO_COMPLETE_USERNAME,
   IMPORTANT_FOR_AUTOFILL_YES,
+  OAUTH_PROVIDER_APPLE,
+  OAUTH_PROVIDER_GOOGLE,
+  OAUTH_PROVIDER_WECHAT,
   TEXT_CONTENT_TYPE_PASSWORD,
   TEXT_CONTENT_TYPE_USERNAME,
 } from "@shared/utils/constants";
@@ -51,9 +55,9 @@ import signinwithapple from "@assets/images/apple.png";
 import wechat from "@assets/images/wechat.png";
 
 const OAUTH_PROVIDER_IMAGES: Record<string, ImageSourcePropType> = {
-  google,
-  signinwithapple,
-  wechat,
+  [OAUTH_PROVIDER_GOOGLE]: google,
+  [OAUTH_PROVIDER_APPLE]: signinwithapple,
+  [OAUTH_PROVIDER_WECHAT]: wechat,
 };
 
 // Per-provider metadata for the CN OAuth-only tiles: brand name (not
@@ -62,9 +66,9 @@ const OAUTH_TILE_META: Record<
   string,
   { label: string; color: string; icon: ComponentProps<typeof Ionicons>["name"] }
 > = {
-  google: { label: "Google", color: "#DB4437", icon: "logo-google" },
-  signinwithapple: { label: "Apple", color: "#000000", icon: "logo-apple" },
-  wechat: { label: "WeChat", color: "#07C160", icon: "logo-wechat" },
+  [OAUTH_PROVIDER_GOOGLE]: { label: "Google", color: "#DB4437", icon: "logo-google" },
+  [OAUTH_PROVIDER_APPLE]: { label: "Apple", color: "#000000", icon: "logo-apple" },
+  [OAUTH_PROVIDER_WECHAT]: { label: "WeChat", color: "#07C160", icon: "logo-wechat" },
 };
 
 /**
@@ -84,7 +88,7 @@ export function LoginScreen() {
     isPasswordValid,
     isLoading,
     isOAuthLoading,
-    monitorOAuthAppLifecycle,
+    pendingOAuthProvider,
     showConfigResetDialog,
     isConfigResetting,
     setShowConfigResetDialog,
@@ -95,7 +99,6 @@ export function LoginScreen() {
     login,
     forgotPwd,
     oauthLogin,
-    handleOAuthAppBecameActive,
     handleCancelOAuth,
     handleConfigReset,
     confirmConfigReset,
@@ -136,8 +139,6 @@ export function LoginScreen() {
           onClose={handleCancelOAuth}
           message={t("auth.login.settingUpAccount")}
           progressMessage={getCurrentFriendlyMessage()}
-          monitorAppLifecycle={monitorOAuthAppLifecycle}
-          onAppBecameActive={handleOAuthAppBecameActive}
         />
       ) : (
         <>
@@ -295,22 +296,35 @@ export function LoginScreen() {
                 {ENABLED_OAUTH_PROVIDERS.map((provider) => {
                   const key = provider.toLocaleLowerCase();
                   const meta = OAUTH_TILE_META[key];
+                  const isPending = pendingOAuthProvider === provider;
                   return (
                     <TouchableOpacity
                       key={provider}
                       onPress={() => oauthLogin(provider)}
+                      disabled={pendingOAuthProvider !== null}
                       style={[
                         globalStyles.oauthButtonFull,
                         { backgroundColor: meta?.color ?? tokens.colors.primary },
+                        pendingOAuthProvider !== null && !isPending
+                          ? globalStyles.oauthButtonDimmed
+                          : null,
                       ]}
                       {...testProps(`button_3p_${provider}`)}
                     >
-                      <Ionicons
-                        name={meta?.icon ?? "person-circle"}
-                        size={20}
-                        color={tokens.colors.white}
-                        {...testProps(`image_3p_${provider}`)}
-                      />
+                      {isPending ? (
+                        <ActivityIndicator
+                          size="small"
+                          color={tokens.colors.white}
+                          {...testProps(`loader_3p_${provider}`)}
+                        />
+                      ) : (
+                        <Ionicons
+                          name={meta?.icon ?? "person-circle"}
+                          size={20}
+                          color={tokens.colors.white}
+                          {...testProps(`image_3p_${provider}`)}
+                        />
+                      )}
                       <Text style={globalStyles.oauthButtonFullText}>
                         {t("auth.login.continueWith", {
                           provider: meta?.label ?? provider,
@@ -333,22 +347,42 @@ export function LoginScreen() {
                   {...testProps("view_3plogin")}
                   style={globalStyles.oauthContainer}
                 >
-                  {ENABLED_OAUTH_PROVIDERS.map((provider) => (
-                    <TouchableOpacity
-                      key={provider}
-                      onPress={() => oauthLogin(provider)}
-                      style={globalStyles.oauthButton}
-                      {...testProps(`button_3p_${provider}`)}
-                    >
-                      <Image
-                        {...testProps(`image_3p_${provider}`)}
-                        source={
-                          OAUTH_PROVIDER_IMAGES[provider.toLocaleLowerCase()]
-                        }
-                        style={globalStyles.oauthImage}
-                      />
-                    </TouchableOpacity>
-                  ))}
+                  {ENABLED_OAUTH_PROVIDERS.map((provider) => {
+                    const isPending = pendingOAuthProvider === provider;
+                    return (
+                      <TouchableOpacity
+                        key={provider}
+                        onPress={() => oauthLogin(provider)}
+                        // Any attempt in flight disables the whole row: the
+                        // provider's own sheet is up, so a second tap would
+                        // race it.
+                        disabled={pendingOAuthProvider !== null}
+                        style={[
+                          globalStyles.oauthButton,
+                          pendingOAuthProvider !== null && !isPending
+                            ? globalStyles.oauthButtonDimmed
+                            : null,
+                        ]}
+                        {...testProps(`button_3p_${provider}`)}
+                      >
+                        {isPending ? (
+                          <ActivityIndicator
+                            size="small"
+                            color={tokens.colors.primary}
+                            {...testProps(`loader_3p_${provider}`)}
+                          />
+                        ) : (
+                          <Image
+                            {...testProps(`image_3p_${provider}`)}
+                            source={
+                              OAUTH_PROVIDER_IMAGES[provider.toLocaleLowerCase()]
+                            }
+                            style={globalStyles.oauthImage}
+                          />
+                        )}
+                      </TouchableOpacity>
+                    );
+                  })}
                 </View>
               </>
             ))}
