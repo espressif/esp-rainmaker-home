@@ -18,6 +18,8 @@ export interface UseCustomizeRoomNameOptions {
   dismissTo?: string | string[] | undefined;
   nodeId?: string | string[] | undefined;
   showSelection?: string | string[] | undefined;
+  /** Device endpoint param to restore on return to device settings. */
+  settingsDevice?: string | string[] | undefined;
   router: { dismissTo: (opts: { pathname: string; params: Record<string, unknown> }) => void; back: () => void };
   t: TFunction;
 }
@@ -45,6 +47,7 @@ export function useCustomizeRoomName(
     dismissTo,
     nodeId,
     showSelection,
+    settingsDevice,
     router,
     t,
   } = options;
@@ -75,6 +78,7 @@ export function useCustomizeRoomName(
     if (finalRoomName) {
       const dismissToParam = firstRouteParam(dismissTo);
       const nodeIdParam  = firstRouteParam(nodeId);
+      const settingsDeviceParam = firstRouteParam(settingsDevice);
       const showSelectionBool = parseRouteParamBoolean(
         firstRouteParam(showSelection),
         true
@@ -89,6 +93,7 @@ export function useCustomizeRoomName(
           ...(roomIdParam ? { roomId: roomIdParam } : {}),
           ...(dismissToParam ? { dismissTo: dismissToParam } : {}),
           ...(nodeIdParam ? { nodeId: nodeIdParam } : {}),
+          ...(settingsDeviceParam ? { settingsDevice: settingsDeviceParam } : {}),
           ...(!showSelectionBool ? { showSelection: "0" } : {}),
         },
       });
@@ -103,6 +108,7 @@ export function useCustomizeRoomName(
     roomId,
     dismissTo,
     nodeId,
+    settingsDevice,
     showSelection,
   ]);
 

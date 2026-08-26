@@ -42,6 +42,7 @@ const CreateRoom = () => {
     dismissTo?: string | string[];
     nodeId?: string | string[];
     showSelection?: string | string[];
+    settingsDevice?: string | string[];
   }>();
 
   const paramRoomName = firstRouteParam(raw.roomName);
@@ -49,6 +50,7 @@ const CreateRoom = () => {
   const roomId = firstRouteParam(raw.roomId);
   const dismissTo = firstRouteParam(raw.dismissTo);
   const nodeIdStr = firstRouteParam(raw.nodeId);
+  const settingsDeviceParam = firstRouteParam(raw.settingsDevice);
   const showSelection = parseRouteParamBoolean(
     firstRouteParam(raw.showSelection),
     true
@@ -105,6 +107,7 @@ const CreateRoom = () => {
     dismissTo,
     nodeId: nodeIdStr,
     showSelection,
+    settingsDeviceParam,
     toast,
     t,
     router: router as UseCreateRoomOptions["router"],

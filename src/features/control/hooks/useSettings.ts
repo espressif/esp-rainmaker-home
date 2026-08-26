@@ -35,11 +35,9 @@ import {
   resolveSettingsDevice,
   resolveSettingsNode,
   saveDeviceDisplayName,
-  shouldShowAddToControlGroup,
   shouldShowUpdateAuthToken,
   shouldShowUpdateDeviceList,
 } from "@features/control/utils/settingsHelpers";
-import { resolveHomeIdContainingNode } from "@features/group/utils/controlGroupHelpers";
 import { ESPCDFDevice, ESPCDFNode } from "@store";
 import type { OTAInfo } from "@src/types/global";
 
@@ -66,7 +64,6 @@ export interface UseSettingsReturn {
   showRemoveDeviceDialog: boolean;
   setShowRemoveDeviceDialog: (open: boolean) => void;
   readmeUrl: string | null;
-  showAddToControlGroup: boolean;
   settingsQuickActions: SettingsQuickActionItem[];
   otaFeatureEnabled: boolean;
   handleSaveDeviceName: () => Promise<boolean>;
@@ -75,7 +72,6 @@ export interface UseSettingsReturn {
   handleRemoveDevice: () => void;
   confirmRemoveDevice: () => Promise<void>;
   handleGuidePress: () => void;
-  handleAddToControlGroup: () => void;
 }
 
 /**
@@ -171,23 +167,11 @@ export const useSettings = (): UseSettingsReturn => {
 
   const readmeUrl = useMemo(() => getNodeReadmeUrl(node), [node]);
 
-  const homeIdForControlGroup = useMemo(() => {
-    if (!id) {
-      return undefined;
-    }
-    return resolveHomeIdContainingNode(
-      id,
-      store?.groupStore?.groupsList ?? [],
-      store?.groupStore?.currentHomeId ?? null,
-    );
-  }, [id, store?.groupStore?.groupsList, store?.groupStore?.currentHomeId]);
-
   const matterControllerConfig = useMemo(
     () => getMatterControllerConfig(node),
     [node],
   );
 
-  const showAddToControlGroup = shouldShowAddToControlGroup(node, isPrimary);
   const showUpdateAuthToken = shouldShowUpdateAuthToken(node, isPrimary);
   const showUpdateDeviceList = shouldShowUpdateDeviceList(node, isPrimary);
   const otaFeatureEnabled = getFeatures().ota;
@@ -382,20 +366,6 @@ export const useSettings = (): UseSettingsReturn => {
   }, [displayName, node, readmeUrl, routerNav]);
 
   /**
-   * Navigates to create-control-group with this node preselected.
-   */
-  const handleAddToControlGroup = useCallback(() => {
-    if (!homeIdForControlGroup || !id) {
-      toast.showError(t("device.settings.controlGroupNeedHome"));
-      return;
-    }
-    routerNav.push({
-      pathname: "/(group)/CreateControlGroup" as const,
-      params: { id: homeIdForControlGroup, preselectedNodeId: id },
-    });
-  }, [homeIdForControlGroup, id, routerNav, t, toast]);
-
-  /**
    * Requests a Matter controller device-list refresh via cloud `MTCtlCMD = 2`.
    */
   const handleUpdateDeviceList = useCallback(async () => {
@@ -460,7 +430,6 @@ export const useSettings = (): UseSettingsReturn => {
     showRemoveDeviceDialog,
     setShowRemoveDeviceDialog,
     readmeUrl,
-    showAddToControlGroup,
     settingsQuickActions,
     otaFeatureEnabled,
     handleSaveDeviceName,
@@ -469,6 +438,5 @@ export const useSettings = (): UseSettingsReturn => {
     handleRemoveDevice,
     confirmRemoveDevice,
     handleGuidePress,
-    handleAddToControlGroup,
   };
 };

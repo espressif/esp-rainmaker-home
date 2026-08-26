@@ -45,6 +45,7 @@ export type FeatureKey =
   | 'controlGroups'
   | 'secondaryGroupManagement'
   | 'onNetworkProvisioning'
+  | 'softApProvisioning'
   | 'matterCommissioning'
   | 'backendSelector'
   | 'accountDeletion';
@@ -70,12 +71,30 @@ const ENV_KEY_MAP: Record<FeatureKey, string> = {
   controlGroups:          'enableControlGroups',
   secondaryGroupManagement: 'enableSecondaryGroupManagement',
   onNetworkProvisioning:  'enableOnNetworkProvisioning',
+  /** Opt-in only — absent or false in env keeps SoftAP off (see `resolveSoftApProvisioning`). */
+  softApProvisioning:     'enableSoftApProvisioning',
   // SDK-capability only: no region/binary env switch, so the SDK map decides.
   matterCommissioning:    'enableMatterCommissioning',
   backendSelector:        'enableBackendSelector',
   // SDK-capability only: Neo has no account-deletion API; RM / Matter support it.
   accountDeletion:        'enableAccountDeletion',
 };
+
+/**
+ * SoftAP is opt-in: disabled unless region or binary env explicitly sets
+ * `enableSoftApProvisioning` to true. SDK capability can still hard-block.
+ */
+function resolveSoftApProvisioning(
+  sdkCaps: Record<string, boolean | readonly string[]>,
+  regionFeatures: Record<string, boolean | readonly string[] | string[] | undefined>,
+  binaryEnv: Record<string, boolean>,
+): boolean {
+  if (sdkCaps.softApProvisioning === false) return false;
+  return (
+    regionFeatures.enableSoftApProvisioning === true ||
+    binaryEnv.enableSoftApProvisioning === true
+  );
+}
 
 /**
  * Returns the current feature flag state by cascading three disable-only
@@ -138,6 +157,7 @@ export function getFeatures(): Record<FeatureKey, boolean> {
     controlGroups:          resolve('controlGroups'),
     secondaryGroupManagement: resolve('secondaryGroupManagement'),
     onNetworkProvisioning:  resolve('onNetworkProvisioning'),
+    softApProvisioning:     resolveSoftApProvisioning(sdkCaps, regionFeatures, binaryEnv),
     matterCommissioning:    resolve('matterCommissioning'),
     backendSelector:        resolve('backendSelector'),
     accountDeletion:        resolve('accountDeletion'),

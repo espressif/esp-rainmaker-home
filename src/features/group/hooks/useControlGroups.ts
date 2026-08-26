@@ -7,7 +7,14 @@
 import { useState, useCallback, useMemo, useRef, useEffect } from "react";
 import type { TFunction } from "i18next";
 import type { ESPCDFGroup } from "@store";
-import { GROUP_TYPE_ROOM } from "@shared/utils/constants";
+import {
+  GROUP_TYPE_ROOM,
+  DEVICE_SETTINGS_SCREEN_ROUTE,
+  DEVICE_SETTINGS_ROUTE_PARAM_OPEN_PICKER,
+  DEVICE_SETTINGS_OPEN_PICKER_CONTROL_GROUP,
+  DEVICE_SETTINGS_ROUTE_PARAM_SELECTED_CONTROL_GROUP_ID,
+  DEVICE_SETTINGS_ROUTE_PARAM_DEVICE,
+} from "@shared/utils/constants";
 import {
   getNodeDiff,
   mapNodeToDisplay,
@@ -131,6 +138,10 @@ export interface UseCreateGroupOptions {
   roomName: string | undefined;
   /** When creating a group, pre-select this node (e.g. from device Settings). */
   preselectedNodeId: string | undefined;
+  /** On create success, navigate here via `router.dismissTo` (e.g. device settings). */
+  dismissTo?: string;
+  /** Device endpoint param to restore when returning to device settings. */
+  settingsDeviceParam?: string;
   toast: {
     showSuccess: (message: string) => void;
     showError: (message: string) => void;
@@ -171,6 +182,8 @@ export function useCreateGroup(
     groupId,
     roomName: roomNameParam,
     preselectedNodeId,
+    dismissTo,
+    settingsDeviceParam,
     toast,
     t,
     router,
@@ -274,9 +287,66 @@ export function useCreateGroup(
         ...(preselectedNodeId?.trim()
           ? { preselectedNodeId: preselectedNodeId.trim() }
           : {}),
+        ...(dismissTo ? { dismissTo } : {}),
+        ...(settingsDeviceParam ? { settingsDevice: settingsDeviceParam } : {}),
       },
     } as any);
-  }, [router, groupName, homeId, groupId, preselectedNodeId]);
+  }, [
+    router,
+    groupName,
+    homeId,
+    groupId,
+    preselectedNodeId,
+    dismissTo,
+    settingsDeviceParam,
+  ]);
+
+  /**
+   * After create, show toast and return to the caller screen (device settings or list).
+   * @param options - Optional newly created control group id for the return route
+   */
+  const navigateAfterGroupFlow = useCallback(
+    (options: { selectedControlGroupId?: string } = {}) => {
+      if (dismissTo) {
+        const isDeviceSettingsReturn = dismissTo === DEVICE_SETTINGS_SCREEN_ROUTE;
+        router.dismissTo({
+          pathname: dismissTo as any,
+          params: isDeviceSettingsReturn
+            ? ({
+                ...(preselectedNodeId?.trim()
+                  ? { id: preselectedNodeId.trim() }
+                  : {}),
+                ...(settingsDeviceParam
+                  ? { [DEVICE_SETTINGS_ROUTE_PARAM_DEVICE]: settingsDeviceParam }
+                  : {}),
+                ...(options.selectedControlGroupId
+                  ? {
+                      [DEVICE_SETTINGS_ROUTE_PARAM_SELECTED_CONTROL_GROUP_ID]:
+                        options.selectedControlGroupId,
+                    }
+                  : {}),
+                [DEVICE_SETTINGS_ROUTE_PARAM_OPEN_PICKER]:
+                  DEVICE_SETTINGS_OPEN_PICKER_CONTROL_GROUP,
+              } as Record<string, string>)
+            : ({
+                ...(homeId ? { id: homeId } : {}),
+              } as Record<string, string>),
+        } as any);
+        return;
+      }
+      router.dismissTo({
+        pathname: "/(group)/ControlGroups",
+        params: { id: homeId },
+      } as any);
+    },
+    [
+      dismissTo,
+      homeId,
+      preselectedNodeId,
+      router,
+      settingsDeviceParam,
+    ],
+  );
 
   const handleAddDevice = useCallback(
     (node: Node) => {
@@ -316,12 +386,17 @@ export function useCreateGroup(
         type: GROUP_TYPE_ROOM,
         mutuallyExclusive: true,
       })
-      .then(() => {
+      .then((group) => {
         toast.showSuccess(t("group.deviceGroups.groupCreatedSuccessfully"));
-        router.dismissTo({
-          pathname: "/(group)/ControlGroups",
-          params: { id: homeId },
-        } as any);
+        const runNavigation = () =>
+          navigateAfterGroupFlow({
+            selectedControlGroupId: group?.id,
+          });
+        if (dismissTo) {
+          requestAnimationFrame(runNavigation);
+        } else {
+          runNavigation();
+        }
       })
       .catch((error: any) => {
         toast.showError(error.description ?? t("group.errors.fallback"));
@@ -329,7 +404,16 @@ export function useCreateGroup(
       .finally(() => {
         setIsLoading((prev) => ({ ...prev, save: false }));
       });
-  }, [home, groupName, selectedNodesIds, nodes, toast, t, router, homeId]);
+  }, [
+    home,
+    groupName,
+    selectedNodesIds,
+    nodes,
+    toast,
+    t,
+    navigateAfterGroupFlow,
+    dismissTo,
+  ]);
 
   const handleUpdate = useCallback(async () => {
     if (!deviceGroup) return;

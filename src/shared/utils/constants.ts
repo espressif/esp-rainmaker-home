@@ -392,6 +392,12 @@ export const QA_DEVICE_SELECTION_TEXT_SELECT_DEVICES = "text_select_devices";
 export const QA_DEVICE_PANEL_NO_PARAMS_EMPTY_STATE =
   "empty_state_device_fallback_no_params";
 
+// GUIDE SCREEN — QA / test ids
+export const QA_GUIDE_LOAD_FAILED_EMPTY_STATE = "empty_state_guide_load_failed";
+export const QA_GUIDE_LOAD_FAILED_TITLE = "text_title_guide_load_failed";
+export const QA_GUIDE_LOAD_FAILED_DESCRIPTION =
+  "text_description_guide_load_failed";
+
 // LIGHT CONTROL SCREEN
 export const COLOR_TAB = "Colour";
 export const WHITE_TAB = "White";
@@ -399,6 +405,19 @@ export const WHITE_TAB = "White";
 // CONTROL NAVIGATION ROUTES
 export const CONTROL_SCREEN_ROUTE = "/(control)/Control";
 export const DEVICE_SETTINGS_SCREEN_ROUTE = "/(control)/Settings";
+
+// DEVICE SETTINGS — return navigation from create room / control group flows
+/** Route param: which settings picker to reopen after a create flow (`room` | `control_group`). */
+export const DEVICE_SETTINGS_ROUTE_PARAM_OPEN_PICKER = "openPicker";
+export const DEVICE_SETTINGS_OPEN_PICKER_ROOM = "room";
+export const DEVICE_SETTINGS_OPEN_PICKER_CONTROL_GROUP = "control_group";
+/** Route param: room subgroup id returned from Create Room when `dismissTo` is device settings. */
+export const DEVICE_SETTINGS_ROUTE_PARAM_SELECTED_ROOM_ID = "selectedRoomId";
+/** Route param: control group id returned from Create Control Group when `dismissTo` is device settings. */
+export const DEVICE_SETTINGS_ROUTE_PARAM_SELECTED_CONTROL_GROUP_ID =
+  "selectedControlGroupId";
+/** Route param: device endpoint id to restore on return to device settings. */
+export const DEVICE_SETTINGS_ROUTE_PARAM_DEVICE = "device";
 
 // ERROR CODES
 export const ERROR_CODES = {
@@ -531,10 +550,13 @@ export const PARAM_VALUE_UNKNOWN = "unknown";
 // Matter QR Code constants
 export const MATTER_QR_CODE_PREFIX = "MT:";
 export const RM_QR_CODE_PREFIX = "NP:";
+/** Provisioning transport id for SoftAP (QR `s` code and native scan flows). */
+export const PROVISION_TRANSPORT_SOFTAP = "softap";
+
 export const RM_QR_TRANSPORT_MAP = {
   'b': 'ble',
-  's': 'softap',
-}
+  's': PROVISION_TRANSPORT_SOFTAP,
+} as const;
 
 // Matter Commissioning Event constants
 export const MATTER_COMMISSIONING_EVENT = "MatterCommissioningEvent";

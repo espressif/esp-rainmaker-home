@@ -52,7 +52,12 @@ import { deviceImages } from "@shared/utils/device";
 import { useToast } from "@shared/hooks/useToast";
 
 // Constants
-import { PLATFORM_IOS } from "@shared/utils/constants";
+import {
+  PLATFORM_IOS,
+  PROVISION_TRANSPORT_SOFTAP,
+} from "@shared/utils/constants";
+import { getFeatures } from "@config/features.config";
+import { PROVISION_ADD_DEVICE_SELECTION_ROUTE } from "@features/provision/constants";
 
 // SoftAP Module
 import { ESPSoftAPAdapter } from "@native-adaptors/implementations/ESPSoftAPAdapter";
@@ -344,7 +349,7 @@ const IOSScanSoftAP = () => {
           store.nodeStore.softAPDeviceInfo = {
             deviceName,
             capabilities,
-            transport: "softap",
+            transport: PROVISION_TRANSPORT_SOFTAP,
           };
 
           // Navigate to POP screen where device will be created after POP entry
@@ -354,7 +359,7 @@ const IOSScanSoftAP = () => {
           const cdfDevice =
             await store?.userStore.user?.createProvisioningDevice(
               deviceName,
-              "softap", // transport type
+              PROVISION_TRANSPORT_SOFTAP,
               2, // security type (SECURITY_2)
               "", // proof of possession (empty since no POP needed)
               "", // softAP password
@@ -801,6 +806,18 @@ const AndroidScanSoftAP = () => {
  * - Android: Full-featured device scanning and selection
  */
 const ScanSoftAP = () => {
+  const router = useRouter();
+
+  useEffect(() => {
+    if (!getFeatures().softApProvisioning) {
+      router.replace(PROVISION_ADD_DEVICE_SELECTION_ROUTE);
+    }
+  }, [router]);
+
+  if (!getFeatures().softApProvisioning) {
+    return null;
+  }
+
   return Platform.OS === PLATFORM_IOS ? (
     <IOSScanSoftAP />
   ) : (

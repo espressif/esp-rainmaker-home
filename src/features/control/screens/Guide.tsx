@@ -4,13 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import {
-  View,
-  ActivityIndicator,
-  ScrollView,
-  Text,
-  Pressable,
-} from "react-native";
+import { View, ActivityIndicator, ScrollView, Pressable } from "react-native";
 import { useLocalSearchParams } from "expo-router";
 import { useTranslation } from "react-i18next";
 import RenderHTML from "react-native-render-html";
@@ -18,10 +12,21 @@ import { Header, ScreenWrapper, Button } from "@shared/components";
 import { tokens } from "@shared/theme/tokens";
 import { globalStyles } from "@shared/theme/globalStyleSheet";
 import { guideScreenStyleSheet } from "@features/control/theme";
+import { GuideLoadErrorEmptyState } from "@features/control/components";
 import { useGuide } from "@features/control/hooks";
 
+const continueButtonStyle = {
+  ...globalStyles.btn,
+  ...globalStyles.bgBlue,
+  ...globalStyles.shadowElevationForLightTheme,
+  ...guideScreenStyleSheet.continueButtonContainer,
+};
+
 /**
- * Renders the guide UI section.
+ * Device guide screen: renders fetched markdown, or a centered empty state when
+ * the guide cannot be loaded. In the provision flow, Continue stays pinned at
+ * the bottom with the same style for loading, error, and success.
+ * @returns Guide screen with header, body, and optional Continue footer
  */
 export default function Guide() {
   const { t } = useTranslation();
@@ -53,22 +58,14 @@ export default function Guide() {
       />
 
       <ScreenWrapper>
-        {isLoading ? (
-          <View style={globalStyles.chatSettingsCenterContainer}>
-            <ActivityIndicator size="large" color={tokens.colors.primary} />
-          </View>
-        ) : error ? (
-          <View
-            style={[globalStyles.chatSettingsCenterContainer, { padding: 20 }]}
-          >
-            <Text
-              style={[globalStyles.textCenter, { color: tokens.colors.error }]}
-            >
-              {error}
-            </Text>
-          </View>
-        ) : (
-          <View style={guideScreenStyleSheet.contentWrapper}>
+        <View style={guideScreenStyleSheet.contentWrapper}>
+          {isLoading ? (
+            <View style={globalStyles.chatSettingsCenterContainer}>
+              <ActivityIndicator size="large" color={tokens.colors.primary} />
+            </View>
+          ) : error ? (
+            <GuideLoadErrorEmptyState hasFooter={fromProvisionFlow} />
+          ) : (
             <ScrollView
               style={guideScreenStyleSheet.scrollView}
               contentContainerStyle={
@@ -95,22 +92,17 @@ export default function Guide() {
                 />
               </Pressable>
             </ScrollView>
+          )}
 
-            {fromProvisionFlow && (
-              <Button
-                label={t("layout.shared.continue")}
-                onPress={handleNavigationAction}
-                style={{
-                  ...globalStyles.btn,
-                  ...globalStyles.bgBlue,
-                  ...globalStyles.shadowElevationForLightTheme,
-                  ...guideScreenStyleSheet.continueButtonContainer,
-                }}
-                qaId="button_continue_guide"
-              />
-            )}
-          </View>
-        )}
+          {fromProvisionFlow && (
+            <Button
+              label={t("layout.shared.continue")}
+              onPress={handleNavigationAction}
+              style={continueButtonStyle}
+              qaId="button_continue_guide"
+            />
+          )}
+        </View>
       </ScreenWrapper>
     </>
   );

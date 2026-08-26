@@ -68,7 +68,7 @@ export {
   type ControlGroupCardProps,
 } from "./Rooms/ControlGroupCard";
 
-// CreateRoom / CreateRoomSuccess screens
+// CreateRoom screen
 export { CreateRoomDeviceItem } from "./CreateRoom/CreateRoomDeviceItem";
 export { default as RoomLeave } from "./CreateRoom/RoomLeave";
 export {
@@ -83,10 +83,6 @@ export {
   CreateRoomFooter,
   type CreateRoomFooterProps,
 } from "./CreateRoom/CreateRoomFooter";
-export {
-  CreateRoomSuccessContent,
-  type CreateRoomSuccessContentProps,
-} from "./CreateRoom/CreateRoomSuccessContent";
 
 // CustomizeRoomName screen
 export {

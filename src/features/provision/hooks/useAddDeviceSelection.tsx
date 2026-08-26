@@ -53,18 +53,22 @@ export const useAddDeviceSelection = (): UseAddDeviceSelectionReturn => {
       description: t("device.addDeviceSelection.bluetoothDescription"),
       onClick: () => router.push("/(provision)/ScanBLE"),
     },
-    {
-      icon: (
-        <HouseWifi
-          {...testProps("icon_house_wifi")}
-          size={24}
-          color={tokens.colors.primary}
-        />
-      ),
-      label: t("device.addDeviceSelection.softAPOption"),
-      description: t("device.addDeviceSelection.softAPDescription"),
-      onClick: () => router.push("/(provision)/ScanSoftAP"),
-    },
+    ...(features.softApProvisioning
+      ? [
+          {
+            icon: (
+              <HouseWifi
+                {...testProps("icon_house_wifi")}
+                size={24}
+                color={tokens.colors.primary}
+              />
+            ),
+            label: t("device.addDeviceSelection.softAPOption"),
+            description: t("device.addDeviceSelection.softAPDescription"),
+            onClick: () => router.push("/(provision)/ScanSoftAP"),
+          } satisfies DeviceOption,
+        ]
+      : []),
     ...(features.onNetworkProvisioning
       ? [
           {
