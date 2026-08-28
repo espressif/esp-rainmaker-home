@@ -47,3 +47,81 @@ Feature: Bluetooth provisioning
     When user taps "bluetooth"
     Then user should be on scan bluetooth screen
     And scan bluetooth screen elements should be present
+
+  Scenario: Provisioning fails gracefully with an incorrect PoP
+    When the device is flashed with "led_light", "ble" transport
+    And user login with "registered user 1" and "registered user 1 password"
+    Then user should land on the home screen
+    When user taps "add device"
+    Then user should be on add device selection screen
+    When user taps "bluetooth"
+    Then user should be on scan bluetooth screen
+    When user selects the discovered ble device
+    Then user should be on pop screen
+    When user enters an incorrect device pop
+    Then the app should reject the proof of possession
+    When user recovers to the pop screen for the discovered ble device
+    And user enters the device pop
+    Then user should be on connect wifi screen
+    When user taps "join other network"
+    And user enters "ssid" and "ssid_password"
+    And user taps "connect"
+    Then user should be on provisioning page
+    And user should see all steps successful
+    And user should see device provisioned successfully toast
+
+  Scenario: Provisioning stops after five incorrect PoP attempts
+    When the device is flashed with "led_light", "ble" transport
+    And user login with "registered user 1" and "registered user 1 password"
+    Then user should land on the home screen
+    When user taps "add device"
+    Then user should be on add device selection screen
+    When user taps "bluetooth"
+    Then user should be on scan bluetooth screen
+    When user selects the discovered ble device
+    Then user should be on pop screen
+    When user enters an incorrect device pop "5" times
+    Then the device should stop the provisioning session
+
+  Scenario: Wi-Fi reset retry recovers from an incorrect password
+    When the device is flashed with "led_light", "ble" transport
+    And user login with "registered user 1" and "registered user 1 password"
+    Then user should land on the home screen
+    When user taps "add device"
+    Then user should be on add device selection screen
+    When user taps "bluetooth"
+    Then user should be on scan bluetooth screen
+    When user selects the discovered ble device
+    Then user should be on pop screen
+    When user enters the device pop
+    Then user should be on connect wifi screen
+    When user taps "join other network"
+    And user enters "ssid" and an incorrect password
+    And user taps "connect"
+    Then user should be on provisioning page
+    And the wifi reset prompt should appear
+    When user agrees to retry the wifi setup
+    Then the wifi reset retry dialog should appear
+    When user retries with the correct wifi password
+    Then user should see all steps successful
+    And user should see device provisioned successfully toast
+
+  @open_wifi
+  Scenario: Successfully provision on an open Wi-Fi network
+    When the device is flashed with "led_light", "ble" transport
+    And user login with "registered user 1" and "registered user 1 password"
+    Then user should land on the home screen
+    When user taps "add device"
+    Then user should be on add device selection screen
+    When user taps "bluetooth"
+    Then user should be on scan bluetooth screen
+    When user selects the discovered ble device
+    Then user should be on pop screen
+    When user enters the device pop
+    Then user should be on connect wifi screen
+    When user taps "join other network"
+    And user enters "ssid open" and "ssid open password"
+    And user taps "connect"
+    Then user should be on provisioning page
+    And user should see all steps successful
+    And user should see device provisioned successfully toast

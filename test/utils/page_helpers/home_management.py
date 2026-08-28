@@ -5,9 +5,12 @@
 
 """Home management page helper: the home banner dropdown, the Home Management list and a home's Settings screen."""
 
+import logging
 import time
 
 from .base import BasePage
+
+logger = logging.getLogger(__name__)
 
 
 class HomeManagement(BasePage):
@@ -39,15 +42,36 @@ class HomeManagement(BasePage):
         time.sleep(1)
         return self
 
+    def is_home_listed(self, home_name, timeout=5):
+        """True when the banner dropdown offers the named home; closes the dropdown either way."""
+        self.go_home_ready()
+        self.click("home_banner_dropdown", timeout=5)
+        listed = self.is_id_visible(f"button_dropdown_{home_name}", timeout=timeout)
+        self._close_home_dropdown()
+        return listed
+
+    def _close_home_dropdown(self):
+        """Best-effort dropdown dismiss; while it is open the banner trigger is replaced by the overlay, so tap the backdrop on iOS and verify the trigger returned — the listing answer is already decided, so never fail the test from here."""
+        try:
+            if self.is_visible("home_banner_dropdown", timeout=1):
+                return
+            if self.platform != "ios":
+                self.driver.back()
+            else:
+                size = self.driver.get_window_size()
+                self.driver.tap([(size["width"] // 2, int(size["height"] * 0.75))])
+            if not self.is_visible("home_banner_dropdown", timeout=3):
+                logger.info("RETRY _close_home_dropdown: trigger not back yet after dismiss tap")
+        except Exception as error:
+            logger.info("Home dropdown dismiss skipped: %s", error)
+        finally:
+            time.sleep(1)
+
     def rename_home(self, new_name):
         """Rename the home from its Settings screen; the app saves on blur/submit, so commit explicitly and confirm the name persisted."""
         self.click("edit_home_name_button", timeout=5)
         self.send_keys("home_name_input", new_name, clear_first=True, timeout=5)
-        if self.platform != "ios":
-            self.driver.press_keycode(66)
-            self.hide_keyboard_if_visible()
-        else:
-            self.click("home_name_input", timeout=3)
+        self.commit_text_input("home_name_input")
         deadline = time.time() + 10
         current = ""
         while time.time() < deadline:

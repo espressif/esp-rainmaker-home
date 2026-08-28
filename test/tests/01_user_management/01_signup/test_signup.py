@@ -6,7 +6,9 @@
 import pytest
 import logging
 from pytest_bdd import scenarios, given, when, then, parsers
+from utils.app_copy import resolve_server_copy
 from utils.common_utils import normalize_input
+from utils.registered_user_resolver import deployment_type
 
 logger = logging.getLogger(__name__)
 pytestmark = pytest.mark.regression
@@ -57,8 +59,8 @@ def should_remain_verification(helper):
     assert helper.verification_code.check_screen_displayed(), "Should remain on verification screen"
 
 @then(parsers.parse('user should see toast with title "{title}" and message "{message}"'))
-def should_see_toast(helper, title, message):
-    message = normalize_input(message)
+def should_see_toast(helper, title, message, pytestconfig):
+    message = resolve_server_copy(pytestconfig.getoption("--deployment"), normalize_input(message))
     toast_title, toast_message = helper.verification_code.get_toast_title_and_message(timeout=5, poll=0.25, require_message=bool(message))
     if title:
         assert toast_title == title, f"Expected toast title: {title} but found: {toast_title}"
@@ -86,6 +88,20 @@ def check_signup_button_state(helper):
 @then("sign up button should be disabled")
 def signup_button_disabled(helper):
     assert not helper.signup.is_signup_button_enabled(), "Sign up button should be disabled"
+
+
+@then("the duplicate signup attempt should be rejected")
+def duplicate_signup_rejected(helper, pytestconfig):
+    # Classic rejects with an account-exists toast; neo never leaks account existence and
+    # proceeds to the verification screen (the code just never arrives for a taken email).
+    if deployment_type(pytestconfig.getoption("--deployment")) == "rmneo":
+        assert helper.verification_code.check_screen_displayed(timeout=10), \
+            "Neo should proceed to verification without leaking account existence"
+        return
+    toast_title, toast_message = helper.verification_code.get_toast_title_and_message(timeout=10, poll=0.25)
+    assert toast_title == "Failed to send verification code", f"Unexpected duplicate-signup toast title: {toast_title}"
+    assert toast_message == "User account already exist", f"Unexpected duplicate-signup toast message: {toast_message}"
+    assert helper.signup.check_screen_displayed(), "Should remain on sign up screen"
 
 @then("all sign up elements should be present")
 def all_signup_elements_present(helper):
@@ -122,13 +138,11 @@ def tap_button(helper, button_name):
 
 @then("user should see app version displayed on sign up")
 def should_see_version_signup(helper, expected_app_version):
-    try:
-        version = helper.signup.get_text("app_version_text")
-        assert version is not None, "App version should be displayed"
-        assert expected_app_version in version, f"Expected '{expected_app_version}' within displayed text, got '{version}'"
-        logger.info(f"App version on sign up: {version}")
-    except Exception:
-        pytest.skip("App version element not found")
+    helper.signup.hide_keyboard_if_visible()
+    version = helper.signup.get_text("app_version_text", timeout=10)
+    assert version, "App version text is not displayed on the sign up screen"
+    assert expected_app_version in version, f"Expected '{expected_app_version}' within displayed text, got '{version}'"
+    logger.info(f"App version on sign up: {version}")
 
 # ========== Easy to add new steps ==========
 # Just add new @when, @then, @given functions above!

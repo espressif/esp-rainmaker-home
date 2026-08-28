@@ -10,6 +10,7 @@ from pytest_bdd import scenarios, given, when, then, parsers
 from utils.api_user_helper import ApiUserHelper
 from utils.mailosaur_helper import get_delete_account_verification_code
 from utils.registered_user_resolver import load_deployment_config
+from utils.app_copy import resolve_server_copy
 from utils.common_utils import normalize_input
 
 logger = logging.getLogger(__name__)
@@ -108,8 +109,8 @@ def verify_button_disabled(helper):
 
 
 @then(parsers.parse('user should see delete account toast with title "{title}" and message "{message}"'))
-def should_see_delete_account_toast(helper, title, message):
-    message = normalize_input(message)
+def should_see_delete_account_toast(helper, title, message, pytestconfig):
+    message = resolve_server_copy(pytestconfig.getoption("--deployment"), normalize_input(message))
     toast_title, toast_message = helper.delete_account.get_toast_title_and_message(
         timeout=5,
         poll=0.25,

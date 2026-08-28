@@ -190,10 +190,14 @@ class QrDisplay:
         end tell
         '''
         try:
-            subprocess.run(["osascript", "-e", script], capture_output=True, check=False, timeout=15)
-            logger.info("Provisioning QR preview closed")
+            result = subprocess.run(["osascript", "-e", script], capture_output=True, check=False, timeout=15)
+            if result.returncode == 0:
+                logger.info("Provisioning QR preview closed")
+                return
+            logger.warning("AppleScript close failed (rc=%s, Automation permission?); killing Preview", result.returncode)
         except subprocess.TimeoutExpired:
-            logger.warning("Closing QR preview timed out (Automation permission not granted?)")
+            logger.warning("Closing QR preview timed out (Automation permission not granted?); killing Preview")
+        subprocess.run(["pkill", "-x", "Preview"], capture_output=True, check=False, timeout=10)
 
     @classmethod
     def _render_png(cls, payload: str, output_dir: Path) -> Path:

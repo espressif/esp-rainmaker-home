@@ -365,6 +365,11 @@ RMNEO_FIRMWARE_MATRIX = [
         "chip": "esp32c3",
         "custom_sdk_config": "CONFIG_ESP_RMAKER_LOCAL_CTRL_CHAL_RESP_ENABLE=y",
     },
+    {
+        "name": "rmneo-esp32c5-light",
+        "chip": "esp32c5",
+        "custom_sdk_config": "",
+    },
 ]
 
 

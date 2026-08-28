@@ -76,7 +76,7 @@ class HardwareConfig:
                 f"Provisioning token '{token}' not set in esp_devices.yaml wifi section"
             )
         value = str(self.wifi.get(key) or "")
-        if not value and key != "ssid_password":
+        if not value and not key.endswith("_password"):
             raise KeyError(
                 f"Provisioning token '{token}' is empty in esp_devices.yaml wifi section"
             )
@@ -101,6 +101,11 @@ class HardwareConfig:
     def acquire_timeout_seconds(self) -> int:
         """Default acquire timeout when waiting for a free device."""
         return int(self.hardware.get("acquire_timeout_seconds", 300))
+
+    @property
+    def busy_wait_seconds(self) -> int:
+        """Extra wait allowed while the wanted device is actively held by a live run (parallel platform); absent or failed devices still fail fast at acquire_timeout_seconds."""
+        return int(self.hardware.get("busy_wait_seconds", 600))
 
     @property
     def firmware_root(self) -> Path:

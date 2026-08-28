@@ -2,13 +2,13 @@ Feature: Scan QR provisioning
   End-to-end QR provisioning flow from add device through home verification
 
   Background:
-    Given an "ESP32C3" device
-    And the device is hard reset
-    And the app is launched
+    Given the app is launched
     And user should be on login screen
 
   @sanity
   Scenario: Successfully provision ESP32C3 device via scan QR (BLE)
+    Given an "ESP32C3" device
+    And the device is hard reset
     When the device is flashed with "led_light", "ble" transport
     And user login with "registered user 1" and "registered user 1 password"
     Then user should land on the home screen
@@ -41,3 +41,46 @@ Feature: Scan QR provisioning
     When user taps "add device"
     Then user should be on scan qr screen
     And scan qr screen elements should be present
+
+  Scenario: Invalid QR code is handled gracefully
+    When user login with "registered user 1" and "registered user 1 password"
+    Then user should land on the home screen
+    When user taps "add device"
+    Then user should be on scan qr screen
+    When a corrupted provisioning qr is displayed for scan
+    Then user should remain on the scan qr screen
+
+  Scenario: Scanning a SoftAP provisioning QR is rejected while SoftAP is disabled
+    When user login with "registered user 1" and "registered user 1 password"
+    Then user should land on the home screen
+    When user taps "add device"
+    Then user should be on scan qr screen
+    When a softap provisioning qr is displayed for scan
+    Then the app should reject the softap provisioning qr
+    And user should remain on the scan qr screen
+
+  @esp32c5
+  Scenario: Provision ESP32C5 device via scan QR (BLE, security 2) onto 5GHz Wi-Fi
+    Given an "ESP32C5" device
+    And the device is hard reset
+    When the device is flashed with "led_light", "ble" transport
+    And user login with "registered user 1" and "registered user 1 password"
+    Then user should land on the home screen
+    When user taps "add device"
+    Then user should be on scan qr screen
+    And device provisioning qr should be displayed for scan
+    When user scans the qr code
+    Then user should be on connect wifi screen
+    When user taps "join other network"
+    And user enters "ssid 5g" and "ssid 5g password"
+    And user taps "connect"
+    Then user should be on provisioning page
+    And user should see all steps successful
+    And user should see device provisioned successfully toast
+    And the device log should confirm a 5GHz connection
+    And continue button should be "enabled"
+    When user taps "continue"
+    Then user should be on name device screen
+    When user renames the device name to "C5 Light"
+    And user taps "continue"
+    Then user should be on add to room screen

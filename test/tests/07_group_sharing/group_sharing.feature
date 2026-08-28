@@ -40,3 +40,65 @@ Feature: Group sharing end-to-end
     And user opens the home sharing settings for "Primary Home"
     Then "registered user 2" should not be listed under "shared with"
     And user renames the home to "Home"
+  Scenario: Decline a sharing invitation
+    When user opens the home sharing settings for "Home"
+    And user renames the home to "Primary Home"
+    And user shares the home with "registered user 2"
+    When user switches to "registered user 2"
+    And user opens the notification center
+    And user declines the sharing invitation from "registered user 1"
+    Then the home "Primary Home" should not be selectable
+    When user switches to "registered user 1"
+    And user opens the home sharing settings for "Primary Home"
+    Then "registered user 2" should not be listed under "shared with"
+    And user renames the home to "Home"
+
+  Scenario: Cancel a pending invitation before it is accepted
+    When user opens the home sharing settings for "Home"
+    And user shares the home with "registered user 2"
+    And user revokes home sharing for "registered user 2"
+    And user opens the home sharing settings for "Home"
+    Then "registered user 2" should not be listed under "shared with"
+    When user switches to "registered user 2"
+    And user opens the notification center
+    Then no sharing invitation from "registered user 1" is present
+
+  Scenario: Cancelling the revoke dialog keeps shared access intact
+    When user opens the home sharing settings for "Home"
+    And user shares the home with "registered user 2"
+    When user switches to "registered user 2"
+    And user opens the notification center
+    And user accepts the sharing invitation from "registered user 1"
+    When user switches to "registered user 1"
+    And user opens the home sharing settings for "Home"
+    Then "registered user 2" should be listed under "shared with"
+    When user dismisses the revoke dialog for "registered user 2"
+    Then "registered user 2" should be listed under "shared with"
+    When user revokes home sharing for "registered user 2"
+    And user opens the home sharing settings for "Home"
+    Then "registered user 2" should not be listed under "shared with"
+
+  Scenario: Sharing the home with yourself is rejected
+    When user opens the home sharing settings for "Home"
+    And user shares the home with "registered user 1" expecting rejection
+    Then the sharing invite should be rejected
+
+  Scenario: Sharing the home with an unregistered user is rejected
+    When user opens the home sharing settings for "Home"
+    And user shares the home with "unregistered.qa@invalid.test" expecting rejection
+    Then the sharing invite should be rejected
+
+  Scenario: Secondary user leaves the shared home
+    When user opens the home sharing settings for "Home"
+    And user renames the home to "Primary Home"
+    And user shares the home with "registered user 2"
+    When user switches to "registered user 2"
+    And user opens the notification center
+    And user accepts the sharing invitation from "registered user 1"
+    When user opens the shared home settings for "Primary Home"
+    And user leaves the shared home
+    Then the home "Primary Home" should not be selectable
+    When user switches to "registered user 1"
+    And user opens the home sharing settings for "Primary Home"
+    Then "registered user 2" should not be listed under "shared with"
+    And user renames the home to "Home"

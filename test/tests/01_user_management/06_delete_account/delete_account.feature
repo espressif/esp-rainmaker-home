@@ -31,7 +31,7 @@ Feature: Delete Account
     When user taps "delete account"
     And user enters delete account verification code "123456"
     And user taps "verify delete account"
-    Then user should see delete account toast with title "Failed to delete account" and message "Verification code is incorrect"
+    Then user should see delete account toast with title "Failed to delete account" and message "incorrect verification code"
 
   @regression
   Scenario: Delete account with resend verification code

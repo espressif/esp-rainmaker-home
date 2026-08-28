@@ -613,6 +613,7 @@
                 <details class="run-meta">
                     <summary>Deployment details (click to expand)</summary>
                     <div class="run-meta-body">
+                        {% if marker %}<div class="run-meta-row"><label>Marker</label><value>{{ marker }}</value></div>{% endif %}
                         {% if app_commit %}<div class="run-meta-row"><label>App commit</label><value>{{ app_commit }}</value></div>{% endif %}
                         {% if active_sdk %}<div class="run-meta-row"><label>Active SDK</label><value>{{ active_sdk }}</value></div>{% endif %}
                         {% if deployment %}<div class="run-meta-row"><label>Deployment</label><value>{{ deployment }}</value></div>{% endif %}
@@ -723,11 +724,14 @@
                                     <div><strong>Duration:</strong> {{ "%.2f"|format(test.duration) }}s</div>
                                     {% if test.outcome == 'failed' %}
                                     {% set jira_summary = '[Automation] ' ~ test.nodeid.split('::')[-1] ~ ' FAILED' %}
-                                    {% set jira_env = (platform or '') ~ ' | App v' ~ (app_version or '') %}
-                                    {% set jira_desc = 'Test: ' ~ test.nodeid ~ '\nStatus: FAILED\nEnvironment: ' ~ jira_env ~ '\nArtifacts (zip): ' ~ (test.artifacts.test_zip_url or '-') ~ '\nVideo: ' ~ (test.artifacts.video_url or '-') %}
+                                    {% set jira_hw = ([test.hardware_info] if test.hardware_info is mapping else test.hardware_info or []) | first %}
+                                    {% set jira_env = (platform or '') ~ '\nApp: v' ~ (app_version or '-') ~ (' (' ~ app_commit ~ ')' if app_commit else '') ~ '\nDeployment: ' ~ (deployment or '-') ~ (' (' ~ active_sdk ~ ')' if active_sdk else '') %}
+                                    {% if jira_hw and jira_hw.esp_idf_commit %}{% set jira_env = jira_env ~ '\nESP-IDF: ' ~ jira_hw.esp_idf_commit %}{% endif %}
+                                    {% if jira_hw and (jira_hw.esp_rainmaker_commit or jira_hw.rmneo_sdk_commit) %}{% set jira_env = jira_env ~ '\nRainMaker: ' ~ (jira_hw.esp_rainmaker_commit or jira_hw.rmneo_sdk_commit) %}{% endif %}
+                                    {% set jira_desc = 'Artifacts (zip): ' ~ (test.artifacts.test_zip_url or '-') ~ '\nVideo: ' ~ (test.artifacts.video_url or '-') %}
                                     <div class="action-row">
                                         {% if jira_base and jira_project_id and jira_issuetype_id %}
-                                        <a class="btn-action btn-jira" target="_blank" href="{{ jira_base }}/secure/CreateIssueDetails!init.jspa?pid={{ jira_project_id }}&issuetype={{ jira_issuetype_id }}&summary={{ jira_summary|urlencode }}&description={{ jira_desc|urlencode }}&labels=automation_caught_issue&environment={{ jira_env|urlencode }}" title="Raise a pre-filled bug in {{ jira_project }} (label: automation_caught_issue)">🐞 File a Jira</a>
+                                        <a class="btn-action btn-jira" target="_blank" href="{{ jira_base }}/secure/CreateIssueDetails!init.jspa?pid={{ jira_project_id }}&issuetype={{ jira_issuetype_id }}&priority=3&summary={{ jira_summary|urlencode }}&description={{ jira_desc|urlencode }}&labels=automation_caught_issue&environment={{ jira_env|urlencode }}" title="Raise a pre-filled bug in {{ jira_project }} (label: automation_caught_issue, priority: Medium)">🐞 File a Jira</a>
                                         {% else %}
                                         <a class="btn-action btn-jira" href="mailto:?subject={{ jira_summary|urlencode }}&body={{ jira_desc|urlencode }}" title="No Jira configured (set JIRA_BASE_URL + JIRA_PROJECT_KEY) — opens a pre-filled e-mail">🐞 File a Jira</a>
                                         {% endif %}

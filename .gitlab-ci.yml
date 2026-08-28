@@ -27,14 +27,19 @@ workflow:
 .select_deployment:
   script:
     - |
-      if printf '%s' "${CI_COMMIT_MESSAGE:-${CI_COMMIT_TITLE:-}}" | grep -qi 'RMNEO'; then
+      if printf '%s' "${CI_COMMIT_MESSAGE:-${CI_COMMIT_TITLE:-}}" | grep -qi 'NEO'; then
         _sel_sdk="rainmaker-neo-base-sdk"; _sel_dep="rmneo"
       else
         _sel_sdk="rainmaker-matter-sdk"; _sel_dep="rm"
       fi
       export ACTIVE_SDK="${ACTIVE_SDK:-$_sel_sdk}"
       export DEPLOYMENT="${DEPLOYMENT:-$_sel_dep}"
-      echo "Commit-message deployment select: ACTIVE_SDK=${ACTIVE_SDK} DEPLOYMENT=${DEPLOYMENT}"
+      _sel_marker="sanity"
+      if printf '%s' "${CI_MERGE_REQUEST_TARGET_BRANCH_NAME:-}" | grep -q '^release/v'; then
+        _sel_marker="regression"
+      fi
+      export MARKER="${MARKER:-$_sel_marker}"
+      echo "Commit-message deployment select: ACTIVE_SDK=${ACTIVE_SDK} DEPLOYMENT=${DEPLOYMENT} MARKER=${MARKER}"
 
 
 # Both build jobs bake the selected ACTIVE_SDK into the env file the app reads at build time.
@@ -259,7 +264,7 @@ ios_ipa:
 .device_test:
   stage: test
   tags: [mac-mini-runner]
-  timeout: 2h
+  timeout: 3h
   variables:
     GIT_CLEAN_FLAGS: -ffdx -e test/.venv
   artifacts:

@@ -189,10 +189,13 @@ class RainMakerCloud:
         self._request("PUT", f"/user/node_group?group_id={group_id}", json_body={"group_name": name})
 
     def reset_home_name(self, target: str = "Home") -> None:
-        """Rename the account's single home back to `target` (repeatability safety net; skipped if the account has multiple homes)."""
+        """Rename the primary home group back to `target` (repeatability safety net). Filters to the primary 'home' entry — rooms and Matter sub-groups make the account list longer than one, which used to skip the rename entirely."""
         groups = self.node_groups()
-        if len(groups) == 1 and groups[0].get("group_name") != target:
-            self.set_group_name(groups[0]["group_id"], target)
+        homes = [g for g in groups if g.get("primary") and (g.get("type") or "home") == "home"]
+        if not homes and len(groups) == 1:
+            homes = groups
+        if len(homes) == 1 and homes[0].get("group_name") != target:
+            self.set_group_name(homes[0]["group_id"], target)
 
     def add_node_to_group(self, group_id: str, node_id: str) -> None:
         self._request("PUT", f"/user/node_group?group_id={group_id}", json_body={"nodes": [node_id], "operation": "add"})
@@ -207,10 +210,17 @@ class RainMakerCloud:
             except Exception as error:
                 logger.debug("ensure_online_node_in_home skipped: %s", error)
 
+    def issued_sharing_requests(self) -> List[dict]:
+        """Every sharing request this account has issued, any status — the backend keeps declined ones listed and the app renders them, so leftovers poison later scenarios."""
+        body = self._request("GET", "/user/node_group/sharing/requests?primary_user=true").json()
+        return body.get("sharing_requests") or []
+
+    def remove_sharing_request(self, request_id: str) -> None:
+        self._request("DELETE", f"/user/node_group/sharing/requests?request_id={request_id}")
+
     def issued_sharing_usernames(self) -> List[str]:
         """Usernames of pending group-sharing requests this account has issued."""
-        body = self._request("GET", "/user/node_group/sharing/requests?primary_user=true").json()
-        return [r.get("user_name") for r in (body.get("sharing_requests") or []) if r.get("user_name")]
+        return [r.get("user_name") for r in self.issued_sharing_requests() if r.get("user_name")]
 
     def shared_usernames(self) -> set:
         """Every secondary (shared-with) username on the account's groups, plus any pending issued invites. Secondary users live under group_sharing[].users.secondary as plain emails."""
@@ -528,10 +538,13 @@ class RmneoCloud:
         self._signed("PATCH", f"/v1/groups/{group_id}", json_body={"group_name": name})
 
     def reset_home_name(self, target: str = "Home") -> None:
-        """Rename the account's single home back to `target` (repeatability safety net; skipped if the account has multiple homes)."""
+        """Rename the primary home group back to `target` (repeatability safety net). Filters to the primary 'home' entry — sub-groups make the account list longer than one, which used to skip the rename entirely."""
         groups = self.groups()
-        if len(groups) == 1 and groups[0].get("group_name") != target:
-            self.set_group_name(groups[0]["group_id"], target)
+        homes = [g for g in groups if g.get("primary") and (g.get("type") or "home") == "home"]
+        if not homes and len(groups) == 1:
+            homes = groups
+        if len(homes) == 1 and homes[0].get("group_name") != target:
+            self.set_group_name(homes[0]["group_id"], target)
 
     def group_users(self, group_id: str) -> List[dict]:
         body = self._signed("GET", f"/v1/groups/{group_id}/users").json()
@@ -612,6 +625,19 @@ class RmneoCloud:
                 except Exception as error:
                     logger.warning("Could not remove RMNEO node %s: %s", node["node_id"], error)
         return removed
+
+    def group_id_for_node(self, node_id: str) -> str:
+        """Group that owns the node; the schedules endpoint is group-scoped."""
+        for node in self.nodes():
+            if node.get("node_id") == node_id and node.get("group_id"):
+                return node["group_id"]
+        raise RuntimeError(f"No RMNEO group found for node {node_id}")
+
+    def set_schedules(self, node_id: str, schedules: List[dict], group_id: str = None) -> None:
+        """Replace the node's schedule list (PUT is replace-all); unlike params this is a REST endpoint on RMNEO."""
+        group_id = group_id or self.group_id_for_node(node_id)
+        self._signed("PUT", f"/v1/groups/{group_id}/nodes/{node_id}/schedules",
+                     json_body={"schedules": schedules})
 
     def _mqtt_only(self, operation: str):
         raise NotImplementedError(

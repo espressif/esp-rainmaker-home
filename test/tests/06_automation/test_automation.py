@@ -12,6 +12,7 @@ Shared steps (launch, login, home, device reserve/prepare/report/verify) live
 in test/conftest.py.
 """
 import logging
+import time
 
 import pytest
 from pytest_bdd import scenarios, then, when, parsers
@@ -104,7 +105,11 @@ def raise_automation_trigger(hardware_session, param, value):
     assert not early, f"Automation fired before the trigger event (cloud early-fire): {early[-1].strip()}"
     hardware_session["serial_since"] = ds.marker()
     hardware_session.get("set_values", {}).pop(param, None)
-    ds.set_param(param, value in ("on", "true"))
+    if value in ("on", "true", "off", "false"):
+        coerced = value in ("on", "true")
+    else:
+        coerced = int(value) if value.lstrip("-").isdigit() else value
+    ds.set_param(param, coerced)
 
 
 @then(parsers.parse('automation "{name}" should be visible'))
@@ -120,3 +125,31 @@ def automation_should_not_be_visible(helper, name):
 @when(parsers.parse('user disables automation "{name}"'))
 def disable_automation(helper, name):
     helper.automations.toggle_automation(name, toggle="off")
+
+
+EVENT_CONDITION_SYMBOLS = {"above": ">", "below": "<"}
+
+
+@when(parsers.re(r'user sets event "(?P<param>[^"]+)" (?P<condition>above|below) "(?P<value>[^"]+)"'))
+def set_event_param_with_condition(helper, hardware_session, param, condition, value):
+    hardware_session.setdefault("set_values", {})[param] = \
+        helper.automations.select_event_param_with_condition(param, EVENT_CONDITION_SYMBOLS[condition], value)
+
+
+@when(parsers.parse('user opens automation "{name}" for editing'))
+def open_automation_for_editing(helper, name):
+    helper.automations.open_automation(name)
+
+
+@when(parsers.parse('user edits the automation action "{param}" to "{value}" for "{device}"'))
+def edit_automation_action(helper, hardware_session, param, value, device):
+    hardware_session.setdefault("set_values", {})[param] = \
+        helper.automations.edit_action_param(device, param, value)
+
+
+@when("user updates the automation")
+def update_the_automation(helper):
+    helper.automations.click("update_automation_button", timeout=10)
+    # Wait out the save round-trip, then give the cloud automation engine time to apply the updated action.
+    helper.automations.get_success_toast(timeout=10)
+    time.sleep(5)

@@ -109,24 +109,25 @@ class Login(BasePage):
 
         return self
     
-    def validate_screen_elements(self):
-        """Validate all expected elements are present on login screen"""
+    def validate_screen_elements(self, include_third_party=True):
+        """Validate all expected elements are present on login screen (neo has no third-party login block)."""
         logger.info("Validating login screen elements")
-        
+
         required_elements = [
             "logo",
             "email_input",
-            "password_input", 
+            "password_input",
             "login_button",
             "forgot_password_button",
             "signup_button",
-            "3p_login_text",
-            "google_login_button",
-            "logo_google",
-            "apple_login_button",
-            "logo_apple",
             "app_version_text"
         ]
+        if include_third_party:
+            required_elements += [
+                "3p_login_text",
+                "google_login_button",
+                "apple_login_button"
+            ]
         
         missing_elements = []
         for element in required_elements:

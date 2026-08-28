@@ -5,7 +5,11 @@
 
 """Scenes page helper: create a scene, activate it, and clean up."""
 
+import logging
+
 from .base import BasePage
+
+logger = logging.getLogger(__name__)
 
 
 class Scenes(BasePage):
@@ -72,6 +76,27 @@ class Scenes(BasePage):
     def is_create_scene_screen_displayed(self, timeout=10):
         """True when the Create Scene screen is shown (its Save control is present)."""
         return self.is_visible("save_scene_button", timeout=timeout)
+
+    def open_scene(self, name, attempts=3):
+        """Open the named scene for editing via its card menu (re-tap in case a transient toast swallows the tap)."""
+        self.set_editing("text_edit_scenes", "edit_scenes_button", False)
+        for attempt in range(attempts):
+            self.click("id", f"card_scene_{name}", timeout=10)
+            if self.is_visible("scene_menu_edit_button", timeout=5):
+                break
+            logger.info("RETRY open_scene(%r): menu not shown, re-tapping card (attempt %s/%s)", name, attempt + 1, attempts)
+        else:
+            raise AssertionError(f"Scene menu did not open for {name!r}")
+        self.click("scene_menu_edit_button", timeout=5)
+        assert self.is_create_scene_screen_displayed(timeout=10), f"Scene editor did not open for {name!r}"
+        return self
+
+    def rename_open_scene(self, new_name):
+        """Rename the scene currently open in the editor (the name field is an always-editable inline input)."""
+        self.send_keys("id", "input_scene_name", new_name, clear_first=True, timeout=10)
+        if self.platform != "ios":
+            self.hide_keyboard_if_visible()
+        return self
 
     def is_scene_visible(self, name, timeout=10, attempts=1):
         """True when a scene card with the given name is listed."""

@@ -63,5 +63,13 @@
   "scene_card": {
     "by": "id",
     "value": "view_scene_card_content"
+  },
+  "max_scene_badge": {
+    "by": "id",
+    "value": "text_max_scene_reached"
+  },
+  "scene_menu_edit_button": {
+    "by": "id",
+    "value": "button_edit_scene_menu"
   }
 }
