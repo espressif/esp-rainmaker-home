@@ -26,6 +26,7 @@ import {
   getTermsOfUseLink,
 } from "@shared/utils/legalLinks";
 import { unregisterForNotification } from "@shared/utils/notifications";
+import { teardownWebPushDelivery } from "@native-adaptors/utils/bootstrapWebPush";
 import { pipelineTask } from "@shared/utils/pipelineTask";
 
 // Types
@@ -200,6 +201,16 @@ export const useUser = () => {
             },
             optional: true,
             background: true,
+          },
+          {
+            name: "teardownWebPushDelivery",
+            run: async () => {
+              // No-op on native (early-returns unless Platform.OS === "web");
+              // on web, detaches the foreground FCM listener installed at
+              // bootstrap so it does not stay attached after signout.
+              teardownWebPushDelivery();
+            },
+            optional: true,
           },
           {
             name: "logoutUser",

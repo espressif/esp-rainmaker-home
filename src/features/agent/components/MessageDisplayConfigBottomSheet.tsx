@@ -20,6 +20,8 @@ import {
 import { useTranslation } from "react-i18next";
 // Styles
 import { tokens } from "@shared/theme/tokens";
+import { globalStyles } from "@shared/theme/globalStyleSheet";
+import { switchFrameProps } from "@shared/theme/switchFrameProps";
 
 // Icons
 import { X } from "lucide-react-native";
@@ -90,16 +92,18 @@ const MessageDisplayConfigBottomSheet: React.FC<
       <View style={styles.switchRow}>
         <Text style={styles.switchLabel}>{t(labelKey)}</Text>
         <Switch
+          {...switchFrameProps}
           size="$2.5"
           checked={localConfig[key]}
           onCheckedChange={() => handleToggle(key)}
+          style={globalStyles.switch}
         >
           <Switch.Thumb
             animation="quicker"
             style={
               localConfig[key]
-                ? { backgroundColor: tokens.colors.primary }
-                : { backgroundColor: tokens.colors.white }
+                ? globalStyles.switchThumbActive
+                : globalStyles.switchThumb
             }
           />
         </Switch>

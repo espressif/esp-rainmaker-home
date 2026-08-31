@@ -18,36 +18,17 @@ import { getPreAuthRoute } from "@features/landing/utils/currentDeployment";
 import { useToast } from "@shared/hooks/useToast";
 import { resetStackTo } from "@shared/utils/navigation";
 import type { ConfigScanPhase } from "@src/types/global";
+import type { UseConfigScanReturn } from "./useConfigScan.types";
 
-export interface UseConfigScanReturn {
-  phase: ConfigScanPhase;
-  showScanner: boolean;
-  setShowScanner: (show: boolean) => void;
-  permission: { granted: boolean } | null;
-  requestPermission: () => void;
-  /**
-   * Resolves and applies a scanned config.
-   * @returns `true` when accepted; `false` when invalid / failed (scanner shows
-   * red border + Scan Again).
-   */
-  handleScan: (scannedValue: string) => Promise<boolean>;
-  handleUpdateConfig: () => void;
-  handleCancel: () => void;
-  handleBackFromScanner: () => void;
-  /** Display label (base URL) of the remembered deployment, else null. */
-  savedDeploymentLabel: string | null;
-  handleContinueWithSaved: () => Promise<void>;
-}
+export type { UseConfigScanReturn } from "./useConfigScan.types";
 
 /**
- * Hook for config scan flow: state and handlers.
- * Single responsibility: manage scan lifecycle.
+ * Native config-scan hook: camera permission plus scan lifecycle.
+ * Web builds resolve `useConfigScan.web.ts` instead.
  *
- * Applying a deployment rebuilds the SDK layer in place, falling back to a
- * process relaunch.
- *
- * Invalid or failed scans return `false` so the scanner can freeze, vibrate,
- * show a red border, and offer Scan Again (same pattern as provision ScanQR).
+ * Invalid or failed scans return `false` from {@link handleScan} so the scanner
+ * can freeze, vibrate, show a red border, and offer Scan Again.
+ * @returns Scan phase, camera permission, and handlers
  */
 export function useConfigScan(): UseConfigScanReturn {
   const router = useRouter();
@@ -62,18 +43,12 @@ export function useConfigScan(): UseConfigScanReturn {
   const switchingRef = useRef(false);
 
   /**
-   * Rebuilds the SDK layer in place for the config just persisted, then routes to
-   * auth. Falls back to a relaunch on failure — the config is already stored, so a
-   * fresh process comes up on the right backend either way.
-   *
-   * Never throws: a rebuild failure is not a scan failure, so it must not surface
-   * as one.
+   * Rebuilds the SDK layer in place for the config just persisted, then routes
+   * to auth. Falls back to a relaunch on failure — the config is already stored.
    */
   const applyDeploymentSwitch = useCallback(async () => {
     try {
       await reinitializeSdk();
-      // Reset: ConfigScan is pushed from Landing / Login, and the deployment is
-      // now committed, so nothing beneath it should stay reachable with back.
       resetStackTo(router, "/(auth)/Login");
     } catch (error) {
       console.error(
@@ -96,8 +71,6 @@ export function useConfigScan(): UseConfigScanReturn {
       scannedRef.current = true;
 
       try {
-        // Resolve while the camera is still mounted so invalid payloads can
-        // toast without flashing the loading screen.
         const json = await resolveConfigFromScan(scannedValue);
 
         setPhase("applying");
@@ -105,15 +78,12 @@ export function useConfigScan(): UseConfigScanReturn {
           json.sdk,
           json.config as SDKConfig,
         );
-        // Remember it so the user can come back to this deployment later
-        // without re-scanning, even after switching to RainMaker Classic / RainMaker Neo.
         await runtimeConfigManager.rememberPrivateDeployment(
           json.sdk,
           json.config as SDKConfig,
         );
         await asyncStorageAdapter.clear();
 
-        // Success view goes up before the rebuild: it is slower than a relaunch was.
         setPhase("success");
         await applyDeploymentSwitch();
         return true;
@@ -124,7 +94,6 @@ export function useConfigScan(): UseConfigScanReturn {
             ? t("config.scan.invalidQRCode")
             : raw,
         );
-        // Keep / restore the scanner so it can show red border + Scan Again.
         setPhase("info");
         scannedRef.current = false;
         return false;
@@ -134,7 +103,7 @@ export function useConfigScan(): UseConfigScanReturn {
   );
 
   /**
-   * Opens the camera scanner (requests permission when needed).
+   * Opens the camera scanner, requesting permission when it is not granted.
    */
   const handleUpdateConfig = useCallback(() => {
     if (!permission?.granted) {
@@ -147,10 +116,6 @@ export function useConfigScan(): UseConfigScanReturn {
    * Dismisses Config Scan back to the previous route, or the pre-auth entry.
    */
   const handleCancel = useCallback(() => {
-    // `router.back()` is a silent no-op when there is nothing to pop (e.g. the
-    // stack was reset by a programmatic restart, or this screen is the entry
-    // route), which reads as a dead back button. Fall back to the pre-auth
-    // route so the screen is always dismissible.
     if (router.canGoBack()) {
       router.back();
       return;
@@ -167,19 +132,15 @@ export function useConfigScan(): UseConfigScanReturn {
     scannedRef.current = false;
   }, []);
 
-  const savedDeployment = runtimeConfigManager.privateDeployment;
-  const savedDeploymentLabel = savedDeployment?.config?.baseUrl ?? null;
+  const savedDeploymentLabel =
+    runtimeConfigManager.privateDeployment?.config?.baseUrl ?? null;
 
   /**
-   * Continue with the previously configured private deployment instead of
-   * scanning a new QR code. Re-applies it as the active runtime config and
-   * rebuilds the SDK layer in place; when it is already the active backend no
-   * re-init is needed and we go straight to auth.
+   * Re-applies the remembered private deployment without a new scan.
    */
   const handleContinueWithSaved = useCallback(async () => {
     const saved = runtimeConfigManager.privateDeployment;
     if (!saved) return;
-    // A second pass would tear the SDK layer down underneath the first.
     if (switchingRef.current) return;
 
     const isAlreadyActive =
@@ -195,8 +156,6 @@ export function useConfigScan(): UseConfigScanReturn {
 
     switchingRef.current = true;
     try {
-      // Switching backends: wipe session data (runtime config + language keys
-      // are protected in asyncStorageAdapter.clear()) and re-init the SDK layer.
       await asyncStorageAdapter.clear();
       await applyDeploymentSwitch();
     } finally {

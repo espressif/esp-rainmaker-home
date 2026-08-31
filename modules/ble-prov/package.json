@@ -1,0 +1,41 @@
+{
+  "name": "@modules/ble-prov",
+  "version": "1.0.0",
+  "private": true,
+  "description": "ESP-IDF RainMaker BLE provisioning — Expo module with Web Bluetooth and native Android/iOS support",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./utils": "./src/utils/index.ts",
+    "./web": "./web/index.ts",
+    "./web/*": "./web/*.ts"
+  },
+  "scripts": {
+    "build": "expo-module build",
+    "clean": "expo-module clean",
+    "lint": "expo-module lint"
+  },
+  "keywords": [
+    "react-native",
+    "expo",
+    "ble",
+    "provisioning",
+    "esp-idf",
+    "rainmaker"
+  ],
+  "license": "Apache-2.0",
+  "dependencies": {
+    "@types/web-bluetooth": "^0.0.21",
+    "esp-ble-prov": "2.0.1"
+  },
+  "peerDependencies": {
+    "expo": "*",
+    "expo-modules-core": "*",
+    "react": "*",
+    "react-native": "*"
+  },
+  "devDependencies": {
+    "expo-module-scripts": "^55.0.2"
+  }
+}

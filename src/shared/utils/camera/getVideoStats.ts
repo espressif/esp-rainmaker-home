@@ -4,106 +4,191 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { RTCPeerConnection } from "react-native-webrtc";
+import {
+  WEBRTC_MEDIA_KIND_VIDEO,
+  WEBRTC_STATS_REPORT_TYPE,
+} from "@shared/utils/constants";
 import type { VideoStats } from "@src/types/global";
 
+/** Minimal peer connection surface needed for stats (RN-webrtc or browser). */
+type PeerConnectionWithStats = {
+  getStats: () => Promise<unknown>;
+};
+
+/** Subset of RTCStats fields used when parsing inbound video reports. */
+type StatsReportLike = {
+  id: string;
+  type: string;
+  kind?: string;
+  mediaType?: string;
+  timestamp?: number;
+  frameWidth?: number;
+  frameHeight?: number;
+  framesPerSecond?: number;
+  framesDropped?: number;
+  bytesReceived?: number;
+  packetsReceived?: number;
+  packetsLost?: number;
+  jitter?: number;
+  codecId?: string;
+  mimeType?: string;
+  name?: string;
+};
+
+type BitrateSample = {
+  bytesReceived: number;
+  timestampMs: number;
+};
+
 /**
- * Extended RTCPeerConnection type with event handler properties
- * These are defined via defineEventAttribute in react-native-webrtc but not in TypeScript types
+ * Previous inbound-rtp sample per peer connection, used to derive instantaneous
+ * bitrate from the delta of cumulative `bytesReceived` over report timestamps.
+ * Reset when the stream stops (null peer) or restarts (byte counter goes backwards).
  */
-interface ExtendedRTCPeerConnection extends RTCPeerConnection {
-  onicecandidate: ((event: { candidate: any | null }) => void) | null;
-  onconnectionstatechange: (() => void) | null;
-  ontrack: ((event: { streams: any[]; track: any; transceiver: any; receiver: any }) => void) | null;
+const previousBitrateByPc = new WeakMap<object, BitrateSample>();
+
+/**
+ * Normalizes `getStats()` results from react-native-webrtc (Map/Array) and
+ * browsers (`RTCStatsReport` maplike) into a plain report array.
+ * @param statsReport - Value returned by `RTCPeerConnection.getStats()`
+ * @returns Flat list of stats reports
+ */
+function toReportsArray(statsReport: unknown): StatsReportLike[] {
+  if (statsReport == null) {
+    return [];
+  }
+  if (statsReport instanceof Map) {
+    return Array.from(statsReport.values()) as StatsReportLike[];
+  }
+  if (Array.isArray(statsReport)) {
+    return statsReport as StatsReportLike[];
+  }
+  if (
+    typeof statsReport === "object" &&
+    typeof (statsReport as RTCStatsReport).forEach === "function"
+  ) {
+    const out: StatsReportLike[] = [];
+    (statsReport as RTCStatsReport).forEach((report) => {
+      out.push(report as StatsReportLike);
+    });
+    return out;
+  }
+  return [];
 }
 
 /**
- * Previous inbound-rtp sample, used to derive an instantaneous bitrate from the
- * delta of cumulative `bytesReceived` over the delta of the report timestamps.
- * Reset when the stream stops (null peer connection) or restarts (byte counter
- * goes backwards). Single active camera stream at a time, so module-level state
- * is sufficient.
+ * True when a report is video media (Chrome `kind`, legacy/RN `mediaType`).
+ * Matching only `mediaType` left inbound-rtp null on web → "Loading stats…".
+ * @param report - Single WebRTC stats report
+ * @returns Whether the report is for video
  */
-let lastBitrateSample: { timestamp: number; bytesReceived: number } | null =
-  null;
+function isVideoMedia(report: StatsReportLike): boolean {
+  return (
+    report.kind === WEBRTC_MEDIA_KIND_VIDEO ||
+    report.mediaType === WEBRTC_MEDIA_KIND_VIDEO
+  );
+}
 
 /**
- * Get stats from peer connection
- * Responsibility: Fetch and parse WebRTC stats from RTCPeerConnection
- * This function extracts video and network statistics from WebRTC stats reports.
- * It handles both Map and Array responses from getStats() and parses:
- * - Video stats: resolution, FPS, frames dropped, codec
- * - Network stats: bitrate, total data, packets, loss percentage, jitter
+ * Instantaneous bitrate (kbps) from consecutive inbound-rtp samples.
+ * Prefers the report `timestamp` when present; falls back to wall clock.
+ * @param peerConnection - Peer used as WeakMap key
+ * @param bytesReceived - Cumulative bytes from inbound-rtp
+ * @param reportTimestamp - Optional RTCStats `timestamp` from the report
+ * @returns Bitrate in kbps
+ */
+function estimateBitrateKbps(
+  peerConnection: object,
+  bytesReceived: number,
+  reportTimestamp?: number,
+): number {
+  const sampleTimestamp =
+    typeof reportTimestamp === "number" && reportTimestamp > 0
+      ? reportTimestamp
+      : Date.now();
+  const previous = previousBitrateByPc.get(peerConnection);
+  previousBitrateByPc.set(peerConnection, {
+    bytesReceived,
+    timestampMs: sampleTimestamp,
+  });
+  if (
+    !previous ||
+    sampleTimestamp <= previous.timestampMs ||
+    bytesReceived < previous.bytesReceived
+  ) {
+    return 0;
+  }
+  const deltaSeconds = (sampleTimestamp - previous.timestampMs) / 1000;
+  if (deltaSeconds <= 0) {
+    return 0;
+  }
+  const deltaBytes = bytesReceived - previous.bytesReceived;
+  return (deltaBytes * 8) / deltaSeconds / 1000;
+}
+
+/**
+ * Fetches and parses WebRTC video + network stats from an RTCPeerConnection.
+ * Works on native (Map/Array) and web (`RTCStatsReport` + `kind: "video"`).
  * @param peerConnection - The RTCPeerConnection instance to get stats from
- * @returns Parsed video stats or null if unavailable
+ * @returns Parsed video stats, or null if unavailable
  */
 export const getVideoStats = async (
-  peerConnection: ExtendedRTCPeerConnection | RTCPeerConnection | null
+  peerConnection: PeerConnectionWithStats | null,
 ): Promise<VideoStats | null> => {
   if (!peerConnection) {
-    lastBitrateSample = null;
     return null;
   }
 
   try {
     const statsReport = await peerConnection.getStats();
-
-    // Handle both Map and Array responses
-    let reportsArray: any[] = [];
-    if (statsReport instanceof Map) {
-      reportsArray = Array.from(statsReport.values());
-    } else if (Array.isArray(statsReport)) {
-      reportsArray = statsReport;
-    } else {
-      return null;
-    }
+    const reportsArray = toReportsArray(statsReport);
 
     if (reportsArray.length === 0) {
       return null;
     }
 
-    const statsMap: any = {};
-    reportsArray.forEach((report: any) => {
+    const statsMap: Record<string, StatsReportLike> = {};
+    for (const report of reportsArray) {
       statsMap[report.id] = report;
-    });
+    }
 
-    // Find video track stats
-    let videoStats: any = null;
-    let inboundRtpStats: any = null;
+    let trackStats: StatsReportLike | null = null;
+    let inboundRtpStats: StatsReportLike | null = null;
 
     for (const report of reportsArray) {
-      if (report.type === "track" && report.kind === "video") {
-        videoStats = report;
-      }
-      // react-native-webrtc / current WebRTC spec label the media type on
-      // inbound-rtp as `kind`; older impls used `mediaType`. Match either so
-      // stats populate (matching only `mediaType` left this null → "loading").
       if (
-        report.type === "inbound-rtp" &&
-        (report.kind === "video" || report.mediaType === "video")
+        report.type === WEBRTC_STATS_REPORT_TYPE.TRACK &&
+        isVideoMedia(report)
+      ) {
+        trackStats = report;
+      }
+      // react-native-webrtc / current WebRTC spec use `kind`; older impls used `mediaType`.
+      if (
+        report.type === WEBRTC_STATS_REPORT_TYPE.INBOUND_RTP &&
+        isVideoMedia(report)
       ) {
         inboundRtpStats = report;
       }
     }
 
-    if (!videoStats && !inboundRtpStats) {
+    if (!trackStats && !inboundRtpStats) {
       return null;
     }
 
-    // Extract stats similar to iOS implementation
-    const frameWidth = videoStats?.frameWidth || inboundRtpStats?.frameWidth || 0;
-    const frameHeight = videoStats?.frameHeight || inboundRtpStats?.frameHeight || 0;
+    const frameWidth =
+      inboundRtpStats?.frameWidth || trackStats?.frameWidth || 0;
+    const frameHeight =
+      inboundRtpStats?.frameHeight || trackStats?.frameHeight || 0;
     const framesPerSecond =
-      videoStats?.framesPerSecond || inboundRtpStats?.framesPerSecond || 0;
+      inboundRtpStats?.framesPerSecond || trackStats?.framesPerSecond || 0;
     const framesDropped =
-      inboundRtpStats?.framesDropped || videoStats?.framesDropped || 0;
+      inboundRtpStats?.framesDropped || trackStats?.framesDropped || 0;
     const bytesReceived = inboundRtpStats?.bytesReceived || 0;
     const packetsReceived = inboundRtpStats?.packetsReceived || 0;
     const packetsLost = inboundRtpStats?.packetsLost || 0;
     const jitter = inboundRtpStats?.jitter || 0;
     const codecId = inboundRtpStats?.codecId;
 
-    // Find codec info
     let codecName = "Unknown";
     if (codecId) {
       const codecReport = statsMap[codecId];
@@ -112,50 +197,23 @@ export const getVideoStats = async (
       }
     }
 
-    // Instantaneous bitrate (kbps) from the delta of cumulative bytesReceived
-    // over the delta of report timestamps. bytesReceived is a running total, so
-    // a single sample can't be a rate — diff it against the previous sample.
-    const sampleTimestamp =
-      typeof inboundRtpStats?.timestamp === "number" &&
-      inboundRtpStats.timestamp > 0
-        ? inboundRtpStats.timestamp
-        : Date.now();
-    let bitrate = 0;
-    if (
-      lastBitrateSample &&
-      sampleTimestamp > lastBitrateSample.timestamp &&
-      bytesReceived >= lastBitrateSample.bytesReceived
-    ) {
-      const deltaBytes = bytesReceived - lastBitrateSample.bytesReceived;
-      const deltaSeconds =
-        (sampleTimestamp - lastBitrateSample.timestamp) / 1000;
-      if (deltaSeconds > 0) {
-        bitrate = (deltaBytes * 8) / deltaSeconds / 1000; // kbps
-      }
-    }
-    lastBitrateSample = { timestamp: sampleTimestamp, bytesReceived };
-
-    // Calculate packet loss percentage
+    const bitrate = estimateBitrateKbps(
+      peerConnection,
+      bytesReceived,
+      inboundRtpStats?.timestamp,
+    );
     const totalPackets = packetsReceived + packetsLost;
     const packetLossPercent =
       totalPackets > 0 ? (packetsLost * 100.0) / totalPackets : 0;
-
-    // Calculate bytes in MB
     const bytesReceivedMB = bytesReceived / (1024.0 * 1024.0);
 
-    // Calculate FPS metrics (simplified - would need to track over time for accurate received/dropped FPS)
-    const receivedFps = framesPerSecond;
-    const droppedFps = framesDropped; // This would need to be calculated as delta
-
-    const statsData: VideoStats = {
-      // VIDEO
+    return {
       resolution: `${frameWidth} x ${frameHeight}`,
       currentFps: framesPerSecond.toFixed(1),
-      receivedFps: receivedFps.toFixed(1),
-      droppedFps: droppedFps.toFixed(1),
+      receivedFps: framesPerSecond.toFixed(1),
+      droppedFps: framesDropped.toFixed(1),
       framesDropped: framesDropped.toString(),
       codec: codecName,
-      // NETWORK
       bitrate: `${Math.round(bitrate)} kbps`,
       totalData: `${bytesReceivedMB.toFixed(2)} MB`,
       packetsRx: packetsReceived.toString(),
@@ -163,8 +221,6 @@ export const getVideoStats = async (
       lossPercent: `${packetLossPercent.toFixed(2)}%`,
       jitter: `${(jitter * 1000).toFixed(2)} ms`,
     };
-
-    return statsData;
   } catch {
     return null;
   }

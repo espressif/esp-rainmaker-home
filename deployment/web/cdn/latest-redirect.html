@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ESP RainMaker — latest</title>
+    <style>
+      body {
+        font-family: system-ui, sans-serif;
+        margin: 2rem;
+        color: #1a1a1a;
+      }
+      .err {
+        color: #b00020;
+      }
+    </style>
+  </head>
+  <body>
+    <p id="status">Loading latest build…</p>
+    <script>
+      (function () {
+        var statusEl = document.getElementById("status");
+
+        function fail(message) {
+          statusEl.className = "err";
+          statusEl.textContent = message;
+        }
+
+        /** Whether the bounce URL asked for the desktop embed shell. */
+        function wantsEmbed() {
+          var path = window.location.pathname.replace(/\/+$/, "");
+          return /\/embed$/i.test(path);
+        }
+
+        /**
+         * Builds the versioned app URL from the latest pointer.
+         * @param {string} prefix - S3/CDN prefix, e.g. web/prod/global/6.1.0
+         * @returns {string}
+         */
+        function targetUrl(prefix) {
+          var cleaned = String(prefix || "").replace(/^\/+/, "").replace(/\/+$/, "");
+          if (!cleaned) {
+            throw new Error("manifest missing prefix");
+          }
+          var base = "/" + cleaned + "/";
+          return wantsEmbed() ? base + "embed" : base;
+        }
+
+        fetch("manifest.json", { cache: "no-store" })
+          .then(function (res) {
+            if (!res.ok) {
+              throw new Error("manifest.json HTTP " + res.status);
+            }
+            return res.json();
+          })
+          .then(function (manifest) {
+            var href = targetUrl(manifest.prefix || "");
+            statusEl.textContent = "Redirecting to " + href + "…";
+            window.location.replace(href);
+          })
+          .catch(function (err) {
+            fail(
+              "Could not resolve latest build. " +
+                (err && err.message ? err.message : String(err))
+            );
+          });
+      })();
+    </script>
+  </body>
+</html>

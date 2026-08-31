@@ -1,0 +1,24 @@
+{
+  "name": "@modules/notification",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Push notification client for ESP RainMaker Home",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./web": "./web/index.ts",
+    "./web/*": "./web/*"
+  },
+  "keywords": [
+    "notification",
+    "fcm",
+    "firebase",
+    "push",
+    "rainmaker"
+  ],
+  "license": "Apache-2.0",
+  "dependencies": {
+    "firebase": "^12.17.1"
+  }
+}

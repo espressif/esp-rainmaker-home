@@ -5,10 +5,10 @@
  */
 
 import React from "react";
-import { View, Text } from "react-native";
+import { View, Text, StyleSheet } from "react-native";
 import { Switch } from "tamagui";
-import { tokens } from "@shared/theme/tokens";
 import { globalStyles } from "@shared/theme/globalStyleSheet";
+import { switchFrameProps } from "@shared/theme/switchFrameProps";
 import { testProps } from "@shared/utils/testProps";
 import { createAutomationStyles as styles } from "../../theme/createAutomationStyles";
 
@@ -42,12 +42,14 @@ export const CreateAutomationRetriggerSection: React.FC<
         </View>
         <Switch
           {...testProps("switch_retrigger")}
+          {...switchFrameProps}
           size="$2.5"
-          borderColor={tokens.colors.bg1}
-          borderWidth={0}
           checked={checked}
           disabled={disabled}
-          style={[globalStyles.switch, disabled && styles.disabledButton]}
+          style={StyleSheet.flatten([
+            globalStyles.switch,
+            disabled && styles.disabledButton,
+          ])}
           onCheckedChange={onCheckedChange}
         >
           <Switch.Thumb

@@ -24,7 +24,26 @@ workflow:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TITLE =~ /^(Draft|WIP):/i'
       when: never
     - if: $CI_MERGE_REQUEST_ID
+    # Main branch — quality-only runs (no MR required).
+    - if: '$CI_COMMIT_BRANCH == "main"'
+    # Release branches — auto-fire OTA publish and enable manual web publish.
     - if: $CI_COMMIT_BRANCH =~ /^release\/.*/
+
+
+# AWS session credentials for web publish / S3 sync (GitLab CI/CD Variables).
+.aws_web_credentials:
+  script:
+    - |
+      set -euo pipefail
+      : "${AWS_ACCESS_KEY_ID:?Set AWS_ACCESS_KEY_ID in CI/CD variables}"
+      : "${AWS_SECRET_ACCESS_KEY:?Set AWS_SECRET_ACCESS_KEY in CI/CD variables}"
+      : "${AWS_REGION:?Set AWS_REGION in CI/CD variables}"
+      export AWS_REGION
+      if [ -n "${AWS_SESSION_TOKEN:-}" ]; then
+        export AWS_SESSION_TOKEN
+      fi
+      command -v aws >/dev/null 2>&1 || { echo "aws CLI not found on runner"; exit 1; }
+      aws sts get-caller-identity
 
 
 # Deployment/SDK select (orthogonal to the region APP_FLAVOR global/cn): ACTIVE_SDK (build) + DEPLOYMENT (test) from the commit message — contains "RMNEO" (any case) -> rmneo, else rm; a preset ACTIVE_SDK/DEPLOYMENT CI/CD variable overrides.
@@ -149,14 +168,19 @@ android_apk:
   stage: build
   tags: [mac-mobile-runner]
   interruptible: true
-  rules:
-    - if: $CI_MERGE_REQUEST_ID
   needs:
     - job: code_quality
+      optional: true
   parallel:
     matrix:
       - APP_FLAVOR: global
       - APP_FLAVOR: cn
+  # MR-only; skip any flavor whose CI/CD secrets are unset (keeps the
+  # pipeline green when only one flavor's secrets are configured).
+  rules:
+    - if: '$CI_MERGE_REQUEST_ID && $APP_FLAVOR == "global" && $FS_ENV_GLOBAL_FILE && $FS_KEYSTORE_GLOBAL_FILE && $FS_GOOGLE_SERVICES_JSON'
+    - if: '$CI_MERGE_REQUEST_ID && $APP_FLAVOR == "cn" && $FS_ENV_CN_FILE && $FS_KEYSTORE_CN_FILE'
+    - when: never
   script:
     - !reference [.select_deployment, script]
     - npm ci
@@ -217,10 +241,12 @@ ios_ipa:
   tags: [mac-mini-runner]
   interruptible: true
   before_script: []
-  rules:
-    - if: $CI_MERGE_REQUEST_ID
   needs:
     - job: code_quality
+      optional: true
+  rules:
+    - if: '$CI_MERGE_REQUEST_ID && $FS_ENV_GLOBAL_FILE && $IOS_P12_PASSWORD && $XCODE_ORG_ID'
+    - when: never
   script:
     - !reference [.select_deployment, script]
     - !reference [.env_tools, script]
@@ -362,10 +388,12 @@ android_test:
   extends: .device_test
   resource_group: android_moto
   rules:
-    - if: $CI_MERGE_REQUEST_ID
+    - if: '$CI_MERGE_REQUEST_ID && $FS_ENV_GLOBAL_FILE && $FS_KEYSTORE_GLOBAL_FILE && $FS_GOOGLE_SERVICES_JSON'
+    - when: never
   needs:
     - job: "android_apk: [global]"
       artifacts: true
+      optional: true
   script:
     - set -euo pipefail
     - !reference [.select_deployment, script]
@@ -384,10 +412,12 @@ ios_test:
   resource_group: iphone_air
   before_script: []
   rules:
-    - if: $CI_MERGE_REQUEST_ID
+    - if: '$CI_MERGE_REQUEST_ID && $FS_ENV_GLOBAL_FILE && $IOS_P12_PASSWORD && $XCODE_ORG_ID'
+    - when: never
   needs:
     - job: ios_ipa
       artifacts: true
+      optional: true
   script:
     - set -euo pipefail
     - !reference [.select_deployment, script]
@@ -501,3 +531,48 @@ ota_publish_global_android:
   extends: .ota_publish_global
   variables:
     OTA_PLATFORM: android
+
+###############################################################
+# WEB — release/* branches (manual): build Expo web export →
+#   s3://$APP_ASSETS_S3_BUCKET/web/<env>/<region>/<version>/
+#   + latest/manifest.json, history.jsonl, version-meta, web/version-manifest.json
+#   + local tracking via deployment/web/cdn.yaml (created from example in the job)
+# CI/CD variables: AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, [AWS_SESSION_TOKEN],
+# AWS_REGION, APP_ASSETS_S3_BUCKET, CLOUDFRONT_DISTRIBUTION_ID, APP_ASSETS_URL, FS_ENV_WEB_FILE
+# Optional: WEB_DEPLOY_ENV (prod), WEB_DEPLOY_REGION (global|cn), WEB_DEPLOY_VERSION
+#
+# Trigger: push to release/* → play web_deploy manually after code_quality
+###############################################################
+
+web_deploy:
+  stage: deploy
+  tags: [mac-mini-runner]
+  interruptible: false
+  rules:
+    - if: '$CI_COMMIT_BRANCH =~ /^release\// && $AWS_ACCESS_KEY_ID && $APP_ASSETS_S3_BUCKET && $CLOUDFRONT_DISTRIBUTION_ID && $FS_ENV_WEB_FILE'
+      when: manual
+    - when: never
+  needs:
+    - job: code_quality
+      optional: true
+  script:
+    - !reference [.aws_web_credentials, script]
+    - |
+      set -euo pipefail
+      : "${APP_ASSETS_S3_BUCKET:?Set APP_ASSETS_S3_BUCKET in CI/CD variables}"
+      : "${CLOUDFRONT_DISTRIBUTION_ID:?Set CLOUDFRONT_DISTRIBUTION_ID in CI/CD variables}"
+      : "${FS_ENV_WEB_FILE:?Set FS_ENV_WEB_FILE (base64 .env.web)}"
+      export APP_ASSETS_S3_BUCKET CLOUDFRONT_DISTRIBUTION_ID FS_ENV_WEB_FILE
+      if [ -n "${APP_ASSETS_URL:-}" ]; then
+        export APP_ASSETS_URL
+      fi
+      if [ -n "${WEB_DEPLOY_ENV:-}" ]; then
+        export WEB_DEPLOY_ENV
+      fi
+      if [ -n "${WEB_DEPLOY_REGION:-}" ]; then
+        export WEB_DEPLOY_REGION
+      fi
+      if [ -n "${WEB_DEPLOY_VERSION:-}" ]; then
+        export WEB_DEPLOY_VERSION
+      fi
+    - ./deployment/web/scripts/deploy-web.sh

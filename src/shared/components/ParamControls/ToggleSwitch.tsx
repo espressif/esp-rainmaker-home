@@ -13,6 +13,8 @@ import { Switch } from "tamagui";
 // Styles
 import { paramControlStyles as styles } from "./lib/styles";
 import { testProps } from "@shared/utils/testProps";
+import { webStopClickPropagationProps } from "@shared/utils/webStopClickPropagation";
+import { switchFrameProps } from "@shared/theme/switchFrameProps";
 
 // Types
 import { ParamControlChildProps } from "./lib/types";
@@ -59,9 +61,13 @@ const ToggleSwitch = observer(
               numberOfLines={1}>{label}</Text>
           </View>
 
-          <View {...testProps(`toggle_${label}_${isChecked ? "on" : "off"}`)}>
+          <View
+            {...testProps(`toggle_${label}_${isChecked ? "on" : "off"}`)}
+            {...webStopClickPropagationProps}
+          >
             <Switch
               {...testProps(`switch_${label}`)}
+              {...switchFrameProps}
               checked={isChecked}
               onCheckedChange={handleValueChange}
               disabled={disabled}

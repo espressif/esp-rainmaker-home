@@ -102,7 +102,7 @@ const HomeScreen = () => {
     !showGroupControlOnHome;
 
   const listHeader = (
-    <>
+    <View style={{ width: "100%" }}>
       <Banner
         activeGroup={selectedHome}
         onDropdownPress={handleDropdownPress}
@@ -133,7 +133,7 @@ const HomeScreen = () => {
           roomGroup={selectedRoomGroup}
         />
       )}
-    </>
+    </View>
   );
 
   const showEmptyCta =

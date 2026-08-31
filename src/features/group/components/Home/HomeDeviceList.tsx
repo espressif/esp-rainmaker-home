@@ -16,10 +16,14 @@ export interface HomeDeviceListProps {
   roomDevices: UseHomeViewModelResult["roomDevices"];
   refreshing: boolean;
   onRefresh: () => void;
-  /** Banner, tabs, filters, group cards — scrolls with the list so pull-to-refresh works above devices. */
+  /**
+   * Banner, tabs, filters, group cards.
+   * Native: scrolls with the list (pull-to-refresh from chrome).
+   * Web (`HomeDeviceList.web`): pinned above; only device cards scroll.
+   */
   listHeader?: React.ReactNode;
   /** Shown when `roomDevices` is empty (e.g. add-first-device CTA). */
-  listEmpty?: React.ReactNode;
+  listEmpty?: React.ReactElement | null;
 }
 
 /**
@@ -40,16 +44,19 @@ export const HomeDeviceList: React.FC<HomeDeviceListProps> = ({
     <FlatList
       {...testProps("list_devices_home")}
       data={roomDevices}
-      keyExtractor={(_, index) => index.toString()}
+      keyExtractor={(item) => {
+        const nodeRef = item.node.deref();
+        return nodeRef ? nodeRef.id + item.name : item.name;
+      }}
       ListHeaderComponent={listHeader ? <>{listHeader}</> : null}
-      ListEmptyComponent={listEmpty ? <>{listEmpty}</> : null}
+      ListHeaderComponentStyle={globalStyles.fullWidth}
+      ListEmptyComponent={listEmpty ?? null}
       renderItem={({ item }) => {
         const nodeRef = item.node.deref();
         return nodeRef ? (
           <DeviceCard
             node={nodeRef}
             device={item}
-            key={nodeRef.id + item.name}
             qaId="device_card_home"
           />
         ) : null;

@@ -16,11 +16,13 @@ import { ESPNotificationAdapter } from "@native-adaptors/implementations/ESPNoti
 import {
   PLATFORM_ANDROID,
   PLATFORM_IOS,
+  PLATFORM_WEB,
 } from "@shared/utils/constants";
 import {
   ESPRMNEO_EXPO_EXTRA_PUSH_KEY,
   ESPRMNEO_EXPO_PUSH_ANDROID_FCM_PROJECT_ID_KEY,
   ESPRMNEO_EXPO_PUSH_IOS_BUNDLE_ID_KEY,
+  ESPRMNEO_EXPO_PUSH_WEB_FIREBASE_PROJECT_ID_KEY,
   ESPRMNEO_INTEGRATION_TYPE_APNS,
   ESPRMNEO_INTEGRATION_TYPE_APNS_SANDBOX,
   ESPRMNEO_INTEGRATION_TYPE_GCM,
@@ -56,10 +58,11 @@ export interface AppPushIdentity {
   platform:
     | typeof PLATFORM_IOS
     | typeof PLATFORM_ANDROID
+    | typeof PLATFORM_WEB
     | typeof ESPRMNEO_PUSH_PLATFORM_OTHER;
   /** iOS: app bundle identifier — matches `apns` / `apns_sandbox` rows. */
   bundleId?: string;
-  /** Android: Firebase project id — matches `gcm` rows. */
+  /** Android / web: Firebase project id — matches `gcm` rows. */
   firebaseProjectId?: string;
   /** iOS: prefer `apns_sandbox` over `apns` (development/debug builds). */
   preferSandbox: boolean;
@@ -67,11 +70,12 @@ export interface AppPushIdentity {
 
 /**
  * Reads push identity overrides from Expo config.
- * @returns Configured Android project and iOS bundle identifiers.
+ * @returns Configured Android / iOS / web push identifiers.
  */
 function readExtraPush(): {
   androidFcmProjectId?: string;
   iosBundleId?: string;
+  webFirebaseProjectId?: string;
 } {
   const extra = (Constants.expoConfig?.extra ?? {}) as Record<string, unknown>;
   const push = (extra[ESPRMNEO_EXPO_EXTRA_PUSH_KEY] ?? {}) as Record<
@@ -89,15 +93,22 @@ function readExtraPush(): {
     typeof iosBundleIdRaw === "string" && iosBundleIdRaw
       ? iosBundleIdRaw
       : undefined;
-  return { androidFcmProjectId, iosBundleId };
+  const webFirebaseProjectIdRaw =
+    push[ESPRMNEO_EXPO_PUSH_WEB_FIREBASE_PROJECT_ID_KEY];
+  const webFirebaseProjectId =
+    typeof webFirebaseProjectIdRaw === "string" && webFirebaseProjectIdRaw
+      ? webFirebaseProjectIdRaw
+      : undefined;
+  return { androidFcmProjectId, iosBundleId, webFirebaseProjectId };
 }
 
 /**
- * Reads the live Firebase project id from the native module (Android). This is
- * the authoritative source — the project that actually mints the FCM token —
- * so it cannot drift from the compiled google-services.json. Returns undefined
- * when unavailable (iOS / CN build / older native binary) so callers fall back.
- * @returns Native Firebase project ID when available.
+ * Reads the live Firebase project id from the notification module (Android
+ * native FirebaseApp, or the web FCM module). This is the authoritative
+ * source — the project that actually mints the FCM token — so it cannot drift
+ * from the compiled google-services.json. Returns undefined when unavailable
+ * so callers fall back.
+ * @returns Firebase project ID when available.
  */
 async function readNativeFirebaseProjectId(): Promise<string | undefined> {
   try {
@@ -110,9 +121,8 @@ async function readNativeFirebaseProjectId(): Promise<string | undefined> {
 
 /**
  * Resolves the running build's push identity.
- * iOS uses the bundle identifier; Android uses the Firebase project id (read
- * live from the native FirebaseApp, falling back to the build-time value in
- * `expoConfig.extra.push.androidFcmProjectId` if the native read is empty).
+ * iOS uses the bundle identifier; Android and web use the Firebase project id
+ * (live from the notification module, falling back to Expo extra).
  * @returns Push identity for the running app build.
  */
 export async function resolveAppPushIdentity(): Promise<AppPushIdentity> {
@@ -131,6 +141,21 @@ export async function resolveAppPushIdentity(): Promise<AppPushIdentity> {
       (await readNativeFirebaseProjectId()) ?? extraPush.androidFcmProjectId;
     return {
       platform: PLATFORM_ANDROID,
+      firebaseProjectId,
+      preferSandbox: false,
+    };
+  }
+
+  if (Platform.OS === PLATFORM_WEB) {
+    // Web FCM tokens are minted by the *web* Firebase project. Falling back
+    // to the Android project id would attach the browser token to the wrong
+    // integration — Android push would look healthy while browser
+    // notifications never arrive. Leave undefined so downstream skips
+    // registration cleanly.
+    const firebaseProjectId =
+      (await readNativeFirebaseProjectId()) ?? extraPush.webFirebaseProjectId;
+    return {
+      platform: PLATFORM_WEB,
       firebaseProjectId,
       preferSandbox: false,
     };
@@ -285,7 +310,10 @@ export function selectPushIntegrationId(
     return (preferred ?? candidates[0]).integration_id;
   }
 
-  if (identity.platform === PLATFORM_ANDROID) {
+  if (
+    identity.platform === PLATFORM_ANDROID ||
+    identity.platform === PLATFORM_WEB
+  ) {
     const gcmRows = integrations.filter(
       (integration) =>
         integration.integration_type === ESPRMNEO_INTEGRATION_TYPE_GCM,

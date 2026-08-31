@@ -489,8 +489,9 @@ export const useCameraWebRTC = (
   }, [toast, t]);
 
   /**
-   * Create track handler
-   * Responsibility: Create handler function for incoming media tracks
+   * Create track handler for remote media.
+   * Sets the remote MediaStream once video arrives; keeps audio tracks on the
+   * same stream so upcoming audio playback does not need a second attach path.
    * @returns Handler function for ontrack event
    */
   const createTrackHandler = useCallback((): ((event: { streams: MediaStream[]; track: any; transceiver: any; receiver: any }) => void) => {
@@ -508,12 +509,10 @@ export const useCameraWebRTC = (
 
       if (event.streams && event.streams.length > 0) {
         const stream = event.streams[0] as MediaStream;
-        const remoteVideoTracks = stream.getVideoTracks();
-        if (remoteVideoTracks.length > 0) {
-          const videoOnlyStream = new MediaStream(remoteVideoTracks);
+        if (stream.getVideoTracks().length > 0) {
           videoStreamSetRef.current = true;
-          videoStreamRef.current = videoOnlyStream;
-          setVideoStream(videoOnlyStream);
+          videoStreamRef.current = stream;
+          setVideoStream(stream);
           setIsStreaming(true);
           setIsLoading(false);
         }

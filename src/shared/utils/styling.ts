@@ -5,6 +5,10 @@
  */
 
 import { Dimensions, PixelRatio } from "react-native";
+import {
+  STYLE_GUIDELINE_BASE_HEIGHT,
+  STYLE_GUIDELINE_BASE_WIDTH,
+} from "@shared/utils/constants";
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
 const [shortDimension, longDimension] =
@@ -12,23 +16,24 @@ const [shortDimension, longDimension] =
     ? [SCREEN_WIDTH, SCREEN_HEIGHT]
     : [SCREEN_HEIGHT, SCREEN_WIDTH];
 
-//Default guideline sizes are based on standard ~5" screen mobile device
-const guidelineBaseWidth = 375;
-const guidelineBaseHeight = 812;
-
 /**
- * Handles scale logic for this module.
+ * Scales a design-px size to the current native screen width.
+ * @param size - Design size based on {@link STYLE_GUIDELINE_BASE_WIDTH}
+ * @returns Pixel-rounded size for the device width
  */
 export const scale = (size: number) =>
   Math.round(
-    PixelRatio.roundToNearestPixel(shortDimension / guidelineBaseWidth) *
-      (size as number)
+    PixelRatio.roundToNearestPixel(shortDimension / STYLE_GUIDELINE_BASE_WIDTH) *
+      size,
   );
+
 /**
- * Handles vertical scale logic for this module.
+ * Scales a design-px size to the current native screen height.
+ * @param size - Design size based on {@link STYLE_GUIDELINE_BASE_HEIGHT}
+ * @returns Pixel-rounded size for the device height
  */
 export const verticalScale = (size: number) =>
   Math.round(
-    PixelRatio.roundToNearestPixel(longDimension / guidelineBaseHeight) *
-      (size as number)
+    PixelRatio.roundToNearestPixel(longDimension / STYLE_GUIDELINE_BASE_HEIGHT) *
+      size,
   );

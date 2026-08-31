@@ -123,6 +123,7 @@ const Banner: React.FC<BannerProps> = ({
         {...testProps("image_home_banner")}
         source={image}
         style={styles.image}
+        resizeMode="contain"
       />
     </View>
   );
@@ -131,8 +132,9 @@ const Banner: React.FC<BannerProps> = ({
 /* ------------------------------ Styles ------------------------------- */
 const styles = StyleSheet.create({
   banner: {
-    paddingVertical: 24,
-    paddingHorizontal: 16,
+    alignSelf: "stretch",
+    paddingVertical: tokens.spacing._20,
+    paddingHorizontal: tokens.spacing._15,
     backgroundColor: tokens.colors.white,
     flexDirection: "row",
     alignItems: "center",
@@ -141,11 +143,12 @@ const styles = StyleSheet.create({
   },
   messageContainer: {
     flex: 1,
+    minWidth: 0,
   },
   smartHomeButton: {
     flexDirection: "row",
     alignItems: "center",
-    marginTop: 4,
+    marginTop: tokens.spacing._5,
     minHeight: 20,
   },
   homeNameSkeleton: {
@@ -155,14 +158,12 @@ const styles = StyleSheet.create({
   smartHomeText: {
     fontWeight: "bold",
     fontSize: tokens.fontSize.md,
-    marginRight: 4,
+    marginRight: tokens.spacing._5,
     fontFamily: tokens.fonts.medium,
     color: tokens.colors.primary,
   },
   image: {
-    width: "100%",
-    objectFit: "contain",
-    maxWidth: 165,
+    width: 165,
     height: 80,
   },
 });

@@ -8,6 +8,7 @@ import { Platform } from 'react-native';
 import Constants from 'expo-constants';
 import { getResolvedActiveSdk, SDK_FEATURE_MAP } from '@config/sdk.config';
 import { getRegionConfig } from '@config/region.config';
+import { PLATFORM_WEB } from '@shared/utils/constants';
 
 /**
  * All controllable feature keys in the application.
@@ -19,7 +20,7 @@ import { getRegionConfig } from '@config/region.config';
  *   scenes, transferGroupSharing, ota, automationRetrigger, accountDeletion
  *
  * Both SDKs supported (env-only control):
- *   automations, aiAgent, thirdPartyAuth, voiceAssistants
+ *   automations, aiAgent, thirdPartyAuth, voiceAssistants, softAPProvisioning
  *
  * SDK-gated (RMNeo / rainmaker-neo-base-sdk only):
  *   controlGroups — device control groups (homogeneous subgroups); not on rainmaker-base-sdk or rainmaker-matter-sdk
@@ -112,12 +113,14 @@ function resolveSoftApProvisioning(
  *   disables what a specific BINARY cannot support (e.g. notifications on the
  *   Android CN build, which ships without FCM).
  *
- * No level can enable what a lower level disabled, with ONE platform exception:
+ * No level can enable what a lower level disabled, with two platform exceptions:
  * notifications are a push-transport capability rather than a region policy, so
  * they stay available on iOS (APNs, every region) regardless of the region /
  * binary ENABLE_NOTIFICATIONS flag — that flag exists to disable the Android CN
- * flavor only. This is a FUNCTION (not a const) so it reads the active SDK,
- * region, and platform at call time.
+ * flavor only. SoftAP requires joining the device Wi-Fi AP, which browsers
+ * cannot do, so it stays off on web even if the env flag is missing. This is a
+ * FUNCTION (not a const) so it reads the active SDK, region, and platform at
+ * call time.
  */
 export function getFeatures(): Record<FeatureKey, boolean> {
   const sdk = getResolvedActiveSdk();
@@ -133,6 +136,21 @@ export function getFeatures(): Record<FeatureKey, boolean> {
     // every region, so on iOS notifications stay available whenever the SDK
     // allows — the region/binary env disable applies to Android only.
     if (key === 'notifications' && Platform.OS === 'ios') return true;
+    // SoftAP needs the phone to join the device AP — browsers cannot, so the
+    // Add Device entry stays hidden on web even if ENABLE_SOFTAP_PROVISIONING
+    // is absent from the env file used for that build.
+    if (key === 'softApProvisioning' && Platform.OS === PLATFORM_WEB) return false;
+    // Matter commissioning uses native stacks; keep Add Device / QR Matter
+    // entry points off on web regardless of ENABLE_MATTER_COMMISSIONING.
+    if (key === 'matterCommissioning' && Platform.OS === PLATFORM_WEB) return false;
+    // On-network provisioning needs LAN discovery + local-control transports
+    // the web adaptors don't implement — hide the Add Device row so users
+    // don't hit a dead-end flow, regardless of ENABLE_ON_NETWORK_PROVISIONING.
+    if (key === 'onNetworkProvisioning' && Platform.OS === PLATFORM_WEB) return false;
+    // Local control (LAN direct-to-device) also relies on native mDNS +
+    // protocomm transports the web adaptors don't implement; keep it off
+    // regardless of ENABLE_LOCAL_CONTROL so the client always goes cloud.
+    if (key === 'localControl' && Platform.OS === PLATFORM_WEB) return false;
     // Level 2: region availability (data-driven, from .env.global.example / .env.cn.example)
     if (regionFeatures[ENV_KEY_MAP[key]] === false) return false;
     // Level 1: binary .env switch — can only disable

@@ -5,12 +5,11 @@
  */
 
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
-import { ScrollView, unstable_batchedUpdates } from "react-native";
+import { ScrollView, unstable_batchedUpdates as rnBatchedUpdates } from "react-native";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { usePreventRemove } from "@react-navigation/native";
 import { useTranslation } from "react-i18next";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-
 import { useCDF } from "@shared/hooks/useCDF";
 import { startNodeLocalDiscovery } from "@features/group/utils/localDiscovery";
 import { startMatterLocalDiscovery } from "@features/matter/utils/matterLocalDiscovery";
@@ -52,6 +51,20 @@ import {
 } from "@shared/utils/provisionNode";
 import { persistWifiCredential } from "./useWifiStorage";
 import { isRmneoStackSdkId } from "@config/sdk.identifiers";
+
+/**
+ * Batches related state updates. react-native-web does not export
+ * `unstable_batchedUpdates`; React 18 already batches in event/async paths, so
+ * a direct call is a safe web fallback.
+ * @param fn - Updates to run together
+ */
+function batchedUpdates(fn: () => void): void {
+  if (typeof rnBatchedUpdates === "function") {
+    rnBatchedUpdates(fn);
+    return;
+  }
+  fn();
+}
 
 interface UseProvisionReturn {
   stages: ProvisionStage[];
@@ -401,7 +414,7 @@ export const useProvision = (): UseProvisionReturn => {
         : undefined;
 
     const finishSuccess = () => {
-      unstable_batchedUpdates(() => {
+      batchedUpdates(() => {
         markFinalProvisionStageComplete(timezoneSoftWarning);
         setIsComplete(true);
       });
@@ -747,7 +760,7 @@ export const useProvision = (): UseProvisionReturn => {
           ? getChallengeResponseStages(t)
           : getProvisionStages(t);
 
-      unstable_batchedUpdates(() => {
+      batchedUpdates(() => {
         setStages(freshStages);
         setIsComplete(false);
       });

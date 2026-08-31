@@ -54,6 +54,119 @@ export const FULFILLED_STATUS = "fulfilled";
 // PLATFORMS
 export const PLATFORM_IOS = "ios";
 export const PLATFORM_ANDROID = "android";
+export const PLATFORM_WEB = "web";
+
+/** Prefix for native-only capability errors thrown from `.web` adaptors */
+export const WEB_PLATFORM_UNSUPPORTED_PREFIX =
+  "This feature is not supported on web";
+
+// WEB BLE LOGGING / PICKER
+/** Console log prefix for Web Bluetooth provisioning diagnostics */
+export const WEB_BLE_LOG_PREFIX = "[WebBLE]";
+/** Web Bluetooth picker rejection name when the user dismisses the chooser */
+export const WEB_BLE_PICKER_NOT_FOUND_ERROR = "NotFoundError";
+/** Substring matched in cancelled Web Bluetooth picker error messages */
+export const WEB_BLE_PICKER_CANCEL_SUBSTRING = "cancel";
+/** DOMException name when clipboard / Permissions Policy blocks an API */
+export const DOM_EXCEPTION_NOT_ALLOWED = "NotAllowedError";
+
+// STYLE SCALE (shared design baseline for scale / verticalScale)
+/** Horizontal guideline width used by `scale()` (~5" phone) */
+export const STYLE_GUIDELINE_BASE_WIDTH = 375;
+/** Vertical guideline height used by `verticalScale()` (~5" phone) */
+export const STYLE_GUIDELINE_BASE_HEIGHT = 812;
+
+// WEB EMBED (desktop iPhone frame around the mobile web app)
+/** Expo Router path for the desktop phone-frame shell */
+export const WEB_EMBED_ROUTE = "/embed";
+/** Pathname segment for the embed route */
+export const WEB_EMBED_SEGMENT = "embed";
+/**
+ * Embed phone frame is shown only when the host viewport is wider than this
+ * (CSS px). At or below, the app stays a normal single mobile web layout.
+ */
+export const WEB_EMBED_MIN_VIEWPORT_WIDTH = 480;
+/**
+ * Iframe Permissions Policy allow list for the embedded app.
+ * Parent sites that iframe `/embed` (or `/`) should mirror these tokens.
+ * `clipboard-read` / `clipboard-write` are required for paste (QR / JSON) and copy inside the phone frame.
+ */
+export const WEB_EMBED_IFRAME_ALLOW =
+  "bluetooth; camera; microphone; geolocation; fullscreen; clipboard-read *; clipboard-write *";
+/** postMessage type when the embed host forwards a dropped file into the iframe. */
+export const WEB_EMBED_MESSAGE_FILE_DROP = "esp.embed.fileDrop";
+/** DOM drag/drop event names (must preventDefault or the browser opens the file). */
+export const DOM_EVENT_DRAG_OVER = "dragover";
+export const DOM_EVENT_DROP = "drop";
+export const DOM_EVENT_DRAG_ENTER = "dragenter";
+export const DOM_EVENT_DRAG_LEAVE = "dragleave";
+/** DataTransfer dropEffect that marks the drag as a copy, not a navigation. */
+export const DATA_TRANSFER_DROP_EFFECT_COPY = "copy";
+/**
+ * Capture + non-passive so `preventDefault` actually blocks browser file navigation.
+ */
+export const DOM_DRAG_DROP_LISTENER_OPTIONS = {
+  capture: true,
+  passive: false,
+} as const;
+/**
+ * Fallback iframe app root when the host is at domain root (`/embed`).
+ * Versioned CDN hosts derive the path from the parent URL instead.
+ */
+export const WEB_EMBED_APP_SRC_PATH = "/";
+/** Design reference width for the phone glass / iframe viewport */
+export const WEB_EMBED_PHONE_WIDTH = 390;
+/** Design reference height for the phone glass / iframe viewport */
+export const WEB_EMBED_PHONE_HEIGHT = 844;
+/** Glass aspect ratio (width / height) */
+export const WEB_EMBED_PHONE_ASPECT =
+  WEB_EMBED_PHONE_WIDTH / WEB_EMBED_PHONE_HEIGHT;
+/**
+ * Max on-screen frame height as a fraction of viewport height.
+ * The iframe stays at 390×844; the chassis is CSS-scaled to fit.
+ */
+export const WEB_EMBED_FRAME_VH_RATIO = 0.8;
+/** Cap on on-screen chassis height after scale (CSS px) */
+export const WEB_EMBED_FRAME_MAX_HEIGHT = 700;
+/** Max on-screen frame width as a fraction of viewport width */
+export const WEB_EMBED_FRAME_VW_RATIO = 1;
+/** Outer bezel padding around the screen glass (fixed design px) */
+export const WEB_EMBED_PHONE_BEZEL = 12;
+/**
+ * Outer chassis corner radius (fixed design px).
+ * Tuned toward modern iPhone continuous corners at the 390×844 glass size.
+ */
+export const WEB_EMBED_PHONE_RADIUS = 56;
+/** Dynamic Island / notch pill width (fixed design px) */
+export const WEB_EMBED_PHONE_ISLAND_WIDTH = 120;
+/** Dynamic Island / notch pill height (fixed design px) */
+export const WEB_EMBED_PHONE_ISLAND_HEIGHT = 34;
+/**
+ * Top safe inset under the Dynamic Island (fixed design px).
+ */
+export const WEB_EMBED_PHONE_SAFE_INSET_TOP = 54;
+/**
+ * Bottom safe inset for the home-indicator area (fixed design px).
+ * Kept at 0 so the app glass sits flush with the chassis bottom.
+ */
+export const WEB_EMBED_PHONE_SAFE_INSET_BOTTOM = 0;
+/** Battery Status API event when charge level changes */
+export const WEB_EMBED_BATTERY_EVENT_LEVEL = "levelchange";
+/** Battery Status API event when charging state changes */
+export const WEB_EMBED_BATTERY_EVENT_CHARGING = "chargingchange";
+/** Poll interval when Battery Status API events are sparse or delayed */
+export const WEB_EMBED_BATTERY_POLL_INTERVAL_MS = 30_000;
+/** Status-bar clock tick once aligned to the next minute boundary */
+export const WEB_EMBED_STATUS_CLOCK_INTERVAL_MS = 60_000;
+/** Document event used to refresh clock/battery after a backgrounded tab */
+export const WEB_EMBED_DOCUMENT_VISIBILITY_EVENT = "visibilitychange";
+/** Window event used to refresh clock/battery when the tab regains focus */
+export const WEB_EMBED_WINDOW_FOCUS_EVENT = "focus";
+/** `document.visibilityState` when the embed tab is foregrounded */
+export const WEB_EMBED_DOCUMENT_VISIBILITY_VISIBLE = "visible";
+/** Horizontal padding for the iPhone status-bar row in the top inset */
+export const WEB_EMBED_STATUS_BAR_PADDING_X = 18;
+
 export const DEFAULT_HOME_GROUP_NAME = "Home";
 export const HOME_NAME_MAX_LENGTH = 32;
 
@@ -572,12 +685,14 @@ export const PARAM_VALUE_UNKNOWN = "unknown";
 // Matter QR Code constants
 export const MATTER_QR_CODE_PREFIX = "MT:";
 export const RM_QR_CODE_PREFIX = "NP:";
+/** Provisioning transport id for BLE (QR `b` code and native scan flows). */
+export const PROVISION_TRANSPORT_BLE = "ble";
 /** Provisioning transport id for SoftAP (QR `s` code and native scan flows). */
 export const PROVISION_TRANSPORT_SOFTAP = "softap";
 
 export const RM_QR_TRANSPORT_MAP = {
-  'b': 'ble',
-  's': PROVISION_TRANSPORT_SOFTAP,
+  b: PROVISION_TRANSPORT_BLE,
+  s: PROVISION_TRANSPORT_SOFTAP,
 } as const;
 
 // Matter Commissioning Event constants
@@ -860,6 +975,29 @@ export const IMAGE_MIME_TYPE_JPEG = "image/jpeg";
 export const IMAGE_MIME_TYPE_PNG = "image/png";
 export const IMAGE_MIME_TYPE_WEBP = "image/webp";
 export const IMAGE_MIME_TYPE_GIF = "image/gif";
+/** Prefix for all raster/image MIME types (clipboard and file input). */
+export const IMAGE_MIME_TYPE_PREFIX = "image/";
+/** JSON document MIME type. */
+export const JSON_MIME_TYPE = "application/json";
+/** Plain-text clipboard MIME type. */
+export const TEXT_MIME_TYPE_PLAIN = "text/plain";
+
+// QR IMAGE DECODE (web Barcode Detector / jsQR)
+/** Barcode Detector API format for QR payloads. */
+export const QR_IMAGE_BARCODE_FORMAT = "qr_code";
+/** Canvas 2D context id used when decoding a QR image. */
+export const QR_IMAGE_CANVAS_CONTEXT_2D = "2d";
+/** Longest image edge (px) before downscaling for QR decode. */
+export const QR_IMAGE_DECODE_MAX_EDGE = 1600;
+/** Source-error code when no QR is found in an image. */
+export const QR_IMAGE_SOURCE_ERROR_NO_QR = "NO_QR";
+
+/** WebRTC getStats() report `type` values used by camera stats parsing. */
+export const WEBRTC_STATS_REPORT_TYPE = {
+  INBOUND_RTP: "inbound-rtp",
+  TRACK: "track",
+  CODEC: "codec",
+} as const;
 
 // GALLERY / FILE LIST (CDF getFiles + media classification)
 /** RainMaker file list entity type for node-scoped files. */

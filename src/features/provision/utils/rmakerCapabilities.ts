@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { deviceRequiresProofOfPossession } from "@integrations/bleProvCapabilities";
+
 /**
  * Parsed RainMaker capabilities from device version info
  */
@@ -22,13 +24,11 @@ export interface RMakerCapabilities {
   rawCapabilities: string[];
 }
 
-// Capability string constants
 const RMAKER_CAP = {
   CLAIM: "claim",
   CAMERA_CLAIM: "camera_claim",
   WIFI_SCAN: "wifi_scan",
   WIFI_PROV: "wifi_prov",
-  NO_POP: "no_pop",
 } as const;
 
 /**
@@ -80,10 +80,17 @@ export function parseRMakerCapabilities(
       result.hasWifiProv = caps.includes(RMAKER_CAP.WIFI_PROV);
     }
 
-    // Check prov capabilities for no_pop
-    if (provCapabilities && Array.isArray(provCapabilities)) {
-      result.requiresPop = !provCapabilities.includes(RMAKER_CAP.NO_POP);
-    }
+    // Check prov capabilities for no_pop and Security0 (shared parity with native)
+    const versionRecord =
+      versionInfo && typeof versionInfo === "object" && !Array.isArray(versionInfo)
+        ? versionInfo
+        : Array.isArray(versionInfo)
+          ? versionInfo.find((item) => item && typeof item === "object")
+          : null;
+    result.requiresPop = deviceRequiresProofOfPossession(
+      versionRecord as { prov?: { sec_ver?: number } } | null,
+      provCapabilities ?? [],
+    );
   } catch (error) {
     console.error("Error parsing RMaker capabilities:", error);
   }

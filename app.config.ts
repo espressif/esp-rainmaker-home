@@ -151,9 +151,28 @@ function buildRegionConfig(env: Record<string, string>) {
   };
 }
 
+const globalRegionEnv = loadRegionEnv(REGION_ENV_FILES.global);
+const cnRegionEnv = loadRegionEnv(REGION_ENV_FILES.cn);
+
 const regionConfigs = {
-  global: buildRegionConfig(loadRegionEnv(REGION_ENV_FILES.global)),
-  cn: buildRegionConfig(loadRegionEnv(REGION_ENV_FILES.cn)),
+  global: buildRegionConfig(globalRegionEnv),
+  cn: buildRegionConfig(cnRegionEnv),
+};
+
+const webEnv = fs.existsSync(path.join(__dirname, ".env.web"))
+  ? parseEnvFile(".env.web")
+  : {};
+
+/** Public FCM web config from `.env.web` (passed to `@modules/notification/web`). */
+const firebaseWeb = {
+  apiKey: webEnv.FIREBASE_WEB_API_KEY || process.env.FIREBASE_WEB_API_KEY || "",
+  projectId: webEnv.FIREBASE_WEB_PROJECT_ID || process.env.FIREBASE_WEB_PROJECT_ID || "",
+  messagingSenderId:
+    webEnv.FIREBASE_WEB_MESSAGING_SENDER_ID ||
+    process.env.FIREBASE_WEB_MESSAGING_SENDER_ID ||
+    "",
+  appId: webEnv.FIREBASE_WEB_APP_ID || process.env.FIREBASE_WEB_APP_ID || "",
+  vapidKey: webEnv.FIREBASE_WEB_VAPID_KEY || process.env.FIREBASE_WEB_VAPID_KEY || "",
 };
 
 /**
@@ -266,7 +285,7 @@ export default {
     },
     web: {
       bundler: "metro",
-      output: "static",
+      output: "single",
       favicon: "./src/assets/images/logo.png"
     },
     runtimeVersion: { policy: "fingerprint" },
@@ -320,7 +339,12 @@ export default {
       ],
     ],
     experiments: {
-      typedRoutes: true
+      typedRoutes: true,
+      // Versioned CDN path for `deploy:web` (e.g. /web/prod/global/6.1.0).
+      // Empty for local `build:web` / `expo start --web` (served from domain root).
+      ...(process.env.WEB_BASE_URL
+        ? { baseUrl: process.env.WEB_BASE_URL.replace(/\/$/, "") }
+        : {}),
     },
     extra: {
       router: {
@@ -351,11 +375,14 @@ export default {
       },
 
       // RMNeo /v1/integrations selection: iOS matches by bundle id, Android
-      // by Firebase project id.
+      // by Firebase project id. Web uses extra.firebaseWeb.projectId.
       push: {
         iosBundleId: process.env.IOS_APP_APPLICATION_ID || "com.espressif.novahome",
         androidFcmProjectId: readAndroidFcmProjectId(),
+        webFirebaseProjectId: firebaseWeb.projectId || undefined,
       },
+
+      firebaseWeb,
 
       // BINARY-level feature overrides (disable-only). Region availability
       // lives in regionConfigs.<region>.features; this layer disables what a

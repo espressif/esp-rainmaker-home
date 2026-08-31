@@ -1,0 +1,32 @@
+# Local web-deploy tracking (copy to deployment/web/cdn.yaml — gitignored;
+# the deploy scripts create it from this file automatically).
+# Updated by deployment/web/scripts after a successful publish. This file is
+# never uploaded, so it may carry author / deployer names; the pointer files
+# published to S3 carry commit identifiers only.
+#
+# S3 layout written by the web deploy:
+#   web/prod/{global|cn}/<semver>/…
+#   web/prod/{global|cn}/latest/manifest.json
+# OTA publishes live under ota/… and are tracked by deployment/ota (not here).
+
+schema_version: 1
+
+# Optional local defaults (CI still prefers env: APP_ASSETS_S3_BUCKET, APP_ASSETS_URL)
+bucket: ""
+cdn_url: ""
+
+web:
+  # Deploy target for the next `npm run deploy:web`
+  environment: prod # prod (staging reserved)
+  region: global # global | cn
+  # Last successful web publish (script-maintained)
+  latest:
+    version: ""
+    s3_prefix: ""
+    published_at: ""
+    git_sha: ""
+    git_branch: ""
+    git_author: ""
+    deployed_by: ""
+    dist_sha: ""
+    site_url: ""

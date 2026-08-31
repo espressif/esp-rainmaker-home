@@ -19,6 +19,7 @@ import { Trash2 } from "lucide-react-native";
 // Styles
 import { tokens } from "@shared/theme/tokens";
 import { globalStyles } from "@shared/theme/globalStyleSheet";
+import { switchFrameProps } from "@shared/theme/switchFrameProps";
 
 // Types
 import { AutomationCardProps } from "@src/types/global";
@@ -28,6 +29,7 @@ import { observer } from "mobx-react-lite";
 
 // Utils
 import { testProps, stateTestProps } from "@shared/utils/testProps";
+import { webStopClickPropagationProps } from "@shared/utils/webStopClickPropagation";
 import AutomationWhenSetSummary from "./AutomationWhenSetSummary";
 
 /**
@@ -76,31 +78,32 @@ const AutomationCard: React.FC<AutomationCardProps & { qaId?: string }> = ({
           {automationName}
         </Text>
         {!isEditing ? (
-          <Switch
-            {...testProps("switch_automation_enabled")}
-            size="$2.5"
-            borderColor={tokens.colors.bg1}
-            borderWidth={0}
-            checked={isEnabled}
-            disabled={toggleLoading}
-            style={globalStyles.switch}
-            onCheckedChange={(value) => handleToggle(value)}
-          >
-            <Switch.Thumb
-              {...stateTestProps(
-                "automation_card",
-                isEnabled,
-                "enabled",
-                "disabled",
-              )}
-              animation="quicker"
-              style={
-                isEnabled
-                  ? globalStyles.switchThumbActive
-                  : globalStyles.switchThumb
-              }
-            />
-          </Switch>
+          <View {...webStopClickPropagationProps}>
+            <Switch
+              {...testProps("switch_automation_enabled")}
+              {...switchFrameProps}
+              size="$2.5"
+              checked={isEnabled}
+              disabled={toggleLoading}
+              style={globalStyles.switch}
+              onCheckedChange={(value) => handleToggle(value)}
+            >
+              <Switch.Thumb
+                {...stateTestProps(
+                  "automation_card",
+                  isEnabled,
+                  "enabled",
+                  "disabled",
+                )}
+                animation="quicker"
+                style={
+                  isEnabled
+                    ? globalStyles.switchThumbActive
+                    : globalStyles.switchThumb
+                }
+              />
+            </Switch>
+          </View>
         ) : (
           <TouchableOpacity
             {...testProps("button_delete_automation")}
