@@ -8,12 +8,15 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "${ROOT}"
 
 # variable_name|relative_path|used_by
+# The FS_ prefix on the older entries is an unlabelled project convention
+# (~"file secret"); newer entries use a plain descriptive name.
 SECRETS=(
   "FS_ENV_GLOBAL_FILE|.env.global|global build"
   "FS_ENV_CN_FILE|.env.cn|cn build"
   "FS_KEYSTORE_GLOBAL_FILE|android/app/release.global.keystore|global build"
   "FS_KEYSTORE_CN_FILE|android/app/release.cn.keystore|cn build"
   "FS_GOOGLE_SERVICES_JSON|android/app/google-services.json|global only"
+  "OTA_SIGNING_KEY_PEM|deployment/ota/certs/private-key.pem|ota publish (both platforms)"
 )
 
 print_table_header() {

@@ -37,6 +37,15 @@
       AVAudioSessionCategoryOptionDefaultToSpeaker | AVAudioSessionCategoryOptionAllowBluetooth;
   [RTCAudioSessionConfiguration setWebRTCConfiguration:audioConfiguration];
 
+  // expo-updates bootstrap. We inherit from RCTAppDelegate rather than
+  // ExpoAppDelegate, so the Expo subscriber system that normally initializes
+  // the update controller never fires — we do it manually here. The wait
+  // gives the async launcher time to select the pending OTA before RN calls
+  // sourceURLForBridge; without it, bundleURL reads a nil launchAssetUrl
+  // and always falls back to the embedded bundle on the next cold launch.
+  [ESPUpdatesBootstrap initializeWithoutStarting];
+  [ESPUpdatesBootstrap startAndWait:3.0];
+
   self.moduleName = @"main";
 
   // You can add your custom initial props in the dictionary below.
@@ -133,6 +142,15 @@
 
 - (NSURL *)bundleURL
 {
+  // Prefer the OTA-cached bundle when expo-updates has one materialized on
+  // disk. The file-exists check guards against a race where the controller
+  // holds a cache row for a file the OS reaped. Falls back to Metro in
+  // Debug and the embedded bundle in Release.
+  NSURL *otaBundleURL = [ESPUpdatesBootstrap launchAssetUrl];
+  if (otaBundleURL != nil && otaBundleURL.isFileURL &&
+      [[NSFileManager defaultManager] fileExistsAtPath:otaBundleURL.path]) {
+    return otaBundleURL;
+  }
 #if DEBUG
   return [[RCTBundleURLProvider sharedSettings] jsBundleURLForBundleRoot:@".expo/.virtual-metro-entry"];
 #else

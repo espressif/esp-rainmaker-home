@@ -6,6 +6,9 @@
   "workspaces": [
     "modules/*"
   ],
+  "engines": {
+    "node": "22.22.3"
+  },
   "scripts": {
     "start": "expo start",
     "start:dev": "APP_ENV=development expo start -c",
@@ -79,6 +82,7 @@
     "expo-status-bar": "~55.0.5",
     "expo-symbols": "~55.0.7",
     "expo-system-ui": "~55.0.16",
+    "expo-updates": "~55.0.27",
     "expo-web-browser": "~55.0.14",
     "google-protobuf": "^3.21.2",
     "i18next": "^25.1.2",

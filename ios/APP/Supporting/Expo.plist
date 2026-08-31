@@ -5,8 +5,46 @@
     <key>EXUpdatesCheckOnLaunch</key>
     <string>ALWAYS</string>
     <key>EXUpdatesEnabled</key>
-    <false/>
+    <true/>
     <key>EXUpdatesLaunchWaitMs</key>
     <integer>0</integer>
+    <key>EXUpdatesURL</key>
+    <string>https://app.rainmaker.espressif.com/ota/prod/global/ios/manifest.json</string>
+    <key>EXUpdatesRuntimeVersion</key>
+    <string>f67b216ff63d1a3490dfa2715172665fb8a1db0a</string>
+    <!--
+      Signing verification. Cert PEM is baked from deployment/ota/certs/certificate.pem
+      via deployment/ota/scripts/sync-signing-cert.js. CI runs the same script in check
+      mode to block commits that let the two drift. See deployment/ota/README.md for the
+      full rotation procedure.
+    -->
+    <key>EXUpdatesCodeSigningCertificate</key>
+    <string>-----BEGIN CERTIFICATE-----
+MIIDOTCCAiGgAwIBAgIUZ17f+V98brWKZ4j208uGHuJTjTMwDQYJKoZIhvcNAQEL
+BQAwGzEZMBcGA1UEAwwQZXNwLW5vdmEtb3RhLXBvYzAeFw0yNjA4MjUwNTU4MTda
+Fw0yNzA4MjUwNTU4MTdaMBsxGTAXBgNVBAMMEGVzcC1ub3ZhLW90YS1wb2MwggEi
+MA0GCSqGSIb3DQEBAQUAA4IBDwAwggEKAoIBAQCiHA8jToojHeb9O/61Mw3G/Rss
+7v+BvQmwIQAUafWGOsi+qysRmRY0qh+/GmjuxwK8uMLGe/3LdtM36Q7bpVQvKBnq
+i/Yr9maLyYG5By0tRLvX0WtcqZnOmj75/nzD2Ue2wgczxZ4GQIIsZHZ+hf9bt/a8
+DhzsLA0GPU40dssydfDTYIeG3Dxp9smQgH9h7bIs8O66iELLECnsOQ/kgJIRux1O
+q9N5hS6ZnSAi11YEjvkvqnnB8d/y9I0sw2WfXLIH/R4bqcOXnFEsKC0M/V2QwWwd
+/nOz61TMOxhiQF4Yc5kVP7NsfhUUVKWwMLIrBcTWGHDsmCqHsLXN1fidTtqjAgMB
+AAGjdTBzMB0GA1UdDgQWBBSreXRC9iYrRgKMAqqG9RhFVftoojAfBgNVHSMEGDAW
+gBSreXRC9iYrRgKMAqqG9RhFVftoojAPBgNVHRMBAf8EBTADAQH/MAsGA1UdDwQE
+AwIHgDATBgNVHSUEDDAKBggrBgEFBQcDAzANBgkqhkiG9w0BAQsFAAOCAQEAfbtn
+qufgoBDsdFa3hNGcvSlUdO9TFnSoCfLhNZKNqKzusVH1+nnRD5w/gD7ei8eLS+O0
+0FpiPqY3GGz3vMZuYNjJN3KxwhI0KOGbMO+ByBPTVkpJeHFAwuz3/gVY7Vs6Qq3x
+nNK9l3s3gOztH9IHo0EF2xaymEsqxLJjw9ZJ1ASOTW4/oDeZj3nosUKgtUKq2LkF
+1ZsPbD4jB+d8QieAChDfowZIGthNTzvNFnrOspKZ5Dks8UkRPG7PnoQyyGdn7MY7
+EQcj+QD5FEiuXXtTuiz6wvpMoFnAP/rLDCpizFc5I2hqG1ttDOMMIo8guBOit9QW
+hlb87CZgZMe6Eahazg==
+-----END CERTIFICATE-----</string>
+    <key>EXUpdatesCodeSigningMetadata</key>
+    <dict>
+      <key>alg</key>
+      <string>rsa-v1_5-sha256</string>
+      <key>keyid</key>
+      <string>main</string>
+    </dict>
   </dict>
 </plist>

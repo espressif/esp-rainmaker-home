@@ -1,1 +1,39 @@
 npm run check
+
+# OTA drift gate: if any staged file shifts the fingerprint, ensure the
+# committed native files match before letting the commit through. The
+# fingerprint sourcer hashes native dirs, app.config.ts, fingerprint.config.js,
+# and package(-lock).json (via node_modules autolinking). Skip the ~30-60s
+# check entirely for JS-only commits.
+STAGED_FINGERPRINT_INPUTS=$(git diff --cached --name-only --diff-filter=ACMR | grep -E '^(ios/|android/|fingerprint\.config\.js$|app\.config\.ts$|package(-lock)?\.json$|deployment/ota/certs/certificate\.pem$)' || true)
+
+if [ -n "$STAGED_FINGERPRINT_INPUTS" ]; then
+  echo ""
+  echo "→ Fingerprint-affecting files staged; checking OTA drift…"
+  if ! node deployment/ota/scripts/sync-runtime-version.js --check; then
+    echo ""
+    echo "→ Diagnosing drift cause…"
+    # `npm i` reconciles the lockfile with package.json and may produce
+    # byte-different node_modules from what CI's `npm ci` installs. The
+    # fingerprint hashes some of those files, so an `npm i`-generated
+    # node_modules drifts locally-vs-CI even with identical committed
+    # sources. `npm ci --dry-run` reports non-zero changes when node_modules
+    # is out of sync with package-lock.json, which is our tell.
+    NPM_CI_OUT=$(npm ci --dry-run --ignore-scripts 2>&1 || true)
+    if echo "$NPM_CI_OUT" | grep -qE '(added|removed|changed) [1-9][0-9]* package'; then
+      echo ""
+      echo "  ⚠ node_modules doesn't match package-lock.json (probably from 'npm i')."
+      echo "    CI uses 'npm ci', which produces byte-different node_modules than 'npm i'."
+      echo "    Committing the drifted fingerprint here would break CI publish AND"
+      echo "    stop any already-installed binary from receiving OTAs at this hash."
+      echo ""
+      echo "    Fix: rm -rf node_modules && npm ci"
+    else
+      echo ""
+      echo "  ⚠ node_modules matches the lockfile — this looks like a real fingerprint change."
+      echo "    Fix: node deployment/ota/scripts/sync-runtime-version.js && git add ios/APP/Supporting/Expo.plist android/app/src/main/AndroidManifest.xml"
+    fi
+    exit 1
+  fi
+  node deployment/ota/scripts/sync-signing-cert.js --check || exit 1
+fi

@@ -1632,14 +1632,20 @@ def driver(request, appium_grid, app_installer):
                 pass  # Ignore cleanup errors
 
 def _expected_app_version_display() -> str:
-    """Expected app version string as shown in UI (e.g. 'Version 3.5.0 (a1b2c3d)')."""
-    from utils.common_utils import read_app_version, read_commit_id
+    """Expected app version string as shown in UI (e.g. 'Version 3.5.0 (57) (a1b2c3d)')."""
+    from utils.common_utils import read_app_version, read_commit_id, read_version_code
 
     version = read_app_version()
     if not version:
         return "Version N/A"
+    version_code = read_version_code()
     commit = read_commit_id()
-    return f"Version {version} ({commit})" if commit else f"Version {version}"
+    parts = [f"Version {version}"]
+    if version_code:
+        parts.append(f"({version_code})")
+    if commit:
+        parts.append(f"({commit})")
+    return " ".join(parts)
 
 
 @pytest.fixture(scope="session")

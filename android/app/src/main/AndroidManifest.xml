@@ -51,13 +51,31 @@
         android:theme="@style/AppTheme">
         <meta-data
             android:name="expo.modules.updates.ENABLED"
-            android:value="false" />
+            android:value="true" />
         <meta-data
             android:name="expo.modules.updates.EXPO_UPDATES_CHECK_ON_LAUNCH"
             android:value="ALWAYS" />
         <meta-data
             android:name="expo.modules.updates.EXPO_UPDATES_LAUNCH_WAIT_MS"
             android:value="0" />
+        <meta-data
+            android:name="expo.modules.updates.EXPO_UPDATE_URL"
+            android:value="https://app.rainmaker.espressif.com/ota/prod/global/android/manifest.json" />
+        <meta-data
+            android:name="expo.modules.updates.EXPO_RUNTIME_VERSION"
+            android:value="9bec346b0207480cb133c3ba084a544ad8ae0a8a" />
+        <!--
+            Signing verification. Cert PEM is baked from deployment/ota/certs/certificate.pem
+            via deployment/ota/scripts/sync-signing-cert.js. CI runs the same script in check
+            mode to block commits that let the two drift. See deployment/ota/README.md for the
+            full rotation procedure.
+        -->
+        <meta-data
+            android:name="expo.modules.updates.CODE_SIGNING_CERTIFICATE"
+            android:value="-----BEGIN CERTIFICATE-----&#10;MIIDOTCCAiGgAwIBAgIUZ17f+V98brWKZ4j208uGHuJTjTMwDQYJKoZIhvcNAQEL&#10;BQAwGzEZMBcGA1UEAwwQZXNwLW5vdmEtb3RhLXBvYzAeFw0yNjA4MjUwNTU4MTda&#10;Fw0yNzA4MjUwNTU4MTdaMBsxGTAXBgNVBAMMEGVzcC1ub3ZhLW90YS1wb2MwggEi&#10;MA0GCSqGSIb3DQEBAQUAA4IBDwAwggEKAoIBAQCiHA8jToojHeb9O/61Mw3G/Rss&#10;7v+BvQmwIQAUafWGOsi+qysRmRY0qh+/GmjuxwK8uMLGe/3LdtM36Q7bpVQvKBnq&#10;i/Yr9maLyYG5By0tRLvX0WtcqZnOmj75/nzD2Ue2wgczxZ4GQIIsZHZ+hf9bt/a8&#10;DhzsLA0GPU40dssydfDTYIeG3Dxp9smQgH9h7bIs8O66iELLECnsOQ/kgJIRux1O&#10;q9N5hS6ZnSAi11YEjvkvqnnB8d/y9I0sw2WfXLIH/R4bqcOXnFEsKC0M/V2QwWwd&#10;/nOz61TMOxhiQF4Yc5kVP7NsfhUUVKWwMLIrBcTWGHDsmCqHsLXN1fidTtqjAgMB&#10;AAGjdTBzMB0GA1UdDgQWBBSreXRC9iYrRgKMAqqG9RhFVftoojAfBgNVHSMEGDAW&#10;gBSreXRC9iYrRgKMAqqG9RhFVftoojAPBgNVHRMBAf8EBTADAQH/MAsGA1UdDwQE&#10;AwIHgDATBgNVHSUEDDAKBggrBgEFBQcDAzANBgkqhkiG9w0BAQsFAAOCAQEAfbtn&#10;qufgoBDsdFa3hNGcvSlUdO9TFnSoCfLhNZKNqKzusVH1+nnRD5w/gD7ei8eLS+O0&#10;0FpiPqY3GGz3vMZuYNjJN3KxwhI0KOGbMO+ByBPTVkpJeHFAwuz3/gVY7Vs6Qq3x&#10;nNK9l3s3gOztH9IHo0EF2xaymEsqxLJjw9ZJ1ASOTW4/oDeZj3nosUKgtUKq2LkF&#10;1ZsPbD4jB+d8QieAChDfowZIGthNTzvNFnrOspKZ5Dks8UkRPG7PnoQyyGdn7MY7&#10;EQcj+QD5FEiuXXtTuiz6wvpMoFnAP/rLDCpizFc5I2hqG1ttDOMMIo8guBOit9QW&#10;hlb87CZgZMe6Eahazg==&#10;-----END CERTIFICATE-----" />
+        <meta-data
+            android:name="expo.modules.updates.CODE_SIGNING_METADATA"
+            android:value="{&quot;alg&quot;:&quot;rsa-v1_5-sha256&quot;,&quot;keyid&quot;:&quot;main&quot;}" />
 
         <activity
             android:name="com.app.MainActivity"

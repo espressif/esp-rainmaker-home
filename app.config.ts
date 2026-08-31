@@ -193,7 +193,18 @@ function readPackageVersion(): string {
   }
 }
 
+function readPackageVersionCode(): number | undefined {
+  try {
+    const raw = fs.readFileSync(path.join(__dirname, "package.json"), "utf8");
+    const code = JSON.parse(raw)?.versionCode;
+    return typeof code === "number" ? code : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 const packageVersion = readPackageVersion();
+const packageVersionCode = readPackageVersionCode();
 
 /**
  * Read from the compiled google-services.json so the id always tracks the FCM
@@ -258,8 +269,22 @@ export default {
       output: "static",
       favicon: "./src/assets/images/logo.png"
     },
+    runtimeVersion: { policy: "fingerprint" },
+    // NOTE: `updates.url` below is inert — the OTA URL is per-platform and
+    // lives in ios/APP/Supporting/Expo.plist and android/app/src/main/AndroidManifest.xml
+    // (hand-maintained out of band from app.config.ts). Running `npx expo prebuild`
+    // would overwrite both native files with the single value here, breaking OTA
+    // on at least one platform. Long-term fix: move OTA URL config into a
+    // per-platform config plugin or an env-driven variable.
+    updates: {
+      enabled: true,
+      url: "https://app.rainmaker.espressif.com/ota/prod/global/ios/manifest.json",
+      checkAutomatically: "ON_LOAD",
+      fallbackToCacheTimeout: 0,
+    },
     plugins: [
       "expo-router",
+      "expo-updates",
       [
         "expo-splash-screen",
         {
@@ -311,6 +336,7 @@ export default {
       appRegion: process.env.APP_REGION || 'auto',
 
       commitId,
+      versionCode: packageVersionCode,
 
       // Region-scoped runtime config, one block per region with an identical
       // shape, built from the committed .env.global.example / .env.cn.example files. Consumed
