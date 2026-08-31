@@ -6,6 +6,7 @@
  * - settings.gradle
  * - build.gradle
  * - google-services.json
+ * - keystore.properties (+ validate release keystore file/passwords/alias)
  *
  * IMPORTANT:
  * - App version comes from package.json (`version`, `versionCode`) — not .env
@@ -15,6 +16,7 @@
  * - Do not manually edit synced files — update .env or package.json instead
  */
 
+const { spawnSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 
@@ -312,6 +314,152 @@ function syncKeystoreProperties(env) {
   console.log(`  ✓ keystore.properties written (storeFile = ${env.ANDROID_KEYSTORE_FILE})`);
 }
 
+/**
+ * Spawn options for `keytool` that force English labels so locale-independent
+ * parsing (e.g. "Keystore type: PKCS12") works under non-English JDKs.
+ *
+ * @returns {{ encoding: string, env: NodeJS.ProcessEnv }}
+ */
+function keytoolSpawnOpts() {
+  return {
+    encoding: 'utf8',
+    env: { ...process.env, LC_ALL: 'C', LANG: 'C' },
+  };
+}
+
+/**
+ * Runs `keytool` with English JVM locale forced via `-J-Duser.language=en`
+ * and C locale env, so output labels stay parseable on any host locale.
+ *
+ * @param {string[]} args keytool argv after the command name
+ * @returns {import('child_process').SpawnSyncReturns<string>}
+ */
+function runKeytool(args) {
+  return spawnSync(
+    'keytool',
+    ['-J-Duser.language=en', ...args],
+    keytoolSpawnOpts()
+  );
+}
+
+/**
+ * True when the store path looks like PKCS12 (`.p12` / `.pfx`), used before
+ * parsing keytool `-list` output so non-English locales cannot mis-route.
+ *
+ * @param {string} storeFile Relative or absolute keystore path
+ * @returns {boolean}
+ */
+function isPkcs12ByExtension(storeFile) {
+  return /\.(p12|pfx)$/i.test(storeFile);
+}
+
+/**
+ * True when keytool `-list` stdout reports PKCS12 (English labels assumed
+ * after {@link runKeytool} forces `user.language=en`).
+ *
+ * @param {string} listStdout keytool `-list` stdout
+ * @returns {boolean}
+ */
+function isPkcs12FromKeytoolList(listStdout) {
+  return /Keystore type:\s*PKCS12/i.test(listStdout || '');
+}
+
+/**
+ * Verifies the release keystore file exists and that store password, key
+ * alias, and key password unlock it via `keytool`. Skipped when signing is
+ * not configured. Fails the prebuild on mismatch so CI/local builds catch
+ * bad credentials before Gradle signing.
+ *
+ * PKCS12 stores do not support `-keypasswd` and require identical store/key
+ * passwords; JKS uses a no-op `-keypasswd` to verify the key password.
+ * PKCS12 is detected from `.p12`/`.pfx` first, then keytool list output.
+ *
+ * @param {Record<string, string>} env Parsed .env map
+ * @returns {void}
+ */
+function validateKeystore(env) {
+  const storeFile = env.ANDROID_KEYSTORE_FILE;
+  if (!storeFile) {
+    return;
+  }
+
+  const storePassword = env.ANDROID_KEYSTORE_PASSWORD || '';
+  const keyAlias = env.ANDROID_KEY_ALIAS || '';
+  const keyPassword = env.ANDROID_KEY_PASSWORD || '';
+  const absPath = path.join(ROOT, 'android/app', storeFile);
+
+  if (!storePassword || !keyAlias || !keyPassword) {
+    console.error(
+      '  ✗ keystore credentials incomplete — need ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS, ANDROID_KEY_PASSWORD'
+    );
+    process.exit(1);
+  }
+
+  if (!fs.existsSync(absPath)) {
+    console.error(
+      `  ✗ keystore file not found: android/app/${storeFile} — need ANDROID_KEYSTORE_FILE`
+    );
+    process.exit(1);
+  }
+
+  const list = runKeytool(['-list', '-keystore', absPath, '-storepass', storePassword]);
+  if (list.error && list.error.code === 'ENOENT') {
+    console.error('  ✗ keytool not found on PATH (install a JDK / Android Studio JDK)');
+    process.exit(1);
+  }
+  if (list.status !== 0) {
+    console.error(
+      '  ✗ keystore store password invalid (or corrupt keystore) — need ANDROID_KEYSTORE_PASSWORD'
+    );
+    process.exit(1);
+  }
+
+  const listAlias = runKeytool([
+    '-list',
+    '-keystore', absPath,
+    '-storepass', storePassword,
+    '-alias', keyAlias,
+  ]);
+  if (listAlias.status !== 0) {
+    console.error(
+      `  ✗ keystore alias not found: ${keyAlias} — need ANDROID_KEY_ALIAS`
+    );
+    process.exit(1);
+  }
+
+  const isPkcs12 =
+    isPkcs12ByExtension(storeFile) || isPkcs12FromKeytoolList(list.stdout || '');
+  if (isPkcs12) {
+    // Java PKCS12 ignores a distinct -keypass; Gradle signing needs them equal.
+    if (storePassword !== keyPassword) {
+      console.error(
+        '  ✗ PKCS12 keystore requires ANDROID_KEY_PASSWORD to match ANDROID_KEYSTORE_PASSWORD — need ANDROID_KEY_PASSWORD, ANDROID_KEYSTORE_PASSWORD'
+      );
+      process.exit(1);
+    }
+  } else {
+    // JKS (and similar): same password as -new is a no-op that confirms key password.
+    const keyCheck = runKeytool([
+      '-keypasswd',
+      '-keystore', absPath,
+      '-alias', keyAlias,
+      '-storepass', storePassword,
+      '-keypass', keyPassword,
+      '-new', keyPassword,
+    ]);
+    if (keyCheck.status !== 0) {
+      console.error(
+        '  ✗ keystore key password invalid — need ANDROID_KEY_PASSWORD'
+      );
+      process.exit(1);
+    }
+  }
+
+  console.log(
+    `  ✓ keystore validated (file=${storeFile}, alias=${keyAlias} — file + passwords match)`
+  );
+}
+
 /* =====================================================
  * Main
  * ===================================================== */
@@ -335,6 +483,7 @@ function main() {
 
   syncGradleProperties(PATHS.gradleProps, env);
   syncKeystoreProperties(env);
+  validateKeystore(env);
 
   // Single per-build application id (ANDROID_APP_APPLICATION_ID). The cn flavor
   // reads it directly via findProperty; the global flavor inherits it via the
