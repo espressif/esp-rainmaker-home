@@ -255,12 +255,36 @@ class Schedules(BasePage):
 
     def save_schedule(self):
         """Save the schedule on the Create Schedule screen."""
-        self.click("save_schedule_button", timeout=3)
+        self.click("save_schedule_button", timeout=5)
         return self
 
     def is_create_schedule_screen_displayed(self, timeout=10):
         """True when the Create Schedule screen is shown (its Save control is present)."""
         return self.is_visible("save_schedule_button", timeout=timeout)
+
+    def toggle_schedule(self, name):
+        """Flip the inline enable switch on the named schedule row (single-schedule scenarios); edit mode replaces the switch with a delete button, so leave it first."""
+        self.set_editing("text_edit_schedules", "edit_schedules_button", False)
+        assert self.is_named_item_visible(f"card_schedule_{name}", timeout=10), f"Schedule {name!r} not listed"
+        switches = self.find_all("schedule_enable_switch")
+        assert switches, f"No enable switch rendered for schedule {name!r}"
+        switches[0].click()
+        return self
+
+    def open_schedule(self, name, attempts=3):
+        """Open the named schedule row for editing (re-tap in case a transient toast swallows the tap)."""
+        for attempt in range(attempts):
+            self.click("id", f"card_schedule_{name}", timeout=10)
+            if self.is_create_schedule_screen_displayed(timeout=5):
+                return self
+            logger.info("RETRY open_schedule(%r): editor not shown, re-tapping card (attempt %s/%s)", name, attempt + 1, attempts)
+        raise AssertionError(f"Schedule editor did not open for {name!r}")
+
+    def rename_open_schedule(self, new_name):
+        """Rename the schedule currently open in the editor (the name field is an always-editable inline input)."""
+        self.send_keys("id", "input_schedule_name", new_name, clear_first=True, timeout=10)
+        self.commit_text_input("id", "input_schedule_name")
+        return self
 
     def is_schedule_visible(self, name, timeout=10, attempts=1):
         """True when a schedule card with the given name is listed."""

@@ -5,6 +5,7 @@
  */
 
 import TimePicker from "@shared/components/Form/TimePicker";
+import { SCHEDULE_TRIGGER_MODE_FIXED } from "@shared/utils/constants";
 
 // Styles
 import { globalStyles } from "@shared/theme/globalStyleSheet";
@@ -22,6 +23,9 @@ import {
 } from "@shared/components";
 import {
   ScheduleTime,
+  ScheduleRelativeTime,
+  ScheduleTriggerTypeSelector,
+  RelativeTimePicker,
   ScheduleDays,
   ScheduleNameInput,
   ScheduleWarningBanner,
@@ -48,8 +52,13 @@ export function CreateScheduleScreen() {
   const { setScheduleName } = useSchedule();
   const {
     state,
+    triggerMode,
     selectedDays,
     showTimePicker,
+    showRelativeTimePicker,
+    relativeSeconds,
+    relativeInitialHours,
+    relativeInitialMinutes,
     loading,
     warning,
     disableActionButton,
@@ -63,7 +72,10 @@ export function CreateScheduleScreen() {
     handleBackPress,
     handleDayToggle,
     handleTimeSelected,
+    handleTriggerModeChange,
+    handleRelativeTimeSelected,
     setShowTimePicker,
+    setShowRelativeTimePicker,
     initialHour,
     initialMinute,
     initialPeriod,
@@ -88,17 +100,30 @@ export function CreateScheduleScreen() {
           onNameChange={setScheduleName}
         />
 
-        {/* TIME SECTION */}
-        <ScheduleTime
-          minutes={state.triggers[0]?.m || 0}
-          onTimePress={() => setShowTimePicker(true)}
+        {/* TRIGGER TYPE */}
+        <ScheduleTriggerTypeSelector
+          mode={triggerMode}
+          onModeChange={handleTriggerModeChange}
         />
 
-        {/* REPEAT SECTION */}
-        <ScheduleDays
-          selectedDays={selectedDays}
-          onDayPress={handleDayToggle}
-        />
+        {/* TIME SECTION */}
+        {triggerMode === SCHEDULE_TRIGGER_MODE_FIXED ? (
+          <>
+            <ScheduleTime
+              minutes={state.triggers[0]?.m || 0}
+              onTimePress={() => setShowTimePicker(true)}
+            />
+            <ScheduleDays
+              selectedDays={selectedDays}
+              onDayPress={handleDayToggle}
+            />
+          </>
+        ) : (
+          <ScheduleRelativeTime
+            rsec={relativeSeconds}
+            onTimePress={() => setShowRelativeTimePicker(true)}
+          />
+        )}
 
         {/* SCHEDULE ACTIONS */}
         <ScheduleActionsList
@@ -140,6 +165,15 @@ export function CreateScheduleScreen() {
         onDiscard={confirmDiscard}
         onKeepEditing={cancelDiscard}
         qaId="create_schedule_unsaved_changes"
+      />
+      
+      {/* Relative Time Picker Modal */}
+      <RelativeTimePicker
+        visible={showRelativeTimePicker}
+        onClose={() => setShowRelativeTimePicker(false)}
+        onDurationSelected={handleRelativeTimeSelected}
+        initialHours={relativeInitialHours}
+        initialMinutes={relativeInitialMinutes}
       />
     </>
   );

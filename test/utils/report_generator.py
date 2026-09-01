@@ -503,7 +503,9 @@ class ReportGenerator:
                         jira_base: str = None,
                         jira_project: str = None,
                         jira_project_id: str = None,
-                        jira_issuetype_id: str = None) -> str:
+                        jira_issuetype_id: str = None,
+                        marker: str = None,
+                        update_latest: bool = True) -> str:
         """
         Generate HTML report from test results
         
@@ -627,6 +629,7 @@ class ReportGenerator:
             'deployment_broker': deployment_broker,
             'deployment_region': deployment_region,
             'active_sdk': active_sdk,
+            'marker': marker,
             'execution_time': execution_time or self._calculate_execution_time(test_results),
             'download_url': download_url,
             'jira_base': jira_base,
@@ -663,9 +666,11 @@ class ReportGenerator:
         with open(report_path, 'w', encoding='utf-8') as f:
             f.write(html_content)
 
-        latest_path = self.reports_dir / "report_latest.html"
-        shutil.copy2(report_path, latest_path)
-        logger.info("Updated report alias: %s", latest_path)
+        # Only finalized reports may claim the alias; the in-run live rebuild passes False.
+        if update_latest:
+            latest_path = self.reports_dir / "report_latest.html"
+            shutil.copy2(report_path, latest_path)
+            logger.info("Updated report alias: %s", latest_path)
 
         # Copy logo to reports directory if it exists in templates
         logo_source = self.template_dir / "espressif_logo.png"

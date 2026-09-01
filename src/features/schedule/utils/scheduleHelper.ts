@@ -6,14 +6,101 @@
 
 
 import { formatTime } from "@shared/utils/common";
-import { WRITE_PERMISSION } from "@shared/utils/constants";
+import {
+  WRITE_PERMISSION,
+  SCHEDULE_TRIGGER_MODE_FIXED,
+  SCHEDULE_TRIGGER_MODE_RELATIVE,
+  SCHEDULE_RELATIVE_MAX_SECONDS,
+  SCHEDULE_RELATIVE_MIN_SECONDS,
+} from "@shared/utils/constants";
 import {
   defaultValueBasedOnParamDataType,
   defaultWritableParamValue,
   filterExcludedParamTypes,
 } from "@shared/utils/paramUtils";
-import type { ScheduleTrigger } from "@src/types/global";
+import type {
+  ScheduleTrigger,
+  ScheduleTriggerMode,
+} from "@src/types/global";
 import type { ESPCDFDeviceParam } from "@store";
+
+/**
+ * Resolves the active trigger mode from the first schedule trigger.
+ * @param triggers - Schedule triggers array
+ * @returns Fixed clock-time mode or relative delay mode
+ */
+export const getScheduleTriggerMode = (
+  triggers: ScheduleTrigger[],
+): ScheduleTriggerMode => {
+  const trigger = triggers[0];
+  if (trigger?.rsec !== undefined) {
+    return SCHEDULE_TRIGGER_MODE_RELATIVE;
+  }
+  return SCHEDULE_TRIGGER_MODE_FIXED;
+};
+
+/**
+ * Clamps relative delay seconds to the supported 1 minute – 3 hour range.
+ * @param seconds - Raw relative delay in seconds
+ * @returns Clamped seconds value
+ */
+export const clampRelativeSeconds = (seconds: number): number => {
+  return Math.min(
+    SCHEDULE_RELATIVE_MAX_SECONDS,
+    Math.max(SCHEDULE_RELATIVE_MIN_SECONDS, seconds),
+  );
+};
+
+/**
+ * Splits relative seconds into hour and minute components for picker UI.
+ * @param totalSeconds - Relative delay in seconds
+ * @returns Hours (0–3) and minutes (0–59) portions
+ */
+export const splitRelativeSeconds = (
+  totalSeconds: number,
+): { hours: number; minutes: number } => {
+  const clamped = clampRelativeSeconds(totalSeconds);
+  const hours = Math.floor(clamped / 3600);
+  const minutes = Math.floor((clamped % 3600) / 60);
+  return { hours, minutes };
+};
+
+/**
+ * Converts hour and minute picker values into a clamped relative delay.
+ * @param hours - Selected hours (0–3)
+ * @param minutes - Selected minutes (0–59)
+ * @returns Relative delay in seconds
+ */
+export const relativeHoursMinutesToSeconds = (
+  hours: number,
+  minutes: number,
+): number => {
+  let totalSeconds = hours * 3600 + minutes * 60;
+  if (hours >= SCHEDULE_RELATIVE_MAX_SECONDS / 3600) {
+    totalSeconds = SCHEDULE_RELATIVE_MAX_SECONDS;
+  }
+  return clampRelativeSeconds(totalSeconds);
+};
+
+/**
+ * Formats a relative delay for display in the schedule editor.
+ * @param rsec - Relative delay in seconds
+ * @param t - i18n translate function
+ * @returns Localized duration label
+ */
+export const formatRelativeDurationLabel = (
+  rsec: number,
+  t: (key: string, options?: Record<string, number>) => string,
+): string => {
+  const { hours, minutes } = splitRelativeSeconds(rsec);
+  if (hours > 0 && minutes > 0) {
+    return t("schedule.time.relativeDurationHoursMinutes", { hours, minutes });
+  }
+  if (hours > 0) {
+    return t("schedule.time.relativeDurationHours", { hours });
+  }
+  return t("schedule.time.relativeDurationMinutes", { minutes });
+};
 
 /**
  * Converts minutes from midnight to hours, minutes, and AM/PM period
@@ -138,6 +225,25 @@ export const validateScheduleData = (
     };
   }
   if (!triggers || triggers.length === 0) {
+    return {
+      isValid: false,
+      error: "schedule.errors.scheduleCreationFailed",
+    };
+  }
+
+  const trigger = triggers[0];
+  if (trigger?.rsec !== undefined) {
+    const rsec = trigger.rsec;
+    if (
+      rsec < SCHEDULE_RELATIVE_MIN_SECONDS ||
+      rsec > SCHEDULE_RELATIVE_MAX_SECONDS
+    ) {
+      return {
+        isValid: false,
+        error: "schedule.errors.invalidRelativeTime",
+      };
+    }
+  } else if (trigger?.m === undefined) {
     return {
       isValid: false,
       error: "schedule.errors.scheduleCreationFailed",

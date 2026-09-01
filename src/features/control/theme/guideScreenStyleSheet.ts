@@ -20,6 +20,9 @@ export const guideScreenStyleSheet = StyleSheet.create({
     scrollContentWithBottomPadding: {
         paddingBottom: 70, // Keeping 70px to accommodate the continue button
     },
+    emptyStateWithFooter: {
+        paddingBottom: 70,
+    },
     continueButtonContainer: {
         position: "absolute",
         bottom: 0,

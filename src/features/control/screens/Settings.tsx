@@ -27,6 +27,8 @@ import {
 import {
   DeviceName,
   DeviceInfo,
+  DeviceRoomAssignment,
+  DeviceControlGroupAssignment,
   OTA,
   DeviceOperations,
   SettingsQuickActions,
@@ -59,7 +61,6 @@ const Settings = observer(() => {
     showRemoveDeviceDialog,
     setShowRemoveDeviceDialog,
     readmeUrl,
-    showAddToControlGroup,
     settingsQuickActions,
     otaFeatureEnabled,
     handleSaveDeviceName,
@@ -68,7 +69,6 @@ const Settings = observer(() => {
     handleRemoveDevice,
     confirmRemoveDevice,
     handleGuidePress,
-    handleAddToControlGroup,
   } = useSettings();
 
   if (!node) {
@@ -143,6 +143,10 @@ const Settings = observer(() => {
             disabled={settingsDisabled}
           />
 
+          <DeviceRoomAssignment node={node} disabled={!isPrimary} />
+
+          <DeviceControlGroupAssignment node={node} />
+
           <SettingsQuickActions actions={settingsQuickActions} />
 
           {readmeUrl && (
@@ -173,48 +177,6 @@ const Settings = observer(() => {
                   </View>
                   <View style={[globalStyles.flex, globalStyles.alignCenter]}>
                     <ChevronRight size={20} color={tokens.colors.primary} />
-                  </View>
-                </Pressable>
-              </View>
-            </ContentWrapper>
-          )}
-
-          {showAddToControlGroup && (
-            <ContentWrapper
-              style={{
-                marginBottom: tokens.spacing._15,
-                ...globalStyles.shadowElevationForLightTheme,
-                backgroundColor: tokens.colors.white,
-              }}
-            >
-              <View
-                style={[globalStyles.settingsSection, { gap: tokens.spacing._10 }]}
-              >
-                <Pressable
-                  style={globalStyles.settingsItem}
-                  onPress={handleAddToControlGroup}
-                  disabled={!isConnected}
-                  {...testProps("button_add_to_control_group")}
-                >
-                  <View style={globalStyles.settingsItemLeft}>
-                    <Text
-                      style={{
-                        flex: 1,
-                        fontWeight: 500,
-                        fontFamily: tokens.fonts.medium,
-                        opacity: isConnected ? 1 : 0.45,
-                      }}
-                    >
-                      {t("device.settings.addToControlGroup")}
-                    </Text>
-                  </View>
-                  <View style={[globalStyles.flex, globalStyles.alignCenter]}>
-                    <ChevronRight
-                      size={20}
-                      color={
-                        isConnected ? tokens.colors.primary : tokens.colors.bg3
-                      }
-                    />
                   </View>
                 </Pressable>
               </View>

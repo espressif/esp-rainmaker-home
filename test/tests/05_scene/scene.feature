@@ -34,3 +34,44 @@ Feature: Scene end-to-end
     When user opens the scene tab
     And user removes any existing scenes
     Then scene "Sanity Scene" should not be visible
+
+  Scenario: Edit an existing scene and verify the added action applies
+    When user opens the scene tab
+    Then user should be on scenes screen
+    When user removes any existing scenes
+    And user taps add scene
+    And user names the scene "Edit Scene"
+    Then user should be on create scene screen
+    When user taps add action
+    And user selects the "E2E Light" device
+    And user sets action "Power" to "on"
+    And user sets action "Brightness" to "40"
+    And user finishes the action
+    And user saves the scene
+    Then user should see scene created successfully toast
+    And scene "Edit Scene" should be visible
+    When user opens scene "Edit Scene" for editing
+    And user renames the open scene to "Edited Scene"
+    And user taps add action
+    And user selects the "E2E Light" device
+    And user sets action "Saturation" to "80"
+    And user finishes the action
+    And user saves the scene
+    Then user should see scene updated successfully toast
+    And scene "Edited Scene" should be visible
+    When user activates scene "Edited Scene"
+    Then the device log should show "Brightness" set to "40", "Saturation" set to "80"
+    When user opens the scene tab
+    And user removes any existing scenes
+    Then scene "Edited Scene" should not be visible
+
+  Scenario: Max scenes badge blocks the device in selection
+    Given the device already has "10" bulk scenes
+    When user opens the scene tab
+    Then user should be on scenes screen
+    When user taps add scene
+    And user names the scene "Overflow Scene"
+    Then user should be on create scene screen
+    When user taps add action
+    Then the max scenes badge should be shown for the device
+    When user removes all bulk scenes from the cloud

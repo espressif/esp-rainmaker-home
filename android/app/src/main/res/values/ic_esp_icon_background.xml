@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Sampled from ic_nova_home_icon-playstore.png -->
+    <color name="ic_esp_icon_background">#E7352C</color>
+</resources>

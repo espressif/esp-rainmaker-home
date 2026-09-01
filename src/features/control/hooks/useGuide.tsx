@@ -7,13 +7,13 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { Dimensions, Linking, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useTranslation } from "react-i18next";
 import { defaultSystemFonts, CustomBlockRenderer } from "react-native-render-html";
 import { SvgUri } from "react-native-svg";
 import axios from "axios";
 import { tokens } from "@shared/theme/tokens";
 import { convertMarkdownToHTML, transformImageUrl, getGuideHTMLStyles } from "@features/control/utils/guideHelper";
 import { GuideImage } from "@features/provision/components";
+import { GUIDE_LOAD_FAILED } from "@features/control/constants";
 
 interface UseGuideReturn {
   markdownContent: string;
@@ -34,7 +34,6 @@ interface UseGuideReturn {
  */
 export const useGuide = (): UseGuideReturn => {
   const router = useRouter();
-  const { t } = useTranslation();
   const params = useLocalSearchParams<{
     url: string;
     title?: string;
@@ -51,7 +50,7 @@ export const useGuide = (): UseGuideReturn => {
   useEffect(() => {
     const fetchMarkdown = async () => {
       if (!params.url) {
-        setError(t("device.errors.noReadmeURLProvided"));
+        setError(GUIDE_LOAD_FAILED);
         setIsLoading(false);
         return;
       }
@@ -68,16 +67,16 @@ export const useGuide = (): UseGuideReturn => {
         });
 
         setMarkdownContent(response.data);
-      } catch (err: any) {
+      } catch (err: unknown) {
         console.error("Error fetching markdown:", err);
-        setError(err.message || "Failed to load content");
+        setError(GUIDE_LOAD_FAILED);
       } finally {
         setIsLoading(false);
       }
     };
 
     fetchMarkdown();
-  }, [params.url, t]);
+  }, [params.url]);
 
   const htmlContent = useMemo(
     () => convertMarkdownToHTML(markdownContent),

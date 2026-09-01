@@ -22,13 +22,13 @@ Feature: Forgot Password
   Scenario: Forgot password with unregistered email
     When user requests resets password with "unregistered user"
     And user taps "send code"
-    Then user should see forgot password toast with title "Failed to send verification code" and message "User does not exist"
+    Then the unregistered email reset request should be rejected
 
 
   @regression
   Scenario: Forgot password with invalid email format
     When user requests resets password with "invalid-email"
-    Then user should see forgot password error "Please enter a valid email address"
+    Then send code button should be disabled
 
   @regression
   Scenario: Reset password with invalid verification code
@@ -37,7 +37,7 @@ Feature: Forgot Password
     And user enters verification code "123456"
     And user enters new password "Welcome01" and confirm password "Welcome01"
     And user taps "confirm"
-    Then user should see forgot password toast with title "Failed to reset password" and message "Verification code is incorrect"
+    Then user should see forgot password toast with title "Failed to reset password" and message "incorrect verification code"
 
   @regression
   Scenario: Reset password with invalid verification code length

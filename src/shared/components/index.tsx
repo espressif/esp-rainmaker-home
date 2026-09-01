@@ -16,6 +16,16 @@ export type { DeviceOfflineBannerProps } from "./Banners/DeviceOfflineBanner";
 // Cards
 export { default as DeviceCard } from "./Cards/DeviceCard";
 export { default as CollapsibleCard } from "./Cards/CollapsibleCard";
+export {
+  default as SettingsFieldCard,
+  SETTINGS_FIELD_CARD_ARROW_DOWN,
+  SETTINGS_FIELD_CARD_ARROW_RIGHT,
+} from "./Cards/SettingsFieldCard";
+export type {
+  SettingsFieldCardArrowDirection,
+  SettingsFieldCardLabelVariant,
+  SettingsFieldCardProps,
+} from "./Cards/SettingsFieldCard";
 
 // Device selection (cross-flow list shell; rows supplied by features)
 export { default as DeviceSelectionList } from "./DeviceSelection/DeviceSelectionList";

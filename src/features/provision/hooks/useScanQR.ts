@@ -31,7 +31,9 @@ import {
   QR_PROVISION_CREATE_ATTEMPTS,
   QR_PROVISION_DISCONNECT_TIMEOUT_MS,
   QR_PROVISION_STEP_TIMEOUT_MS,
+  PROVISION_TRANSPORT_SOFTAP,
 } from "@shared/utils/constants";
+import { getFeatures } from "@config/features.config";
 import {
   MATTER_ROUTE_PARAM_FABRIC_CONVERSION_CONSENT_REQUIRED,
   MATTER_ROUTE_PARAM_VALUE_FALSE,
@@ -493,6 +495,15 @@ export const useScanQR = (): UseScanQRReturn => {
       if (!name || !transport) {
         markScanFailed();
         toast.showError(t("device.scan.qr.unableToConnectToDevice"));
+        return;
+      }
+
+      if (
+        transport === PROVISION_TRANSPORT_SOFTAP &&
+        !getFeatures().softApProvisioning
+      ) {
+        markScanFailed();
+        toast.showError(t("device.scan.qr.softAPNotSupported"));
         return;
       }
 

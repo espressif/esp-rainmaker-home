@@ -443,6 +443,8 @@ export interface TimePickerScrollHandlerProps {
 // ============================================================================
 
 // Schedule Component Props
+export type ScheduleTriggerMode = "fixed" | "relative";
+
 export interface ScheduleDaysProps {
   selectedDays: number[];
   onDayPress: (index: number) => void;
@@ -451,6 +453,24 @@ export interface ScheduleDaysProps {
 export interface ScheduleTimeProps {
   minutes?: number;
   onTimePress: () => void;
+}
+
+export interface ScheduleTriggerTypeSelectorProps {
+  mode: ScheduleTriggerMode;
+  onModeChange: (mode: ScheduleTriggerMode) => void;
+}
+
+export interface ScheduleRelativeTimeProps {
+  rsec: number;
+  onTimePress: () => void;
+}
+
+export interface RelativeTimePickerProps {
+  visible: boolean;
+  onClose: () => void;
+  onDurationSelected: (hours: number, minutes: number) => void;
+  initialHours?: number;
+  initialMinutes?: number;
 }
 
 export interface ScheduleCardProps {

@@ -11,6 +11,8 @@ export interface UseCustomizeControlGroupNameOptions {
   id: string | string[] | undefined;
   groupId: string | string[] | undefined;
   preselectedNodeId?: string | string[];
+  dismissTo?: string | string[];
+  settingsDevice?: string | string[];
   router: {
     dismissTo: (opts: {
       pathname: string;
@@ -33,7 +35,7 @@ export interface UseCustomizeControlGroupNameResult {
 export function useCustomizeControlGroupName(
   options: UseCustomizeControlGroupNameOptions
 ): UseCustomizeControlGroupNameResult {
-  const { currentGroupName, id, groupId, preselectedNodeId, router } = options;
+  const { currentGroupName, id, groupId, preselectedNodeId, dismissTo, settingsDevice, router } = options;
 
   const [groupName, setGroupName] = useState("");
 
@@ -53,6 +55,12 @@ export function useCustomizeControlGroupName(
       typeof preselectedNodeId === "string"
         ? preselectedNodeId
         : preselectedNodeId?.[0];
+    const dismissToParam =
+      typeof dismissTo === "string" ? dismissTo : dismissTo?.[0];
+    const settingsDeviceParam =
+      typeof settingsDevice === "string"
+        ? settingsDevice
+        : settingsDevice?.[0];
     if (finalName) {
       router.dismissTo({
         pathname: "/(group)/CreateControlGroup",
@@ -61,12 +69,14 @@ export function useCustomizeControlGroupName(
           id: idStr,
           groupId: groupIdStr ?? "",
           ...(pre?.trim() ? { preselectedNodeId: pre.trim() } : {}),
+          ...(dismissToParam ? { dismissTo: dismissToParam } : {}),
+          ...(settingsDeviceParam ? { settingsDevice: settingsDeviceParam } : {}),
         },
       });
     } else {
       router.back();
     }
-  }, [groupName, router, id, groupId, preselectedNodeId]);
+  }, [groupName, router, id, groupId, preselectedNodeId, dismissTo, settingsDevice]);
 
   const handleGroupNameChange = useCallback((value: string) => {
     setGroupName(value);

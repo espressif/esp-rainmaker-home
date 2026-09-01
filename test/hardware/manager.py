@@ -83,14 +83,17 @@ class ResourceManager:
         @param test_name - Pytest node id for ownership tracking
         @returns Allocated EspResource
         """
-        timeout = timeout if timeout is not None else self.config.acquire_timeout_seconds
+        explicit_timeout = timeout is not None
+        timeout = timeout if explicit_timeout else self.config.acquire_timeout_seconds
         lease_seconds = lease_seconds or self.config.lock_stale_seconds
-        deadline = time.time() + timeout
+        busy_budget = timeout if explicit_timeout else max(timeout, self.config.busy_wait_seconds)
+        start = time.time()
         chip_type = chip_type.lower()
         owner_pid = os.getpid()
 
         refreshed = False
-        while time.time() < deadline:
+        last_wait_log = 0.0
+        while True:
             row = self.store.try_reserve(
                 chip_type=chip_type,
                 owner_pid=owner_pid,
@@ -124,11 +127,31 @@ class ResourceManager:
                     test_name or "unknown-test",
                 )
                 return resource
+            waited = time.time() - start
+            holder = self.store.busy_holder(chip_type=chip_type)
+            if holder and holder.get("owner_pid") == owner_pid:
+                holder = None
+            if holder is None:
+                if waited >= timeout:
+                    raise HardwareUnavailableException(
+                        f"No available {chip_type} device within {timeout}s"
+                    )
+            elif waited >= busy_budget:
+                raise HardwareUnavailableException(
+                    f"No available {chip_type} device within {int(busy_budget)}s "
+                    f"(held by {holder.get('owner_test') or holder.get('owner_pid')})"
+                )
+            elif waited - last_wait_log >= 30:
+                logger.info(
+                    "RETRY acquire(%s): busy, held by %s on %s — waiting (%.0fs/%.0fs)",
+                    chip_type,
+                    holder.get("owner_test") or holder.get("owner_pid"),
+                    holder.get("mac_address"),
+                    waited,
+                    busy_budget,
+                )
+                last_wait_log = waited
             time.sleep(2)
-
-        raise HardwareUnavailableException(
-            f"No available {chip_type} device within {timeout}s"
-        )
 
     def acquire_mac(
         self,
@@ -138,13 +161,16 @@ class ResourceManager:
         lease_seconds: Optional[int] = None,
     ) -> EspResource:
         """Lock one SPECIFIC device by MAC (e.g. the Matter chip) so active_reserved_ports() protects it from a sibling run's discovery reset (needs the shared lock db)."""
-        timeout = timeout if timeout is not None else self.config.acquire_timeout_seconds
+        explicit_timeout = timeout is not None
+        timeout = timeout if explicit_timeout else self.config.acquire_timeout_seconds
         lease_seconds = lease_seconds or self.config.lock_stale_seconds
-        deadline = time.time() + timeout
+        busy_budget = timeout if explicit_timeout else max(timeout, self.config.busy_wait_seconds)
+        start = time.time()
         owner_pid = os.getpid()
 
         refreshed = False
-        while time.time() < deadline:
+        last_wait_log = 0.0
+        while True:
             row = self.store.try_reserve_mac(
                 mac_address=mac_address,
                 owner_pid=owner_pid,
@@ -176,11 +202,30 @@ class ResourceManager:
                     test_name or "unknown-test",
                 )
                 return resource
+            waited = time.time() - start
+            holder = self.store.busy_holder(mac_address=mac_address)
+            if holder and holder.get("owner_pid") == owner_pid:
+                holder = None
+            if holder is None:
+                if waited >= timeout:
+                    raise HardwareUnavailableException(
+                        f"Device {mac_address} not available within {timeout}s"
+                    )
+            elif waited >= busy_budget:
+                raise HardwareUnavailableException(
+                    f"Device {mac_address} not available within {int(busy_budget)}s "
+                    f"(held by {holder.get('owner_test') or holder.get('owner_pid')})"
+                )
+            elif waited - last_wait_log >= 30:
+                logger.info(
+                    "RETRY acquire_mac(%s): busy, held by %s — waiting (%.0fs/%.0fs)",
+                    mac_address,
+                    holder.get("owner_test") or holder.get("owner_pid"),
+                    waited,
+                    busy_budget,
+                )
+                last_wait_log = waited
             time.sleep(2)
-
-        raise HardwareUnavailableException(
-            f"Device {mac_address} not available within {timeout}s"
-        )
 
     def release(self, mac_address: str, failed: bool = False, error: str = "") -> None:
         """Release a resource back to the available pool."""

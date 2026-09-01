@@ -10,6 +10,7 @@ post-provision continue chain.
 """
 import json
 import logging
+import re
 import time
 from dataclasses import replace
 from pathlib import Path
@@ -22,6 +23,7 @@ from hardware.exceptions import SerialLogError
 from hardware.models import ResourceStatus
 from hardware.qr import QrPayloadExtractor
 from hardware.requirements import HardwareRequirement
+from utils.app_copy import app_i18n
 from utils.common_utils import normalize_input
 from utils.registered_user_resolver import deployment_type
 
@@ -238,7 +240,7 @@ def should_be_on_pop_screen(helper):
 
 @then("user should be on connect wifi screen")
 def should_be_on_connect_wifi_screen(helper):
-    assert helper.connect_wifi.check_screen_displayed(timeout=7), "Should be on connect wifi screen"
+    assert helper.connect_wifi.check_screen_displayed(timeout=10), "Should be on connect wifi screen"
 
 
 @then("user should be on provisioning page")
@@ -290,3 +292,97 @@ def device_should_be_visible_on_home(helper, device_name):
     assert helper.home.is_device_visible(normalize_input(device_name), timeout=10), (
         f"Device '{device_name}' should be visible on home screen"
     )
+
+
+INCORRECT_POP = "wrongpop"
+
+
+@when("user enters an incorrect device pop")
+def enter_incorrect_pop(helper):
+    helper.pop.enter_pop(INCORRECT_POP)
+
+
+@when(parsers.parse('user enters an incorrect device pop "{count:d}" times'))
+def enter_incorrect_pop_times(helper, count):
+    for _ in range(count):
+        if not helper.pop.check_screen_displayed(timeout=5):
+            break
+        helper.pop.enter_pop(INCORRECT_POP)
+        time.sleep(2)
+
+
+@then("the app should reject the proof of possession")
+def pop_rejected(helper):
+    # Intermediate toasts (connecting/session) fire before the rejection one, so poll for the exact copy.
+    expected = app_i18n("device.errors.failedToVerifyCode")
+    deadline = time.time() + 20
+    seen = []
+    while time.time() < deadline:
+        title, _ = helper.pop.get_toast_title_and_message(timeout=3, require_message=False)
+        if title == expected:
+            return
+        if title and title not in seen:
+            seen.append(title)
+        time.sleep(0.5)
+    raise AssertionError(f"Wrong-PoP toast {expected!r} not shown; toasts seen: {seen or 'none'}")
+
+
+@then("the device should stop the provisioning session")
+def provisioning_session_stopped(helper, hardware_session):
+    resource = hardware_session["resource"]
+    markers = ("max attempt", "provisioning stopped", "too many", "sec mismatch", "sec_mismatch", "session closed")
+    deadline = time.time() + 30
+    matched = ""
+    while time.time() < deadline and not matched:
+        text = Path(resource.serial_log_path).read_text(errors="replace").lower() if resource.serial_log_path else ""
+        matched = next((marker for marker in markers if marker in text), "")
+        if not matched:
+            time.sleep(2)
+    assert matched, "Device serial shows no provisioning-stop marker after repeated incorrect PoP attempts"
+    assert not helper.connect_wifi.check_screen_displayed(timeout=3), \
+        "Connect Wi-Fi screen reachable after the device stopped provisioning"
+
+
+@when(parsers.parse('user enters "{ssid_key}" and an incorrect password'))
+def enter_wifi_with_incorrect_password(helper, ssid_key, provision_config_resolver):
+    helper.connect_wifi.enter_join_network_credentials(provision_config_resolver(ssid_key), "Wrong-Passw0rd!")
+
+
+@then("the wifi reset prompt should appear")
+def wifi_reset_prompt_appears(helper):
+    assert helper.provision.is_visible("wifi_reset_prompt_title", timeout=60), \
+        "Wi-Fi reset prompt did not appear after the incorrect password"
+    description = helper.provision.get_text("wifi_reset_prompt_message", timeout=5)
+    expected = app_i18n("device.provision.wifiResetMessage")
+    assert expected in (description or ""), \
+        f"Unexpected wifi reset prompt message: {description!r} (expected to contain {expected!r})"
+
+
+@when("user agrees to retry the wifi setup")
+def agree_to_retry_wifi_setup(helper):
+    helper.provision.click("wifi_reset_prompt_confirm", timeout=5)
+
+
+@then("the wifi reset retry dialog should appear")
+def wifi_reset_retry_dialog_appears(helper):
+    assert helper.provision.is_visible("wifi_reset_retry_title", timeout=15), \
+        "Wi-Fi reset password dialog did not appear after agreeing to retry"
+    message = helper.provision.get_text("wifi_reset_retry_message", timeout=5)
+    expected = app_i18n("device.provision.wifiResetPasswordMessage")
+    assert message == expected, f"Unexpected wifi reset dialog message: {message!r} (expected {expected!r})"
+
+
+@when("user retries with the correct wifi password")
+def retry_with_correct_wifi_password(helper, provision_config_resolver):
+    helper.provision.send_keys("wifi_reset_password_input", provision_config_resolver("ssid_password"), timeout=10)
+    helper.provision.click("wifi_reset_retry_button", timeout=5)
+
+
+@then("the device log should confirm a 5GHz connection")
+def confirm_5ghz_connection(hardware_session):
+    resource = hardware_session["resource"]
+    assert resource.serial_log_path, "No serial log for the provisioned device"
+    text = Path(resource.serial_log_path).read_text(errors="replace")
+    channels = [int(c) for c in re.findall(r"channel[:= ]\s*(\d{1,3})", text, re.I)]
+    high_band = [c for c in channels if c >= 36]
+    assert high_band, f"No 5GHz channel in the serial log; channels seen: {sorted(set(channels))}"

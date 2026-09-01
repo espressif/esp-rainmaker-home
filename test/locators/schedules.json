@@ -63,5 +63,17 @@
   "save_schedule_button": {
     "by": "id",
     "value": "button_save_schedule"
+  },
+  "schedule_enable_switch": {
+    "by": "id",
+    "value": "switch_enable_schedule"
+  },
+  "schedule_card": {
+    "by": "id",
+    "value": "card_schedule"
+  },
+  "max_schedule_badge": {
+    "by": "id",
+    "value": "text_max_schedule_reached"
   }
 }

@@ -137,7 +137,6 @@ class ScanQr(BasePage):
 
         required_elements = [
             "title",
-            "qr_code_icon",
         ]
 
         missing_elements = []

@@ -24,13 +24,13 @@ Feature: Change Password
     Then user should see toast with title "Failed to change password. Please try again" and message "<message>"
     Examples:
       | test_case                               | login_user        | old_password                | new_password      | confirm_password  | message |
-      | Password length not enough              | registered user 1 | registered user 1 password | 1234567           | 1234567           | Password length must be between 8 to 256 characters. It should be alpha-numeric without any whitespace. It should contain atleast one uppercase, one lowercase character and a number |
-      | Password with no uppercase characters   | registered user 1 | registered user 1 password | welcome01         | welcome01         | Password length must be between 8 to 256 characters. It should be alpha-numeric without any whitespace. It should contain atleast one uppercase, one lowercase character and a number |
-      | Password with no numeric characters     | registered user 2 | registered user 2 password | Welcom<space>e    | Welcom<space>e    | Password length must be between 8 to 256 characters. It should be alpha-numeric without any whitespace. It should contain atleast one uppercase, one lowercase character and a number |
-      | Password with no lowercase characters   | registered user 2 | registered user 2 password | WELCOME1          | WELCOME1          | Password length must be between 8 to 256 characters. It should be alpha-numeric without any whitespace. It should contain atleast one uppercase, one lowercase character and a number |
-      | Password with leading whitespace        | registered user 2 | registered user 2 password | <space>Welcome1   | <space>Welcome1   | Password length must be between 8 to 256 characters. It should be alpha-numeric without any whitespace. It should contain atleast one uppercase, one lowercase character and a number |
-      | Password with trailing whitespace       | registered user 2 | registered user 2 password | Welcome1<space>   | Welcome1<space>   | Password length must be between 8 to 256 characters. It should be alpha-numeric without any whitespace. It should contain atleast one uppercase, one lowercase character and a number |
-      | Incorrect current password              | registered user 1 | incorrect_password         | registered user 1 password | registered user 1 password | The password you entered is incorrect |
+      | Password length not enough              | registered user 1 | registered user 1 password | 1234567           | 1234567           | change password policy error |
+      | Password with no uppercase characters   | registered user 1 | registered user 1 password | welcome01         | welcome01         | change password policy error |
+      | Password with no numeric characters     | registered user 2 | registered user 2 password | Welcom<space>e    | Welcom<space>e    | change password policy error |
+      | Password with no lowercase characters   | registered user 2 | registered user 2 password | WELCOME1          | WELCOME1          | change password policy error |
+      | Password with leading whitespace        | registered user 2 | registered user 2 password | <space>Welcome1   | <space>Welcome1   | change password policy error |
+      | Password with trailing whitespace       | registered user 2 | registered user 2 password | Welcome1<space>   | Welcome1<space>   | change password policy error |
+      | Incorrect current password              | registered user 1 | incorrect_password         | registered user 1 password | registered user 1 password | incorrect current password |
 
   @regression
   Scenario Outline: Inline validation errors

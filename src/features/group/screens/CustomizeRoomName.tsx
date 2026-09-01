@@ -42,6 +42,7 @@ const CustomizeRoomName = () => {
     dismissTo,
     nodeId,
     showSelection,
+    settingsDevice,
   } = useLocalSearchParams<{
     currentRoomName?: string | string[];
     id?: string | string[];
@@ -49,6 +50,7 @@ const CustomizeRoomName = () => {
     dismissTo?: string | string[];
     nodeId?: string | string[];
     showSelection?: string | string[];
+    settingsDevice?: string | string[];
   }>();
 
   const {
@@ -66,6 +68,7 @@ const CustomizeRoomName = () => {
     dismissTo,
     nodeId,
     showSelection,
+    settingsDevice,
     router: router as Parameters<typeof useCustomizeRoomName>[0]["router"],
     t,
   });

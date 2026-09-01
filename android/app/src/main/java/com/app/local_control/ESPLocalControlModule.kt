@@ -60,11 +60,11 @@ class ESPLocalControlModule(reactContext: ReactApplicationContext) :
         private const val OPTION_VERSION_KEY = "versionKey"
     }
 
+    // All connection state (credentials, endpoints, session) lives on the per-node
+    // EspLocalDevice entries in this map. There is deliberately NO module-wide
+    // session/baseUrl: a shared session meant sendData(nodeA) could ride whichever
+    // node connected last, delivering params to the wrong device.
     private val localDeviceMap: HashMap<String, EspLocalDevice> = HashMap()
-    private var sessionState: SessionState = SessionState.NOT_CREATED
-    private var session: EspLocalSession? = null
-    private var securityType: Int = 0 // Default security, which will be set during connect
-    private var baseUrl: String = "" // Base URL will be set during connect
 
     /**
      * Returns the name of the module for React Native integration.
@@ -80,16 +80,6 @@ class ESPLocalControlModule(reactContext: ReactApplicationContext) :
     override fun createNativeModules(
         reactContext: ReactApplicationContext
     ): MutableList<NativeModule> = listOf(this).toMutableList()
-
-    /**
-     * Enum representing the states of a session.
-     */
-    enum class SessionState {
-        NOT_CREATED, // Session not created
-        CREATING, // Session is being created
-        CREATED, // Session successfully created
-        FAILED // Session creation failed
-    }
 
     /**
      * Interface for session events.
@@ -117,6 +107,10 @@ class ESPLocalControlModule(reactContext: ReactApplicationContext) :
     /**
      * Per-node connection state captured at connect() time. Re-used by sendData()
      * to re-handshake with the original credentials if the session is torn down.
+     *
+     * @property session The node's own secure session (bound to a transport built
+     *   from [baseUrl]). Every send for this nodeId goes through this session and
+     *   no other, so commands can never ride another node's connection.
      */
     inner class EspLocalDevice(
         val nodeId: String,
@@ -127,7 +121,10 @@ class ESPLocalControlModule(reactContext: ReactApplicationContext) :
         val pop: String?,
         val username: String?,
         val endpoints: LocalCtrlEndpoints
-    )
+    ) {
+        @Volatile
+        var session: EspLocalSession? = null
+    }
 
     /**
      * Class managing session logic for secure communication with devices.
@@ -195,39 +192,12 @@ class ESPLocalControlModule(reactContext: ReactApplicationContext) :
          * @param listener Listener to handle the response.
          */
         fun sendDataToDevice(path: String, data: ByteArray, listener: ResponseListener) {
-            val encryptedData = security.encrypt(data)
             if (isSessionEstablished) {
-                transport.sendConfigData(path, encryptedData, object : ResponseListener {
-                    override fun onSuccess(returnData: ByteArray?) {
-                        try {
-                            val decryptedData = security.decrypt(returnData)
-                            listener.onSuccess(decryptedData)
-                        } catch (e: Exception) {
-                            // Decrypt failure means this session is unusable; force a
-                            // fresh handshake on the next sendData call.
-                            isSessionEstablished = false
-                            listener.onFailure(e)
-                        }
-                    }
-
-                    override fun onFailure(e: Exception) {
-                        isSessionEstablished = false
-                        listener.onFailure(e)
-                    }
-                })
+                sendEncrypted(path, data, listener)
             } else {
                 init(null, object : SessionListener {
                     override fun onSessionEstablished() {
-                        transport.sendConfigData(path, encryptedData, object : ResponseListener {
-                            override fun onSuccess(returnData: ByteArray?) {
-                                listener.onSuccess(returnData)
-                            }
-
-                            override fun onFailure(e: Exception) {
-                                isSessionEstablished = false
-                                listener.onFailure(e)
-                            }
-                        })
+                        sendEncrypted(path, data, listener)
                     }
 
                     override fun onSessionEstablishFailed(e: Exception) {
@@ -235,6 +205,34 @@ class ESPLocalControlModule(reactContext: ReactApplicationContext) :
                     }
                 })
             }
+        }
+
+        /**
+         * Encrypts and sends [data], decrypting the response. Encryption must
+         * happen only once the session is established — the security object's
+         * cipher state is derived from the handshake, so bytes encrypted before a
+         * re-handshake would be garbage to the device (and vice versa).
+         */
+        private fun sendEncrypted(path: String, data: ByteArray, listener: ResponseListener) {
+            val encryptedData = security.encrypt(data)
+            transport.sendConfigData(path, encryptedData, object : ResponseListener {
+                override fun onSuccess(returnData: ByteArray?) {
+                    try {
+                        val decryptedData = security.decrypt(returnData)
+                        listener.onSuccess(decryptedData)
+                    } catch (e: Exception) {
+                        // Decrypt failure means this session is unusable; force a
+                        // fresh handshake on the next sendData call.
+                        isSessionEstablished = false
+                        listener.onFailure(e)
+                    }
+                }
+
+                override fun onFailure(e: Exception) {
+                    isSessionEstablished = false
+                    listener.onFailure(e)
+                }
+            })
         }
 
     }
@@ -321,28 +319,29 @@ class ESPLocalControlModule(reactContext: ReactApplicationContext) :
     /**
      * Checks if a device with the given `nodeId` is connected.
      *
+     * "Connected" means THIS node's own session is established — not merely that
+     * the node connected at some point in the past. Answering from map membership
+     * alone made the JS layer skip connect() while the actual session belonged to
+     * a different node, sending commands to the wrong device.
+     *
      * @param nodeId The unique identifier of the device.
      * @param promise Promise to resolve with the connection status.
      */
     @ReactMethod
     fun isConnected(nodeId: String, promise: Promise) {
-        val isConnected = localDeviceMap.containsKey(nodeId)
+        val isConnected = localDeviceMap[nodeId]?.session?.isEstablished() == true
         promise.resolve(isConnected)
     }
 
     /**
-     * Drops the cached per-node connection state so the next `connect()` /
-     * `sendData()` performs a fresh handshake with current credentials.
+     * Drops the cached per-node connection state (credentials AND session) so the
+     * next `connect()` / `sendData()` performs a fresh handshake with current
+     * credentials.
      *
      * Call this when the node's local-control details may have changed — e.g.
      * after a factory-reset + re-provision (new PoP), a new DHCP IP, or when the
-     * node drops off mDNS. Without this, `isConnected()` (mere map membership)
-     * keeps reporting `true`, so the caller skips `connect()` and the stale
-     * PoP/IP captured in [localDeviceMap] is reused forever (until app restart).
-     *
-     * Only the per-node entry is evicted here; the module-wide [session] is reset
-     * lazily by the next `connect()`, so we don't tear down an unrelated node's
-     * active session.
+     * node drops off mDNS. The node's session lives on its map entry, so evicting
+     * it never affects any other node's active session.
      */
     @ReactMethod
     fun disconnect(nodeId: String) {
@@ -393,8 +392,6 @@ class ESPLocalControlModule(reactContext: ReactApplicationContext) :
         promise: Promise
     ) {
 
-        this.securityType = securityType
-        this.baseUrl = baseUrl
         val endpoints = endpointsFrom(options)
 
         val address: String
@@ -412,11 +409,7 @@ class ESPLocalControlModule(reactContext: ReactApplicationContext) :
         val device =
             EspLocalDevice(nodeId, address, port, baseUrl, securityType, pop, username, endpoints)
 
-        // Drop any prior session so initSession() isn't short-circuited by a stale state.
-        session = null
-        sessionState = SessionState.NOT_CREATED
-
-        initSession(device, baseUrl, securityType, pop, username, endpoints, object : ResponseListener {
+        initSession(device, object : ResponseListener {
             override fun onSuccess(returnData: ByteArray?) {
                 localDeviceMap[nodeId] = device
                 val result = WritableNativeMap().apply {
@@ -432,30 +425,21 @@ class ESPLocalControlModule(reactContext: ReactApplicationContext) :
     }
 
     /**
-     * Initializes a secure session with the device. For Security2, first probes
-     * the device's version endpoint so the right `sec_patch_ver` is fed into the
-     * Security2 constructor (required against ESP-IDF v5.4+ firmware).
+     * Initializes a secure session with [device], using the credentials and base
+     * URL captured on it. For Security2, first probes the device's version
+     * endpoint so the right `sec_patch_ver` is fed into the Security2 constructor
+     * (required against ESP-IDF v5.4+ firmware).
      */
     private fun initSession(
         device: EspLocalDevice,
-        baseUrl: String,
-        securityType: Int,
-        pop: String?,
-        username: String?,
-        endpoints: LocalCtrlEndpoints,
         listener: ResponseListener
     ) {
-        if (sessionState == SessionState.CREATING) return
-        sessionState = SessionState.CREATING
-
-        if (securityType == 2) {
-            fetchSecPatchVersion(baseUrl, endpoints) { secPatchVersion ->
-                establishSession(
-                    baseUrl, securityType, pop, username, secPatchVersion, endpoints, listener
-                )
+        if (device.securityType == 2) {
+            fetchSecPatchVersion(device.baseUrl, device.endpoints) { secPatchVersion ->
+                establishSession(device, secPatchVersion, listener)
             }
         } else {
-            establishSession(baseUrl, securityType, pop, username, 0, endpoints, listener)
+            establishSession(device, 0, listener)
         }
     }
 
@@ -471,12 +455,12 @@ class ESPLocalControlModule(reactContext: ReactApplicationContext) :
             object : ResponseListener {
                 override fun onSuccess(returnData: ByteArray?) {
                     val version = parseSecPatchVersion(returnData, endpoints.versionKey)
-                    Log.d(TAG, "Device advertises sec_patch_ver=$version")
+                    Log.d(TAG, "Device at $baseUrl advertises sec_patch_ver=$version")
                     onResult(version)
                 }
 
                 override fun onFailure(e: Exception) {
-                    Log.w(TAG, "Version endpoint unavailable, using sec_patch_ver=0: ${e.message}")
+                    Log.w(TAG, "Version endpoint unavailable at $baseUrl, using sec_patch_ver=0: ${e.message}")
                     onResult(0)
                 }
             }
@@ -496,44 +480,42 @@ class ESPLocalControlModule(reactContext: ReactApplicationContext) :
     }
 
     private fun establishSession(
-        baseUrl: String,
-        securityType: Int,
-        pop: String?,
-        username: String?,
+        device: EspLocalDevice,
         secPatchVersion: Int,
-        endpoints: LocalCtrlEndpoints,
         listener: ResponseListener
     ) {
-        val security: Security = when (securityType) {
-            2 -> Security2(username, pop, secPatchVersion).also {
+        val security: Security = when (device.securityType) {
+            2 -> Security2(device.username, device.pop, secPatchVersion).also {
                 Log.d(
                     TAG,
-                    "Created security 2 with username: $username, pop: $pop, patchVersion: $secPatchVersion"
+                    "Created security 2 for ${device.nodeId} with username: ${device.username}, patchVersion: $secPatchVersion"
                 )
             }
 
-            1 -> Security1(pop).also {
-                Log.d(TAG, "Created security 1 with pop: $pop")
+            1 -> Security1(device.pop).also {
+                Log.d(TAG, "Created security 1 for ${device.nodeId}")
             }
 
             0 -> Security0()
             else -> {
-                Log.e(TAG, "Invalid security type: $securityType. Defaulting to Security0.")
+                Log.e(TAG, "Invalid security type: ${device.securityType}. Defaulting to Security0.")
                 Security0()
             }
         }
 
-        val transport = EspLocalTransport(baseUrl)
-        session = EspLocalSession(transport, security, endpoints.sessionPath)
+        // The session is bound to this node's own transport and stored on the
+        // node's entry — never on the module — so it cannot be reused for a
+        // different nodeId.
+        val transport = EspLocalTransport(device.baseUrl)
+        val session = EspLocalSession(transport, security, device.endpoints.sessionPath)
+        device.session = session
 
-        session?.init(null, object : SessionListener {
+        session.init(null, object : SessionListener {
             override fun onSessionEstablished() {
-                sessionState = SessionState.CREATED
                 listener.onSuccess(null)
             }
 
             override fun onSessionEstablishFailed(e: Exception) {
-                sessionState = SessionState.FAILED
                 listener.onFailure(e)
             }
         })
@@ -557,11 +539,11 @@ class ESPLocalControlModule(reactContext: ReactApplicationContext) :
             return
         }
 
-        Log.d(TAG, "Base URL: $baseUrl")
-        val normalizedEndPoint = endPoint.removePrefix("/")
-        val finalUrl = "$baseUrl/$normalizedEndPoint"
-
-        Log.d(TAG, "Final URL for sending data: $finalUrl")
+        // Pass only the endpoint path: the destination host always comes from the
+        // session's own transport (built from device.baseUrl), so the log below
+        // reports the host the data is actually sent to.
+        val path = endPoint.removePrefix("/")
+        Log.d(TAG, "sendData: nodeId=$nodeId target=${device.baseUrl}/$path")
 
         val decodedData: ByteArray = try {
             Base64.getDecoder().decode(data)
@@ -570,19 +552,15 @@ class ESPLocalControlModule(reactContext: ReactApplicationContext) :
             return
         }
 
-        if (session == null || !session!!.isEstablished()) {
+        val session = device.session
+        if (session == null || !session.isEstablished()) {
             // Re-handshake with the per-node credentials captured at connect().
-            sessionState = SessionState.NOT_CREATED
+            Log.d(TAG, "sendData: no established session for $nodeId, re-handshaking with ${device.baseUrl}")
             initSession(
                 device,
-                device.baseUrl,
-                device.securityType,
-                device.pop,
-                device.username,
-                device.endpoints,
                 object : ResponseListener {
                     override fun onSuccess(returnData: ByteArray?) {
-                        sendDataToDevice(nodeId, finalUrl, decodedData, promise)
+                        sendDataToDevice(device, path, decodedData, promise)
                     }
 
                     override fun onFailure(e: Exception) {
@@ -591,8 +569,6 @@ class ESPLocalControlModule(reactContext: ReactApplicationContext) :
                         // connect() with current credentials instead of looping on
                         // the stale ones. The param write still falls back to MQTT.
                         localDeviceMap.remove(nodeId)
-                        session = null
-                        sessionState = SessionState.NOT_CREATED
                         promise.reject(
                             "SESSION_NOT_INITIALIZED",
                             "Failed to initialize session. Error: ${e.message}"
@@ -601,20 +577,26 @@ class ESPLocalControlModule(reactContext: ReactApplicationContext) :
                 }
             )
         } else {
-            sendDataToDevice(nodeId, finalUrl, decodedData, promise)
+            sendDataToDevice(device, path, decodedData, promise)
         }
     }
 
     /**
-     * Sends data to the device via the established session.
+     * Sends data to the device via its own established session.
      *
-     * @param nodeId Unique identifier of the device (used to evict cached state on failure).
-     * @param finalUrl Fully constructed URL for the endpoint.
+     * @param device Per-node connection state whose session and transport are used
+     *   (the entry is evicted from [localDeviceMap] on failure).
+     * @param path Endpoint path; the session's transport prepends the node's base URL.
      * @param data Data to send.
      * @param promise Promise to resolve with the device's response.
      */
-    private fun sendDataToDevice(nodeId: String, finalUrl: String, data: ByteArray, promise: Promise) {
-        session?.sendDataToDevice(finalUrl, data, object : ResponseListener {
+    private fun sendDataToDevice(device: EspLocalDevice, path: String, data: ByteArray, promise: Promise) {
+        val session = device.session
+        if (session == null) {
+            promise.reject("SESSION_NOT_INITIALIZED", "No session for nodeId ${device.nodeId}")
+            return
+        }
+        session.sendDataToDevice(path, data, object : ResponseListener {
             @RequiresApi(Build.VERSION_CODES.O)
             override fun onSuccess(returnData: ByteArray?) {
                 val encodedResponse = returnData?.let { Base64.getEncoder().encodeToString(it) } ?: ""
@@ -624,9 +606,8 @@ class ESPLocalControlModule(reactContext: ReactApplicationContext) :
             override fun onFailure(e: Exception?) {
                 // Send failed on a previously-good session (socket died / device
                 // rebooted): evict so the next call forces a fresh connect().
-                localDeviceMap.remove(nodeId)
-                session = null
-                sessionState = SessionState.NOT_CREATED
+                Log.w(TAG, "sendData failed for ${device.nodeId} (${device.baseUrl}): ${e?.message}")
+                localDeviceMap.remove(device.nodeId)
                 promise.reject("SEND_DATA_FAILED", e?.message ?: "Failed to send data")
             }
         })

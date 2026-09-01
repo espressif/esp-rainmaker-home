@@ -145,21 +145,26 @@ export const getNodeReadmeUrl = (
   (node?.nodeConfig?.info as { readme?: string } | undefined)?.readme ?? null;
 
 /**
- * Whether the "add to control group" entry should appear.
+ * Whether the control group settings field should appear on device settings.
  * @param node - CDF node
  * @param isPrimary - Node primary-user flag
- * @returns True when control groups are enabled and the node qualifies
+ * @returns True when control groups are enabled and the user can view the field
  */
 export const shouldShowAddToControlGroup = (
   node: ESPCDFNode | undefined,
   isPrimary: boolean,
 ): boolean =>
-  Boolean(
-    getFeatures().controlGroups &&
-      isPrimary &&
-      node &&
-      getPrimaryHomogeneousDeviceType(node) !== null,
-  );
+  Boolean(getFeatures().controlGroups && isPrimary && node);
+
+/**
+ * Whether a node can be assigned to a control group (homogeneous device type).
+ * @param node - CDF node
+ * @returns True when the node has a single compatible device type
+ */
+export const canNodeBeAddedToControlGroup = (
+  node: ESPCDFNode | undefined,
+): boolean =>
+  Boolean(node && getPrimaryHomogeneousDeviceType(node) !== null);
 
 /**
  * Whether the registration-token quick action should be shown.

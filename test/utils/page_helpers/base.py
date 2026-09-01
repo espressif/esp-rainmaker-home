@@ -607,27 +607,59 @@ class BasePage:
         except Exception:
             return ""
 
-    def select_named_device(self, name, timeout=15):
-        """Select a device on any device-selection screen by its name-specific id; clicks the visible label (the row's tap target may not register as 'clickable', and the list can load asynchronously)."""
-        element = self.find_visible("id", value=f"text_{name}_device_name", timeout=timeout)
-        if not element:
-            raise RuntimeError(f"Device '{name}' not found on the device-selection screen")
-        element.click()
+    def select_named_device(self, name, timeout=15, attempts=3):
+        """Select a device on any device-selection screen by its name-specific id; clicks the visible label (the row's tap target may not register as 'clickable') and re-taps if the sheet does not advance. On a retry, the label being gone means the earlier tap already advanced."""
+        for attempt in range(attempts):
+            element = self.find_visible("id", value=f"text_{name}_device_name", timeout=timeout if attempt == 0 else 3)
+            if not element:
+                if attempt:
+                    return self
+                raise RuntimeError(f"Device '{name}' not found on the device-selection screen")
+            try:
+                element.click()
+            except StaleElementReferenceException:
+                # Connectivity updates re-render the list between find and click; re-find and re-tap.
+                logger.info("RETRY select_named_device(%r): stale row, re-finding (attempt %s/%s)", name, attempt + 1, attempts)
+                continue
+            if self._wait_for_row_to_leave(lambda: self.is_id_visible(f"text_{name}_device_name", 0.5)):
+                return self
+            logger.info("RETRY select_named_device(%r): sheet did not advance, re-tapping (attempt %s/%s)", name, attempt + 1, attempts)
         return self
 
-    def select_list_item(self, items_locator, name=None, timeout=10):
-        """Click a list row matching `name`; click the sole row if there is only one."""
-        self.is_visible(items_locator, timeout=timeout)
-        rows = self.find_all(items_locator)
-        if not rows:
-            raise RuntimeError(f"No '{items_locator}' rows available to select")
-        if name:
-            for row in rows:
-                if name.lower() in self._element_label(row).lower():
-                    row.click()
+    def _wait_for_row_to_leave(self, still_visible, grace=5.0):
+        """Poll until a tapped row leaves the tree (screen advanced). A re-tap fired during the transition animation lands on the incoming screen and opens whatever sits at those coordinates, so give the first tap the full grace window to prove itself."""
+        deadline = time.time() + grace
+        while time.time() < deadline:
+            if not still_visible():
+                return True
+            time.sleep(0.3)
+        return False
+
+    def select_list_item(self, items_locator, name=None, timeout=10, attempts=3):
+        """Click a list row matching `name` (or the sole row); re-tap if the list does not advance. On a retry, the rows being gone means the earlier tap already advanced."""
+        for attempt in range(attempts):
+            if not self.is_visible(items_locator, timeout=timeout if attempt == 0 else 3):
+                if attempt:
                     return self
-            raise RuntimeError(f"No '{items_locator}' row matched '{name}' among {len(rows)} rows")
-        rows[0].click()
+                raise RuntimeError(f"No '{items_locator}' rows available to select")
+            try:
+                rows = self.find_all(items_locator)
+                if not rows:
+                    if attempt:
+                        return self
+                    raise RuntimeError(f"No '{items_locator}' rows available to select")
+                target = rows[0]
+                if name:
+                    target = next((row for row in rows if name.lower() in self._element_label(row).lower()), None)
+                    if target is None:
+                        raise RuntimeError(f"No '{items_locator}' row matched '{name}' among {len(rows)} rows")
+                target.click()
+            except StaleElementReferenceException:
+                logger.info("RETRY select_list_item(%r): stale row, re-finding (attempt %s/%s)", items_locator, attempt + 1, attempts)
+                continue
+            if self._wait_for_row_to_leave(lambda: self.is_visible(items_locator, timeout=0.5)):
+                return self
+            logger.info("RETRY select_list_item(%r): list did not advance, re-tapping (attempt %s/%s)", items_locator, attempt + 1, attempts)
         return self
 
     def read_power_state(self, timeout=5):
@@ -640,6 +672,22 @@ class BasePage:
                 return "off"
             time.sleep(0.5)
         return None
+
+    def commit_text_input(self, locator_name_or_type, value=None, timeout=5):
+        """Commit a single-line input via the keyboard's own Return/Enter — a blind screen tap to blur can land inside another input and re-summon the keyboard."""
+        if self.platform == "ios":
+            element = self.find_visible(locator_name_or_type, value=value, timeout=timeout)
+            if element is None:
+                logger.info("commit_text_input: input %r not visible, skipping Return", value or locator_name_or_type)
+                return self
+            element.send_keys("\n")
+            if self._is_keyboard_shown():
+                logger.info("RETRY commit_text_input(%r): keyboard still up after Return, falling back to hide", value or locator_name_or_type)
+                self.hide_keyboard_if_visible()
+        else:
+            self.driver.press_keycode(66)
+            self.hide_keyboard_if_visible()
+        return self
 
     def hide_keyboard_if_visible(self):
         """Hide keyboard if visible; return True only when keyboard is gone (or was never shown)."""

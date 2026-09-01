@@ -26,6 +26,8 @@ class Guide(BasePage):
             return False
 
     def tap_continue(self):
-        """Tap Continue on the guide screen."""
+        """Tap Continue on the guide screen; a failed remote-content load is logged, not asserted — the app keeps Continue available."""
+        if self.is_visible("empty_state", timeout=1):
+            logger.warning("Guide load network failure observed; the app showed the failure state and Continue remains available")
         self.click("continue_button", timeout=5)
         return self

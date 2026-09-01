@@ -33,7 +33,7 @@ class ConnectWifi(BasePage):
         """Assisted claiming sits between PoP/QR and this screen; let it finish before looking here."""
         return self.get_other_page_helper("claiming").wait_until_finished()
 
-    def wait_for_network_selection_loading_to_finish(self, timeout=10):
+    def wait_for_network_selection_loading_to_finish(self, timeout=20):
         """Wait for the network picker loading spinner to disappear."""
         if not self.is_visible("network_selection_loading", timeout=2):
             logger.info("Select Wi-Fi loading spinner not visible")

@@ -211,6 +211,7 @@ export const SDK_FEATURE_MAP: Record<
     thirdPartyAuth: true,
     voiceAssistants: true,
     onNetworkProvisioning: true,
+    softApProvisioning: true,
     // Matter lives in the separate ESPRMMatterBase adaptor, not this one.
     matterCommissioning: false,
     accountDeletion: true,
@@ -236,6 +237,7 @@ export const SDK_FEATURE_MAP: Record<
     // Challenge-response association over LAN HTTP, against the `ch_resp`
     // endpoint set on the shared `_esp_rmaker_ctrl._tcp` instance.
     onNetworkProvisioning: true,
+    softApProvisioning: true,
     // The RMNeo stack has no Matter support: its CDF group exposes no
     // `convertToMatterFabric` / `issueUserNoC`, so commissioning cannot run.
     matterCommissioning: false,
@@ -260,6 +262,7 @@ export const SDK_FEATURE_MAP: Record<
     voiceAssistants: true,
     matterCommissioning: true,
     onNetworkProvisioning: true,
+    softApProvisioning: true,
     accountDeletion: true,
   },
 };

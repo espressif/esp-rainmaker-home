@@ -12,6 +12,7 @@ import os
 import sqlite3
 import threading
 import time
+from contextlib import closing
 from pathlib import Path
 from typing import Any, Dict, Optional
 
@@ -71,7 +72,7 @@ class SqliteResourceStore:
         return connection
 
     def _init_db(self) -> None:
-        with self._thread_lock, self._connect() as connection:
+        with self._thread_lock, closing(self._connect()) as connection, connection:
             connection.executescript(_SCHEMA)
             self._ensure_column(connection, "resources", "last_released_at", "REAL")
             connection.commit()
@@ -103,7 +104,7 @@ class SqliteResourceStore:
         """Insert or refresh a discovered device without stealing active locks."""
         now = time.time()
         metadata_json = json.dumps(metadata or {})
-        with self._thread_lock, self._connect() as connection:
+        with self._thread_lock, closing(self._connect()) as connection, connection:
             row = connection.execute(
                 "SELECT status, owner_pid FROM resources WHERE mac_address = ?",
                 (mac_address,),
@@ -149,7 +150,7 @@ class SqliteResourceStore:
         """Reclaim locks whose owner process is gone."""
         now = time.time()
         reclaimed = 0
-        with self._thread_lock, self._connect() as connection:
+        with self._thread_lock, closing(self._connect()) as connection, connection:
             rows = connection.execute(
                 """
                 SELECT mac_address, owner_pid, lock_expires_at, status
@@ -195,7 +196,7 @@ class SqliteResourceStore:
         chip_type = chip_type.lower()
         now = time.time()
         expires_at = now + lease_seconds
-        with self._thread_lock, self._connect() as connection:
+        with self._thread_lock, closing(self._connect()) as connection, connection:
             candidates = connection.execute(
                 """
                 SELECT * FROM resources
@@ -264,7 +265,7 @@ class SqliteResourceStore:
         mac_up = (mac_address or "").upper()
         now = time.time()
         expires_at = now + lease_seconds
-        with self._thread_lock, self._connect() as connection:
+        with self._thread_lock, closing(self._connect()) as connection, connection:
             row = connection.execute(
                 "SELECT * FROM resources WHERE upper(mac_address) = ? AND status = ?",
                 (mac_up, ResourceStatus.AVAILABLE.value),
@@ -307,15 +308,30 @@ class SqliteResourceStore:
 
     def active_reserved_ports(self) -> list:
         """Ports held by ANY live owner — discovery must not probe these (esptool chip-id resets the board mid-use). Status is deliberately ignored: provisioning flows flip owned rows to FLASHING/PROVISIONING/IN_USE, and a status filter left those ports probe-able while still owned."""
-        with self._thread_lock, self._connect() as connection:
+        with self._thread_lock, closing(self._connect()) as connection, connection:
             rows = connection.execute(
                 "SELECT port, owner_pid FROM resources WHERE owner_pid IS NOT NULL",
             ).fetchall()
         return [row["port"] for row in rows if row["port"] and row["owner_pid"] and _pid_alive(row["owner_pid"])]
 
+    def busy_holder(self, chip_type: str = None, mac_address: str = None) -> Optional[Dict[str, Any]]:
+        """Row owned by a LIVE process matching the query — the caller may productively wait for it. Same liveness predicate as active_reserved_ports; status is ignored because owned rows move through FLASHING/PROVISIONING/IN_USE."""
+        with self._thread_lock, closing(self._connect()) as connection, connection:
+            rows = connection.execute(
+                "SELECT * FROM resources WHERE owner_pid IS NOT NULL",
+            ).fetchall()
+        for row in rows:
+            if chip_type and (row["chip_type"] or "").lower() != chip_type.lower():
+                continue
+            if mac_address and (row["mac_address"] or "").upper() != mac_address.upper():
+                continue
+            if row["owner_pid"] and _pid_alive(row["owner_pid"]):
+                return dict(row)
+        return None
+
     def update_status(self, mac_address: str, status: ResourceStatus, error: str = "") -> None:
         """Update lifecycle status for a resource."""
-        with self._thread_lock, self._connect() as connection:
+        with self._thread_lock, closing(self._connect()) as connection, connection:
             connection.execute(
                 """
                 UPDATE resources
@@ -330,7 +346,7 @@ class SqliteResourceStore:
     def release(self, mac_address: str) -> None:
         """Release a resource back to the available pool."""
         now = time.time()
-        with self._thread_lock, self._connect() as connection:
+        with self._thread_lock, closing(self._connect()) as connection, connection:
             connection.execute(
                 """
                 UPDATE resources

@@ -7,6 +7,16 @@
 /** i18n key for the empty state when a device control panel has no parameters. */
 export const I18N_DEVICE_CONTROL_FALLBACK_NO_PARAMS = "device.control.fallbackNoParams";
 
+/** i18n key for the Guide screen title when markdown fails to load. */
+export const I18N_DEVICE_GUIDE_LOAD_FAILED = "device.control.guideLoadFailed";
+
+/** i18n key for the Guide screen description when markdown fails to load. */
+export const I18N_DEVICE_GUIDE_LOAD_FAILED_DESCRIPTION =
+  "device.control.guideLoadFailedDescription";
+
+/** Sentinel stored on Guide fetch failure (UI copy comes from i18n, not this value). */
+export const GUIDE_LOAD_FAILED = "load_failed";
+
 /** Settings quick-action tile ids (horizontal row after node info). */
 export const SETTINGS_QUICK_ACTION_AUTH_TOKEN = "auth_token";
 export const SETTINGS_QUICK_ACTION_DEVICE_LIST = "device_list";
