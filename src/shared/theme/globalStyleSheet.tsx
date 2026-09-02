@@ -656,6 +656,192 @@ export const globalStyles = StyleSheet.create({
     backgroundColor: tokens.colors.bg1,
     marginHorizontal: tokens.spacing._15,
   },
+  settingsOptionChip: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    margin: tokens.spacing._5,
+    paddingVertical: tokens.spacing._10,
+    paddingHorizontal: tokens.spacing._15,
+    borderRadius: tokens.radius.sm,
+    backgroundColor: tokens.colors.bg5,
+  },
+  settingsOptionChipSelected: {
+    backgroundColor: tokens.colors.bg1,
+  },
+  settingsOptionChipLabel: {
+    flex: 1,
+    paddingRight: tokens.spacing._10,
+    fontSize: tokens.fontSize.sm,
+    fontFamily: tokens.fonts.medium,
+    color: tokens.colors.black,
+  },
+  settingsOptionChipLabelSelected: {
+    color: tokens.colors.primary,
+    fontWeight: "600",
+  },
+  settingsOptionChipDisabled: {
+    opacity: 0.5,
+  },
+  settingsOptionValueText: {
+    fontSize: tokens.fontSize.sm,
+    color: tokens.colors.black,
+    fontFamily: tokens.fonts.medium,
+    flexShrink: 1,
+  },
+  settingsOptionEmptyText: {
+    fontSize: tokens.fontSize.sm,
+    color: tokens.colors.text_secondary,
+    fontFamily: tokens.fonts.regular,
+    paddingVertical: tokens.spacing._10,
+  },
+  settingsPickerCreateRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: tokens.spacing._10,
+    paddingVertical: tokens.spacing._10,
+    paddingHorizontal: tokens.spacing._5,
+  },
+  settingsPickerCreateRowAfterList: {
+    marginTop: tokens.spacing._5,
+    borderTopWidth: 1,
+    borderTopColor: tokens.colors.bg4,
+    paddingTop: tokens.spacing._15,
+  },
+  settingsPickerCreateRowBeforeList: {
+    marginBottom: tokens.spacing._5,
+    borderBottomWidth: 1,
+    borderBottomColor: tokens.colors.bg4,
+    paddingBottom: tokens.spacing._15,
+  },
+  settingsPickerCreateRowText: {
+    flex: 1,
+    fontSize: tokens.fontSize.sm,
+    color: tokens.colors.primary,
+    fontFamily: tokens.fonts.medium,
+  },
+  settingsFieldValue: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: tokens.spacing._5,
+    flexShrink: 1,
+  },
+  settingsFieldValueDisabled: {
+    opacity: 0.5,
+  },
+  settingsFieldCard: {
+    backgroundColor: tokens.colors.white,
+    borderRadius: tokens.radius.sm,
+    marginBottom: tokens.spacing._15,
+    overflow: "hidden",
+  },
+  settingsFieldCardHeader: {
+    padding: tokens.spacing._15,
+  },
+  settingsFieldCardHeaderContent: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    width: "100%",
+  },
+  settingsFieldCardHeaderText: {
+    flex: 1,
+    paddingRight: tokens.spacing._10,
+  },
+  settingsFieldCardTitle: {
+    fontWeight: "500",
+    fontFamily: tokens.fonts.medium,
+    color: tokens.colors.black,
+    marginBottom: 0,
+  },
+  settingsFieldCardLabel: {
+    fontWeight: "500",
+    fontFamily: tokens.fonts.medium,
+    color: tokens.colors.black,
+    marginBottom: 0,
+  },
+  settingsFieldCardValue: {
+    fontSize: tokens.fontSize.sm,
+    fontFamily: tokens.fonts.medium,
+    color: tokens.colors.primary,
+    flexShrink: 1,
+    textAlign: "right",
+  },
+  settingsFieldCardDescription: {
+    fontSize: tokens.fontSize.xs,
+    color: tokens.colors.gray,
+    marginTop: 2,
+    fontFamily: tokens.fonts.regular,
+  },
+  settingsFieldCardRight: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: tokens.spacing._5,
+    flexShrink: 1,
+    justifyContent: "flex-end",
+  },
+  settingsFieldCardIconButton: {
+    width: 28,
+    height: 28,
+    borderRadius: tokens.radius.sm,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: tokens.colors.gray + "15",
+  },
+  settingsFieldCardDisabled: {
+    opacity: 0.5,
+  },
+  settingsPickerDrawer: {
+    backgroundColor: tokens.colors.white,
+    borderTopLeftRadius: tokens.radius.md,
+    borderTopRightRadius: tokens.radius.md,
+    minHeight: "45%",
+    maxHeight: "80%",
+    overflow: "hidden",
+  },
+  settingsPickerDrawerHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: tokens.spacing._15,
+    paddingBottom: tokens.spacing._10,
+  },
+  settingsPickerDrawerHeaderText: {
+    flex: 1,
+    paddingRight: tokens.spacing._10,
+  },
+  settingsPickerDrawerTitle: {
+    fontSize: tokens.fontSize.md,
+    fontFamily: tokens.fonts.medium,
+    color: tokens.colors.black,
+  },
+  settingsPickerDrawerSubtitle: {
+    marginTop: tokens.spacing._5,
+    fontSize: tokens.fontSize.sm,
+    color: tokens.colors.text_secondary,
+    fontFamily: tokens.fonts.regular,
+  },
+  settingsPickerDrawerList: {
+    flex: 1,
+  },
+  settingsPickerDrawerOptions: {
+    paddingHorizontal: tokens.spacing._10,
+    paddingBottom: tokens.spacing._10,
+  },
+  settingsPickerDrawerEmptyState: {
+    flexGrow: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: tokens.spacing._20,
+    paddingVertical: tokens.spacing._30,
+    minHeight: 160,
+  },
+  settingsPickerDrawerEmptyStateText: {
+    fontSize: tokens.fontSize.sm,
+    color: tokens.colors.text_secondary,
+    fontFamily: tokens.fonts.regular,
+    textAlign: "center",
+  },
 
   // Device scanning styles
   scanContainer: {
@@ -1754,6 +1940,56 @@ export const globalStyles = StyleSheet.create({
   },
   scheduleTimeButton: {
     alignItems: "flex-end",
+  },
+  scheduleTriggerTypeContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    alignSelf: "flex-end",
+    backgroundColor: tokens.colors.bg1,
+    borderRadius: tokens.radius.sm,
+    padding: tokens.spacing._5 / 2,
+    gap: tokens.spacing._5 / 2,
+  },
+  scheduleTriggerTypeButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: tokens.spacing._5 / 2,
+    paddingVertical: tokens.spacing._5,
+    paddingHorizontal: tokens.spacing._10,
+    borderRadius: tokens.radius.sm,
+    backgroundColor: "transparent",
+  },
+  scheduleTriggerTypeButtonActive: {
+    backgroundColor: tokens.colors.white,
+    shadowColor: tokens.colors.black,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  scheduleTriggerTypeText: {
+    fontSize: tokens.fontSize.xxs,
+    fontFamily: tokens.fonts.regular,
+    color: tokens.colors.text_secondary,
+  },
+  scheduleTriggerTypeTextActive: {
+    fontFamily: tokens.fonts.medium,
+    color: tokens.colors.text_primary,
+    fontWeight: "600",
+  },
+  scheduleRelativePickerHint: {
+    textAlign: "center",
+    fontSize: tokens.fontSize.xs,
+    color: tokens.colors.text_secondary,
+    marginBottom: tokens.spacing._10,
+    paddingHorizontal: tokens.spacing._15,
+  },
+  scheduleRelativePickerLabels: {
+    flexDirection: "row",
+    justifyContent: "space-around",
+    paddingHorizontal: tokens.spacing._30,
+    marginTop: tokens.spacing._5,
   },
 
   // Scene Management Styles
@@ -3715,46 +3951,6 @@ export const globalStyles = StyleSheet.create({
     shadowOpacity: 0.15,
     shadowRadius: 10,
     elevation: 6,
-  },
-  // CreateRoomSuccess
-  createRoomSuccessContainer: {
-    flex: 1,
-    backgroundColor: tokens.colors.white,
-  },
-  createRoomSuccessContent: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: tokens.spacing._20,
-  },
-  createRoomSuccessIllustration: {
-    width: 120,
-    height: 120,
-    marginBottom: tokens.spacing._10,
-  },
-  createRoomSuccessTitle: {
-    fontFamily: tokens.fonts.medium,
-    fontSize: 18,
-    color: tokens.colors.black,
-    textAlign: "center",
-    marginBottom: tokens.spacing._10,
-  },
-  createRoomSuccessSubtitle: {
-    fontFamily: tokens.fonts.regular,
-    textAlign: "center",
-    color: tokens.colors.gray,
-    marginBottom: tokens.spacing._30,
-  },
-  createRoomSuccessButton: {
-    width: "100%",
-    shadowColor: tokens.colors.primary,
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.15,
-    shadowRadius: 10,
-    elevation: 6,
-  },
-  createRoomSuccessButtonSpacing: {
-    marginTop: tokens.spacing._10,
   },
   // Home screen
   homeScreenContainer: {

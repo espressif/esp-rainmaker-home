@@ -33,3 +33,63 @@ Feature: Schedule end-to-end
     When user opens the schedule tab
     And user removes any existing schedules
     Then schedule "Sanity Schedule" should not be visible
+
+  Scenario: Enable and disable a schedule via the inline switch
+    When user opens the schedule tab
+    Then user should be on schedules screen
+    When user removes any existing schedules
+    And user taps add schedule
+    And user names the schedule "Switch Schedule"
+    Then user should be on create schedule screen
+    When user sets the schedule time "120" minutes ahead
+    And user taps add action
+    And user selects the "E2E Light" device
+    And user sets action "Power" to "on"
+    And user finishes the action
+    And user saves the schedule
+    Then user should see schedule created successfully toast
+    And schedule "Switch Schedule" should be visible
+    When user toggles schedule "Switch Schedule" via the inline switch
+    And user toggles schedule "Switch Schedule" via the inline switch
+    Then schedule "Switch Schedule" should be visible
+    When user removes any existing schedules
+    Then schedule "Switch Schedule" should not be visible
+
+  Scenario: Edit an existing schedule and verify the edited time fires
+    When user opens the schedule tab
+    Then user should be on schedules screen
+    When user removes any existing schedules
+    And user taps add schedule
+    And user names the schedule "Edit Schedule"
+    Then user should be on create schedule screen
+    When user sets the schedule time "120" minutes ahead
+    And user taps add action
+    And user selects the "E2E Light" device
+    And user sets action "Hue" to "200"
+    And user finishes the action
+    And user saves the schedule
+    Then user should see schedule created successfully toast
+    And schedule "Edit Schedule" should be visible
+    When user opens schedule "Edit Schedule" for editing
+    And user renames the open schedule to "Edited Schedule"
+    And user sets the schedule time "3" minutes ahead
+    And user saves the schedule
+    Then user should see schedule updated successfully toast
+    And schedule "Edited Schedule" should be visible
+    Then the device log should show "Hue" set to "200" within "250" seconds
+    When user opens the schedule tab
+    And user removes any existing schedules
+    Then schedule "Edited Schedule" should not be visible
+
+  @max_schedule_badge
+  Scenario: Max schedules badge blocks the device in selection
+    Given the device already has "10" bulk schedules
+    When user opens the schedule tab
+    Then user should be on schedules screen
+    When user taps add schedule
+    And user names the schedule "Overflow Schedule"
+    Then user should be on create schedule screen
+    When user sets the schedule time "120" minutes ahead
+    And user taps add action
+    Then the max schedules badge should be shown for the device
+    When user removes all bulk schedules from the cloud

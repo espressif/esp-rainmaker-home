@@ -10,8 +10,6 @@ import ESPProvision
 
 @objc(ESPLocalControlModule)
 class ESPLocalControlModule: NSObject {
-  
-  var espLocalDevice = ESPDevice(name: "espDevice", security: .unsecure, transport: .softap)
 
   /// Protocomm endpoints of the local-control protocol a node speaks.
   ///
@@ -41,11 +39,73 @@ class ESPLocalControlModule: NSObject {
     }
   }
 
-  /// Endpoints captured at `connect()` time, reused for any re-handshake.
-  private var endpoints = LocalCtrlEndpoints(options: nil)
+  /// Per-node connection state captured at `connect()` time: the node's own
+  /// `ESPDevice` (which holds its session/transport) plus the protocomm
+  /// endpoints it was connected with.
+  private struct LocalDeviceEntry {
+    let device: ESPDevice
+    let endpoints: LocalCtrlEndpoints
+  }
+
+  // All connection state lives on the per-node entries in this map. There is
+  // deliberately NO module-wide device/session: a single shared `ESPDevice`
+  // meant sendData(nodeA) could ride whichever node connected last, delivering
+  // params to the wrong device.
+  private var devicesByNodeId: [String: LocalDeviceEntry] = [:]
+
+  /// Promise callbacks of `connect()` calls whose handshake is still in flight,
+  /// keyed by node. A second `connect(nodeId)` arriving while a handshake for
+  /// that node is pending joins the existing attempt instead of starting a
+  /// parallel one.
+  private var pendingConnects: [String: [(RCTPromiseResolveBlock, RCTPromiseRejectBlock)]] = [:]
+
+  /// Guards `devicesByNodeId` and `pendingConnects`: RN method-queue calls and
+  /// ESPProvision completion handlers touch them from different threads.
+  private let stateLock = NSLock()
+
+  private func entry(for nodeId: String) -> LocalDeviceEntry? {
+    stateLock.lock()
+    defer { stateLock.unlock() }
+    return devicesByNodeId[nodeId]
+  }
+
+  private func setEntry(_ entry: LocalDeviceEntry, for nodeId: String) {
+    stateLock.lock()
+    defer { stateLock.unlock() }
+    devicesByNodeId[nodeId] = entry
+  }
+
+  private func removeEntry(for nodeId: String) {
+    stateLock.lock()
+    defer { stateLock.unlock() }
+    devicesByNodeId[nodeId] = nil
+  }
+
+  /// Registers a `connect()` waiter for `nodeId`. Returns `true` when a handshake
+  /// for this node is already in flight — the new caller has joined it and the
+  /// caller must NOT start another handshake.
+  private func registerConnectWaiter(for nodeId: String, resolve: @escaping RCTPromiseResolveBlock, reject: @escaping RCTPromiseRejectBlock) -> Bool {
+    stateLock.lock()
+    defer { stateLock.unlock() }
+    if pendingConnects[nodeId] != nil {
+      pendingConnects[nodeId]?.append((resolve, reject))
+      return true
+    }
+    pendingConnects[nodeId] = [(resolve, reject)]
+    return false
+  }
+
+  /// Removes and returns every waiter registered for `nodeId`, so the handshake
+  /// outcome settles all of them exactly once.
+  private func drainConnectWaiters(for nodeId: String) -> [(RCTPromiseResolveBlock, RCTPromiseRejectBlock)] {
+    stateLock.lock()
+    defer { stateLock.unlock() }
+    let waiters = pendingConnects[nodeId] ?? []
+    pendingConnects[nodeId] = nil
+    return waiters
+  }
 
   /// Normalizes `baseUrl` for ESPProvision `ESPSoftAPTransport`, which prepends `http://` when building URLs.
-
   private func baseUrlForSoftApTransport(_ baseUrl: String) -> String {
     var s = baseUrl.trimmingCharacters(in: .whitespacesAndNewlines)
     let lower = s.lowercased()
@@ -59,8 +119,12 @@ class ESPLocalControlModule: NSObject {
     }
     return s
   }
-  
+
   /// Checks if the ESP device is connected and has an established session.
+  ///
+  /// "Connected" means THIS node's own session is established — never another
+  /// node's. Each node has its own `ESPDevice` entry, so the answer can't be
+  /// satisfied by a session that actually belongs to a different device.
   ///
   /// - Parameters:
   ///   - nodeId: The identifier of the ESP device to check.
@@ -70,40 +134,31 @@ class ESPLocalControlModule: NSObject {
   ///   - reject: A callback invoked with an error message if the check fails.
   @objc(isConnected:resolve:reject:)
   func isConnected(nodeId: String, resolve: @escaping RCTPromiseResolveBlock, reject: @escaping RCTPromiseRejectBlock) {
-    // Check if the provided nodeId matches the name of the local ESP device.
-    if espLocalDevice.name != nodeId {
-      // If the nodeId not matches, resolve with false as the session is not established.
-      resolve(false)
-      return
-    }
-    // Resolve with the session status of the ESP device.
-    resolve(espLocalDevice.isSessionEstablished())
-  }
-
-  /// Resets the cached device to an unsecure stub so `isConnected` reports `false` and the
-  /// next `connect()` performs a fresh SEC1 handshake with current credentials.
-  ///
-  /// ESPProvision caches `isSessionEstablished` once at handshake and never resets it (not on
-  /// a failed send, and `ESPDevice.disconnect()` only tears down a softAP hotspot config), so
-  /// we replace the device object outright to invalidate stale session/PoP/IP state.
-  private func resetLocalDevice() {
-    espLocalDevice = ESPDevice(name: "espDevice", security: .unsecure, transport: .softap)
+    resolve(entry(for: nodeId)?.device.isSessionEstablished() ?? false)
   }
 
   /// Drops the cached session/credentials for `nodeId` so the next `connect()` re-handshakes
   /// with current credentials. Call on re-provision, PoP/IP change, or mDNS loss (wired from
   /// the JS `DISCOVERY_LOST` handler via `ESPLocalControlAdapter.disconnect`).
   ///
-  /// Guarded by a name match so invalidating one node never tears down a different node's
-  /// active session (this module holds a single `espLocalDevice`).
+  /// ESPProvision caches `isSessionEstablished` once at handshake and never resets it (not on
+  /// a failed send, and `ESPDevice.disconnect()` only tears down a softAP hotspot config), so
+  /// we drop the node's entry outright to invalidate stale session/PoP/IP state. Only this
+  /// node's entry is removed; other nodes' active sessions are untouched.
   @objc(disconnect:)
   func disconnect(nodeId: String) {
-    if espLocalDevice.name == nodeId {
-      resetLocalDevice()
-    }
+    removeEntry(for: nodeId)
   }
-  
+
   /// Establishes a connection to an ESP device using the specified parameters.
+  ///
+  /// Calling this while a handshake for the same node is already in flight does
+  /// NOT start a second handshake: the call joins the pending attempt and both
+  /// promises settle with that attempt's outcome (a joiner's own parameters are
+  /// ignored — call `disconnect(nodeId:)` first to force a fresh handshake with
+  /// new credentials). Calling it while a session is already established always
+  /// re-handshakes and, on success, atomically replaces the node's entry;
+  /// in-flight `sendData` calls complete on the old session they captured.
   ///
   /// - Parameters:
   ///   - nodeId: The identifier of the ESP device to connect to.
@@ -120,7 +175,7 @@ class ESPLocalControlModule: NSObject {
   ///   - reject: A callback invoked with an error message if the connection fails.
   @objc(connect:baseUrl:securityType:pop:username:options:resolve:reject:)
   func connect(nodeId: String, baseUrl: String, securityType: NSNumber, pop: String?, username: String?, options: NSDictionary?, resolve: @escaping RCTPromiseResolveBlock, reject: @escaping RCTPromiseRejectBlock) {
-    endpoints = LocalCtrlEndpoints(options: options)
+    let endpoints = LocalCtrlEndpoints(options: options)
     // Determine the connection security type and configure the ESPDevice
     // accordingly.
     //
@@ -131,7 +186,8 @@ class ESPLocalControlModule: NSObject {
     // for security 2 (SRP6a authenticated handshake). This mirrors what the
     // Android `ESPLocalControlModule` already does — it constructs
     // `Security1(pop)` even when `pop` is null/empty.
-    switch securityType {
+    let device: ESPDevice
+    switch securityType.intValue {
     case 1:
       // IMPORTANT: pass `""` (not `nil`) when POP isn't supplied. iOS
       // `ESPDevice.initialiseSession` treats `proofOfPossession == nil` as
@@ -140,7 +196,7 @@ class ESPLocalControlModule: NSObject {
       // callback forever. An empty-string POP routes through
       // `initSecureSession(pop: "")` → `ESPSecurity1(proofOfPossession: "")`,
       // which matches Android's `Security1(null/empty)` path.
-      espLocalDevice = ESPDevice(
+      device = ESPDevice(
         name: nodeId,
         security: .secure,
         transport: .softap,
@@ -149,37 +205,52 @@ class ESPLocalControlModule: NSObject {
     case 2:
       // Secure connection with proof of possession and username.
       if let pop = pop, let username = username {
-        espLocalDevice = ESPDevice(name: nodeId, security: .secure, transport: .softap, proofOfPossession: pop, username: username)
+        device = ESPDevice(name: nodeId, security: .secure, transport: .softap, proofOfPossession: pop, username: username)
       } else {
         reject("error", "Username or password is missing", nil)
         return
       }
     default:
       // Unsecure connection.
-      espLocalDevice = ESPDevice(name: nodeId, security: .unsecure, transport: .softap)
+      device = ESPDevice(name: nodeId, security: .unsecure, transport: .softap)
     }
-    
-    // Configure the transport layer for the ESPDevice.
-    espLocalDevice.espSoftApTransport = ESPSoftAPTransport(baseUrl: baseUrlForSoftApTransport(baseUrl))
+
+    // A handshake for this node is already in flight: join it instead of racing
+    // a second one against the same device.
+    if registerConnectWaiter(for: nodeId, resolve: resolve, reject: reject) {
+      return
+    }
+
+    // Configure the transport layer for the ESPDevice. The session this device
+    // establishes is bound to this transport (this node's own base URL) and is
+    // stored on the node's map entry, so it can never serve another nodeId.
+    device.espSoftApTransport = ESPSoftAPTransport(baseUrl: baseUrlForSoftApTransport(baseUrl))
 
     // Security2 IV scheme depends on firmware sec_patch_ver; probe it first.
-    if securityType == 2 {
-      fetchSecPatchVersion { patchVersion in
+    if securityType.intValue == 2 {
+      fetchSecPatchVersion(device: device, endpoints: endpoints) { patchVersion in
         var prov: [String: Any] = ["sec_ver": ESPSecurity.secure2.rawValue]
         if let patchVersion = patchVersion {
           prov["sec_patch_ver"] = patchVersion
         }
-        self.espLocalDevice.versionInfo = ["prov": prov] as NSDictionary
-        self.establishSession(resolve: resolve, reject: reject)
+        device.versionInfo = ["prov": prov] as NSDictionary
+        self.establishSession(nodeId: nodeId, device: device, endpoints: endpoints)
       }
     } else {
-      establishSession(resolve: resolve, reject: reject)
+      establishSession(nodeId: nodeId, device: device, endpoints: endpoints)
     }
   }
 
-  private func fetchSecPatchVersion(completion: @escaping (Int?) -> Void) {
+  /// Probes the node's version endpoint for `sec_patch_ver` (selects the
+  /// Security 2 AES-GCM IV scheme). `sec_patch_ver` is OPTIONAL by design:
+  /// pre-patch firmware doesn't report it at all, and omitting the key makes
+  /// ESPProvision fall back to patch version 0 (the legacy scheme), which is
+  /// exactly what that firmware speaks. So a missing/unreadable value must NOT
+  /// fail the connection — a genuine mismatch is still caught, because the
+  /// SRP6a handshake in `establishSession` fails and rejects the promise.
+  private func fetchSecPatchVersion(device: ESPDevice, endpoints: LocalCtrlEndpoints, completion: @escaping (Int?) -> Void) {
     let versionKey = endpoints.versionKey
-    espLocalDevice.espSoftApTransport.SendConfigData(path: endpoints.versionPath, data: Data("---".utf8)) { response, _ in
+    device.espSoftApTransport.SendConfigData(path: endpoints.versionPath, data: Data("---".utf8)) { response, _ in
       guard
         let response = response,
         let json = try? JSONSerialization.jsonObject(with: response) as? [String: Any],
@@ -192,20 +263,28 @@ class ESPLocalControlModule: NSObject {
     }
   }
 
-  private func establishSession(resolve: @escaping RCTPromiseResolveBlock, reject: @escaping RCTPromiseRejectBlock) {
-    espLocalDevice.initialiseSession(sessionPath: endpoints.sessionPath) { status in
+  private func establishSession(nodeId: String, device: ESPDevice, endpoints: LocalCtrlEndpoints) {
+    device.initialiseSession(sessionPath: endpoints.sessionPath) { status in
+      // Settle every connect() call that joined this handshake.
+      let waiters = self.drainConnectWaiters(for: nodeId)
       switch status {
       case .connected:
-        resolve(["status": "success"])
+        // Only a successfully handshaked device is published to the map, so
+        // isConnected()/sendData() never see a half-connected entry.
+        self.setEntry(LocalDeviceEntry(device: device, endpoints: endpoints), for: nodeId)
+        waiters.forEach { resolve, _ in resolve(["status": "success"]) }
       case .failedToConnect(let eSPSessionError):
-        reject("error", eSPSessionError.description, nil)
+        waiters.forEach { _, reject in reject("error", eSPSessionError.description, nil) }
       case .disconnected:
-        reject("error", "Failed to establish session", nil)
+        waiters.forEach { _, reject in reject("error", "Failed to establish session", nil) }
       }
     }
   }
-  
+
   /// Sends data to the specified ESP device through a given path.
+  ///
+  /// The data goes out on the target node's own session — looked up by `nodeId`
+  /// — so a concurrent `connect()` for a different node can never redirect it.
   ///
   /// - Parameters:
   ///   - nodeId: The identifier of the ESP device to send data to.
@@ -215,35 +294,45 @@ class ESPLocalControlModule: NSObject {
   ///   - reject: A callback invoked with an error message if the data fails to send or if the data is not base64 encoded.``
   @objc(sendData:path:data:resolve:reject:)
   func sendData(nodeId: String, path: String, data: String, resolve: @escaping RCTPromiseResolveBlock, reject: @escaping RCTPromiseRejectBlock) {
-    // Convert the input data to a Data object using UTF-8 encoding.
-    let data: Data = data.data(using: .utf8)!
-    
-    // Check if the data is base64 encoded. If so, proceed to send the data.
-    if let data = Data(base64Encoded: data) {
-      var invoked = false
-      espLocalDevice.sendData(path: path, data: data, completionHandler: { data, error in
-        // Prevent multiple callback invocations
-        guard !invoked else { return }
-        
-        // If an error occurred, reject the promise with the error description.
-        if error != nil {
-          // Session/transport failed (e.g. device rebooted after re-provision): drop the
-          // cached device so the next call's isConnected() is false and connect()
-          // re-handshakes with current credentials instead of reusing the dead session.
-          self.resetLocalDevice()
-          reject("error", error?.description, nil)
-          invoked = true
-          return
-        }
-        
-        // Resolve the promise with the base64 encoded response data.
-        resolve(data!.base64EncodedString())
-        invoked = true
-      })
-    } else {
-      // Reject the promise if the data is not base64 encoded.
-      reject("error", "Data is not base64 encoded.", nil)
+    guard let entry = entry(for: nodeId) else {
+      // No session for this node — tell JS so it runs connect() with this
+      // node's own credentials instead of silently using another node's session.
+      reject("DEVICE_NOT_FOUND", "Device with nodeId \(nodeId) not found", nil)
+      return
     }
+    let device = entry.device
+
+    // Decode the base64 payload; reject rather than crash on malformed input.
+    guard let payload = Data(base64Encoded: data) else {
+      reject("error", "Data is not base64 encoded.", nil)
+      return
+    }
+
+    var invoked = false
+    device.sendData(path: path, data: payload, completionHandler: { data, error in
+      // Prevent multiple callback invocations
+      guard !invoked else { return }
+      invoked = true
+
+      // If an error occurred, reject the promise with the error description.
+      if let error = error {
+        // Session/transport failed (e.g. device rebooted after re-provision): drop
+        // this node's entry so the next call's isConnected() is false and connect()
+        // re-handshakes with current credentials instead of reusing the dead session.
+        self.removeEntry(for: nodeId)
+        reject("error", error.description, nil)
+        return
+      }
+
+      // ESPProvision should never return nil data with a nil error, but the
+      // types allow it — reject instead of force-unwrapping.
+      guard let data = data else {
+        reject("error", "No response data received.", nil)
+        return
+      }
+
+      // Resolve the promise with the base64 encoded response data.
+      resolve(data.base64EncodedString())
+    })
   }
 }
-

@@ -64,6 +64,19 @@ class GroupSharing(BasePage):
             time.sleep(0.5)
         return self
 
+    def share_home_with_expecting_rejection(self, email):
+        """Enter an invalid invitee and confirm; the modal staying open is the app's rejection signal (success closes it, and the error toast renders under the modal window where the driver cannot read it), then dismiss."""
+        self.click("add_user_button", timeout=5)
+        self.send_keys("invite_input", email, clear_first=True, timeout=5)
+        if self.platform != "ios":
+            self.hide_keyboard_if_visible()
+        self.click("confirm_add_user_button", timeout=5)
+        time.sleep(4)
+        still_open = self.is_visible("add_user_overlay", timeout=2)
+        if self.is_visible("cancel_add_user_button", timeout=2):
+            self.click("cancel_add_user_button", timeout=3)
+        return still_open
+
     def is_user_listed(self, section, email, timeout=8):
         """Whether the email is present in the 'pending' or 'shared' section (rows share a static id, matched on the per-row name TextView)."""
         name_locator = "pending_user_name" if section == "pending" else "shared_user_name"
@@ -86,6 +99,37 @@ class GroupSharing(BasePage):
                 self.click("revoke_confirm_button", timeout=5)
                 time.sleep(1)
                 return self
+        return self
+
+    def dismiss_revoke_dialog_for(self, email):
+        """Open the remove dialog for a listed user, then cancel it."""
+        for name_locator, button_locator in (
+            ("shared_user_name", "remove_shared_user_button"),
+            ("pending_user_name", "remove_pending_user_button"),
+        ):
+            index = self._index_of(name_locator, email)
+            if index is not None:
+                self.find_all(button_locator)[index].click()
+                self.click("revoke_cancel_button", timeout=5)
+                time.sleep(1)
+                return self
+        raise AssertionError(f"{email} not listed in sharing or pending sections")
+
+    def is_invitation_present(self, from_text, timeout=5):
+        """True when a sharing invitation matching from_text is in the notification list."""
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            if self._index_of("notification_description", from_text) is not None:
+                return True
+            time.sleep(1)
+        return False
+
+    def leave_shared_home(self):
+        """Leave the shared home from its settings screen and confirm the dialog."""
+        home_management = self._home_management()
+        home_management.click("leave_home_button", timeout=10)
+        self.click("revoke_confirm_button", timeout=5)
+        time.sleep(2)
         return self
 
     def open_notification_center(self):

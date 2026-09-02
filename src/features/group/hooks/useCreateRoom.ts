@@ -13,6 +13,11 @@ import {
   GROUP_TYPE_ROOM,
   ERROR_CODES_MAP,
   GROUP_USER_ACCESS_PRIMARY,
+  DEVICE_SETTINGS_SCREEN_ROUTE,
+  DEVICE_SETTINGS_ROUTE_PARAM_OPEN_PICKER,
+  DEVICE_SETTINGS_OPEN_PICKER_ROOM,
+  DEVICE_SETTINGS_ROUTE_PARAM_SELECTED_ROOM_ID,
+  DEVICE_SETTINGS_ROUTE_PARAM_DEVICE,
 } from "@shared/utils/constants";
 import {
   getRemainingDays,
@@ -41,15 +46,17 @@ export interface UseCreateRoomOptions {
   roomId: string | undefined;
   /** Initial room name from the router (screen should pass a single `string` via `firstRouteParam` / navigation `params`). */
   paramRoomName: string | undefined;
-  /** On create success, navigate here via `router.dismissTo` (e.g. provision room picker) */
+  /** On create success, navigate here via `router.dismissTo` (e.g. provision room picker). */
   dismissTo?: string;
   /**
-   * Provisioned device node id: forwarded to success / `dismissTo`; when `showSelection` is false,
+   * Provisioned device node id: forwarded to `dismissTo`; when `showSelection` is false,
    * seeds the new room’s member list.
    */
   nodeId?: string;
   /** When false, device add/remove UI is hidden (use with `nodeId` for provision). */
   showSelection?: boolean;
+  /** Device endpoint param to restore when returning to device settings. */
+  settingsDeviceParam?: string;
   toast: {
     showSuccess: (message: string) => void;
     showError: (message: string) => void;
@@ -59,6 +66,7 @@ export interface UseCreateRoomOptions {
     push: (href: unknown) => void;
     replace: (href: unknown) => void;
     dismissTo: (href: unknown) => void;
+    back: () => void;
   };
 }
 
@@ -141,6 +149,7 @@ export function useCreateRoom(
     dismissTo,
     nodeId,
     showSelection = true,
+    settingsDeviceParam,
     toast,
     t,
     router,
@@ -241,6 +250,18 @@ export function useCreateRoom(
     if (paramRoomName) setRoomName(paramRoomName);
   }, [paramRoomName]);
 
+  useEffect(() => {
+    if (roomId || showSelection || !nodeId) {
+      return;
+    }
+    if (!home?.nodeIds?.includes(nodeId)) {
+      return;
+    }
+    setSelectedNodesIds((prev) =>
+      prev.includes(nodeId) ? prev : [nodeId],
+    );
+  }, [roomId, showSelection, nodeId, home?.nodeIds]);
+
   const handleCustomRoomName = useCallback(() => {
     router.push({
       pathname: "/(group)/CustomizeRoomName",
@@ -250,6 +271,7 @@ export function useCreateRoom(
         roomId,
         ...(dismissTo ? { dismissTo } : {}),
         ...(nodeId ? { nodeId } : {}),
+        ...(settingsDeviceParam ? { settingsDevice: settingsDeviceParam } : {}),
         ...(!showSelection ? { showSelection: "0" } : {}),
       },
     } as any);
@@ -260,6 +282,7 @@ export function useCreateRoom(
     roomId,
     dismissTo,
     nodeId,
+    settingsDeviceParam,
     showSelection,
   ]);
 
@@ -277,6 +300,53 @@ export function useCreateRoom(
       setSelectedNodesIds((prev) => prev.filter((id) => id !== node.id));
     },
     [showSelection]
+  );
+
+  /**
+   * After create/update, show toast and return to the caller screen (provision picker,
+   * Rooms list, or previous route).
+   */
+  const navigateAfterRoomFlow = useCallback(
+    (options: { selectedRoomId?: string }) => {
+      if (dismissTo) {
+        const isDeviceSettingsReturn = dismissTo === DEVICE_SETTINGS_SCREEN_ROUTE;
+        router.dismissTo({
+          pathname: dismissTo as any,
+          params: isDeviceSettingsReturn
+            ? ({
+                ...(nodeId ? { id: nodeId } : {}),
+                ...(settingsDeviceParam
+                  ? { [DEVICE_SETTINGS_ROUTE_PARAM_DEVICE]: settingsDeviceParam }
+                  : {}),
+                ...(options.selectedRoomId
+                  ? {
+                      [DEVICE_SETTINGS_ROUTE_PARAM_SELECTED_ROOM_ID]:
+                        options.selectedRoomId,
+                    }
+                  : {}),
+                [DEVICE_SETTINGS_ROUTE_PARAM_OPEN_PICKER]:
+                  DEVICE_SETTINGS_OPEN_PICKER_ROOM,
+              } as Record<string, string>)
+            : ({
+                ...(homeId ? { id: homeId } : {}),
+                ...(nodeId ? { nodeId } : {}),
+                ...(options.selectedRoomId
+                  ? { selectedRoomId: options.selectedRoomId }
+                  : {}),
+              } as Record<string, string>),
+        } as any);
+        return;
+      }
+      if (homeId) {
+        router.dismissTo({
+          pathname: "/(group)/Rooms",
+          params: { id: homeId },
+        } as any);
+        return;
+      }
+      router.back();
+    },
+    [router, homeId, dismissTo, nodeId, settingsDeviceParam]
   );
 
   const handleSave = useCallback(() => {
@@ -297,7 +367,7 @@ export function useCreateRoom(
           if (homeId) {
             rememberPendingCreatedRoom(homeId, group);
           }
-          toast.showSuccess(t("group.createRoom.roomCreatedSuccessfully"));
+          toast.showSuccess(t("group.createRoomSuccess.title"));
           try {
             await syncHomeWithNodes(true);
             reconcilePendingCreatedRoom(homeId, store?.groupStore);
@@ -305,23 +375,15 @@ export function useCreateRoom(
             console.warn("[CreateRoom] sync after create failed:", error);
             reconcilePendingCreatedRoom(homeId, store?.groupStore);
           }
-          await new Promise((r) => setTimeout(r, 500));
-          const params: Record<string, string> = {
-            id: homeId as string,
-          };
+          const runNavigation = () =>
+            navigateAfterRoomFlow({
+              selectedRoomId: group.id,
+            });
           if (dismissTo) {
-            params.dismissTo = dismissTo;
-            if (nodeId) {
-              params.nodeId = nodeId;
-            }
-            if (group.id) {
-              params.selectedRoomId = group.id;
-            }
+            requestAnimationFrame(runNavigation);
+          } else {
+            runNavigation();
           }
-          router.replace({
-            pathname: "/(group)/CreateRoomSuccess",
-            params,
-          } as any);
         }
       })
       .catch((error: any) => {
@@ -339,9 +401,9 @@ export function useCreateRoom(
     router,
     homeId,
     dismissTo,
-    nodeId,
     syncHomeWithNodes,
     store,
+    navigateAfterRoomFlow,
   ]);
 
   const handleUpdate = useCallback(async () => {
@@ -357,15 +419,19 @@ export function useCreateRoom(
       if (toAdd.length > 0) {
         await room.addNodes(toAdd);
       }
-      toast.showSuccess(t("group.createRoom.roomUpdatedSuccessfully"));
-      router.replace({
-        pathname: "/(group)/CreateRoomSuccess",
-        params: { id: homeId, updated: true },
-      } as any);
+      toast.showSuccess(t("group.createRoomSuccess.title"));
+      navigateAfterRoomFlow({});
     } catch (error: any) {
       toast.showError(error.description ?? t("group.errors.fallback"));
     }
-  }, [room, roomName, selectedNodesIds, toast, t, router, homeId]);
+  }, [
+    room,
+    roomName,
+    selectedNodesIds,
+    toast,
+    t,
+    navigateAfterRoomFlow,
+  ]);
 
   const handleDelete = useCallback(() => {
     setShowDeleteDialog(true);

@@ -82,6 +82,18 @@ class ArtifactHandler(SimpleHTTPRequestHandler):
         finally:
             self._head_only = False
 
+    def _latest_finalized_report(self) -> Optional[Path]:
+        """Newest finalized report_*.html in html/ (never live_*, never report_latest itself)."""
+        try:
+            html_dir = self.base_path.resolve() / "html"
+            candidates = [
+                p for p in html_dir.glob("report_*.html")
+                if re.match(r"report_\d{6}_\d{8}_", p.name)
+            ]
+            return max(candidates, key=lambda p: p.stat().st_mtime, default=None)
+        except OSError:
+            return None
+
     def do_GET(self):
         """Handle GET requests"""
         try:
@@ -94,6 +106,14 @@ class ArtifactHandler(SimpleHTTPRequestHandler):
             
             file_path = (self.base_path / path).resolve()
             base_path_resolved = self.base_path.resolve()
+
+            # Serve report_latest dynamically: test runs on branches predating the
+            # update_latest gate keep overwriting the file with live content, so the
+            # newest FINALIZED report is computed at request time instead.
+            if path.rsplit('/', 1)[-1] == 'report_latest.html':
+                latest = self._latest_finalized_report()
+                if latest is not None:
+                    file_path = latest
             
             logger.debug(f"Serving request: {self.path} -> {file_path} (base: {base_path_resolved})")
             

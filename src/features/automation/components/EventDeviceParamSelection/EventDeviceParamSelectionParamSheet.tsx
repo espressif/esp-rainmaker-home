@@ -96,6 +96,7 @@ export const EventDeviceParamSelectionParamSheet: React.FC<
                 {visibleConditions.map((condition) => (
                   <Pressable
                     key={condition.value}
+                    {...testProps(`button_event_condition_${condition.value}`)}
                     style={[
                       styles.conditionButton,
                       eventCondition === condition.value &&

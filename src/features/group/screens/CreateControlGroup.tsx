@@ -26,12 +26,14 @@ const CreateControlGroup = () => {
   const { t } = useTranslation();
   const toast = useToast();
   const router = useRouter();
-  const { roomName: roomNameParam, id, groupId, preselectedNodeId } =
+  const { roomName: roomNameParam, id, groupId, preselectedNodeId, dismissTo, settingsDevice } =
     useLocalSearchParams<{
       roomName?: string;
       id?: string;
       groupId?: string;
       preselectedNodeId?: string;
+      dismissTo?: string;
+      settingsDevice?: string;
     }>();
 
   const {
@@ -55,6 +57,8 @@ const CreateControlGroup = () => {
     groupId,
     roomName: roomNameParam,
     preselectedNodeId,
+    dismissTo,
+    settingsDeviceParam: settingsDevice,
     toast,
     t,
     router: router as Parameters<typeof useCreateGroup>[0]["router"],

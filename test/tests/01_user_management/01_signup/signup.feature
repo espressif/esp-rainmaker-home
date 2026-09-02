@@ -27,7 +27,7 @@ Feature: Sign Up
     Then user should proceed to verification screen
     When user enters verification code "000000"
     And user taps "verify"
-    Then user should see toast with title "Failed to confirm signup" and message "Verification code is incorrect"
+    Then user should see toast with title "Failed to confirm signup" and message "incorrect verification code"
     And user should remain on verification screen
 
   @regression
@@ -41,16 +41,15 @@ Feature: Sign Up
 
   @regression
   Scenario: Password mismatch validation
-    When user signs up with "test@espressif.com", "password123", "differentpassword" and "decline" consent
-    Then user should see error "Passwords do not match"
+    When user signs up with "test@espressif.com", "password123", "differentpassword" and "accept" consent
+    Then sign up button should be disabled
     And user should remain on sign up screen
 
   @regression
   Scenario: Email already exists
-    When user signs up with "espressif.testing@gmail.com", "Welcome01", "Welcome01" and "accept" consent
+    When user signs up with "espressif.testing@gmail.com", "Welcome01!", "Welcome01!" and "accept" consent
     And user taps "confirm"
-    Then user should see toast with title "Failed to send verification code" and message "User account already exist"
-    And user should remain on sign up screen
+    Then the duplicate signup attempt should be rejected
 
   Scenario Outline: Sign up button should be disabled in invalid cases
     Given user is on the sign up screen
@@ -88,8 +87,8 @@ Feature: Sign Up
     And user should remain on verification screen
 
   Scenario Outline: Multiple invalid email formats
-    When user signs up with "<email>", "password123", "password123" and "decline" consent
-    Then user should see error "Please enter a valid email address"
+    When user signs up with "<email>", "password123", "password123" and "accept" consent
+    Then sign up button should be disabled
     And user should remain on sign up screen
 
     Examples:
@@ -101,7 +100,7 @@ Feature: Sign Up
   Scenario Outline: Various weak passwords
     When user signs up with "test@espressif.com", "<password>", "<password>" and "accept" consent
     And user taps "confirm"
-    Then user should see toast with title "Failed to send verification code" and message "Password length must be between 8 to 256 characters. It should be alpha-numeric without any whitespace. It should contain atleast one uppercase, one lowercase character and a number"                                                                                        
+    Then user should see toast with title "Failed to send verification code" and message "signup password policy error"
     And user should remain on sign up screen
 
     Examples:
@@ -109,8 +108,17 @@ Feature: Sign Up
       | password123              |
       | 12345678                 |
       | password                 |
-      | <space>Password1         |
-      | Password1<space>         |
       | PASSWORD123              |
       | Password                 |
       | Pass1                    |
+
+  Scenario Outline: Weak passwords with whitespace
+    When user signs up with "test@espressif.com", "<password>", "<password>" and "accept" consent
+    And user taps "confirm"
+    Then user should see toast with title "Failed to send verification code" and message "signup whitespace password error"
+    And user should remain on sign up screen
+
+    Examples:
+      | password                 |
+      | <space>Password1         |
+      | Password1<space>         |

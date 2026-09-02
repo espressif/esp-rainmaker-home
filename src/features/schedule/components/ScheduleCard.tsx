@@ -136,7 +136,26 @@ const ScheduleCard = ({
 
       <View style={globalStyles.scheduleRepeatContainer}>
         <Text style={globalStyles.secondaryText}>{t("schedule.createSchedule.repeat")}</Text>
-        {!triggers?.[0]?.d || triggers[0]?.d === 0 ? (
+        {triggers?.[0]?.rsec !== undefined ? (
+          <View style={globalStyles.scheduleDaysContainer}>
+            <View
+              style={[
+                globalStyles.scheduleDayBox,
+                globalStyles.scheduleDayBoxActive,
+                styles.onceBox,
+              ]}
+            >
+              <Text
+                style={[
+                  globalStyles.scheduleDayText,
+                  globalStyles.scheduleDayTextActive,
+                ]}
+              >
+                {t("schedule.time.afterDelay")}
+              </Text>
+            </View>
+          </View>
+        ) : !triggers?.[0]?.d || triggers[0]?.d === 0 ? (
           <View style={globalStyles.scheduleDaysContainer}>
             <View
               style={[

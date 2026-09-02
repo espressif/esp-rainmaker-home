@@ -10,6 +10,7 @@ Shared provisioning steps (hardware allocation, flashing, Wi-Fi entry,
 post-provision chain) live in tests/02_provisioning/conftest.py.
 """
 import logging
+import time
 from pathlib import Path
 
 import pytest
@@ -17,6 +18,7 @@ from pytest_bdd import scenarios, then, when
 
 from hardware.models import ResourceStatus
 from hardware.qr import QrDisplay, QrPayloadExtractor
+from utils.app_copy import app_i18n
 
 logger = logging.getLogger(__name__)
 pytestmark = [pytest.mark.regression, pytest.mark.provisioning]
@@ -77,3 +79,43 @@ def scan_qr_elements_present(helper):
     helper.scan_qr.grant_runtime_permissions_if_needed()
     helper.scan_qr.validate_baseline_elements()
     helper.scan_qr.validate_scanner_elements()
+
+
+@when("a corrupted provisioning qr is displayed for scan")
+def corrupted_qr_displayed(hardware_session, helper):
+    artifact_dir = hardware_session["artifact_dir"]
+    platform = helper.driver._test_info.get("platform", "android")
+    png_path = QrDisplay.show("CORRUPTED-PAYLOAD-NOT-A-PROVISIONING-QR-0123456789", artifact_dir.root, platform=platform)
+    assert png_path.is_file() and png_path.stat().st_size > 0
+
+
+@when("a softap provisioning qr is displayed for scan")
+def softap_qr_displayed(hardware_session, helper):
+    artifact_dir = hardware_session["artifact_dir"]
+    platform = helper.driver._test_info.get("platform", "android")
+    payload = '{"ver":"v1","name":"PROV_softap","username":"wifiprov","pop":"abcd1234","transport":"softap"}'
+    png_path = QrDisplay.show(payload, artifact_dir.root, platform=platform)
+    assert png_path.is_file() and png_path.stat().st_size > 0
+
+
+@then("the app should reject the softap provisioning qr")
+def softap_qr_rejected(helper):
+    expected = app_i18n("device.scan.qr.softAPNotSupported")
+    deadline = time.time() + 20
+    seen = []
+    while time.time() < deadline:
+        title, _ = helper.scan_qr.get_toast_title_and_message(timeout=3, require_message=False)
+        if title == expected:
+            return
+        if title and title not in seen:
+            seen.append(title)
+        time.sleep(0.5)
+    raise AssertionError(f"SoftAP rejection toast {expected!r} not shown; toasts seen: {seen or 'none'}")
+
+
+@then("user should remain on the scan qr screen")
+def remains_on_scan_qr(helper):
+    deadline = time.time() + 8
+    while time.time() < deadline:
+        assert helper.scan_qr.check_screen_displayed(timeout=2), "App left the Scan QR screen for a corrupted QR"
+        time.sleep(2)

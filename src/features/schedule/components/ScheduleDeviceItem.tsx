@@ -75,7 +75,10 @@ export const ScheduleDeviceItem = ({
         badgeLable={
           disabled &&
           (showAsOnline ? (
-            <Text style={[globalStyles.fontXs, globalStyles.textWarning]}>
+            <Text
+              {...testProps("text_max_schedule_reached")}
+              style={[globalStyles.fontXs, globalStyles.textWarning]}
+            >
               {t("schedule.deviceSelection.maxScheduleReached")}
             </Text>
           ) : (

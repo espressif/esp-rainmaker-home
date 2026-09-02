@@ -10,7 +10,8 @@ from datetime import datetime, timedelta, timezone
 from pytest_bdd import scenarios, given, when, then, parsers
 from utils.mailosaur_helper import generate_email, get_verification_code
 from utils.common_utils import normalize_input
-from utils.app_copy import app_i18n, request_password_recovery_copy
+from utils.app_copy import app_i18n, request_password_recovery_copy, resolve_server_copy
+from utils.registered_user_resolver import deployment_type
 
 logger = logging.getLogger(__name__)
 pytestmark = [pytest.mark.regression, pytest.mark.user_management, pytest.mark.forgot_password]
@@ -46,7 +47,8 @@ def request_reset_password(helper, email, registered_user_resolver, pytestconfig
 
 
 @then(parsers.parse('user should see forgot password toast with title "{title}" and message "{message}"'))
-def should_see_forgot_password_toast(helper, title, message):
+def should_see_forgot_password_toast(helper, title, message, pytestconfig):
+    message = resolve_server_copy(pytestconfig.getoption("--deployment"), message)
     toast_title, toast_message = helper.forgot_password.get_toast_title_and_message(timeout=5, poll=0.25)
     if toast_title and toast_message:
         assert toast_title == title, f"Expected toast title: {title} but found: {toast_title}"
@@ -75,6 +77,36 @@ def should_see_code_sent_title(helper):
 def should_see_forgot_password_error(helper, message):
     error = helper.forgot_password.get_error_message()
     assert error == message, f"Expected error message: {message} but found: {error}"
+
+
+@then("send code button should be disabled")
+def send_code_button_disabled(helper):
+    assert not helper.forgot_password.is_enabled("send_code_button", timeout=3), "Send Code button should be disabled"
+
+
+@then("the unregistered email reset request should be rejected")
+def unregistered_reset_rejected(helper, pytestconfig):
+    # Classic rejects with a user-does-not-exist toast. Neo never leaks account existence:
+    # it proceeds to the reset screen, or (when recovery is throttled) rejects with a
+    # generic error — either way the response must not reveal that the user is unknown.
+    if deployment_type(pytestconfig.getoption("--deployment")) == "rmneo":
+        deadline = time.time() + 12
+        toast = (None, None)
+        while time.time() < deadline:
+            if helper.reset_password.check_screen_displayed(timeout=2):
+                return
+            title, message = helper.forgot_password.get_toast_title_and_message(timeout=1, require_message=False)
+            if title:
+                toast = (title, message)
+                break
+        title, message = toast
+        assert title, "Neo showed neither the reset screen nor any rejection toast"
+        leaked = any(hint in f"{title} {message or ''}".lower() for hint in ("not exist", "not found"))
+        assert not leaked, f"Neo leaked account existence: title={title!r} message={message!r}"
+        return
+    toast_title, toast_message = helper.forgot_password.get_toast_title_and_message(timeout=10, poll=0.25)
+    assert toast_title == "Failed to send verification code", f"Unexpected rejection toast title: {toast_title}"
+    assert toast_message == "User does not exist", f"Unexpected rejection toast message: {toast_message}"
 
 
 @when(parsers.parse('user enters verification code "{code}"'))

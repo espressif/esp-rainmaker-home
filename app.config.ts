@@ -91,6 +91,9 @@ function loadRegionEnv(pair: { local: string; example: string }): Record<string,
 /** `true` unless the value is exactly "false" (same semantics as before). */
 const flag = (v?: string): boolean => v !== "false";
 
+/** `true` only when the value is exactly "true" (opt-in features). */
+const optInFlag = (v?: string): boolean => v === "true";
+
 const splitCsv = (v?: string): string[] =>
   (v || "")
     .split(",")
@@ -140,6 +143,7 @@ function buildRegionConfig(env: Record<string, string>) {
       enableVoiceAssistants: flag(env.ENABLE_VOICE_ASSISTANTS),
       enableControlGroups: flag(env.ENABLE_CONTROL_GROUPS),
       enableOnNetworkProvisioning: flag(env.ENABLE_ON_NETWORK_PROVISIONING),
+      enableSoftApProvisioning: optInFlag(env.ENABLE_SOFTAP_PROVISIONING),
       thirdPartyAuthProviders: flag(env.ENABLE_THIRD_PARTY_AUTH)
         ? splitCsv(env.THIRD_PARTY_AUTH_ENABLED_PROVIDERS)
         : [],
@@ -345,6 +349,7 @@ export default {
         enableCdfAutoSync: process.env.ENABLE_CDF_AUTOSYNC !== 'false',
         enableControlGroups: process.env.ENABLE_CONTROL_GROUPS !== 'false',
         enableOnNetworkProvisioning: process.env.ENABLE_ON_NETWORK_PROVISIONING !== 'false',
+        enableSoftApProvisioning: process.env.ENABLE_SOFTAP_PROVISIONING === 'true',
         enableBackendSelector: process.env.ENABLE_BACKEND_SELECTOR !== 'false',
       }
 

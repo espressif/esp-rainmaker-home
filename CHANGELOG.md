@@ -5,6 +5,34 @@ All notable changes to the ESP RainMaker Home app will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [6.1.1]
+
+### Added
+
+- **Schedule**
+  - **“After Delay”** trigger: run a schedule after 1 minute up to 3 hours, not only at a fixed time
+
+- **Device settings**
+  - Assign a device to a **room** from Device Settings
+  - Assign a device to a **control group** from Device Settings
+
+- **Configuration**
+  - Option to hide the **SoftAP provisioning** entry point
+
+- **Android**
+  - Updated launcher icon with adaptive icon support
+  - Release keystore validation during prebuild to catch bad signing credentials early
+
+### Enhanced
+
+- **Room creation**
+  - Replaced the **“Room is Ready”** screen with a toast after creating a room
+
+### Fixed
+
+- **Local control**
+  - Scoped local-control sessions per node to prevent cross-node writes on multi-device networks
+
 ## [6.1.0]
  
 ### Added

@@ -75,5 +75,29 @@
   "enable_disable_automation": {
     "by": "id",
     "value": "switch_automation_enabled"
+  },
+  "event_condition_gt_button": {
+    "by": "id",
+    "value": "button_event_condition_>"
+  },
+  "event_condition_lt_button": {
+    "by": "id",
+    "value": "button_event_condition_<"
+  },
+  "event_condition_eq_button": {
+    "by": "id",
+    "value": "button_event_condition_=="
+  },
+  "update_automation_button": {
+    "by": "id",
+    "value": "button_update_automation"
+  },
+  "automation_menu_edit_option": {
+    "by": "id",
+    "value": "automation_menu_option_edit"
+  },
+  "action_selection_done_button": {
+    "by": "id",
+    "value": "button_done_action_selection"
   }
 }

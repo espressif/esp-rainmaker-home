@@ -31,6 +31,16 @@ def reset_group_sharing_state(pytestconfig, primary_cloud):
             model = pytestconfig.getoption("--model", default=None)
             mutate_registered_users(deployment, model, lambda existing: existing[:1])
             primary_cloud.reset_home_name("Home")
+            if hasattr(primary_cloud, "issued_sharing_requests"):
+                for request in list(primary_cloud.issued_sharing_requests()):
+                    request_id = request.get("request_id")
+                    if not request_id:
+                        continue
+                    try:
+                        primary_cloud.remove_sharing_request(request_id)
+                        logger.info("Removed stale sharing request %s (%s)", request_id, request.get("request_status"))
+                    except Exception as error:
+                        logger.warning("Stale sharing request %s not removed: %s", request_id, error)
             for username in list(primary_cloud.shared_usernames()):
                 primary_cloud.revoke_group_sharing(username)
             deadline = time.time() + 10

@@ -17,6 +17,7 @@ import re
 import socket
 import time
 import fcntl
+import shutil
 import tempfile
 import yaml
 from contextlib import contextmanager
@@ -347,6 +348,7 @@ class PytestReportPlugin:
                                                 logger.warning(f"Failed to organize Appium log: {e}", exc_info=True)
                                         if appium_log_url:
                                             self.appium_log_url = appium_log_url
+                                            self._appium_log_src = log_file_path
                                             break
                 except Exception as e:
                     logger.warning(f"Could not get Appium log URL: {e}")
@@ -363,6 +365,19 @@ class PytestReportPlugin:
         """Run-scoped live page name so parallel runs never overwrite each other."""
         return f"live_{getattr(self, 'run_id', None) or os.getpid()}.html"
 
+    def _refresh_appium_log_artifact(self):
+        """Re-copy the growing Appium server log over its published artifact — organize_artifact snapshots it once at first publish, freezing the artifact at the first test."""
+        src = getattr(self, "_appium_log_src", None)
+        if not (src and self.artifact_host and self.run_id):
+            return
+        try:
+            src_path = Path(src)
+            dest = Path(self.artifact_host.artifacts_dir) / str(self.run_id) / "logs" / "log.log"
+            if src_path.exists() and dest.exists() and src_path.stat().st_size > dest.stat().st_size:
+                shutil.copy2(src_path, dest)
+        except Exception as error:
+            logger.debug(f"Appium log artifact refresh skipped: {error}")
+
     def _write_live_report(self):
         """Rebuild the live page from the results collected so far.
 
@@ -376,6 +391,7 @@ class PytestReportPlugin:
         if now - getattr(self, "_live_last", 0) < getattr(self, "_live_interval", 60):
             return
         self._live_last = now
+        self._refresh_appium_log_artifact()
         try:
             path = self.report_generator.generate_report(
                 test_results=list(self.test_results),
@@ -383,6 +399,7 @@ class PytestReportPlugin:
                 test_lab=self.config.get("report", {}).get("test_lab", "Pune"),
                 chipset=self.config.get("report", {}).get("chipset", "Mobile Devices"),
                 execution_time="in progress",
+                update_latest=False,
             )
             if not path:
                 return
@@ -453,6 +470,7 @@ class PytestReportPlugin:
         """Called when test session finishes"""
         if not UTILITIES_AVAILABLE:
             return
+        self._refresh_appium_log_artifact()
         
         # Generate report even if all tests were skipped (for visibility)
         if not self.test_results:
@@ -565,6 +583,7 @@ class PytestReportPlugin:
                     jira_project=os.getenv("JIRA_PROJECT_KEY") or None,
                     jira_project_id=os.getenv("JIRA_PROJECT_ID") or None,
                     jira_issuetype_id=os.getenv("JIRA_ISSUETYPE_ID") or None,
+                    marker=self._marker_display(),
                 )
                 
                 if report_path:
@@ -614,6 +633,27 @@ class PytestReportPlugin:
         if platform and model:
             return f"{platform}, {model}"
         return model or platform or "Mobile Devices"
+
+    def _marker_display(self) -> str:
+        """The run's marker for report/email display: the -m expression, else 'regression'/'sanity' inferred from the collected items' markers."""
+        expr = ""
+        try:
+            expr = (self.session.config.getoption("-m", default="") or "").strip()
+        except Exception:
+            pass
+        if expr:
+            return expr
+        try:
+            names = set()
+            for item in (getattr(self.session, "items", None) or []):
+                for m in item.iter_markers():
+                    names.add(m.name)
+            for known in ("regression", "sanity"):
+                if known in names:
+                    return known
+        except Exception:
+            pass
+        return ""
 
     def _app_version(self) -> str:
         """The app version actually installed on the device under test (adb / ideviceinstaller),
@@ -878,6 +918,9 @@ class PytestReportPlugin:
         subject_template = email_config.get('subject_template', 'Test Report - {date} - {status}')
         date_str = datetime.now().strftime("%d-%m-%Y")
         subject = subject_template.format(date=date_str, status=status)
+        marker_display = self._marker_display()
+        if marker_display:
+            subject = f"{marker_display.title()} {subject}"
         app_version = self._app_version()
         if app_version:
             subject = f"{subject} - v{app_version}"

@@ -30,10 +30,6 @@ export {
   type UseCreateRoomOptions,
 } from "./useCreateRoom";
 export {
-  useCreateRoomSuccess,
-  type UseCreateRoomSuccessResult,
-} from "./useCreateRoomSuccess";
-export {
   useCustomizeRoomName,
   type UseCustomizeRoomNameResult,
   type UseCustomizeRoomNameOptions,

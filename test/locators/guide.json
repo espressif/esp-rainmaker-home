@@ -8,5 +8,17 @@
     "by": "id",
     "value": "button_continue_guide",
     "text": "Continue"
+  },
+  "empty_state": {
+    "by": "id",
+    "value": "empty_state_guide_load_failed"
+  },
+  "empty_state_title": {
+    "by": "id",
+    "value": "text_title_guide_load_failed"
+  },
+  "empty_state_description": {
+    "by": "id",
+    "value": "text_description_guide_load_failed"
   }
 }

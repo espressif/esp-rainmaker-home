@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useTranslation } from "react-i18next";
 import { useSchedule } from "@context/schedules.context";
@@ -17,13 +17,21 @@ import {
 import { stableStringify } from "@shared/utils/common";
 import { LoadingState } from "@src/types/global";
 import {
+  SCHEDULE_RELATIVE_DEFAULT_SECONDS,
+  SCHEDULE_TRIGGER_MODE_RELATIVE,
+} from "@shared/utils/constants";
+import {
   convertDaysBitmapToArray,
   convertDaysArrayToBitmap,
   convertTimeToMinutes,
   convertMinutesToTime,
   getCurrentTimeInMinutes,
+  getScheduleTriggerMode,
+  relativeHoursMinutesToSeconds,
+  splitRelativeSeconds,
   validateScheduleData,
 } from "@features/schedule/utils/scheduleHelper";
+import type { ScheduleTriggerMode } from "@src/types/global";
 
 /**
  * Hook for CreateSchedule screen
@@ -52,6 +60,7 @@ export const useCreateSchedule = () => {
   } = useSchedule();
 
   const [showTimePicker, setShowTimePicker] = useState(false);
+  const [showRelativeTimePicker, setShowRelativeTimePicker] = useState(false);
   const [loading, setLoading] = useState<LoadingState>({
     save: false,
     delete: false,
@@ -60,6 +69,23 @@ export const useCreateSchedule = () => {
   // load / create-mode defaults), so the unsaved-changes baseline never
   // captures a half-initialized draft.
   const [isDraftReady, setIsDraftReady] = useState(false);
+
+  const triggerMode = useMemo(
+    () => getScheduleTriggerMode(state.triggers),
+    [state.triggers],
+  );
+
+  /** Last relative offset chosen or loaded; restored when toggling back from fixed. */
+  const lastRelativeSecondsRef = useRef<number>(
+    SCHEDULE_RELATIVE_DEFAULT_SECONDS,
+  );
+
+  useEffect(() => {
+    const rsec = state.triggers[0]?.rsec;
+    if (rsec !== undefined) {
+      lastRelativeSecondsRef.current = rsec;
+    }
+  }, [state.triggers]);
 
   // Convert days bitmap to array for UI
   const selectedDays = useMemo(() => {
@@ -185,6 +211,31 @@ export const useCreateSchedule = () => {
     } as any);
   };
 
+  /**
+   * Switches between fixed and relative trigger modes while preserving the
+   * last relative offset across toggles (mirrors fixed mode keeping m/d).
+   */
+  const handleTriggerModeChange = (mode: ScheduleTriggerMode) => {
+    if (mode === SCHEDULE_TRIGGER_MODE_RELATIVE) {
+      setTriggers([{ rsec: lastRelativeSecondsRef.current }]);
+      return;
+    }
+
+    if (state.triggers[0]?.rsec !== undefined) {
+      lastRelativeSecondsRef.current = state.triggers[0].rsec;
+    }
+
+    const minutes = state.triggers[0]?.m ?? getCurrentTimeInMinutes();
+    const daysBitmap = state.triggers[0]?.d ?? 0;
+    setTriggers([{ m: minutes, d: daysBitmap }]);
+  };
+
+  const handleRelativeTimeSelected = (hours: number, minutes: number) => {
+    const rsec = relativeHoursMinutesToSeconds(hours, minutes);
+    setTriggers([{ rsec }]);
+    setShowRelativeTimePicker(false);
+  };
+
   // Handle day toggle
   const handleDayToggle = (index: number) => {
     const newDays = selectedDays.includes(index)
@@ -251,11 +302,21 @@ export const useCreateSchedule = () => {
   // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional hook deps
   }, [state.nodes, checkOfflineNodes]);
 
+  const relativeSeconds =
+    state.triggers[0]?.rsec ?? SCHEDULE_RELATIVE_DEFAULT_SECONDS;
+  const { hours: relativeInitialHours, minutes: relativeInitialMinutes } =
+    splitRelativeSeconds(relativeSeconds);
+
   return {
     // State
     state,
+    triggerMode,
     selectedDays,
     showTimePicker,
+    showRelativeTimePicker,
+    relativeSeconds,
+    relativeInitialHours,
+    relativeInitialMinutes,
     loading,
     warning,
     disableActionButton,
@@ -271,7 +332,10 @@ export const useCreateSchedule = () => {
     handleBackPress,
     handleDayToggle,
     handleTimeSelected,
+    handleTriggerModeChange,
+    handleRelativeTimeSelected,
     setShowTimePicker,
+    setShowRelativeTimePicker,
     // Time picker
     ...getInitialTimePickerValues(),
   };

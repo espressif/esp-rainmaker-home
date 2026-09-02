@@ -8,6 +8,10 @@
 wifi:
   ssid: "${PROVISION_WIFI_SSID:-ESP_WIFI}"
   ssid_password: "${PROVISION_WIFI_PASSWORD:-PASSword01}"
+  ssid_5g: "${PROVISION_WIFI_5G_SSID:-ESP_WIFI_5G}"
+  ssid_5g_password: "${PROVISION_WIFI_5G_PASSWORD:-PASSword01}"
+  ssid_open: "${PROVISION_WIFI_OPEN_SSID:-AndroidRainmakerOpenNetwork0123}"
+  ssid_open_password: ""
 
 firmware_repository:
   # Directory of per-chip firmware bundles, e.g. firmwares/<bundle_esp32c3>, firmwares/<bundle_esp32s2>.
@@ -19,6 +23,7 @@ hardware:
   lock_db_path: hardware/.resource_locks.db
   lock_stale_seconds: 300
   acquire_timeout_seconds: 30
+  busy_wait_seconds: 600
   esptool_path: "python -m esptool"
 
 # E2E suites reserve a chip of e2e_chip_type, bind it to its cloud node, reuse if online else BLE-provision, and name it e2e_fw_name.

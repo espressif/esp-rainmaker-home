@@ -27,12 +27,14 @@ import { testProps } from "@shared/utils/testProps";
 const CustomizeControlGroupName = () => {
   const { t } = useTranslation();
   const router = useRouter();
-  const { currentGroupName, id, groupId, preselectedNodeId } =
+  const { currentGroupName, id, groupId, preselectedNodeId, dismissTo, settingsDevice } =
     useLocalSearchParams<{
       currentGroupName?: string;
       id?: string;
       groupId?: string;
       preselectedNodeId?: string;
+      dismissTo?: string;
+      settingsDevice?: string;
     }>();
 
   const {
@@ -45,6 +47,8 @@ const CustomizeControlGroupName = () => {
     id,
     groupId,
     preselectedNodeId,
+    dismissTo,
+    settingsDevice,
     router: router as Parameters<
       typeof useCustomizeControlGroupName
     >[0]["router"],

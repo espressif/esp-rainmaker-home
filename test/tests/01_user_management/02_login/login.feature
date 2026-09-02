@@ -12,12 +12,12 @@ Feature: Login
 
   Scenario: Invalid email format
     When user login with "invalid-email" and "password123"
-    Then user should see error "Please enter a valid email address"
+    Then login button should be disabled
     And user should be on login screen
 
   Scenario: Wrong password
     When user login with "registered user 1" and "wrongpassword"
-    Then user should see toast with title "Sign in failed" and message "Incorrect user name or password"
+    Then user should see toast with title "Sign in failed" and message "wrong credentials"
     And user should be on login screen
 
   Scenario: Empty credentials validation

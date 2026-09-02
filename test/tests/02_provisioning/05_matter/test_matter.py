@@ -10,7 +10,7 @@ import pytest
 from pytest_bdd import scenarios, when, then, parsers
 
 logger = logging.getLogger(__name__)
-pytestmark = [pytest.mark.regression, pytest.mark.provisioning, pytest.mark.matter]
+pytestmark = [pytest.mark.regression, pytest.mark.provisioning, pytest.mark.matter, pytest.mark.timeout(900)]
 
 scenarios("matter.feature")
 

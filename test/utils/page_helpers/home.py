@@ -51,14 +51,19 @@ class Home(BasePage):
         """
         end_time = time.monotonic() + timeout
         while time.monotonic() < end_time:
+            entry = None
             if self.is_visible("add_device_button", timeout=1):
-                self.click("add_device_button")
-                return self
-            if self.is_visible("add_device_banner_button", timeout=1):
+                entry = "add_device_button"
+            elif self.is_visible("add_device_banner_button", timeout=1):
                 logger.info("Using empty-state banner add device button")
-                self.click("add_device_banner_button")
+                entry = "add_device_banner_button"
+            if entry is None:
+                time.sleep(1)
+                continue
+            self.click(entry)
+            if self._wait_for_row_to_leave(lambda: self.is_visible(entry, timeout=0.5), grace=6.0):
                 return self
-            time.sleep(1)
+            logger.info("RETRY open_add_device: still on home after tapping %s, re-tapping", entry)
         raise Exception(f"Add device entry point not found on home screen within {timeout}s")
 
     def open_device(self, device_name: str, timeout=10):
@@ -116,6 +121,10 @@ class Home(BasePage):
                     pass
             time.sleep(0.6)
         return self
+
+    def refresh_device_list(self):
+        """Force the home device list (nodes with services/params) to re-fetch — needed after cloud-side param changes."""
+        return self._refresh_home_device_list()
 
     def _refresh_home_device_list(self):
         """Force the home device list to re-fetch by switching to another tab and back."""

@@ -27,14 +27,19 @@ workflow:
 .select_deployment:
   script:
     - |
-      if printf '%s' "${CI_COMMIT_MESSAGE:-${CI_COMMIT_TITLE:-}}" | grep -qi 'RMNEO'; then
+      if printf '%s' "${CI_COMMIT_MESSAGE:-${CI_COMMIT_TITLE:-}}" | grep -qi 'NEO'; then
         _sel_sdk="rainmaker-neo-base-sdk"; _sel_dep="rmneo"
       else
         _sel_sdk="rainmaker-matter-sdk"; _sel_dep="rm"
       fi
       export ACTIVE_SDK="${ACTIVE_SDK:-$_sel_sdk}"
       export DEPLOYMENT="${DEPLOYMENT:-$_sel_dep}"
-      echo "Commit-message deployment select: ACTIVE_SDK=${ACTIVE_SDK} DEPLOYMENT=${DEPLOYMENT}"
+      _sel_marker="sanity"
+      if printf '%s' "${CI_MERGE_REQUEST_TARGET_BRANCH_NAME:-}" | grep -q '^release/v'; then
+        _sel_marker="regression"
+      fi
+      export MARKER="${MARKER:-$_sel_marker}"
+      echo "Commit-message deployment select: ACTIVE_SDK=${ACTIVE_SDK} DEPLOYMENT=${DEPLOYMENT} MARKER=${MARKER}"
 
 
 # Both build jobs bake the selected ACTIVE_SDK into the env file the app reads at build time.
@@ -49,6 +54,36 @@ workflow:
           printf '\nACTIVE_SDK=%s\n' "${ACTIVE_SDK}" >> "${env_file}"
         fi
         echo "ACTIVE_SDK=${ACTIVE_SDK} -> ${env_file}"
+      }
+
+      # Decode FS_ENV_<FLAVOR>_FILE when set; otherwise start from the committed
+      # .env.<flavor>.example. Then fill any missing/empty keys from that example
+      # so CI secrets do not need updating for every new template key.
+      resolve_ci_env() {
+        local flavor="$1"
+        local region_env=".env.${flavor}"
+        local example_env=".env.${flavor}.example"
+        local secret_var="FS_ENV_$(echo "${flavor}" | tr '[:lower:]' '[:upper:]')_FILE"
+        local env_b64="${!secret_var:-}"
+
+        if [ -n "${env_b64}" ]; then
+          umask 077
+          printf '%s' "${env_b64}" | base64 -d > "${region_env}"
+          echo "Decoded CI secret ${secret_var} -> ${region_env}"
+        elif [ -f "${example_env}" ]; then
+          cp "${example_env}" "${region_env}"
+          echo "WARN: ${secret_var} not set; using ${example_env} as base"
+        else
+          echo "ERROR: ${secret_var} not set and ${example_env} is missing"
+          exit 1
+        fi
+
+        if [ -f "${example_env}" ]; then
+          node scripts/merge-env-with-example.js "${region_env}" "${example_env}"
+        fi
+
+        cp "${region_env}" .env
+        test -s .env
       }
 
 
@@ -103,16 +138,13 @@ android_apk:
   script:
     - !reference [.select_deployment, script]
     - npm ci
-    # Secrets: FS_ENV_<FLAVOR>_FILE, FS_KEYSTORE_<FLAVOR>_FILE, FS_GOOGLE_SERVICES_JSON (global); keystore.properties via prebuild.
+    # Secrets: FS_ENV_<FLAVOR>_FILE (optional; falls back to .env.<flavor>.example),
+    # FS_KEYSTORE_<FLAVOR>_FILE, FS_GOOGLE_SERVICES_JSON (global); keystore.properties via prebuild.
     - |
       set -euo pipefail
       FLAVOR_UPPER=$(echo "${APP_FLAVOR}" | tr '[:lower:]' '[:upper:]')
-      ENV_SECRET_VAR="FS_ENV_${FLAVOR_UPPER}_FILE"
       KEYSTORE_SECRET_VAR="FS_KEYSTORE_${FLAVOR_UPPER}_FILE"
       KEYSTORE_PATH="release.${APP_FLAVOR}.keystore"
-
-      ENV_B64="${!ENV_SECRET_VAR:-}"
-      [ -n "${ENV_B64}" ] || { echo "${ENV_SECRET_VAR} is not set"; exit 1; }
 
       KEYSTORE_B64="${!KEYSTORE_SECRET_VAR:-}"
       [ -n "${KEYSTORE_B64}" ] || { echo "${KEYSTORE_SECRET_VAR} is not set"; exit 1; }
@@ -124,13 +156,11 @@ android_apk:
       umask 077
       mkdir -p android/app
 
-      printf '%s' "${ENV_B64}" | base64 -d > .env
       printf '%s' "${KEYSTORE_B64}" | base64 -d > "android/app/${KEYSTORE_PATH}"
       if [ "${APP_FLAVOR}" = "global" ]; then
         printf '%s' "$FS_GOOGLE_SERVICES_JSON" | base64 -d > android/app/google-services.json
       fi
 
-      test -s .env
       test -s "android/app/${KEYSTORE_PATH}"
       if [ "${APP_FLAVOR}" = "global" ]; then
         test -s android/app/google-services.json
@@ -138,9 +168,9 @@ android_apk:
 
     - !reference [.env_tools, script]
     - |
-      REGION_ENV=".env.${APP_FLAVOR}"
-      cp .env "${REGION_ENV}"
-      inject_active_sdk "${REGION_ENV}"
+      resolve_ci_env "${APP_FLAVOR}"
+      inject_active_sdk ".env.${APP_FLAVOR}"
+      cp ".env.${APP_FLAVOR}" .env
 
     - npm run "prebuild:android:${APP_FLAVOR}"
 
@@ -188,7 +218,6 @@ ios_ipa:
       fi
 
       # Secrets — GitLab CI/CD Variables only (Settings → CI/CD → Variables)
-      : "${FS_ENV_GLOBAL_FILE:?must be set as a GitLab CI/CD variable (masked)}"
       : "${PRIVATE_TOKEN:?must be set as a GitLab CI/CD variable (masked)}"
       : "${IOS_P12_PASSWORD:?must be set as a GitLab CI/CD variable (masked)}"
       : "${IOS_KEYCHAIN_PASSWORD:?must be set as a GitLab CI/CD variable (masked)}"
@@ -209,15 +238,11 @@ ios_ipa:
 
       npm ci
 
-      # Secrets: FS_ENV_GLOBAL_FILE (base64 .env.global) → .env + .env.global for prebuild / app.config
-      umask 077
-      printf '%s' "${FS_ENV_GLOBAL_FILE}" | base64 -d > .env.global
-
+      # FS_ENV_GLOBAL_FILE (base64 .env.global) when set; else .env.global.example.
+      # Missing keys in the CI secret are filled from the committed example.
+      resolve_ci_env global
       inject_active_sdk .env.global
-
       cp .env.global .env
-      test -s .env.global
-      test -s .env
 
       npm run prebuild:ios
 
@@ -239,7 +264,7 @@ ios_ipa:
 .device_test:
   stage: test
   tags: [mac-mini-runner]
-  timeout: 2h
+  timeout: 3h
   variables:
     GIT_CLEAN_FLAGS: -ffdx -e test/.venv
   artifacts:
@@ -250,7 +275,8 @@ ios_ipa:
 
 .device_test_env:
   script:
-    - if [ -n "${FS_ENV_GLOBAL_FILE:-}" ]; then printf '%s' "${FS_ENV_GLOBAL_FILE}" | base64 -d > .env; elif [ -f .env.global.example ]; then cp .env.global.example .env; fi
+    - !reference [.env_tools, script]
+    - resolve_ci_env global
 
 .device_test_run:
   script:

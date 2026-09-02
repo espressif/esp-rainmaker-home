@@ -14,7 +14,12 @@ import pytest
 from pytest_bdd import scenarios, then, when
 
 logger = logging.getLogger(__name__)
-pytestmark = [pytest.mark.regression, pytest.mark.provisioning, pytest.mark.softap]
+pytestmark = [
+    pytest.mark.skip(reason="SoftAP provisioning is disabled in the app since v6.1.1"),
+    pytest.mark.regression,
+    pytest.mark.provisioning,
+    pytest.mark.softap,
+]
 
 scenarios("softap.feature")
 

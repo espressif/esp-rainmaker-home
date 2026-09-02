@@ -41,6 +41,44 @@ def app_i18n(key: str) -> str:
     return node
 
 
+# Backend copies that differ between the classic (rm) and neo deployments; feature
+# files carry the token and the step resolves it for the deployment under test.
+SERVER_COPY = {
+    "signup password policy error": {
+        "rm": "Password length must be between 8 to 256 characters. It should be alpha-numeric without any whitespace. It should contain atleast one uppercase, one lowercase character and a number",
+        "rmneo": "Password must be at least 8 characters and include one uppercase letter and one special character.",
+    },
+    "change password policy error": {
+        "rm": "Password length must be between 8 to 256 characters. It should be alpha-numeric without any whitespace. It should contain atleast one uppercase, one lowercase character and a number",
+        "rmneo": "Password change failed",
+    },
+    "incorrect verification code": {
+        "rm": "Verification code is incorrect",
+        "rmneo": "Invalid verification code",
+    },
+    "incorrect current password": {
+        "rm": "The password you entered is incorrect",
+        "rmneo": "Password change failed",
+    },
+    "wrong credentials": {
+        "rm": "Incorrect user name or password",
+        "rmneo": "Authentication failed",
+    },
+    "signup whitespace password error": {
+        "rm": "Password length must be between 8 to 256 characters. It should be alpha-numeric without any whitespace. It should contain atleast one uppercase, one lowercase character and a number",
+        "rmneo": "Failed to create user account",
+    },
+}
+
+
+def resolve_server_copy(deployment: str, text: str) -> str:
+    """Map a SERVER_COPY token to the deployment's backend copy; literals pass through."""
+    entry = SERVER_COPY.get(text)
+    if not entry:
+        return text
+    return entry[deployment_type(deployment)]
+
+
 def request_password_recovery_copy(deployment: str, email: str) -> "str | None":
     """The backend's own text for the forgot-password toast, from the same endpoint the app's SDK calls (classic: POST /v1/forgotpassword2; neo: POST /v1/user/auth/password-recovery). None if the call fails or returns no text — the caller falls back to the i18n heading, mirroring the app."""
     block = load_deployment_config(deployment).get(deployment, {}) or {}

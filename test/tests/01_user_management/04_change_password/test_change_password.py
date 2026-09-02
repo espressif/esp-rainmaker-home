@@ -7,6 +7,7 @@ import pytest
 import logging
 from pytest_bdd import scenarios, given, when, then, parsers
 from utils.registered_user_resolver import update_registered_user_password
+from utils.app_copy import resolve_server_copy
 from utils.common_utils import normalize_input
 
 logger = logging.getLogger(__name__)
@@ -15,12 +16,7 @@ pytestmark = [pytest.mark.regression, pytest.mark.user_management, pytest.mark.c
 scenarios('change_password.feature')
 
 
-@given(parsers.parse('user is on change password screen for "{login_user}"'))
-def on_change_password_screen_for_user(helper, login_user, registered_user_password_resolver, registered_user_resolver):
-    resolved_email = registered_user_resolver(login_user)
-    login_password = registered_user_password_resolver(f"{login_user} password")
-    helper.login.perform_login(resolved_email, login_password)
-    helper.login.last_login_email = resolved_email
+def _open_change_password_screen(helper):
     assert helper.home.check_screen_displayed(timeout=10), "Home screen is not displayed"
     helper.home.click("user_button")
     helper.user.click("settings_button")
@@ -33,6 +29,15 @@ def on_change_password_screen_for_user(helper, login_user, registered_user_passw
         helper.settings.click("account_security_item")
     helper.account_security.click("change_password_button")
     assert helper.change_password.check_screen_displayed(), "Change password screen is not displayed"
+
+
+@given(parsers.parse('user is on change password screen for "{login_user}"'))
+def on_change_password_screen_for_user(helper, login_user, registered_user_password_resolver, registered_user_resolver):
+    resolved_email = registered_user_resolver(login_user)
+    login_password = registered_user_password_resolver(f"{login_user} password")
+    helper.login.perform_login(resolved_email, login_password)
+    helper.login.last_login_email = resolved_email
+    _open_change_password_screen(helper)
 
 @given("user is on the change password screen")
 def on_change_password_screen(helper):
@@ -71,7 +76,7 @@ def tap_button(helper, button_name):
 
 @then(parsers.parse('user should see toast with title "{title}" and message "{message}"'))
 def should_see_toast(helper, title, message, pytestconfig):
-    message = normalize_input(message)
+    message = resolve_server_copy(pytestconfig.getoption("--deployment"), normalize_input(message))
     toast_title, toast_message = helper.change_password.get_toast_title_and_message(
         timeout=5,
         poll=0.25,

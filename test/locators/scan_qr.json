@@ -4,10 +4,6 @@
     "value": "title",
     "text": "Scan QR Code"
   },
-  "qr_code_icon": {
-    "by": "id",
-    "value": "icon_qr_code"
-  },
   "qr_guide_text": {
     "by": "id",
     "value": "text_qr_guide"

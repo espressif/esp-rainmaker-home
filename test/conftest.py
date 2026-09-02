@@ -249,10 +249,9 @@ def hardware_session(request, resource_manager, per_test_debug_dir):
     resources = session.get("resources") or ([session["resource"]] if session.get("resource") else [])
     e2e_held = session.get("e2e_held")
     resources = [r for r in resources if r is not e2e_held]
-    if any(r.qr_payload for r in resources):
-        from hardware.qr import QrDisplay
+    from hardware.qr import QrDisplay
 
-        QrDisplay.close()  # never leave the QR preview behind on failures
+    QrDisplay.close()  # self-guarded by its _active flag; covers chipless scan tests (corrupted QR) too
     for resource in resources:
         try:
             resource_manager.serial_logger.stop(resource)
@@ -828,6 +827,9 @@ def pytest_addoption(parser):
     parser.addoption("--install-app", action="store", default="y", help="Install app before tests (y/n)")
     parser.addoption("--reboot-device", action="store", default="y", help="Reboot the phone once at session start (y/n)")
     parser.addoption("--deployment", action="store", default="rm", help="Deployment name in config/deployment.yaml")
+    parser.addoption("--scale-count", action="store", type=int,
+                     default=int(os.environ.get("SCALE_COUNT", "5")),
+                     help="Iterations for @scale scenarios (env: SCALE_COUNT)")
     parser.addoption("--active-sdk", action="store", default=None, help="SDK the app under test was built with, overriding ACTIVE_SDK (ids in config/sdk.identifiers.ts)")
     parser.addoption("--fresh-users", action="store_true", default=False, help="Clear persisted registered users at session start so the run creates fresh ones")
 
@@ -958,10 +960,13 @@ def pytest_configure(config):
     # Register custom markers
     config.addinivalue_line("markers", "multiple_devices: mark test to run on multiple devices")
     config.addinivalue_line("markers", "sanity: mark test as sanity test")
+    config.addinivalue_line("markers", "open_wifi: needs the open (passwordless) lab AP; gate via deployment.yaml features")
     config.addinivalue_line("markers", "smoke: mark test as smoke test")
     config.addinivalue_line("markers", "regression: mark test as regression test")
     config.addinivalue_line("markers", "user_management: mark test as user management test")
     config.addinivalue_line("markers", "provisioning: mark tests ESP provisioning test")
+    config.addinivalue_line("markers", "esp32c5: mark test as ESP32C5-specific")
+    config.addinivalue_line("markers", "scale: mark test as a configurable-scale run")
     config.addinivalue_line("markers", "scene: mark test as scene E2E test")
     config.addinivalue_line("markers", "schedule: mark test as schedule E2E test")
     config.addinivalue_line("markers", "automation: mark test as automation E2E test")
@@ -1026,6 +1031,51 @@ def _reboot_android_device(adb_path: str, udid: Optional[str], model: str, timeo
         time.sleep(5)
 
     logger.warning(f"{model} did not report boot completed within {timeout}s; continuing anyway")
+    return False
+
+
+def _ensure_android_wifi_connected(adb_cmd: list, model: str, timeout: int = 120) -> bool:
+    """
+    Wait until the phone is associated to the lab Wi-Fi after a reboot, enabling the radio if it came back off.
+
+    A reboot can leave Wi-Fi disabled or still associating; the app then fails every
+    cloud call with "Network request failed" and the first tests of the session fail
+    for a reason that has nothing to do with them.
+    """
+    expected = os.getenv("PROVISION_WIFI_SSID")
+    deadline = time.time() + timeout
+    enable_attempted = False
+    last_status = ""
+    while time.time() < deadline:
+        try:
+            result = subprocess.run(adb_cmd + ["shell", "cmd", "wifi", "status"],
+                                    capture_output=True, text=True, timeout=15)
+            last_status = (result.stdout or "").strip()
+        except Exception as error:
+            logger.debug("Wi-Fi status probe failed on %s: %s", model, error)
+            last_status = ""
+
+        if "connected to" in last_status:
+            if expected and f'"{expected}"' not in last_status:
+                logger.warning("%s is on a different Wi-Fi than %r: %s", model, expected,
+                               last_status.splitlines()[-1] if last_status else "")
+            else:
+                logger.info("%s is connected to Wi-Fi %r", model, expected)
+            return True
+
+        if not enable_attempted and "enabled" not in last_status:
+            logger.info("Wi-Fi is off on %s after reboot; enabling it", model)
+            for enable_cmd in (["shell", "cmd", "wifi", "set-wifi-enabled", "enabled"],
+                               ["shell", "svc", "wifi", "enable"]):
+                try:
+                    subprocess.run(adb_cmd + enable_cmd, capture_output=True, text=True, timeout=15)
+                except Exception as error:
+                    logger.debug("Wi-Fi enable via %s failed: %s", enable_cmd[-1], error)
+            enable_attempted = True
+        time.sleep(5)
+
+    logger.warning("%s did not associate to Wi-Fi within %ss (last status: %s); cloud-dependent tests will likely fail",
+                   model, timeout, last_status.replace("\n", " | ")[:160])
     return False
 
 
@@ -1265,6 +1315,85 @@ def _install_ios_app(udid: Optional[str], ipa_path: str, bundle_id: str, model: 
         return False
 
 
+_UIA2_CRASH_SIGNATURES = (
+    "instrumentation process is not running",
+    "INSTRUMENTATION_ABORTED",
+    "Process crashed",
+    "cannot be proxied to UiAutomator2",
+)
+_uia2_whitelisted_udids = set()
+
+
+def _is_uia2_crash(error) -> bool:
+    text = str(error)
+    return any(sig in text for sig in _UIA2_CRASH_SIGNATURES)
+
+
+def _adb_prefix(udid):
+    cmd = ["adb"]
+    if udid:
+        cmd += ["-s", udid]
+    return cmd
+
+
+def _whitelist_uiautomator2(udid):
+    """Keep the uia2 server out of doze/background kill (Motorola aggressively reaps instrumentation)."""
+    if udid in _uia2_whitelisted_udids:
+        return
+    for pkg in ("io.appium.uiautomator2.server", "io.appium.uiautomator2.server.test"):
+        try:
+            subprocess.run(_adb_prefix(udid) + ["shell", "dumpsys", "deviceidle", "whitelist", f"+{pkg}"],
+                           capture_output=True, text=True, timeout=15)
+        except Exception as error:
+            logger.warning("uia2 doze whitelist failed for %s: %s", pkg, error)
+    _uia2_whitelisted_udids.add(udid)
+    logger.info("uia2 server whitelisted from doze on %s", udid or "default device")
+
+
+def _unwedge_android_uiautomator2(udid, model="android device"):
+    """Clear a wedged uiautomation registration: only a reboot reliably releases it, then drop the stale uia2 apks so Appium reinstalls fresh."""
+    _reboot_android_device("adb", udid, model)
+    _ensure_android_wifi_connected(_adb_prefix(udid), model)
+    for pkg in ("io.appium.uiautomator2.server", "io.appium.uiautomator2.server.test"):
+        try:
+            subprocess.run(_adb_prefix(udid) + ["uninstall", pkg], capture_output=True, text=True, timeout=30)
+        except Exception as error:
+            logger.warning("uia2 uninstall failed for %s: %s", pkg, error)
+    _uia2_whitelisted_udids.discard(udid)
+
+
+_IOS_DEVICE_LOST_RETRIES = 3
+_IOS_DEVICE_LOST_SIGNATURES = (
+    "Unknown device or simulator UDID",
+    "Failed to receive any data within the timeout",
+    "Unable to launch WebDriverAgent",
+    "xcodebuild failed with code 65",
+)
+
+
+def _is_ios_device_lost(error) -> bool:
+    text = str(error)
+    return any(sig in text for sig in _IOS_DEVICE_LOST_SIGNATURES)
+
+
+def _wait_for_ios_device(udid, timeout=240) -> bool:
+    """Poll until the phone is enumerable again. A WDA/xcodebuild death tears down the CoreDevice tunnel, so the device is briefly invisible and every new session fails with 'Unknown device or simulator UDID' — it re-establishes itself within a few minutes."""
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        try:
+            listed = subprocess.run(["xcrun", "devicectl", "list", "devices"],
+                                    capture_output=True, text=True, timeout=45)
+            if udid and udid in (listed.stdout or ""):
+                return True
+            probe = subprocess.run(["idevice_id", "-l"], capture_output=True, text=True, timeout=20)
+            if udid and udid in (probe.stdout or ""):
+                return True
+        except Exception as error:
+            logger.debug("iOS device probe failed: %s", error)
+        time.sleep(10)
+    return False
+
+
 @pytest.fixture(scope="session")
 def device_reboot(request):
     """
@@ -1306,6 +1435,8 @@ def device_reboot(request):
             f"{android_path.rstrip('/')}/platform-tools/adb" if android_path else "adb"
         )
         _reboot_android_device(adb_path, udid, model)
+        adb_cmd = [adb_path] + (["-s", udid] if udid else [])
+        _ensure_android_wifi_connected(adb_cmd, model)
     elif platform == "ios":
         _reboot_ios_device(udid, model)
     else:
@@ -1444,9 +1575,34 @@ def driver(request, appium_grid, app_installer):
         else:
             pytest.skip(f"Unsupported platform: {platform}")
         
-        driver_instance = webdriver.Remote(server_url, options=options)
+        try:
+            driver_instance = webdriver.Remote(server_url, options=options)
+        except Exception as create_error:
+            if platform == "android" and _is_uia2_crash(create_error):
+                logger.warning("RETRY driver: uiautomator2 instrumentation wedged (%s); rebooting %s and retrying once",
+                               create_error, model)
+                _unwedge_android_uiautomator2(capabilities.get("udid"), model)
+                driver_instance = webdriver.Remote(server_url, options=options)
+            elif platform == "ios" and _is_ios_device_lost(create_error):
+                driver_instance = None
+                for attempt in range(_IOS_DEVICE_LOST_RETRIES):
+                    logger.warning("RETRY driver (attempt %s/%s): iPhone not enumerable (%s); waiting for the CoreDevice tunnel to rebuild",
+                                   attempt + 1, _IOS_DEVICE_LOST_RETRIES, create_error)
+                    _wait_for_ios_device(capabilities.get("udid"))
+                    try:
+                        driver_instance = webdriver.Remote(server_url, options=options)
+                        break
+                    except Exception as retry_error:
+                        create_error = retry_error
+                        if not _is_ios_device_lost(retry_error):
+                            raise
+                if driver_instance is None:
+                    raise create_error
+            else:
+                raise
         try:
             if platform == "android":
+                _whitelist_uiautomator2(capabilities.get("udid"))
                 driver_instance.update_settings({"waitForIdleTimeout": 200})
                 logger.info("Android: waitForIdleTimeout=200")
             elif platform == "ios":

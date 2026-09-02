@@ -35,3 +35,16 @@ def select_discovered_ble_device(helper, capture_device_prov_info):
 def scan_ble_elements_present(helper):
     helper.scan_ble.grant_runtime_permissions_if_needed()
     helper.scan_ble.validate_screen_elements()
+
+
+@when("user recovers to the pop screen for the discovered ble device")
+def recover_to_pop_screen(helper, capture_device_prov_info):
+    if helper.pop.check_screen_displayed(timeout=3):
+        return
+    helper.home.go_home()
+    helper.home.open_add_device()
+    helper.add_device.open_selection_from_scanner()
+    helper.add_device.select_bluetooth_option()
+    info = capture_device_prov_info()
+    helper.scan_ble.select_device(info.get("name"))
+    assert helper.pop.check_screen_displayed(timeout=10), "Could not recover to the proof of possession screen"
