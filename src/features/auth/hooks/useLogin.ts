@@ -12,6 +12,7 @@ import {
   useContext,
   useRef,
 } from "react";
+import { AppState, type AppStateStatus } from "react-native";
 import { useCDF } from "@shared/hooks/useCDF";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useTranslation } from "react-i18next";
@@ -22,8 +23,13 @@ import {
   withPostLoginPipelineHooks,
 } from "@features/auth/utils/postLoginPipeline";
 import {
+  APP_STATE_ACTIVE,
+  APP_STATE_BACKGROUND,
+  APP_STATE_INACTIVE,
   CDF_EXTERNAL_PROPERTIES,
   OAUTH_APP_RESUME_CANCEL_GRACE_PERIOD_MS,
+  OAUTH_APP_RESUME_CHECK_DELAY_MS,
+  OAUTH_PROVIDER_WECHAT,
 } from "@shared/utils/constants";
 import { getAuthAllowedUsernameTypes } from "@features/auth/utils/authHelper";
 import {
@@ -42,6 +48,7 @@ import {
   initPipelineProgress,
   isCurrentOAuthAttempt,
   isOAuthLoadingStatus,
+  isOAuthCancellation,
   mapOAuthErrorToMessage,
   OAUTH_PIPELINE_STEP_GET_USER_PROFILE,
   shouldMonitorOAuthAppLifecycle,
@@ -54,6 +61,9 @@ import {
   isWeChatCancellation,
   hasReceivedWeChatAuthCode,
 } from "@native-adaptors/implementations/ESPWeChatAdapter";
+import {
+  isGoogleNativeLoginInProgress,
+} from "@native-adaptors/implementations/ESPGoogleSignInAdapter";
 import { espOauthAdapter } from "@native-adaptors/implementations/ESPOauthAdapter";
 import { runtimeConfigManager } from "@config/runtime.config";
 import asyncStorageAdapter from "@native-adaptors/implementations/ESPAsyncStorage";
@@ -115,6 +125,11 @@ export function useLogin() {
     createInitialOAuthFlowState
   );
   const [pipelineProgress, setPipelineProgress] = useState<PipelineProgress | null>(null);
+  // Which provider button is mid-attempt, so it can show an inline spinner while
+  // the provider's own UI is up. Null when no attempt is running.
+  const [pendingOAuthProvider, setPendingOAuthProvider] = useState<string | null>(
+    null
+  );
   const [showConfigResetDialog, setShowConfigResetDialog] = useState(false);
   const [isConfigResetting, setIsConfigResetting] = useState(false);
   const [authFieldsKey, setAuthFieldsKey] = useState(0);
@@ -122,6 +137,10 @@ export function useLogin() {
   const oauthFlowStateRef = useRef(oauthFlowState);
   const oauthAttemptInFlightRef = useRef(false);
   const oauthResumeCancelTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null
+  );
+  const appStateRef = useRef<AppStateStatus>(AppState.currentState);
+  const appResumeCheckTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
     null
   );
 
@@ -256,6 +275,7 @@ export function useLogin() {
       oauthResumeCancelTimerRef.current = null;
     }
     oauthAttemptInFlightRef.current = false;
+    setPendingOAuthProvider(null);
     const nextState = cancelOAuthAttempt(oauthFlowStateRef.current);
     oauthFlowStateRef.current = nextState;
     setOAuthFlowState(nextState);
@@ -281,10 +301,23 @@ export function useLogin() {
   };
 
   /**
+   * Hosted browser OAuth — the flow every provider falls back to.
+   * @param provider OAuth provider key.
+   */
+  const loginWithHostedOAuth = async (provider: string) => {
+    return (
+      (await store?.userStore.auth?.loginWithOauth({
+        identityProvider: provider,
+      })) ?? null
+    );
+  };
+
+  /**
    * Starts provider OAuth authentication and runs post-login setup on success.
    * @param provider OAuth provider key.
    */
   const oauthLogin = async (provider: string) => {
+    setPendingOAuthProvider(provider);
     const startedState = startOAuthAttempt(oauthFlowStateRef.current);
     oauthFlowStateRef.current = startedState;
     setOAuthFlowState(startedState);
@@ -296,12 +329,14 @@ export function useLogin() {
     }
     setPipelineProgress(null);
     try {
+      // WeChat is the one provider the SDK cannot drive itself: its native SDK
+      // yields an authorization *code*, not a provider ID token, so it has no
+      // `nativeLoginAdapter` equivalent. Every other provider — native picker
+      // or browser — is decided inside `loginWithOauth`.
       const user =
-        provider.toLowerCase() === "wechat"
+        provider.toLowerCase() === OAUTH_PROVIDER_WECHAT
           ? await loginWithWeChat()
-          : await store?.userStore.auth?.loginWithOauth({
-              identityProvider: provider,
-            });
+          : await loginWithHostedOAuth(provider);
       if (!isCurrentOAuthAttempt(oauthFlowStateRef.current, oauthAttemptId)) {
         return;
       }
@@ -356,13 +391,21 @@ export function useLogin() {
       );
       oauthFlowStateRef.current = failedState;
       setOAuthFlowState(failedState);
-      console.error(`OAuth login failed for provider ${provider}:`, error);
-      const errorMessage = mapOAuthErrorToMessage(error, t);
-      toast.showError(t("auth.errors.oauthLoginFailedTitle"), errorMessage);
+      // Backing out of the account sheet or the hosted browser is the user's
+      // own choice: they already know they cancelled, so the attempt is reset
+      // silently instead of being logged and reported as a failure.
+      if (!isOAuthCancellation(error)) {
+        console.error(`OAuth login failed for provider ${provider}:`, error);
+        toast.showError(
+          t("auth.errors.oauthLoginFailedTitle"),
+          mapOAuthErrorToMessage(error, t)
+        );
+      }
       setPipelineProgress(null);
     } finally {
       if (isCurrentOAuthAttempt(oauthFlowStateRef.current, oauthAttemptId)) {
         oauthAttemptInFlightRef.current = false;
+        setPendingOAuthProvider(null);
       }
       if (oauthResumeCancelTimerRef.current) {
         clearTimeout(oauthResumeCancelTimerRef.current);
@@ -401,15 +444,63 @@ export function useLogin() {
         // fail on its own — so cancelling here would discard a valid login
         // (seen with SignInWithApple when the CN token exchange exceeded the
         // grace period). Let it finish; the loading overlay's close button
-        // still allows a manual cancel.
-        if (espOauthAdapter.hasReceivedAuthCode() || hasReceivedWeChatAuthCode()) {
+        // still allows a manual cancel. The native Google picker never has a
+        // browser phase to abandon at all, so it is excluded outright — see
+        // isGoogleNativeLoginInProgress.
+        if (
+          espOauthAdapter.hasReceivedAuthCode() ||
+          hasReceivedWeChatAuthCode() ||
+          isGoogleNativeLoginInProgress()
+        ) {
           return;
         }
+        // Silent, as above: the user returned from the browser without
+        // authorising, so they know the attempt is over.
         cancelOAuthFlow();
-        toast.showError("OAuth Login Failed", "OAuth login was cancelled.");
       }
     }, OAUTH_APP_RESUME_CANCEL_GRACE_PERIOD_MS);
-  }, [cancelOAuthFlow, toast]);
+  }, [cancelOAuthFlow]);
+
+  /**
+   * Browser-abandon watchdog.
+   *
+   * Previously an effect inside OAuthLoadingOverlay, which worked only because
+   * that overlay was mounted for the whole attempt. It no longer is — the
+   * provider-auth phase deliberately leaves the login screen visible — so the
+   * listener lives here, where the flow state it guards already lives.
+   *
+   * Only the browser flow can be abandoned this way; the native account sheet
+   * never backgrounds the app, and `handleOAuthAppBecameActive` additionally
+   * bails when a token is already in flight.
+   */
+  useEffect(() => {
+    if (!monitorOAuthAppLifecycle) return;
+
+    const subscription = AppState.addEventListener("change", (nextState) => {
+      const previousState = appStateRef.current;
+      const wasBackgrounded =
+        previousState === APP_STATE_BACKGROUND ||
+        previousState === APP_STATE_INACTIVE;
+      if (wasBackgrounded && nextState === APP_STATE_ACTIVE) {
+        if (appResumeCheckTimerRef.current) {
+          clearTimeout(appResumeCheckTimerRef.current);
+        }
+        appResumeCheckTimerRef.current = setTimeout(() => {
+          handleOAuthAppBecameActive();
+          appResumeCheckTimerRef.current = null;
+        }, OAUTH_APP_RESUME_CHECK_DELAY_MS);
+      }
+      appStateRef.current = nextState;
+    });
+
+    return () => {
+      subscription.remove();
+      if (appResumeCheckTimerRef.current) {
+        clearTimeout(appResumeCheckTimerRef.current);
+        appResumeCheckTimerRef.current = null;
+      }
+    };
+  }, [monitorOAuthAppLifecycle, handleOAuthAppBecameActive]);
 
   const handleCancelOAuth = useCallback(() => {
     cancelOAuthFlow();
@@ -480,7 +571,7 @@ export function useLogin() {
     isPasswordValid,
     isLoading,
     isOAuthLoading,
-    monitorOAuthAppLifecycle,
+    pendingOAuthProvider,
     pipelineProgress,
     showConfigResetDialog,
     isConfigResetting,
@@ -493,7 +584,6 @@ export function useLogin() {
     login,
     forgotPwd,
     oauthLogin,
-    handleOAuthAppBecameActive,
     handleCancelOAuth,
     handleConfigReset,
     confirmConfigReset,

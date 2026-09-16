@@ -249,11 +249,10 @@
       "autoSignInFailed": "Failed to auto sign in",
       "failedToSaveProfile": "Failed to save profile",
       "pleaseTryAgain": "Please try again",
-      "oauthCancelled": "OAuth login was cancelled.",
       "oauthNoBrowser": "No browser app found. Please install a browser.",
-      "oauthErrorWithMessage": "OAuth error: {{message}}",
-      "oauthUnknownFailure": "OAuth login failed. Please try again.",
-      "oauthLoginFailedTitle": "OAuth Login Failed"
+      "oauthErrorWithMessage": "{{message}}",
+      "oauthUnknownFailure": "Sign in failed. Please try again.",
+      "oauthLoginFailedTitle": "Sign in failed"
     }
   },
   "user": {

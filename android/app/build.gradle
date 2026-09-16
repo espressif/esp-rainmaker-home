@@ -135,7 +135,7 @@ android {
     compileSdk rootProject.ext.compileSdkVersion
 
     namespace 'com.app'
-    
+
     // Configure native libraries path
     sourceSets {
         main {
@@ -246,6 +246,14 @@ android {
                         + "'. Allowed values: 'ChipTool' or 'GooglePlayServices'.")
             }
             buildConfigField "String", "MATTER_COMMISSIONING_METHOD", "\"${commissioningMethod}\""
+
+            // Google login (global only — the CN APK ships no Google Play
+            // services). Web OAuth client id whose audience the RainMaker
+            // backend verifies; read by ESPGoogleSignInModule. Synced from
+            // GOOGLE_WEB_CLIENT_ID in .env. Blank is supported: the module then
+            // reports itself unconfigured and JS falls back to the hosted flow.
+            buildConfigField "String", "GOOGLE_WEB_CLIENT_ID",
+                    "\"${(project.findProperty("GOOGLE_WEB_CLIENT_ID") ?: "").toString()}\""
         }
         // CN: api2.rainmaker.espressif.com.cn, in-app ChipTool Matter
         // commissioning, NO Firebase / Google Play services. App id com.espressif.nova
@@ -352,6 +360,13 @@ dependencies {
 
     // WeChat SDK — CN flavor only (WeChat login is offered solely in the CN build).
     cnImplementation 'com.tencent.mm.opensdk:wechat-sdk-android-without-mta:6.8.0'
+
+    // Google sign-in through Credential Manager (native account picker) —
+    // GLOBAL flavor only. Backed by Google Play services, which the CN APK
+    // deliberately omits; CN does not offer Google login either way.
+    globalImplementation 'androidx.credentials:credentials:1.6.0'
+    globalImplementation 'androidx.credentials:credentials-play-services-auth:1.6.0'
+    globalImplementation 'com.google.android.libraries.identity.googleid:googleid:1.2.0'
 
     implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3'
 

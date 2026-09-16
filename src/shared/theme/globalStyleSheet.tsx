@@ -270,6 +270,16 @@ export const globalStyles = StyleSheet.create({
   },
   oauthButton: {
     marginHorizontal: tokens.spacing._10,
+    // Reserves the icon's footprint so swapping in a spinner does not reflow
+    // the row mid-attempt.
+    width: 44,
+    height: 44,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  // Non-active providers while another attempt is in flight.
+  oauthButtonDimmed: {
+    opacity: 0.4,
   },
   oauthImage: {
     width: 44,

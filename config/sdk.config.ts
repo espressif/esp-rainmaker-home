@@ -17,6 +17,7 @@ import { matterLocalDiscoveryAdapter } from "@native-adaptors/implementations/Ma
 import ESPLocalControlAdapter from "@native-adaptors/implementations/ESPLocalControlAdapter";
 import { ESPNotificationAdapter } from "@native-adaptors/implementations/ESPNotificationAdapter";
 import { espOauthAdapter } from "@native-adaptors/implementations/ESPOauthAdapter";
+import { googleNativeLoginAdapter } from "@native-adaptors/implementations/ESPGoogleSignInAdapter";
 import ESPAppUtilityAdapter from "@native-adaptors/implementations/ESPAppUtilityAdapter";
 import { matterCommissioningAdaptor } from "@native-adaptors/implementations/ESPMatterAdapter";
 import { ESPMatterControlAdapter } from "@native-adaptors/implementations/ESPMatterControlAdapter";
@@ -89,6 +90,10 @@ export function getRMSDKConfig(): ESPRMBaseConfig {
     provisionAdapter: provisionAdapter,
     notificationAdapter: ESPNotificationAdapter,
     oauthAdapter: espOauthAdapter,
+    // Platform account UI for providers that have one. The SDK prefers it over
+    // the browser flow per attempt and falls back to `oauthAdapter` when it
+    // reports unavailable, so no caller has to choose.
+    nativeLoginAdapter: googleNativeLoginAdapter,
     appUtilityAdapter: ESPAppUtilityAdapter,
   };
 

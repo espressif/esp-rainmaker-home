@@ -52,6 +52,14 @@
 				<string>$(WECHAT_APP_ID)</string>
 			</array>
 		</dict>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>google</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>$(GOOGLE_IOS_URL_SCHEME)</string>
+			</array>
+		</dict>
 	</array>
 	<key>CFBundleVersion</key>
 	<string>1</string>
@@ -105,6 +113,10 @@
 	</array>
 	<key>RCTNewArchEnabled</key>
 	<true/>
+	<key>GIDClientID</key>
+	<string>$(GOOGLE_IOS_CLIENT_ID)</string>
+	<key>GIDServerClientID</key>
+	<string>$(GOOGLE_WEB_CLIENT_ID)</string>
 	<key>WeChatAppID</key>
 	<string>$(WECHAT_APP_ID)</string>
 	<key>WeChatUniversalLink</key>

@@ -147,6 +147,30 @@ The provider lists **are** the region gate — Google is simply absent from the 
 | `THIRD_PARTY_AUTH_REDIRECT_HOST`   | Host component of OAuth redirect URL |
 | `THIRD_PARTY_AUTH_REDIRECT_URL`    | Full redirect URL (native BuildConfig) |
 
+#### Google native account picker
+
+Google login can skip the hosted authorize page and use Google's own account
+sheet — Credential Manager on Android, the GoogleSignIn SDK on iOS. The picker
+returns a Google ID token, which the app exchanges for RainMaker tokens at
+`POST {BASE_URL}/{API_VERSION}/auth/federated/google`.
+
+| Variable                | Description                                                       | Platform |
+| ----------------------- | ----------------------------------------------------------------- | -------- |
+| `GOOGLE_WEB_CLIENT_ID`  | OAuth **Web application** client registered as the deployment's Google identity provider. The ID token is minted for this audience because that is what the backend verifies. | Both     |
+| `GOOGLE_IOS_CLIENT_ID`  | OAuth **iOS** client from the same Google Cloud project. Its reversed form is derived into the Info.plist URL scheme by `scripts/sync-env-to-ios.js`. | iOS      |
+
+Both keys are optional. Leave either blank and that platform reports the picker
+unavailable, so Google login falls back to the hosted browser flow and keeps
+working. CN leaves both blank: the CN APK ships no Google Play services, the CN
+cloud has no `/auth/federated` endpoint, and Google is not in the CN provider
+list.
+
+Android needs no per-app client id — the app is identified by package name plus
+signing certificate — but that pairing **must** be registered on an Android
+OAuth client in the same project, **including the debug signing key**. An
+unregistered SHA-1 makes the picker return a cancellation rather than an error,
+which reads as the user dismissing it.
+
 ---
 
 ### Deep Links

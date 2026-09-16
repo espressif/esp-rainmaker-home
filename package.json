@@ -1,8 +1,8 @@
 {
   "name": "NOVA",
   "main": "expo-router/entry",
-  "version": "6.1.1",
-  "versionCode": 53,
+  "version": "6.2.0",
+  "versionCode": 54,
   "workspaces": [
     "modules/*"
   ],
@@ -37,7 +37,7 @@
   },
   "dependencies": {
     "@espressif/rainmaker-base-cdf": "2.3.0",
-    "@espressif/rainmaker-base-sdk": "3.4.0",
+    "@espressif/rainmaker-base-sdk": "3.5.0",
     "@espressif/rainmaker-matter-sdk": "3.1.0",
     "@espressif/rainmaker-neo-base-sdk": "1.2.0",
     "@expo/vector-icons": "^14.0.2",
