@@ -41,7 +41,7 @@ APP_GROUP_ID = group.com.espressif.novahome
 APP_MATTER_EXTENSION = com.espressif.nova.MatterExtension
 
 // App Version (marketing version)
-APP_VERSION = 6.1.1
+APP_VERSION = 6.2.0
 
 // App URL Scheme (used in Info.plist)
 APP_SCHEMA = rainmaker
@@ -69,3 +69,13 @@ MATTER_ECOSYSTEM_NAME = Rainmaker Home
 WECHAT_APP_ID =wx9d48fe3e583d36ab
 WECHAT_UNIVERSAL_LINK_HOST =wechat-212038829774-prod.s3.cn-north-1.amazonaws.com.cn
 WECHAT_UNIVERSAL_LINK_PREFIX =wechat-212038829774-prod.s3.cn-north-1.amazonaws.com.cn/
+
+// Google login (native account picker). All three feed Info.plist. Populated
+// from GOOGLE_IOS_CLIENT_ID / GOOGLE_WEB_CLIENT_ID in .env by
+// scripts/sync-env-to-ios.js — do NOT hardcode. URL_SCHEME is the reversed iOS
+// client id, derived by the sync script. Leaving these empty is supported: the
+// native picker then reports itself unconfigured and Google login falls back to
+// the hosted browser flow. Keep the keys present (empty) so the sync can fill them.
+GOOGLE_IOS_CLIENT_ID =
+GOOGLE_WEB_CLIENT_ID =
+GOOGLE_IOS_URL_SCHEME =

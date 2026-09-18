@@ -13,6 +13,7 @@ import com.oney.WebRTCModule.WebRTCModuleOptions
 import org.webrtc.audio.JavaAudioDeviceModule
 import com.app.utils.ESPAppUtilityModule
 import com.app.discovery.ESPDiscoveryModule
+import com.app.googlesignin.GoogleSignInModuleProvider
 import com.app.local_control.ESPLocalControlModule
 import com.app.matter.ESPMatterModule
 import com.app.matter.ESPMatterUtilityModule
@@ -119,6 +120,14 @@ class MainApplication : Application(), ReactApplication {
                 add(object : ReactPackage {
                     override fun createNativeModules(reactContext: ReactApplicationContext): List<NativeModule> =
                         WeChatModuleProvider.create(reactContext)
+                    override fun createViewManagers(reactContext: ReactApplicationContext): List<ViewManager<*, *>> =
+                        emptyList()
+                })
+                // Google login — contributes the module on the global flavor only
+                // (no-op provider on cn). See com.app.googlesignin.GoogleSignInModuleProvider.
+                add(object : ReactPackage {
+                    override fun createNativeModules(reactContext: ReactApplicationContext): List<NativeModule> =
+                        GoogleSignInModuleProvider.create(reactContext)
                     override fun createViewManagers(reactContext: ReactApplicationContext): List<ViewManager<*, *>> =
                         emptyList()
                 })

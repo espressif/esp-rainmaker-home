@@ -105,6 +105,19 @@ export const FORBIDDEN = 6;
 export const ESP_TOKEN_ERROR = "ESPTokenError";
 export const OAUTH_CANCELLED_ERROR_TAG = "OAUTH_CANCELLED";
 export const OAUTH_NO_BROWSER_FOUND_ERROR_TAG = "NO_BROWSER_FOUND";
+// Rejection code the native Google modules raise when the user dismisses the
+// account picker. It reaches the login flow unchanged (adapter -> SDK), so the
+// flow matches on it to tell a dismissal apart from a real failure.
+export const GOOGLE_SIGN_IN_CANCELLED_ERROR_TAG = "GOOGLE_SIGN_IN_CANCELLED";
+
+// OAUTH PROVIDER KEYS
+// Lowercased form of the provider names in THIRD_PARTY_AUTH_ENABLED_PROVIDERS
+// (region env). The env lists them in display casing ("Google",
+// "SignInWithApple", "WeChat"); callers lowercase before matching, so compare
+// against these rather than inline literals.
+export const OAUTH_PROVIDER_GOOGLE = "google";
+export const OAUTH_PROVIDER_APPLE = "signinwithapple";
+export const OAUTH_PROVIDER_WECHAT = "wechat";
 
 // APP LIFECYCLE
 export const APP_STATE_ACTIVE = "active";

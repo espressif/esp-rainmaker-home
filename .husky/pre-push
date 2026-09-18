@@ -1,6 +1,6 @@
 branch=$(git symbolic-ref --short HEAD 2>/dev/null)
 
-pattern="^(task|feature|bugfix|hotfix|enhancement|release|test)/[a-z0-9-]+$"
+pattern="^(task|feature|bugfix|hotfix|enhancement|pre-release|release|test)/[a-z0-9.-]+$"
 
 if ! echo "$branch" | grep -qE "$pattern"; then
   echo ""
@@ -12,10 +12,12 @@ if ! echo "$branch" | grep -qE "$pattern"; then
   echo "     bugfix/<name>"
   echo "     hotfix/<name>"
   echo "     enhancement/<name>"
+  echo "     pre-release/<name>"
   echo "     release/<name>"
   echo "     test/<name>"
   echo ""
-  echo "   Rules for <name>: lowercase letters, numbers, and '-' only"
+  echo "   Rules for <name>: lowercase letters, numbers, '-' and '.' only"
+  echo "   (e.g. pre-release/v6.1.1, release/v6.2.0)"
   echo ""
   exit 1
 fi

@@ -200,6 +200,35 @@ function updateXcconfig(file, env) {
           .replace(/\/+$/, '');
         return stripped ? `${stripped}/` : '';
       }
+    },
+    // Google login (native account picker). Both ids reach the GoogleSignIn SDK
+    // through Info.plist: the iOS client identifies the app, the web client is
+    // sent as serverClientID so the issued ID token is minted for the audience
+    // the RainMaker backend verifies.
+    {
+      key: 'GOOGLE_IOS_CLIENT_ID',
+      sourceKey: 'GOOGLE_IOS_CLIENT_ID',
+      computeValue: (env) => env.GOOGLE_IOS_CLIENT_ID ?? ''
+    },
+    {
+      key: 'GOOGLE_WEB_CLIENT_ID',
+      sourceKey: 'GOOGLE_WEB_CLIENT_ID',
+      computeValue: (env) => env.GOOGLE_WEB_CLIENT_ID ?? ''
+    },
+    // Google redirects back through the REVERSED iOS client id
+    // (com.googleusercontent.apps.<id>), which must be registered as a URL
+    // scheme. Derived here rather than stored so the two can never drift.
+    {
+      key: 'GOOGLE_IOS_URL_SCHEME',
+      sourceKey: 'GOOGLE_IOS_CLIENT_ID',
+      computeValue: (env) => {
+        const clientId = env.GOOGLE_IOS_CLIENT_ID ?? '';
+        if (!clientId.endsWith('.apps.googleusercontent.com')) return '';
+        return `com.googleusercontent.apps.${clientId.replace(
+          /\.apps\.googleusercontent\.com$/,
+          ''
+        )}`;
+      }
     }
   ];
 

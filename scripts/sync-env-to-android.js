@@ -95,6 +95,11 @@ const ENV_TO_GRADLE = {
   // WeChat login (CN flavor only). Drives the CN flavor's BuildConfig field and
   // the WXEntryActivity URL scheme manifest placeholder.
   WECHAT_APP_ID: 'WECHAT_APP_ID',
+
+  // Google login (global flavor only). Feeds the global flavor's BuildConfig
+  // field read by ESPGoogleSignInModule; blank disables the native account
+  // picker and Google login falls back to the hosted browser flow.
+  GOOGLE_WEB_CLIENT_ID: 'GOOGLE_WEB_CLIENT_ID',
 };
 
 /* =====================================================

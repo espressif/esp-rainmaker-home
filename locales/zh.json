@@ -249,11 +249,10 @@
       "autoSignInFailed": "自动登录失败",
       "failedToSaveProfile": "个人资料保存失败",
       "pleaseTryAgain": "请重试",
-      "oauthCancelled": "OAuth 登录已取消。",
       "oauthNoBrowser": "未找到浏览器应用，请安装浏览器。",
-      "oauthErrorWithMessage": "OAuth 错误：{{message}}",
-      "oauthUnknownFailure": "OAuth 登录失败，请重试。",
-      "oauthLoginFailedTitle": "OAuth 登录失败"
+      "oauthErrorWithMessage": "{{message}}",
+      "oauthUnknownFailure": "登录失败，请重试。",
+      "oauthLoginFailedTitle": "登录失败"
     }
   },
   "user": {
