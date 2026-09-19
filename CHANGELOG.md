@@ -5,6 +5,14 @@ All notable changes to the ESP RainMaker Home app will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [6.2.1]
+
+### Fixed
+
+- **User Authentication [RMNeo]**
+  - Updated the SDK to fix expired session token refresh handling
+  - Fixed an issue where rotated refresh tokens were not persisted, which could cause subsequent refresh attempts to invalidate the user session
+
 ## [6.2.0]
 
 ### Added
