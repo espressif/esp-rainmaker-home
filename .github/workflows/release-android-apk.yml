@@ -116,8 +116,11 @@ jobs:
           java-version: "17"
 
       # 6. Setup Android SDK
+      # v4+ is required: Google stopped serving the legacy `tools` SDK package
+      # in Sep 2026, so the v3 line (which requests it by default) fails at
+      # sdkmanager on every run and is no longer maintained upstream.
       - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
+        uses: android-actions/setup-android@v4
 
       # Cache Gradle dependencies (main speed boost across releases)
       - name: Cache Gradle
