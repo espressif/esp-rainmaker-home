@@ -5,6 +5,27 @@ All notable changes to the ESP RainMaker Home app will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [6.3.0]
+ 
+### Added
+
+- **Over-the-Air (OTA) updates**
+  - Ship JavaScript bundle updates so users receive fixes without waiting for a store release
+  - Signed bundles delivered via CloudFront with per-platform manifests and rollout channels
+  - Runtime-version fingerprint gate: native-affecting changes still require a store release
+ 
+- **Web platform support**
+  - Run the RainMaker Home app in a browser with parity for MQTT, provisioning, notifications, Matter and OAuth
+  - BLE and Wi-Fi provisioning in the browser via Web Bluetooth
+  - Iframe embed mode to host the app inside a partner page
+  - CloudFront-based web deployment pipeline with versioned uploads and SPA routing
+
+### Fixed
+
+- **iOS 27 / Xcode 27 support**
+  - Adopt the UIScene lifecycle so the app launches on iOS 27 (previously crashed at launch on the iOS 27 SDK)
+  - Raise pod iOS deployment target floor to 15.1 (16.0 for ExpoRouter) so the project builds on Xcode 27
+
 ## [6.2.1]
 
 ### Fixed

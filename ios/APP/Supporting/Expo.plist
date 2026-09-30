@@ -11,7 +11,7 @@
     <key>EXUpdatesURL</key>
     <string>https://app.rainmaker.espressif.com/ota/prod/global/ios/manifest.json</string>
     <key>EXUpdatesRuntimeVersion</key>
-    <string>70adf5ac4ef49b0cdbbe55812f4d5c559a66130e</string>
+    <string>5b62bfa6e5f97a6fcd9be877a0f2b410f45a4b03</string>
     <!--
       Signing verification. Cert PEM is baked from deployment/ota/certs/certificate.pem
       via deployment/ota/scripts/sync-signing-cert.js. CI runs the same script in check

@@ -63,7 +63,7 @@
             android:value="https://app.rainmaker.espressif.com/ota/prod/global/android/manifest.json" />
         <meta-data
             android:name="expo.modules.updates.EXPO_RUNTIME_VERSION"
-            android:value="31ae8680d5b0a8bb32722cd8503f4d565fbe7943" />
+            android:value="efce812669cdff44b1d80fdee3d7d3ff43e8d9b3" />
         <!--
             Signing verification. Cert PEM is baked from deployment/ota/certs/certificate.pem
             via deployment/ota/scripts/sync-signing-cert.js. CI runs the same script in check
