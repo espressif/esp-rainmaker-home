@@ -258,3 +258,58 @@ fetchCompletionHandler:(void (^)(UIBackgroundFetchResult))completionHandler {
 }
 
 @end
+
+#pragma mark - UIScene lifecycle
+
+// Required by iOS 27. Attaches AppDelegate's window to the scene and
+// forwards URL / user-activity callbacks to AppDelegate.
+@interface AppSceneDelegate : UIResponder <UIWindowSceneDelegate>
+@property (strong, nonatomic) UIWindow *window;
+@end
+
+@implementation AppSceneDelegate
+
+- (void)scene:(UIScene *)scene
+    willConnectToSession:(UISceneSession *)session
+                 options:(UISceneConnectionOptions *)connectionOptions {
+  if (![scene isKindOfClass:[UIWindowScene class]]) {
+    return;
+  }
+  UIWindowScene *windowScene = (UIWindowScene *)scene;
+
+  AppDelegate *appDelegate = (AppDelegate *)[UIApplication sharedApplication].delegate;
+  UIWindow *existingWindow = appDelegate.window;
+  if (existingWindow != nil) {
+    existingWindow.windowScene = windowScene;
+    self.window = existingWindow;
+  } else {
+    self.window = [[UIWindow alloc] initWithWindowScene:windowScene];
+  }
+
+  UIApplication *application = [UIApplication sharedApplication];
+  for (UIOpenURLContext *context in connectionOptions.URLContexts) {
+    [appDelegate application:application openURL:context.URL options:@{}];
+  }
+  for (NSUserActivity *activity in connectionOptions.userActivities) {
+    [appDelegate application:application
+        continueUserActivity:activity
+          restorationHandler:^(NSArray<id<UIUserActivityRestoring>> * _Nullable restorableObjects) {}];
+  }
+}
+
+- (void)scene:(UIScene *)scene openURLContexts:(NSSet<UIOpenURLContext *> *)URLContexts {
+  AppDelegate *appDelegate = (AppDelegate *)[UIApplication sharedApplication].delegate;
+  UIApplication *application = [UIApplication sharedApplication];
+  for (UIOpenURLContext *context in URLContexts) {
+    [appDelegate application:application openURL:context.URL options:@{}];
+  }
+}
+
+- (void)scene:(UIScene *)scene continueUserActivity:(NSUserActivity *)userActivity {
+  AppDelegate *appDelegate = (AppDelegate *)[UIApplication sharedApplication].delegate;
+  [appDelegate application:[UIApplication sharedApplication]
+      continueUserActivity:userActivity
+        restorationHandler:^(NSArray<id<UIUserActivityRestoring>> * _Nullable restorableObjects) {}];
+}
+
+@end
