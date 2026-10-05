@@ -128,6 +128,7 @@ def enter_new_passwords(helper, new_password, confirm_password, registered_user_
     resolved_confirm = registered_user_password_resolver(normalize_input(confirm_password))
     helper.reset_password.send_keys("new_password_input", resolved_new)
     helper.reset_password.send_keys("confirm_password_input", resolved_confirm)
+    helper.reset_password.hide_keyboard_if_visible()
 
 
 @when(parsers.parse('user taps "{button_name}"'))
