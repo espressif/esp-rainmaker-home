@@ -301,6 +301,10 @@ function handleRmneoNodeUpdate(
 /**
  * Subscribes the Neo subscription manager to all nodes in `params.nodeList`,
  * skipping nodes whose current SDK object is already registered.
+ *
+ * Nodes restored from the CDF disk snapshot carry `_raw: null` until the
+ * first live sync adopts the SDK node; they are skipped here (the sync
+ * subscribes them) so a reconnect during that window cannot throw.
  * @param params - CDF subscribe request (node list + callback).
  * @param subscriptionState - Current node-id to SDK-node registrations.
  */
@@ -310,8 +314,11 @@ export async function subscribeRmneoUserToNodeUpdates(
 ): Promise<void> {
   const subscriptionManager = ESPRMNeoBase.subscriptionManager;
   const sdkNodes = params.nodeList
-    .map((node) => node._raw as ESPRMNeoNode)
-    .filter((node) => subscriptionState.get(node.nodeId) !== node);
+    .map((node) => node._raw as ESPRMNeoNode | null | undefined)
+    .filter(
+      (node): node is ESPRMNeoNode =>
+        !!node?.nodeId && subscriptionState.get(node.nodeId) !== node,
+    );
 
   if (sdkNodes.length === 0) {
     return;

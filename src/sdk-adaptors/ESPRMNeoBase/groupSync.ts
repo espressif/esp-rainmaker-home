@@ -13,7 +13,10 @@ import type {
 import { DEFAULT_HOME_GROUP_NAME, ESPCDF } from "@store";
 import type { ESPRMNeoGroup, ESPRMNeoUser } from "@espressif/rainmaker-neo-base-sdk";
 import { USER_PERMISSION } from "@shared/utils/constants";
-import { ensureRmneoMqttConnected } from "./utils/helpers/mqttConnectionHelpers";
+import {
+  ensureRmneoMqttConnected,
+  refreshRmneoMqttCredentials,
+} from "./utils/helpers/mqttConnectionHelpers";
 import { logRmneoGroupsRaw } from "./utils/helpers/debugLogHelpers";
 import {
   buildNodeSubgroupMembershipMap,
@@ -49,7 +52,6 @@ export async function syncHomeWithNodes(
   mqttConnectionPromise: Promise<unknown>,
 ): Promise<ESPCDFGroup | null> {
   await mqttConnectionPromise;
-  await ensureRmneoMqttConnected(esprmngUser);
 
   // Snapshot subgroup membership before this sync overwrites the store, so we
   // can tell afterwards which nodes' rooms/control groups changed and need an
@@ -68,7 +70,15 @@ export async function syncHomeWithNodes(
   if (cdfGroups.length === 0) {
     const newHome = await esprmngUser.createGroup(DEFAULT_HOME_GROUP_NAME);
     cdfGroups = transformRmneoSdkGroupsToCdf(esprmngUser, [newHome]);
+    // MQTT could not connect at login (assume-role answers 409 while the user
+    // has no groups); now that a home exists, connect under its policy.
+    await refreshRmneoMqttCredentials(esprmngUser, "home.create");
   }
+
+  // Only now is MQTT worth ensuring: nothing above needs the transport, and
+  // for a brand-new user it cannot connect until the default home exists.
+  // Subscribes below need it up.
+  await ensureRmneoMqttConnected(esprmngUser);
 
   callbacks.setGroupsList(cdfGroups);
 
@@ -147,7 +157,11 @@ export async function createHome(
   esprmngUser: ESPRMNeoUser,
   params: ESPCDFCreateHomeRequestParams,
 ): Promise<ESPRMNeoGroup> {
-  return esprmngUser.createGroup(params.name);
+  const created = await esprmngUser.createGroup(params.name);
+  // New home -> new group id outside the current IoT policy. Re-vend now so
+  // the first device provisioned here is subscribable on the first attempt.
+  await refreshRmneoMqttCredentials(esprmngUser, "home.create");
+  return created;
 }
 
 /**

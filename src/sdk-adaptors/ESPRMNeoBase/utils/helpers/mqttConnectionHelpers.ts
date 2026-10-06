@@ -59,6 +59,40 @@ const MQTT_CONNECT_RETRY_DELAY_MS = 1500;
 /** How often the watchdog polls the transport's connection state. */
 const MQTT_WATCHDOG_INTERVAL_MS = 15000;
 
+/** Options for a forced MQTT reconnect. */
+export interface RmneoMqttReconnectOptions {
+  /**
+   * Re-subscribe the store's nodes once the transport is back up (default
+   * `true`). Pass `false` when a full `syncHomeWithNodes` follows: the sync
+   * subscribes every node with fresh SDK instances, and subscribing them
+   * here first would leave two listeners per node. The teardown of stale
+   * registrations always runs, so the sync's subscribe reaches the wire.
+   */
+  resubscribe?: boolean;
+}
+
+const HTTP_STATUS_CONFLICT = 409;
+
+/**
+ * Whether a connect failure is the expected "no groups yet" 409.
+ *
+ * `POST /v1/assumed-roles` answers 409 (`User has no groups`) while the user
+ * has no home yet, because there is no membership to scope the IoT policy
+ * to. That is the normal state of a brand-new account until the default home
+ * is created, so it is not a transient failure worth retrying. The SDK's
+ * API manager attaches `status` to the thrown error and `connectMQTT`
+ * rethrows the same instance.
+ * @param error - Error thrown by `connectMQTT()`.
+ * @returns `true` for the no-groups conflict.
+ */
+function isNoGroupsConflict(error: unknown): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    (error as { status?: unknown }).status === HTTP_STATUS_CONFLICT
+  );
+}
+
 /**
  * Connects MQTT with bounded retries for transient cloud failures.
  * @param esprmngUser - Authenticated RMNeo user.
@@ -73,6 +107,14 @@ async function connectMQTTWithRetries(
       return await esprmngUser.connectMQTT();
     } catch (error) {
       lastError = error;
+      if (isNoGroupsConflict(error)) {
+        // Expected for a first sign-in with no home yet. The default-home
+        // creation in syncHomeWithNodes reconnects once a group exists.
+        console.info(
+          "[startRmneoMqttConnection] user has no groups yet; deferring MQTT until a home exists",
+        );
+        break;
+      }
       console.error(
         `[startRmneoMqttConnection] connectMQTT attempt ${attempt}/${MQTT_CONNECT_MAX_ATTEMPTS} failed:`,
         error,
@@ -118,10 +160,12 @@ export function startRmneoMqttConnection(
       mqttTransportUiState.setConnected(true);
     })
     .catch((error) => {
-      console.error(
-        "[startRmneoMqttConnection] Failed to connect MQTT after retries:",
-        error,
-      );
+      if (!isNoGroupsConflict(error)) {
+        console.error(
+          "[startRmneoMqttConnection] Failed to connect MQTT after retries:",
+          error,
+        );
+      }
       mqttConnectionByUser.delete(esprmngUser);
     });
   mqttConnectionByUser.set(esprmngUser, promise);
@@ -287,17 +331,19 @@ export function ensureRmneoMqttConnected(
  * If another reconnect is already running, waits for it then still force-reconnects
  * so a soft ensure that early-returned on a stale CONNECTED flag cannot skip work.
  * @param esprmngUser - RMNeo user whose MQTT session is rebuilt.
+ * @param options - Reconnect options (see {@link RmneoMqttReconnectOptions}).
  * @returns Promise settled after the forced reconnect attempt.
  */
 export function forceRmneoMqttReconnectOnResume(
   esprmngUser: ESPRMNeoUser,
+  options?: RmneoMqttReconnectOptions,
 ): Promise<void> {
   const prior = reconnectInFlightByUser.get(esprmngUser);
   const promise = (async () => {
     if (prior) {
       await prior.catch(() => {});
     }
-    await forceRmneoMqttReconnectOnce(esprmngUser);
+    await forceRmneoMqttReconnectOnce(esprmngUser, options);
   })().finally(() => {
     if (reconnectInFlightByUser.get(esprmngUser) === promise) {
       reconnectInFlightByUser.delete(esprmngUser);
@@ -305,6 +351,37 @@ export function forceRmneoMqttReconnectOnResume(
   });
   reconnectInFlightByUser.set(esprmngUser, promise);
   return promise;
+}
+
+/**
+ * Re-vends MQTT credentials after the user's home membership changed
+ * (share accepted, home created). The assume-role IoT policy is scoped to
+ * membership at vend time, so the existing connection cannot subscribe to or
+ * publish for a home gained mid-session, and {@link ensureRmneoMqttConnected}
+ * would no-op because the transport is still connected.
+ *
+ * Callers await this before syncing so the new home's nodes subscribe under
+ * the fresh policy. Never throws: a failed reconnect must not fail the
+ * accept / create that already succeeded server-side (the watchdog and
+ * resume paths retry later).
+ * @param esprmngUser - RMNeo user whose membership changed.
+ * @param reason - Short tag for the warning log (e.g. `share.accept`).
+ * @param options - Pass `{ resubscribe: false }` when the caller runs a full
+ *   sync right after, so existing nodes are not subscribed twice.
+ */
+export async function refreshRmneoMqttCredentials(
+  esprmngUser: ESPRMNeoUser,
+  reason: string,
+  options?: RmneoMqttReconnectOptions,
+): Promise<void> {
+  try {
+    await forceRmneoMqttReconnectOnResume(esprmngUser, options);
+  } catch (error) {
+    console.warn(
+      `[rmneoMqttConnection] membership-change reconnect (${reason}) failed; watchdog/resume will retry:`,
+      error,
+    );
+  }
 }
 
 /**
@@ -355,9 +432,11 @@ async function ensureRmneoMqttConnectedOnce(
  * Tears down any native MQTT session, reconnects with fresh credentials, and
  * resubscribes. Used on AppState resume when the CONNECTED flag may be stale.
  * @param esprmngUser - RMNeo user whose session is rebuilt.
+ * @param options - Reconnect options (see {@link RmneoMqttReconnectOptions}).
  */
 async function forceRmneoMqttReconnectOnce(
   esprmngUser: ESPRMNeoUser,
+  options?: RmneoMqttReconnectOptions,
 ): Promise<void> {
   mqttTransportUiState.setConnected(false);
   console.warn(
@@ -375,13 +454,23 @@ async function forceRmneoMqttReconnectOnce(
   }
   mqttConnectionByUser.delete(esprmngUser);
   await startRmneoMqttConnection(esprmngUser);
-  await finishReconnectWithResubscribe();
+  await finishReconnectWithResubscribe(options);
 }
 
 /**
- * After a reconnect attempt, resubscribes nodes when the transport is up.
+ * After a reconnect attempt, resets node registrations when the transport is
+ * up and, unless `options.resubscribe` is `false`, subscribes the store's
+ * nodes again.
+ *
+ * The reset always runs: the forced disconnect dropped every wire
+ * subscription, but the SDK orchestrator still marks each shadow as
+ * subscribed. Unsubscribing every node clears that flag so the next
+ * subscribe (here, or in the caller's sync) actually reaches the broker.
+ * @param options - Reconnect options (see {@link RmneoMqttReconnectOptions}).
  */
-async function finishReconnectWithResubscribe(): Promise<void> {
+async function finishReconnectWithResubscribe(
+  options?: RmneoMqttReconnectOptions,
+): Promise<void> {
   const reconnected = await ESPMQTTAdapter.isConnected();
   console.log(
     `[rmneoMqttConnection] reconnect attempt finished, connected=${reconnected}`,
@@ -396,7 +485,11 @@ async function finishReconnectWithResubscribe(): Promise<void> {
   await cdfUser?.unsubscribeFromNodeUpdates?.().catch(() => {});
   await resetMqttNodeRegistrations(nodeIds);
 
-  if (cdfUser && nodesList.length > 0) {
+  if (options?.resubscribe === false) {
+    console.log(
+      `[rmneoMqttConnection] reset ${nodeIds.length} node registration(s); caller's sync re-subscribes`,
+    );
+  } else if (cdfUser && nodesList.length > 0) {
     try {
       await cdfUser.subscribeToNodeUpdates({ nodeList: nodesList });
       for (const cdfNode of nodesList) {

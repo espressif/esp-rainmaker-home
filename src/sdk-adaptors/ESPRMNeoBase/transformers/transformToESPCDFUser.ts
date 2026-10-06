@@ -45,6 +45,7 @@ import { startRmneoLocalDiscoverySubscription } from "../utils/helpers/localDisc
 import {
   clearRmneoMqttConnection,
   startRmneoMqttConnection,
+  refreshRmneoMqttCredentials,
 } from "../utils/helpers/mqttConnectionHelpers";
 import { clearAllCdfProjectedNcfg } from "../utils/helpers/nodeHelpers";
 import { provisionDevice } from "../utils/helpers/provisionHelpers";
@@ -251,7 +252,7 @@ export function transformToESPCDFUser(
     > {
       const list = await esprmngUser.listSharingRequests();
       const data = list.map((req) =>
-        transformToESPCDFGroupSharingRequest(req),
+        transformToESPCDFGroupSharingRequest(req, esprmngUser),
       );
       return {
         status: STATUS_SUCCESS,
@@ -306,6 +307,9 @@ export function transformToESPCDFUser(
      */
     async createGroup(data: ESPCDFCreateGroupRequest): Promise<ESPCDFGroup> {
       const group = await esprmngUser.createGroup(data.name);
+      // New home -> new group id outside the current IoT policy. Re-vend now so
+      // the first device provisioned here is subscribable on the first attempt.
+      await refreshRmneoMqttCredentials(esprmngUser, "home.create");
       return transformToESPCDFGroup(
         group,
         esprmngUser,
