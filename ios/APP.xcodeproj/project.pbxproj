@@ -27,7 +27,7 @@
 		8790E6612FF7C82C0020344B /* Matter.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 8790E65E2FF7C7AC0020344B /* Matter.framework */; };
 		B18059E884C0ABDD17F3DC3D /* ExpoModulesProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = FAC715A2D49A985799AEE119 /* ExpoModulesProvider.swift */; };
 		BB2F792D24A3F905000567C9 /* Expo.plist in Resources */ = {isa = PBXBuildFile; fileRef = BB2F792C24A3F905000567C9 /* Expo.plist */; };
-		DA803ADE4C6C4736BAE299F2 /* noop-file.swift in Sources */ = {isa = PBXBuildFile; fileRef = E4690621EE5B4198A07FB6D0 /* noop-file.swift */; };
+		DA803ADE4C6C4736BAE299F2 /* ESPUpdatesBootstrap.swift in Sources */ = {isa = PBXBuildFile; fileRef = E4690621EE5B4198A07FB6D0 /* ESPUpdatesBootstrap.swift */; };
 		F10B4D132E66E4A9000C0687 /* ESPDiscoveryModule.swift in Sources */ = {isa = PBXBuildFile; fileRef = F10B4D112E66E4A9000C0687 /* ESPDiscoveryModule.swift */; };
 		F10B4D142E66E4A9000C0687 /* ESPDiscoveryModule.m in Sources */ = {isa = PBXBuildFile; fileRef = F10B4D102E66E4A9000C0687 /* ESPDiscoveryModule.m */; };
 		F146362D2F33164A009BE833 /* ESPMatterConstants.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1A40E1F2EBC9E3A008A590D /* ESPMatterConstants.swift */; };
@@ -117,7 +117,7 @@
 		A5F1B4F2E6D1CB5980F02DB0 /* libPods-APP.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = "libPods-APP.a"; sourceTree = BUILT_PRODUCTS_DIR; };
 		AA286B85B6C04FC6940260E9 /* SplashScreen.storyboard */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = file.storyboard; name = SplashScreen.storyboard; path = APP/SplashScreen.storyboard; sourceTree = "<group>"; };
 		BB2F792C24A3F905000567C9 /* Expo.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; path = Expo.plist; sourceTree = "<group>"; };
-		E4690621EE5B4198A07FB6D0 /* noop-file.swift */ = {isa = PBXFileReference; explicitFileType = undefined; fileEncoding = 4; includeInIndex = 0; lastKnownFileType = sourcecode.swift; name = "noop-file.swift"; path = "APP/noop-file.swift"; sourceTree = "<group>"; };
+		E4690621EE5B4198A07FB6D0 /* ESPUpdatesBootstrap.swift */ = {isa = PBXFileReference; explicitFileType = undefined; fileEncoding = 4; includeInIndex = 0; lastKnownFileType = sourcecode.swift; name = ESPUpdatesBootstrap.swift; path = APP/ESPUpdatesBootstrap.swift; sourceTree = "<group>"; };
 		ED297162215061F000B7C4FE /* JavaScriptCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = JavaScriptCore.framework; path = System/Library/Frameworks/JavaScriptCore.framework; sourceTree = SDKROOT; };
 		F10B4D102E66E4A9000C0687 /* ESPDiscoveryModule.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = ESPDiscoveryModule.m; sourceTree = "<group>"; };
 		F10B4D112E66E4A9000C0687 /* ESPDiscoveryModule.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ESPDiscoveryModule.swift; sourceTree = "<group>"; };
@@ -190,7 +190,7 @@
 				13B07FB61A68108700A75B9A /* Info.plist */,
 				13B07FB71A68108700A75B9A /* main.m */,
 				AA286B85B6C04FC6940260E9 /* SplashScreen.storyboard */,
-				E4690621EE5B4198A07FB6D0 /* noop-file.swift */,
+				E4690621EE5B4198A07FB6D0 /* ESPUpdatesBootstrap.swift */,
 				0259EEB2E2A64AFC9F746EEF /* APP-Bridging-Header.h */,
 				94D7943BDE76E78EC62286AA /* PrivacyInfo.xcprivacy */,
 				F10B4D122E66E4A9000C0687 /* Discovery */,
@@ -645,7 +645,7 @@
 				F18184BB2E4B1C33002C7B0A /* ESPAppUtilityModule.swift in Sources */,
 				F18184BC2E4B1C34002C7B0A /* ESPPermissionUtils.swift in Sources */,
 				B18059E884C0ABDD17F3DC3D /* ExpoModulesProvider.swift in Sources */,
-				DA803ADE4C6C4736BAE299F2 /* noop-file.swift in Sources */,
+				DA803ADE4C6C4736BAE299F2 /* ESPUpdatesBootstrap.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

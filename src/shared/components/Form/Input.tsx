@@ -8,26 +8,25 @@ import { useState, forwardRef, useCallback, useRef } from "react";
 import {
   View,
   TextInput,
-  StyleSheet,
   TextInputProps,
-  TouchableOpacity,
+  Pressable,
+  Platform,
   Text,
   NativeSyntheticEvent,
+  StyleProp,
+  TextStyle,
   TextInputChangeEventData,
   TextInputEndEditingEventData,
 } from "react-native";
 
-// Icons
 import { Ionicons } from "@expo/vector-icons";
 
-// Hooks
 import { useDebounce } from "@shared/hooks/useDebounce";
-
-// Styles
 import { tokens } from "@shared/theme/tokens";
-
+import { PLATFORM_WEB } from "@shared/utils/constants";
 import { testProps } from "@shared/utils/testProps";
-// Types
+import inputStyles from "./inputStyles";
+
 type InputMode = "text" | "numeric" | "email" | "tel" | "url";
 
 interface ValidationResult {
@@ -59,7 +58,7 @@ interface InputProps extends Omit<TextInputProps, "onChangeText"> {
   /** Initial value */
   initialValue?: string;
   /** Additional style overrides */
-  style?: object;
+  style?: StyleProp<TextStyle>;
   /** Whether to show bottom border */
   border?: boolean;
   /** Whether to add horizontal padding */
@@ -69,6 +68,8 @@ interface InputProps extends Omit<TextInputProps, "onChangeText"> {
   /** QA automation identifier */
   qaId?: string;
 }
+
+const isWeb = Platform.OS === PLATFORM_WEB;
 
 /**
  * Input
@@ -82,6 +83,15 @@ interface InputProps extends Omit<TextInputProps, "onChangeText"> {
  * - Forward ref support
  * - Platform-specific styling
  * - OS autofill sync (iOS/Android password managers often skip `onChangeText`)
+ *
+ * Web-only branches (behind `Platform.OS === PLATFORM_WEB`):
+ * - Always controlled — RN-web flips the underlying `<input>` from uncontrolled
+ *   to controlled when `defaultValue` → `value` transitions, and that remount
+ *   drops focus mid-typing.
+ * - Password eye control preserves focus via `preventDefault` on mouse-down
+ *   and a `requestAnimationFrame` focus restore (mouse-down would otherwise
+ *   blur the field before `onPress` runs).
+ * - `outlineStyle: "none"` on the input drops the browser's default focus outline.
  */
 const Input = forwardRef<TextInput, InputProps>(function Input(
   {
@@ -114,15 +124,35 @@ const Input = forwardRef<TextInput, InputProps>(function Input(
     const [value, setValue] = useState<string>(initialValue);
     const [errorMessage, setErrorMessage] = useState<string>("");
     /**
-     * Once true, TextInput is controlled via `value` so password visibility
-     * toggles keep the text. Until then it stays uncontrolled (`defaultValue`)
-     * so iOS/Android autofill can paint sibling fields without React wiping them.
+     * On native, TextInput stays uncontrolled (`defaultValue`) until the first
+     * edit so iOS/Android autofill can paint sibling fields without React
+     * wiping them. On web the field must be controlled from the first render
+     * (see the component doc block) — flip is skipped.
      */
-    const [isValueDriven, setIsValueDriven] = useState(initialValue !== "");
+    const [isValueDriven, setIsValueDriven] = useState(
+      isWeb || initialValue !== "",
+    );
     /** True after the user edits the field; avoids skipping blur validation when parent syncs `initialValue` on each change. */
     const valueDirtyRef = useRef(false);
     const valueRef = useRef(value);
     valueRef.current = value;
+    const inputRef = useRef<TextInput | null>(null);
+
+    /**
+     * Forwards the external ref while keeping a local ref for the web focus-restore
+     * on password toggle.
+     */
+    const setRefs = useCallback(
+      (instance: TextInput | null) => {
+        inputRef.current = instance;
+        if (typeof ref === "function") {
+          ref(instance);
+        } else if (ref) {
+          ref.current = instance;
+        }
+      },
+      [ref],
+    );
 
     // Immediate validation for button state (no error display)
     const validateImmediate = useCallback(
@@ -265,31 +295,55 @@ const Input = forwardRef<TextInput, InputProps>(function Input(
     };
 
     /**
-     * Toggles whether the password characters are visible.
+     * Toggles whether the password characters are visible. On web, also
+     * restores focus to the input after the toggle so the eye control does
+     * not leave the field blurred.
      */
     const togglePassword = () => {
       setShowPassword((prev) => !prev);
+      if (isWeb) {
+        requestAnimationFrame(() => {
+          inputRef.current?.focus();
+        });
+      }
+    };
+
+    /**
+     * Web-only: stop mouse-down on the eye control from blurring the input
+     * before `onPress` runs.
+     */
+    const preventEyeMouseDownBlur = (event: { preventDefault: () => void }) => {
+      event.preventDefault();
     };
 
     const hasError = !!errorMessage;
+
+    const styles = inputStyles;
 
     return (
       <View
         {...(qaId ? testProps(qaId) : {})}
         style={[styles.container, marginBottom && styles.marginBottom]}
       >
-        <View style={[styles.inputWrapper]}>
+        <View
+          style={[
+            styles.inputWrapper,
+            border && styles.wrapperBorder,
+            hasError && styles.wrapperErrorBorder,
+          ]}
+        >
           {!!icon && (
             <Ionicons
-              name={icon as any}
+              name={icon as keyof typeof Ionicons.glyphMap}
               size={22}
               style={styles.leftIcon}
               color={hasError ? tokens.colors.red : tokens.colors.gray}
+              pointerEvents="none"
             />
           )}
 
           <TextInput
-            ref={ref}
+            ref={setRefs}
             {...(qaId
               ? testProps(`input_${qaId}`)
               : testProps("text_input_field"))}
@@ -307,28 +361,38 @@ const Input = forwardRef<TextInput, InputProps>(function Input(
             style={[
               styles.input,
               style,
-              !!icon && styles.paddingLeft,
               !editable && styles.disabled,
-              border && styles.border,
-              hasError && styles.errorBorder,
+              border && styles.inputBorder,
+              hasError && styles.inputErrorBorder,
               paddingHorizontal && styles.paddingHorizontal,
+              !!icon && styles.paddingLeft,
+              isPassword && styles.paddingRight,
+              // RN-web accepts outlineStyle; TextStyle does not declare it.
+              isWeb &&
+                ({ outlineStyle: "none" } as unknown as TextStyle),
             ]}
             inputMode={inputMode}
             editable={editable}
           />
 
           {isPassword && (
-            <TouchableOpacity
+            <Pressable
               {...testProps(`button_toggle_${qaId}`)}
               onPress={togglePassword}
               style={styles.eyeIcon}
+              accessibilityRole="button"
+              hitSlop={8}
+              // Web-only DOM event; cast so native Pressable typings accept it.
+              {...(isWeb
+                ? ({ onMouseDown: preventEyeMouseDownBlur } as object)
+                : {})}
             >
               <Ionicons
                 name={showPassword ? "eye-outline" : "eye-off-outline"}
                 size={16}
                 color={tokens.colors.gray}
               />
-            </TouchableOpacity>
+            </Pressable>
           )}
         </View>
 
@@ -340,64 +404,6 @@ const Input = forwardRef<TextInput, InputProps>(function Input(
         )}
       </View>
     );
-});
-
-/* ------------------------------ Styles ------------------------------- */
-const styles = StyleSheet.create({
-  container: {
-    width: "100%",
-  },
-  inputWrapper: {
-    position: "relative",
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: tokens.colors.white,
-    borderRadius: tokens.radius.sm,
-  },
-  marginBottom: {
-    marginBottom: tokens.spacing._15,
-  },
-  border: {
-    borderBottomWidth: 1,
-    borderColor: tokens.colors.borderColor,
-  },
-  errorBorder: {
-    borderBottomWidth: 1,
-    borderColor: tokens.colors.red,
-  },
-  input: {
-    flex: 1,
-    height: 40,
-    fontSize: tokens.fontSize.sm,
-    color: tokens.colors.black,
-    fontFamily: tokens.fonts.regular,
-  },
-  paddingHorizontal: {
-    paddingHorizontal: tokens.spacing._20,
-  },
-  paddingLeft: {
-    paddingLeft: 30,
-  },
-  leftIcon: {
-    position: "absolute",
-    left: 0,
-    zIndex: 10,
-    marginRight: tokens.spacing._10,
-  },
-  eyeIcon: {
-    position: "absolute",
-    right: tokens.spacing._5,
-    zIndex: 10,
-  },
-  disabled: {
-    opacity: 0.4,
-  },
-  errorText: {
-    fontSize: tokens.fontSize.xs,
-    color: tokens.colors.red,
-    marginTop: tokens.spacing._5,
-    fontFamily: tokens.fonts.regular,
-  },
 });
 
 export default Input;

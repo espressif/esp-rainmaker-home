@@ -375,6 +375,7 @@ dependencies {
     implementation 'org.bouncycastle:bcprov-jdk15on:1.70'
     implementation 'org.bouncycastle:bcpkix-jdk15on:1.70'
     implementation 'org.bouncycastle:bcutil-jdk15on:1.70'
+    implementation 'org.conscrypt:conscrypt-android:2.7.0'
 
     // Protobuf dependency for Matter TLV and certificate handling
     implementation 'com.google.protobuf:protobuf-javalite:4.32.1'
@@ -415,4 +416,17 @@ dependencies {
     } else {
         implementation jscFlavor
     }
+}
+
+// expo-updates transitively pulls org.bouncycastle:*-jdk15to18:1.81, which
+// duplicates the *-jdk15on:1.70 classes declared in the dependencies block
+// and breaks R8/D8 with "Duplicate class org.bouncycastle.*" errors. Drop
+// the newer artifact IDs; the -jdk15on variant provides the same
+// functionality expo-updates needs for code-signing verification. Revisit
+// this exclusion if the app's own bouncycastle dependencies are upgraded to
+// the -jdk15to18 line.
+configurations.all {
+    exclude group: 'org.bouncycastle', module: 'bcprov-jdk15to18'
+    exclude group: 'org.bouncycastle', module: 'bcpkix-jdk15to18'
+    exclude group: 'org.bouncycastle', module: 'bcutil-jdk15to18'
 }

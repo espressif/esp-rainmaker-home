@@ -1,11 +1,14 @@
 {
   "name": "NOVA",
   "main": "expo-router/entry",
-  "version": "6.2.1",
-  "versionCode": 55,
+  "version": "6.3.0",
+  "versionCode": 56,
   "workspaces": [
     "modules/*"
   ],
+  "engines": {
+    "node": "22.22.3"
+  },
   "scripts": {
     "start": "expo start",
     "start:dev": "APP_ENV=development expo start -c",
@@ -23,7 +26,9 @@
     "build:android:global": "{ cp .env.global .env 2>/dev/null || cp .env.global.example .env; } && npm run prebuild:android && cd android && ./gradlew assembleGlobalRelease",
     "build:android:cn": "{ cp .env.cn .env 2>/dev/null || cp .env.cn.example .env; } && npm run prebuild:android && cd android && ./gradlew assembleCnRelease",
     "ios": "cp .env.global.example .env && npm run prebuild:ios && expo run:ios",
-    "web": "expo start --web",
+    "web": "node deployment/web/scripts/sync-firebase-messaging-sw.js && expo start --web",
+    "build:web": "node deployment/web/scripts/sync-firebase-messaging-sw.js && expo export --platform web -c",
+    "deploy:web": "./deployment/web/scripts/deploy-web.sh",
     "test": "jest --watchAll",
     "lint": "expo lint",
     "lint:arch": "depcruise src config app modules --config .dependency-cruiser.cjs --validate --output-type err",
@@ -41,7 +46,11 @@
     "@espressif/rainmaker-matter-sdk": "3.1.0",
     "@espressif/rainmaker-neo-base-sdk": "1.2.1",
     "@expo/vector-icons": "^14.0.2",
+    "@modules/ble-prov": "*",
     "@modules/kvs": "*",
+    "@modules/mqtt": "*",
+    "@modules/notification": "*",
+    "@modules/webrtc": "*",
     "@react-native-async-storage/async-storage": "^2.1.2",
     "@react-native-community/checkbox": "^0.5.17",
     "@react-native-community/slider": "5.1.2",
@@ -53,6 +62,7 @@
     "@tamagui/core": "1.126.12",
     "@tamagui/toast": "1.126.12",
     "@types/react": "~19.2.0",
+    "aws-iot-device-sdk-v2": "^1.28.0",
     "axios": "1.10.0",
     "buffer": "^6.0.3",
     "burnt": "^0.13.0",
@@ -79,10 +89,13 @@
     "expo-status-bar": "~55.0.5",
     "expo-symbols": "~55.0.7",
     "expo-system-ui": "~55.0.16",
+    "expo-updates": "~55.0.27",
     "expo-web-browser": "~55.0.14",
+    "firebase": "^12.17.1",
     "google-protobuf": "^3.21.2",
     "i18next": "^25.1.2",
     "joi": "^17.13.3",
+    "jsqr": "^1.4.0",
     "lucide-react-native": "^1.14.0",
     "marked": "^17.0.1",
     "mobx": "^6.13.5",
@@ -115,7 +128,8 @@
     "react-native-webview": "13.16.0",
     "react-native-worklets": "0.7.4",
     "tamagui": "1.126.12",
-    "victory-native": "^41.20.2"
+    "victory-native": "^41.20.2",
+    "yaml": "^2.9.0"
   },
   "devDependencies": {
     "@babel/core": "^7.25.2",
@@ -124,6 +138,7 @@
     "@types/google-protobuf": "^3.15.6",
     "@types/jest": "^29.5.12",
     "@types/react": "~19.2.0",
+    "@types/web-bluetooth": "^0.0.21",
     "babel-plugin-module-resolver": "^5.0.3",
     "babel-preset-expo": "~55.0.22",
     "cspell": "^9.8.0",

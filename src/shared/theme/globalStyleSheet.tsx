@@ -4,10 +4,13 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { StyleSheet } from "react-native";
+import { Platform, StyleSheet } from "react-native";
 import { tokens } from "./tokens";
 import { verticalScale } from "@shared/utils/styling";
+import { PLATFORM_WEB } from "@shared/utils/constants";
 import { chartStyles } from "./chartStyleSheet";
+
+const isWeb = Platform.OS === PLATFORM_WEB;
 
 export const globalStyles = StyleSheet.create({
   // Typography
@@ -356,19 +359,19 @@ export const globalStyles = StyleSheet.create({
     marginTop: tokens.spacing._5,
     marginBottom: tokens.spacing._10,
   },
+  // Web: padding 0 + border keeps the Tamagui thumb math right; native keeps its original geometry.
   switch: {
     backgroundColor: tokens.colors.bg1,
     borderColor: tokens.colors.bg1,
-    borderWidth: 0,
-    paddingHorizontal: 3,
+    ...(isWeb ? { borderWidth: 2, padding: 0 } : { borderWidth: 0, paddingHorizontal: 3 }),
   },
   switchThumb: {
     backgroundColor: tokens.colors.white,
-    marginVertical: 2,
+    ...(isWeb ? null : { marginVertical: 2 }),
   },
   switchThumbActive: {
     backgroundColor: tokens.colors.primary,
-    marginVertical: 2,
+    ...(isWeb ? null : { marginVertical: 2 }),
   },
   activeTab: {
     color: tokens.colors.primary,
@@ -3457,6 +3460,12 @@ export const globalStyles = StyleSheet.create({
   configScanMessage: {
     fontSize: 16,
     color: tokens.colors.text_primary,
+    textAlign: "center",
+    marginTop: tokens.spacing._20,
+  },
+  configScanErrorText: {
+    fontSize: 16,
+    color: tokens.colors.red,
     textAlign: "center",
     marginTop: tokens.spacing._20,
   },

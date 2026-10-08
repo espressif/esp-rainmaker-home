@@ -9,6 +9,7 @@ import {
   View,
   Text,
   Image,
+  StyleSheet,
   TouchableOpacity,
   useWindowDimensions,
 } from "react-native";
@@ -33,8 +34,10 @@ import {
   PARAM_INCOMING_UPDATE_DEBOUNCE_MS,
 } from "@shared/utils/constants";
 import { globalStyles } from "@shared/theme/globalStyleSheet";
+import { switchFrameProps } from "@shared/theme/switchFrameProps";
 import { tokens } from "@shared/theme/tokens";
 import { testProps } from "@shared/utils/testProps";
+import { webStopClickPropagationProps } from "@shared/utils/webStopClickPropagation";
 
 /** Overlap for stacked avatars (~50% of 40px inner image). */
 const AVATAR_OVERLAP = 16;
@@ -289,30 +292,31 @@ const ControlGroupCard = observer(
           </View>
 
           {hasPower ? (
-            <Switch
-              {...testProps("switch_control_group_power")}
-              size="$2.5"
-              borderColor={tokens.colors.bg1}
-              borderWidth={0}
-              checked={powerAllOn}
-              disabled={!canTogglePower}
-              style={[
-                globalStyles.switch,
-                !canTogglePower && globalStyles.deviceCardDisabled,
-              ]}
-              onCheckedChange={(checked) =>
-                handleGroupPower(Boolean(checked))
-              }
-            >
-              <Switch.Thumb
-                animation="quicker"
-                style={
-                  powerAllOn
-                    ? globalStyles.switchThumbActive
-                    : globalStyles.switchThumb
+            <View {...webStopClickPropagationProps}>
+              <Switch
+                {...testProps("switch_control_group_power")}
+                {...switchFrameProps}
+                size="$2.5"
+                checked={powerAllOn}
+                disabled={!canTogglePower}
+                style={StyleSheet.flatten([
+                  globalStyles.switch,
+                  !canTogglePower && globalStyles.deviceCardDisabled,
+                ])}
+                onCheckedChange={(checked) =>
+                  handleGroupPower(Boolean(checked))
                 }
-              />
-            </Switch>
+              >
+                <Switch.Thumb
+                  animation="quicker"
+                  style={
+                    powerAllOn
+                      ? globalStyles.switchThumbActive
+                      : globalStyles.switchThumb
+                  }
+                />
+              </Switch>
+            </View>
           ) : (
             <View style={globalStyles.controlGroupCardSwitchPlaceholder} />
           )}

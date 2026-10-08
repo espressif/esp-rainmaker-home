@@ -4,7 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-export {
-  useConfigScan,
-  type UseConfigScanReturn,
-} from "./useConfigScan";
+export { useConfigScan } from "./useConfigScan";
+export type {
+  UseConfigScanReturn,
+  UseConfigScanBaseReturn,
+} from "./useConfigScan.types";

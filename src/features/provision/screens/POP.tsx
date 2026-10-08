@@ -102,6 +102,10 @@ const POPScreen = () => {
                 ]}
                 placeholder={t("device.pop.placeholder")}
                 maxLength={8}
+                // PoP is case-sensitive for Security2 SRP (e.g. QR `de64a660`).
+                autoCapitalize="none"
+                autoCorrect={false}
+                spellCheck={false}
                 returnKeyType="done"
                 onSubmitEditing={() => {
                   if (!isLoading) {

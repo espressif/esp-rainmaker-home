@@ -13,7 +13,7 @@ import {
   ImageSourcePropType,
   ScrollView,
 } from "react-native";
-import { MediaStream } from "react-native-webrtc";
+import type { MediaStream } from "react-native-webrtc";
 import type { ReactNode } from "react";
 import { AgentConfig } from "@features/agent/utils";
 import { ESPCDFDevice, ESPCDFGroup, ESPCDFNode, ESPCDFDeviceParam, ESPCDFNodeConfig, ESPCDFAutomation, ESPCDFGroupSharingRequest } from "@store";
@@ -997,8 +997,11 @@ export interface AutomationMenuBottomSheetProps {
 
 export type ConfigScanPhase =
   | "info"
+  | "scanning"
+  | "fetching"
   | "applying"
-  | "success";
+  | "success"
+  | "error";
 
 // ============================================================================
 // Chat Types

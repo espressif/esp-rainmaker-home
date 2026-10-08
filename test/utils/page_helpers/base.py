@@ -20,6 +20,8 @@ from utils.locator_loader import LocatorLoader
 
 logger = logging.getLogger(__name__)
 
+IOS_KEYBOARD_SETTLE_S = 0.6
+
 
 def _is_stale_reference_error(error):
     """Return True for Selenium/Appium stale element exceptions."""
@@ -147,7 +149,10 @@ class BasePage:
                     the_text = text
                 if clear_first:
                     element.clear()
-                element.send_keys(the_text)
+                if self.platform == "ios":
+                    self._ios_type(element, the_text)
+                else:
+                    element.send_keys(the_text)
                 return element
             except Exception as e:
                 if _is_stale_reference_error(e) and attempt < 2:
@@ -156,6 +161,19 @@ class BasePage:
                     continue
                 raise
         raise last_err
+
+    def _ios_type(self, element, text):
+        """Focus the field, let the keyboard settle, type, and retype once if WDA dropped characters."""
+        for attempt in (1, 2):
+            element.click()
+            time.sleep(IOS_KEYBOARD_SETTLE_S)
+            element.send_keys(text)
+            typed = element.get_attribute("value") or ""
+            if typed == str(text) or "\u2022" in typed:
+                return
+            logger.warning("iOS typed %r instead of %r on attempt %s", typed[:24], str(text)[:24], attempt)
+            if attempt == 1:
+                element.clear()
 
 
     def clear(self, locator_name_or_type, value=None, timeout=None, poll=0.5):
@@ -370,6 +388,11 @@ class BasePage:
             except Exception:
                 return False
         elif self.platform == "ios":
+            try:
+                if self.driver.is_keyboard_shown():
+                    return True
+            except Exception:
+                pass
             try:
                 return self.driver.find_element("xpath", "//XCUIElementTypeKeyboard").is_displayed()
             except Exception:

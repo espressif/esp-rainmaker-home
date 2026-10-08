@@ -21,33 +21,15 @@ import {
   getSupportedDeviceTypes,
   isAIAgentFromAdvertisement,
 } from "@shared/utils/device";
-import { DEVICE_TYPE_LIST } from "@/config/devices.config";
+import { DEFAULT_PROVISION_DEVICE_PREFIX } from "@features/provision/constants";
+import type { UseScanBLEReturn } from "./useScanBLE.types";
 
-export interface UseScanBLEReturn {
-  // State
-  isScanning: boolean;
-  scannedDevices: ESPCDFProvisioningDevice[];
-  connectingDevice: Record<string, boolean>;
-  showAgentTerms: boolean;
-  devicePrefix: string;
-  availableDevices: typeof DEVICE_TYPE_LIST;
-
-  // Permissions
-  bleGranted: boolean;
-  locationGranted: boolean;
-  bluetoothEnabled: boolean | null;
-  isChecking: boolean;
-  allPermissionsGranted: boolean;
-
-  // Handlers
-  handleScanAgain: () => void;
-  handleBleDeviceConnect: (device: ESPCDFProvisioningDevice) => void;
-  handleAgentTermsComplete: () => void;
-  handleAgentTermsClose: () => void;
-}
+export type { UseScanBLEReturn } from "./useScanBLE.types";
 
 /**
- * Custom hook for ScanBLE component business logic
+ * Custom hook for ScanBLE component business logic (native).
+ * Web builds resolve `useScanBLE.web.ts` via Metro platform extensions.
+ * @returns Scan BLE state and handlers for native provisioning
  */
 export const useScanBLE = (): UseScanBLEReturn => {
   const toast = useToast();
@@ -64,7 +46,7 @@ export const useScanBLE = (): UseScanBLEReturn => {
   } = useDevicePermissions();
 
   // State
-  const [devicePrefix] = useState<string>("PROV_");
+  const [devicePrefix] = useState<string>(DEFAULT_PROVISION_DEVICE_PREFIX);
   const [isScanning, setIsScanning] = useState(false);
   const [connectingDevice, setConnectingDevice] = useState<Record<string, boolean>>({});
   const [scannedDevices, setScannedDevices] = useState<ESPCDFProvisioningDevice[]>([]);

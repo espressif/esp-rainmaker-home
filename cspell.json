@@ -173,7 +173,13 @@
     "HLS",
     "CREDS",
     "Verhoeff",
-    "discriminator"
+    "discriminator",
+    "jsqr",
+    "jsQR",
+    "firebase",
+    "Firebase",
+    "vapid",
+    "VAPID"
   ],
   "flagWords": [],
   "ignoreRegExpList": [

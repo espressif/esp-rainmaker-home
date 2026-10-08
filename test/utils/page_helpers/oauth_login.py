@@ -296,13 +296,23 @@ class OauthLogin(BasePage):
     def _ios_native_apple_sheet_present(self):
         return self._ios_native_apple_sheet()[0] is not None
 
+    def _ios_sheet_hosts(self):
+        hosts = list(self.IOS_SHEET_HOSTS)
+        try:
+            active = (self.driver.execute_script("mobile: activeAppInfo") or {}).get("bundleId")
+            if active and active not in hosts and not active.startswith("com.espressif"):
+                hosts.insert(0, active)
+        except Exception:
+            pass
+        return tuple(hosts)
+
     def _ios_apple_native_in_progress(self):
         """The native Sign in with Apple flow (account sheet or password page) is on screen."""
         try:
-            for bundle in self.IOS_SHEET_HOSTS:
+            for bundle in self._ios_sheet_hosts():
                 self._ios_scope(bundle)
                 source = self.driver.page_source
-                if "Sign in with Apple" in source or "Enter the password for Apple" in source:
+                if "Sign in with Apple" in source or "Enter the password for Apple" in source or "Apple Account" in source:
                     return True
             return False
         finally:
@@ -323,7 +333,7 @@ class OauthLogin(BasePage):
 
     def _ios_native_apple_sign_in(self, password):
         """Drive the native Sign in with Apple sheet to password entry; True once the password is submitted."""
-        for host in self.IOS_SHEET_HOSTS + ("auto",):
+        for host in self._ios_sheet_hosts() + ("auto",):
             try:
                 self._ios_scope(host)
                 fields = self.driver.find_elements("class name", "XCUIElementTypeSecureTextField")
@@ -339,10 +349,12 @@ class OauthLogin(BasePage):
                     field.clear()
                     field.send_keys(password)
                     time.sleep(0.5)
-                    if (field.get_attribute("value") or "").strip():
+                    typed = (field.get_attribute("value") or "").strip()
+                    logger.info("Apple password field holds %s chars (expected %s)", len(typed), len(password))
+                    if typed and len(typed) == len(password):
                         entered = True
                         break
-                    logger.warning("Apple password field still empty after attempt %s; retrying", attempt + 1)
+                    logger.warning("Apple password field holds %s/%s chars after attempt %s; retrying", len(typed), len(password), attempt + 1)
                 if not entered:
                     logger.warning("Apple password did not register in the field; will retry on next loop")
                     return False
@@ -515,8 +527,15 @@ class OauthLogin(BasePage):
             if self._is_keyboard_shown():
                 self._tap_any(next_buttons, quiet=True)
         else:
-            if not self._tap_any(next_buttons, quiet=True):
-                field.send_keys("\n")
+            field.send_keys("\n")
+            time.sleep(2)
+            try:
+                still_here = field.is_displayed()
+            except Exception:
+                still_here = False
+            if still_here:
+                self.hide_keyboard_if_visible()
+                self._tap_any(next_buttons, quiet=True)
 
     def _apple_handle_trust_browser(self):
         """Apple's post-2FA 'Trust this browser?' interstitial: tap Trust so the sign-in redirect proceeds."""

@@ -10,6 +10,7 @@ import {
   ViewStyle,
   TouchableWithoutFeedback,
   Keyboard,
+  Platform,
 } from "react-native";
 import { SafeAreaView, type Edge } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
@@ -18,6 +19,8 @@ import { StatusBar } from "expo-status-bar";
 import { globalStyles } from "@shared/theme/globalStyleSheet";
 
 import { testProps } from "@shared/utils/testProps";
+import { PLATFORM_WEB } from "@shared/utils/constants";
+
 // Types
 interface ScreenWrapperProps {
   /** Additional style overrides */
@@ -53,6 +56,9 @@ const ScreenWrapper: React.FC<ScreenWrapperProps> = ({
   excludeBottom = false,
   qaId,
 }) => {
+  /**
+   * Dismisses the software keyboard when the user taps outside an input.
+   */
   const handleDismissKeyboard = () => {
     if (dismissKeyboard) {
       Keyboard.dismiss();
@@ -68,10 +74,14 @@ const ScreenWrapper: React.FC<ScreenWrapperProps> = ({
     safeAreaEdges.push("bottom");
   }
 
+  // Web: never wrap in TouchableWithoutFeedback — it fights TextInput focus.
+  const useTapToDismiss =
+    dismissKeyboard && Platform.OS !== PLATFORM_WEB;
+
   return (
     <SafeAreaView style={[globalStyles.container, style]} edges={safeAreaEdges}>
       <StatusBar style="dark" backgroundColor="#ffffff" translucent={false} />
-      {dismissKeyboard ? (
+      {useTapToDismiss ? (
         <TouchableWithoutFeedback
           {...(qaId ? testProps(qaId) : {})}
           accessible={false}

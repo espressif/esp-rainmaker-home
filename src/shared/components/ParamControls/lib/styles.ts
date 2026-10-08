@@ -4,9 +4,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { StyleSheet } from 'react-native';
+import { Platform, StyleSheet } from 'react-native';
 import { tokens } from '@shared/theme/tokens';
 import { globalStyles } from '@shared/theme/globalStyleSheet';
+import { PLATFORM_WEB } from '@shared/utils/constants';
+
+const isWeb = Platform.OS === PLATFORM_WEB;
 
 export const paramControlStyles = StyleSheet.create({
   // Base Container
@@ -404,9 +407,18 @@ export const paramControlStyles = StyleSheet.create({
     ...globalStyles.textWhite,
   },
 
-  // Toggle Switch Styles
+  // Toggle Switch Styles.
+  // Web-only overrides: padding: 0 + explicit border avoid Tamagui web
+  // thumb overflow. Native switches keep their pre-web-embed appearance.
   toggleSwitch: {
     backgroundColor: tokens.colors.bg2,
+    ...(isWeb
+      ? {
+          borderColor: tokens.colors.bg2,
+          borderWidth: 2,
+          padding: 0,
+        }
+      : null),
   },
 
   toggleThumb: {

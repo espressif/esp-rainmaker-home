@@ -4,6 +4,27 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import {
+  IMAGE_MIME_TYPE_GIF,
+  IMAGE_MIME_TYPE_JPEG,
+  IMAGE_MIME_TYPE_PNG,
+  IMAGE_MIME_TYPE_WEBP,
+} from "@shared/utils/constants";
+
+/** Default BLE advertised name prefix for ESP-IDF provisioning devices */
+export const DEFAULT_PROVISION_DEVICE_PREFIX = "PROV_";
+
+/** DOM id for the web BLE spinner keyframes style tag */
+export const WEB_BLE_SPIN_STYLE_ID = "web-ble-scan-spin-keyframes";
+/** CSS keyframes name for the web BLE scan/connect spinner */
+export const WEB_BLE_SPIN_KEYFRAMES_NAME = "webBleScanSpin";
+/** CSS duration for one web BLE spinner rotation */
+export const WEB_BLE_SPIN_DURATION = "0.8s";
+/** CSS timing function for the web BLE spinner */
+export const WEB_BLE_SPIN_TIMING = "linear";
+/** CSS iteration count for the web BLE spinner */
+export const WEB_BLE_SPIN_ITERATION = "infinite";
+
 /**
  * Progress `description` strings emitted by RainMaker / RainMaker Neo SDK
  * `runChallengeResponseProvisionFlow` (BLE / SoftAP chal-resp).
@@ -34,6 +55,25 @@ export const PROVISION_SCAN_QR_ROUTE = "/(provision)/ScanQR";
 /** Expo Router path for add-device selection / secondary-user gate. */
 export const PROVISION_ADD_DEVICE_SELECTION_ROUTE =
   "/(provision)/AddDeviceSelection";
+
+/** Hidden file-input control type for web QR upload. */
+export const PROVISION_QR_INPUT_TYPE_FILE = "file";
+
+/**
+ * `accept` attribute for the web provision QR file picker (images only).
+ */
+export const PROVISION_QR_FILE_ACCEPT = [
+  IMAGE_MIME_TYPE_PNG,
+  IMAGE_MIME_TYPE_JPEG,
+  IMAGE_MIME_TYPE_WEBP,
+  IMAGE_MIME_TYPE_GIF,
+].join(",");
+
+/** Source-error codes thrown while reading a web provision QR image or text. */
+export const PROVISION_QR_SOURCE_ERROR_NO_QR = "NO_QR";
+export const PROVISION_QR_SOURCE_ERROR_UNSUPPORTED = "UNSUPPORTED_FILE";
+export const PROVISION_QR_SOURCE_ERROR_EMPTY = "EMPTY";
+export const PROVISION_QR_SOURCE_ERROR_CLIPBOARD_DENIED = "CLIPBOARD_DENIED";
 
 /** Permission UI: still waiting on the OS prompt / initial check. */
 export const PERMISSION_UI_STATUS_REQUESTING = "requesting";

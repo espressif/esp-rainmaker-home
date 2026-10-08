@@ -145,7 +145,8 @@ const InnerLayout = () => {
                     top={statusBarHeight}
                     alignItems="stretch"
                     width="100%"
-                    padding={16}
+                    paddingHorizontal={tokens.spacing._15}
+                    paddingVertical={tokens.spacing._15}
                   />
                 </ScheduleProvider>
               </ToastProvider>

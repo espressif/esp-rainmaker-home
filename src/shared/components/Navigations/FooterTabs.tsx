@@ -92,7 +92,7 @@ const FooterTabs: React.FC<FooterTabsProps> = ({ tabs }) => {
         style={styles.item}
         onPress={() => handleTabPress(tab.route, isActive)}
       >
-        <tab.Icon style={{ color: iconColor }} size={28} />
+        <tab.Icon color={iconColor} size={28} />
         <Text
           {...testProps(`text_tab_${tab.label}`)}
           style={[styles.label, { color: iconColor }]}

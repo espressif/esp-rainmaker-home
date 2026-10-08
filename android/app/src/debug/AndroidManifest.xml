@@ -3,5 +3,11 @@
 
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW"/>
 
-    <application android:usesCleartextTraffic="true" tools:targetApi="28" tools:ignore="GoogleAppIndexingWarning" tools:replace="android:usesCleartextTraffic" />
+    <application android:usesCleartextTraffic="true" tools:targetApi="28" tools:ignore="GoogleAppIndexingWarning" tools:replace="android:usesCleartextTraffic">
+        <!-- Debug builds load JS from Metro; with OTA on, code signing rejects the unsigned dev manifest. -->
+        <meta-data
+            android:name="expo.modules.updates.ENABLED"
+            android:value="false"
+            tools:replace="android:value" />
+    </application>
 </manifest>

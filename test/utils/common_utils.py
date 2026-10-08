@@ -81,6 +81,23 @@ def read_app_version() -> str:
     return ""
 
 
+def read_version_code() -> str:
+    """Return the build number under test from package.json `versionCode`."""
+    from pathlib import Path
+
+    repo_root = Path(__file__).resolve().parents[2]
+    try:
+        import json
+
+        package_json = repo_root / "package.json"
+        if package_json.exists():
+            value = json.loads(package_json.read_text()).get("versionCode")
+            return "" if value is None else str(value)
+    except Exception as error:
+        logger.warning("Could not read app version code: %s", error)
+    return ""
+
+
 def read_commit_id() -> str:
     """Return the short git commit id for the build under test.
 

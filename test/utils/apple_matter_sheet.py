@@ -43,7 +43,7 @@ for obs in request.results ?? [] {
 """
 
 CONSENT_MARKERS = ("would like to add this accessory", "will be added to")
-CONSENT_BUTTONS = ("Add to ", "Add Accessory")
+CONSENT_BUTTONS = ("Add to ", "Add Accessory", "Set Up")
 PROGRESS_MARKERS = ("This may take a few minutes", "Connecting", "Setting Up", "Adding")
 ERROR_MARKERS = ("Unable to Add", "Not Found", "Accessory Not Found", "Couldn't Add",
                  "Unable to Communicate", "Try Again")
@@ -52,6 +52,9 @@ SHEET_MARKERS = (("Accessory", "This may take a few minutes")
 
 POST_CONSENT_LABELS = ("Continue", "Done", "Allow", "Next")
 ADVANCE_LABELS = CONSENT_BUTTONS + POST_CONSENT_LABELS
+CYRILLIC_TO_LATIN_LOOKALIKES = str.maketrans(
+    "\u0410\u0412\u0415\u041a\u041c\u041d\u041e\u0420\u0421\u0422\u0425\u0430\u0435\u043e\u0440\u0441\u0443\u0445",
+    "ABEKMHOPCTXaeopcyx")
 
 # Modal decisions Apple interposes mid-pairing, each with the one button we may tap. These are
 # answered before the progress check: the dialog is drawn over a sheet still reading
@@ -96,6 +99,7 @@ class AppleMatterSheet:
             if len(parts) != 5:
                 continue
             text, bx, by, bw, bh = parts
+            text = text.translate(CYRILLIC_TO_LATIN_LOOKALIKES)
             try:
                 bx, by, bw, bh = float(bx), float(by), float(bw), float(bh)
             except ValueError:

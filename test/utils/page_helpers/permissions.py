@@ -146,14 +146,17 @@ class Permissions(BasePage):
                 self.driver.execute_script("mobile: alert", {"action": "dismiss", "buttonLabel": "Cancel"})
                 logger.info("iOS 'Join Wi-Fi Network' prompt cancelled (buttons: %s)", buttons)
                 return True
+            if "Not Now" in buttons:
+                self.driver.execute_script("mobile: alert", {"action": "dismiss", "buttonLabel": "Not Now"})
+                logger.info("iOS system nag dismissed via 'Not Now' (buttons: %s)", buttons)
+                return True
             preferred = ("Allow While Using App", "While Using App", "Allow Once", "Allow", "OK")
             choice = next((b for p in preferred for b in buttons if b == p), None)
-            if choice:
-                self.driver.execute_script("mobile: alert", {"action": "accept", "buttonLabel": choice})
-                logger.info("iOS permission allow - clicked '%s' (buttons: %s)", choice, buttons)
-            else:
-                self.driver.execute_script("mobile: alert", {"action": "accept"})
-                logger.info("iOS permission allow via alert API (buttons: %s)", buttons)
+            if not choice:
+                logger.info("iOS alert is not a permission prompt; left untouched (buttons: %s)", buttons)
+                return False
+            self.driver.execute_script("mobile: alert", {"action": "accept", "buttonLabel": choice})
+            logger.info("iOS permission allow - clicked '%s' (buttons: %s)", choice, buttons)
             return True
         except Exception:
             pass
