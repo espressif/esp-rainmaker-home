@@ -8,6 +8,7 @@ import { ScheduleCardProps } from "@src/types/global";
 
 // Utils
 import { getScheduleTimeText } from "@shared/utils/common";
+import { webStopClickPropagationProps } from "@shared/utils/webStopClickPropagation";
 
 // React Native Imports
 import {
@@ -25,6 +26,7 @@ import { Switch } from "tamagui";
 // Styles
 import { tokens } from "@shared/theme/tokens";
 import { globalStyles } from "@shared/theme/globalStyleSheet";
+import { switchFrameProps } from "@shared/theme/switchFrameProps";
 
 // Constants
 import { SCHEDULE_DAYS } from "@shared/utils/constants";
@@ -98,26 +100,27 @@ const ScheduleCard = ({
           <Text style={globalStyles.scheduleTime}>{timeText}</Text>
         </View>
         {!isEditing ? (
-          <Switch
-            {...testProps("switch_enable_schedule")}
-            size="$2.5"
-            borderColor={tokens.colors.bg1}
-            borderWidth={0}
-            checked={enabled}
-            onCheckedChange={onToggle}
-            style={[globalStyles.switch]}
-          >
-            <Switch.Thumb
-              {...stateTestProps("schedule_card", enabled, "enabled", "disabled")}
-              animation="quicker"
-              style={
-                enabled
-                  ? globalStyles.switchThumbActive
-                  : globalStyles.switchThumb
-              }
-              disabled={toggleLoading}
-            />
-          </Switch>
+          <View {...webStopClickPropagationProps}>
+            <Switch
+              {...testProps("switch_enable_schedule")}
+              {...switchFrameProps}
+              size="$2.5"
+              checked={enabled}
+              onCheckedChange={onToggle}
+              style={globalStyles.switch}
+            >
+              <Switch.Thumb
+                {...stateTestProps("schedule_card", enabled, "enabled", "disabled")}
+                animation="quicker"
+                style={
+                  enabled
+                    ? globalStyles.switchThumbActive
+                    : globalStyles.switchThumb
+                }
+                disabled={toggleLoading}
+              />
+            </Switch>
+          </View>
         ) : (
           <TouchableOpacity
             {...testProps("button_delete_schedule")}

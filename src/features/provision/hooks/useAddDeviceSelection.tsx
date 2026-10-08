@@ -29,7 +29,9 @@ interface UseAddDeviceSelectionReturn {
 }
 
 /**
- * Custom hook for AddDeviceSelection screen business logic
+ * Builds the Add Device method list for the current home.
+ * Bluetooth is always offered; SoftAP and on-network follow `getFeatures()`.
+ * @returns Selection options plus home/restriction copy for the screen.
  */
 export const useAddDeviceSelection = (): UseAddDeviceSelectionReturn => {
   const router = useRouter();

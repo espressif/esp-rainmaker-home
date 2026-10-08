@@ -172,6 +172,10 @@ export const ESPRMNEO_EXPO_PUSH_ANDROID_FCM_PROJECT_ID_KEY =
 /** Expo `extra.push` iOS bundle id field. */
 export const ESPRMNEO_EXPO_PUSH_IOS_BUNDLE_ID_KEY = "iosBundleId";
 
+/** Expo `extra.push` web Firebase project id field. */
+export const ESPRMNEO_EXPO_PUSH_WEB_FIREBASE_PROJECT_ID_KEY =
+  "webFirebaseProjectId";
+
 // USER TRANSFORM — Cognito / profile attribute keys
 /** Standard Cognito phone attribute on `userAttributes`. */
 export const ESPRMNEO_USER_ATTR_PHONE_NUMBER = "phone_number";

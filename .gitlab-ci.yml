@@ -4,12 +4,15 @@ stages:
   - quality
   - build
   - test
+  - deploy
 
 variables:
   LANG: en_US.UTF-8
   LC_ALL: en_US.UTF-8
 
-# MR-only pipelines;
+# Pipelines run in two contexts:
+#   - MR pipelines: quality/build/test + OTA (manual) for pre-merge iteration.
+#   - release/* branch push pipelines: OTA publish (auto) once a merge lands.
 # auto_cancel: a re-push cancels the superseded pipeline's interruptible (build/quality) jobs.
 workflow:
   auto_cancel:
@@ -21,6 +24,26 @@ workflow:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TITLE =~ /^(Draft|WIP):/i'
       when: never
     - if: $CI_MERGE_REQUEST_ID
+    # Main branch — quality-only runs (no MR required).
+    - if: '$CI_COMMIT_BRANCH == "main"'
+    # Release branches — auto-fire OTA publish and enable manual web publish.
+    - if: $CI_COMMIT_BRANCH =~ /^release\/.*/
+
+
+# AWS session credentials for web publish / S3 sync (GitLab CI/CD Variables).
+.aws_web_credentials:
+  script:
+    - |
+      set -euo pipefail
+      : "${AWS_ACCESS_KEY_ID:?Set AWS_ACCESS_KEY_ID in CI/CD variables}"
+      : "${AWS_SECRET_ACCESS_KEY:?Set AWS_SECRET_ACCESS_KEY in CI/CD variables}"
+      : "${AWS_REGION:?Set AWS_REGION in CI/CD variables}"
+      export AWS_REGION
+      if [ -n "${AWS_SESSION_TOKEN:-}" ]; then
+        export AWS_SESSION_TOKEN
+      fi
+      command -v aws >/dev/null 2>&1 || { echo "aws CLI not found on runner"; exit 1; }
+      aws sts get-caller-identity
 
 
 # Deployment/SDK select (orthogonal to the region APP_FLAVOR global/cn): ACTIVE_SDK (build) + DEPLOYMENT (test) from the commit message — contains "RMNEO" (any case) -> rmneo, else rm; a preset ACTIVE_SDK/DEPLOYMENT CI/CD variable overrides.
@@ -87,11 +110,25 @@ workflow:
       }
 
 
+# Decode the OTA manifest signing key — see deployment/ota/README.md for rotation.
+.ota_signing_key:
+  script:
+    - |
+      : "${OTA_SIGNING_KEY_PEM:?must be set (masked, protected). See deployment/ota/README.md.}"
+      umask 077
+      mkdir -p deployment/ota/certs
+      printf '%s' "${OTA_SIGNING_KEY_PEM}" | base64 -d > deployment/ota/certs/private-key.pem
+      test -s deployment/ota/certs/private-key.pem
+
+
 before_script:
   - export PATH="/usr/local/opt/python@3.10/libexec/bin:/usr/local/bin:/opt/homebrew/bin:$PATH"
   - export PATH="$ANDROID_HOME/platform-tools:$ANDROID_HOME/emulator:$ANDROID_HOME/tools:$ANDROID_HOME/tools/bin:$PATH"
 
-  - 'NVM_BIN="$(ls -d "$HOME"/.nvm/versions/node/v22*/bin 2>/dev/null | sort -V | tail -1)"; export PATH="${NVM_BIN:+${NVM_BIN}:}$PATH"'
+  # Honor .nvmrc so the runner uses the exact Node the repo pins. Falls back
+  # to the latest installed v22 if the pinned version isn't on the runner,
+  # so unrelated jobs still run — but OTA's drift check will catch mismatches.
+  - 'REQ_NODE="$(cat .nvmrc 2>/dev/null | tr -d " \n")"; PINNED_BIN="$HOME/.nvm/versions/node/v${REQ_NODE}/bin"; if [ -n "$REQ_NODE" ] && [ -x "$PINNED_BIN/node" ]; then export PATH="$PINNED_BIN:$PATH"; else NVM_BIN="$(ls -d "$HOME"/.nvm/versions/node/v22*/bin 2>/dev/null | sort -V | tail -1)"; export PATH="${NVM_BIN:+${NVM_BIN}:}$PATH"; echo "WARN: pinned Node v${REQ_NODE} not installed on this runner; using $(node -v 2>/dev/null || echo none)"; fi'
   - 'command -v node >/dev/null 2>&1 || { echo "Node 22 not found; run nvm install 22"; exit 1; }'
 
   - node -v
@@ -114,6 +151,8 @@ code_quality:
   tags: [mac-mini-runner]
   interruptible: true
   before_script: []
+  rules:
+    - if: $CI_MERGE_REQUEST_ID
   script:
     - |
       set -eo pipefail
@@ -131,10 +170,17 @@ android_apk:
   interruptible: true
   needs:
     - job: code_quality
+      optional: true
   parallel:
     matrix:
       - APP_FLAVOR: global
       - APP_FLAVOR: cn
+  # MR-only; skip any flavor whose CI/CD secrets are unset (keeps the
+  # pipeline green when only one flavor's secrets are configured).
+  rules:
+    - if: '$CI_MERGE_REQUEST_ID && $APP_FLAVOR == "global" && $FS_ENV_GLOBAL_FILE && $FS_KEYSTORE_GLOBAL_FILE && $FS_GOOGLE_SERVICES_JSON'
+    - if: '$CI_MERGE_REQUEST_ID && $APP_FLAVOR == "cn" && $FS_ENV_CN_FILE && $FS_KEYSTORE_CN_FILE'
+    - when: never
   script:
     - !reference [.select_deployment, script]
     - npm ci
@@ -197,6 +243,10 @@ ios_ipa:
   before_script: []
   needs:
     - job: code_quality
+      optional: true
+  rules:
+    - if: '$CI_MERGE_REQUEST_ID && $FS_ENV_GLOBAL_FILE && $IOS_P12_PASSWORD && $XCODE_ORG_ID'
+    - when: never
   script:
     - !reference [.select_deployment, script]
     - !reference [.env_tools, script]
@@ -337,9 +387,13 @@ ios_ipa:
 android_test:
   extends: .device_test
   resource_group: android_moto
+  rules:
+    - if: '$CI_MERGE_REQUEST_ID && $FS_ENV_GLOBAL_FILE && $FS_KEYSTORE_GLOBAL_FILE && $FS_GOOGLE_SERVICES_JSON'
+    - when: never
   needs:
     - job: "android_apk: [global]"
       artifacts: true
+      optional: true
   script:
     - set -euo pipefail
     - !reference [.select_deployment, script]
@@ -357,9 +411,13 @@ ios_test:
   extends: .device_test
   resource_group: iphone_air
   before_script: []
+  rules:
+    - if: '$CI_MERGE_REQUEST_ID && $FS_ENV_GLOBAL_FILE && $IOS_P12_PASSWORD && $XCODE_ORG_ID'
+    - when: never
   needs:
     - job: ios_ipa
       artifacts: true
+      optional: true
   script:
     - set -euo pipefail
     - !reference [.select_deployment, script]
@@ -374,3 +432,147 @@ ios_test:
     # WebDriverAgent is built fresh from the Apple account signed in to Xcode on
     # this runner (no prebuilt-WDA bootstrap).
     - !reference [.device_test_run, script]
+
+# OTA publish — see deployment/ota/README.md for the flow, trigger model, and rotation.
+.ota_publish_global:
+  stage: deploy
+  tags: [mac-mini-runner]
+  needs: []
+  before_script:
+    - export PATH="/usr/local/opt/python@3.10/libexec/bin:/usr/local/bin:/opt/homebrew/bin:$PATH"
+    # Honor .nvmrc so the runner uses the exact Node the repo pins. Falls back
+    # to the latest installed v22 if the pinned version isn't on the runner,
+    # so unrelated jobs still run — but OTA's drift check will catch mismatches.
+    - 'REQ_NODE="$(cat .nvmrc 2>/dev/null | tr -d " \n")"; PINNED_BIN="$HOME/.nvm/versions/node/v${REQ_NODE}/bin"; if [ -n "$REQ_NODE" ] && [ -x "$PINNED_BIN/node" ]; then export PATH="$PINNED_BIN:$PATH"; else NVM_BIN="$(ls -d "$HOME"/.nvm/versions/node/v22*/bin 2>/dev/null | sort -V | tail -1)"; export PATH="${NVM_BIN:+${NVM_BIN}:}$PATH"; echo "WARN: pinned Node v${REQ_NODE} not installed on this runner; using $(node -v 2>/dev/null || echo none)"; fi'
+    - |
+      if ! command -v aws >/dev/null 2>&1; then
+        echo "AWS CLI not on PATH; installing via brew..."
+        brew install awscli
+      fi
+    - node -v && npm -v && aws --version
+  rules:
+    # OTA publishes go straight to the live production bucket + CloudFront —
+    # no staging separation — so there is intentionally no manual trigger from
+    # MR pipelines: a stray click would push an in-progress bundle to devices.
+    # The only path that publishes is a merge to release/*.
+    #
+    # Skip release/* auto-publish if any native surface changed: a JS-only
+    # OTA published for a new fingerprint has no in-wild binary to apply to.
+    - if: $CI_COMMIT_BRANCH =~ /^release\/.*/
+      changes:
+        paths:
+          - "ios/**"
+          - "android/**"
+          - "fingerprint.config.js"
+          - "app.config.ts"
+          - "deployment/ota/certs/certificate.pem"
+      when: never
+    - if: $CI_COMMIT_BRANCH =~ /^release\/.*/
+  variables:
+    OTA_REGION: global
+  script:
+    - !reference [.env_tools, script]
+    - !reference [.ota_signing_key, script]
+    - |
+      set -euo pipefail
+      : "${AWS_ACCESS_KEY_ID:?must be set as a GitLab CI/CD variable}"
+      : "${AWS_SECRET_ACCESS_KEY:?must be set as a GitLab CI/CD variable}"
+      : "${AWS_REGION:?must be set as a GitLab CI/CD variable}"
+      : "${APP_ASSETS_S3_BUCKET:?must be set as a GitLab CI/CD variable}"
+      : "${CLOUDFRONT_DISTRIBUTION_ID:?must be set as a GitLab CI/CD variable}"
+      : "${APP_ASSETS_URL:?must be set as a GitLab CI/CD variable}"
+
+      # Decode FS_ENV_<REGION>_FILE when set (falls back to .env.<region>.example)
+      # so the fingerprint here matches the one the dev computed against the same
+      # env — otherwise `sync-runtime-version.js --check` drifts on release cuts.
+      resolve_ci_env "${OTA_REGION}"
+      npm ci
+
+      # OTA_VERSION from package.json's versionCode (see deployment/ota/README.md).
+      OTA_VERSION=$(node -p "require('./package.json').versionCode")
+      case "$OTA_VERSION" in
+        ''|*[!0-9]*)
+          echo "ERROR: package.json versionCode is not a positive integer: '$OTA_VERSION'"
+          exit 1
+          ;;
+      esac
+      echo "OTA_VERSION=${OTA_VERSION}"
+
+      # Drift checks — fail fast on stale native runtime version or cert.
+      node deployment/ota/scripts/sync-runtime-version.js --check --platform "$OTA_PLATFORM"
+      node deployment/ota/scripts/sync-signing-cert.js --check --platform "$OTA_PLATFORM"
+
+      OTA_FINGERPRINT=$(node deployment/ota/scripts/sync-runtime-version.js --print --platform "$OTA_PLATFORM")
+      echo "OTA_FINGERPRINT=${OTA_FINGERPRINT}"
+
+      npx expo export --platform "${OTA_PLATFORM}" --output-dir dist-ota
+
+      HOST="${APP_ASSETS_URL#https://}"
+      HOST="${HOST#http://}"
+      HOST="${HOST%/}"
+      BASE_URL="https://${HOST}/ota/prod/${OTA_REGION}/${OTA_PLATFORM}/${OTA_FINGERPRINT}/${OTA_VERSION}"
+      node deployment/ota/scripts/build-manifest.js "$BASE_URL" "$OTA_PLATFORM"
+
+      node deployment/ota/scripts/publish.js --region "$OTA_REGION" --platform "$OTA_PLATFORM" --version "$OTA_VERSION"
+      node deployment/ota/scripts/promote.js --region "$OTA_REGION" --platform "$OTA_PLATFORM" --version "$OTA_VERSION"
+
+      # Sanity check — direct fingerprint URL (client-facing flat URL works
+      # only after the CloudFront routing function is deployed).
+      echo ""
+      echo "=== Verifying published manifest ==="
+      curl -sI "https://${HOST}/ota/prod/${OTA_REGION}/${OTA_PLATFORM}/${OTA_FINGERPRINT}/latest/manifest.json" | head -10
+
+ota_publish_global_ios:
+  extends: .ota_publish_global
+  variables:
+    OTA_PLATFORM: ios
+
+ota_publish_global_android:
+  extends: .ota_publish_global
+  variables:
+    OTA_PLATFORM: android
+
+###############################################################
+# WEB — release/* branches (manual): build Expo web export →
+#   s3://$APP_ASSETS_S3_BUCKET/web/<env>/<region>/<version>/
+#   + latest/manifest.json, history.jsonl, version-meta, web/version-manifest.json
+#   + local tracking via deployment/web/cdn.yaml (created from example in the job)
+# CI/CD variables: AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, [AWS_SESSION_TOKEN],
+# AWS_REGION, APP_ASSETS_S3_BUCKET, CLOUDFRONT_DISTRIBUTION_ID, APP_ASSETS_URL, FS_ENV_WEB_FILE
+# Optional: WEB_DEPLOY_ENV (prod), WEB_DEPLOY_REGION (global|cn), WEB_DEPLOY_VERSION
+#
+# Trigger: push to release/* → play web_deploy manually after code_quality
+###############################################################
+
+web_deploy:
+  stage: deploy
+  tags: [mac-mini-runner]
+  interruptible: false
+  rules:
+    - if: '$CI_COMMIT_BRANCH =~ /^release\// && $AWS_ACCESS_KEY_ID && $APP_ASSETS_S3_BUCKET && $CLOUDFRONT_DISTRIBUTION_ID && $FS_ENV_WEB_FILE'
+      when: manual
+    - when: never
+  needs:
+    - job: code_quality
+      optional: true
+  script:
+    - !reference [.aws_web_credentials, script]
+    - |
+      set -euo pipefail
+      : "${APP_ASSETS_S3_BUCKET:?Set APP_ASSETS_S3_BUCKET in CI/CD variables}"
+      : "${CLOUDFRONT_DISTRIBUTION_ID:?Set CLOUDFRONT_DISTRIBUTION_ID in CI/CD variables}"
+      : "${FS_ENV_WEB_FILE:?Set FS_ENV_WEB_FILE (base64 .env.web)}"
+      export APP_ASSETS_S3_BUCKET CLOUDFRONT_DISTRIBUTION_ID FS_ENV_WEB_FILE
+      if [ -n "${APP_ASSETS_URL:-}" ]; then
+        export APP_ASSETS_URL
+      fi
+      if [ -n "${WEB_DEPLOY_ENV:-}" ]; then
+        export WEB_DEPLOY_ENV
+      fi
+      if [ -n "${WEB_DEPLOY_REGION:-}" ]; then
+        export WEB_DEPLOY_REGION
+      fi
+      if [ -n "${WEB_DEPLOY_VERSION:-}" ]; then
+        export WEB_DEPLOY_VERSION
+      fi
+    - ./deployment/web/scripts/deploy-web.sh

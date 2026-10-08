@@ -11,13 +11,22 @@ import { tokens } from "@shared/theme/tokens";
 import { globalStyles } from "@shared/theme/globalStyleSheet";
 import { testProps } from "@shared/utils/testProps";
 
+interface ScanningAnimationProps {
+  /** Optional status copy; defaults to the scanning-devices string */
+  message?: string;
+}
+
 /**
  * ScanningAnimation
  *
  * Displays an animated loading indicator while scanning for devices
+ * @param props - Optional status message override
+ * @param props.message - Optional status copy; defaults to the scanning-devices string
  * @returns Spinner and rotating graphic with translated status text
  */
-export const ScanningAnimation: React.FC = () => {
+export const ScanningAnimation: React.FC<ScanningAnimationProps> = ({
+  message,
+}) => {
   const { t } = useTranslation();
   const [rotateAnim] = useState(new Animated.Value(0));
 
@@ -48,7 +57,7 @@ export const ScanningAnimation: React.FC = () => {
         <ActivityIndicator size="large" color={tokens.colors.primary} />
       </Animated.View>
       <Text {...testProps("text_scanning_devices_ble")} style={globalStyles.scanningText}>
-        {t("device.scan.ble.scanningDevices")}
+        {message ?? t("device.scan.ble.scanningDevices")}
       </Text>
     </View>
   );

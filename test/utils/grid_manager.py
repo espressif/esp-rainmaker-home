@@ -171,7 +171,7 @@ class AppiumGridManager:
             "skipLogCapture": False,
             "waitForIdleTimeout": 0,
             "reduceMotion": True,
-            "maxTypingFrequency": 30
+            "maxTypingFrequency": 10
         }
         # Add app if available
         # app_path = rainmaker_home_config.get("ipa_path")
@@ -233,6 +233,7 @@ class AppiumGridManager:
                 "port": server_port,
                 "model": model,
                 "platform": platform,
+                "udid": self.mobiles_config.get("mobiles", {}).get(model, {}).get("udid"),
                 "url": f"http://localhost:{server_port}",
                 "log_file": str(log_file)
             }
@@ -283,6 +284,7 @@ class AppiumGridManager:
                     process.terminate()
                 
                 process.wait(timeout=10)
+                self._kill_orphaned_wda_build(self.servers[server_id].get("udid"))
                 logger.info(f"Stopped Appium server for {model}")
                 
             except Exception as e:
@@ -290,6 +292,11 @@ class AppiumGridManager:
             finally:
                 del self.servers[server_id]
     
+    def _kill_orphaned_wda_build(self, udid):
+        """The XCUITest driver detaches its WebDriverAgent xcodebuild, so killing the server group leaves it running."""
+        if udid and os.name != "nt":
+            subprocess.run(["pkill", "-f", f"xcodebuild.*WebDriverAgent.*{udid}"], check=False)
+
     def cleanup(self):
         """Stop all Appium servers"""
         for server_id in list(self.servers.keys()):

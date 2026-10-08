@@ -36,6 +36,7 @@ import {
 } from "@shared/utils/device";
 import { parseBridgedChildParentNodeId } from "@shared/utils/matterLocalReachability";
 import { resolveDeviceCardPowerParam } from "@shared/utils/deviceParams";
+import { webStopClickPropagationProps } from "@shared/utils/webStopClickPropagation";
 import {
   getDeviceCardSensorReadings,
 } from "@shared/utils/deviceCardSensor";
@@ -57,6 +58,7 @@ import {
 
 // Styles
 import { globalStyles } from "@shared/theme/globalStyleSheet";
+import { switchFrameProps } from "@shared/theme/switchFrameProps";
 import { tokens } from "@shared/theme/tokens";
 
 // Icons
@@ -290,15 +292,14 @@ const DeviceCard: React.FC<DeviceCardProps> = ({
         {isPowerParamExisit && (
           <Switch
             {...testProps("switch_device_power")}
+            {...switchFrameProps}
             size="$2.5"
-            borderColor={tokens.colors.bg1}
-            borderWidth={0}
             checked={isPowerOn}
             disabled={!deviceConnected}
-            style={[
+            style={StyleSheet.flatten([
               globalStyles.switch,
               !deviceConnected && globalStyles.deviceCardDisabled,
-            ]}
+            ])}
             onCheckedChange={handleDevicePowerControl}
           >
             <Switch.Thumb
@@ -402,29 +403,30 @@ const DeviceCard: React.FC<DeviceCardProps> = ({
           style={styles.image}
         />
         {isPowerParamExisit && (
-          <Switch
-            {...testProps("switch_device_power")}
-            size="$2.5"
-            borderColor={tokens.colors.bg1}
-            borderWidth={0}
-            checked={isPowerOn}
-            disabled={!deviceConnected}
-            style={[
-              globalStyles.switch,
-              !deviceConnected && globalStyles.deviceCardDisabled,
-            ]}
-            onCheckedChange={handleDevicePowerControl}
-          >
-            <Switch.Thumb
-              {...stateTestProps("card_power_state", isPowerOn)}
-              animation="quicker"
-              style={
-                isPowerOn
-                  ? globalStyles.switchThumbActive
-                  : globalStyles.switchThumb
-              }
-            />
-          </Switch>
+          <View {...webStopClickPropagationProps}>
+            <Switch
+              {...testProps("switch_device_power")}
+              {...switchFrameProps}
+              size="$2.5"
+              checked={isPowerOn}
+              disabled={!deviceConnected}
+              style={StyleSheet.flatten([
+                globalStyles.switch,
+                !deviceConnected && globalStyles.deviceCardDisabled,
+              ])}
+              onCheckedChange={handleDevicePowerControl}
+            >
+              <Switch.Thumb
+                {...stateTestProps("card_power_state", isPowerOn)}
+                animation="quicker"
+                style={
+                  isPowerOn
+                    ? globalStyles.switchThumbActive
+                    : globalStyles.switchThumb
+                }
+              />
+            </Switch>
+          </View>
         )}
         {sensorCardDisplay.length > 0 && (
           <Text style={styles.textValue} numberOfLines={2}>

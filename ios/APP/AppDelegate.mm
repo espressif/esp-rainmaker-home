@@ -37,6 +37,15 @@
       AVAudioSessionCategoryOptionDefaultToSpeaker | AVAudioSessionCategoryOptionAllowBluetooth;
   [RTCAudioSessionConfiguration setWebRTCConfiguration:audioConfiguration];
 
+  // expo-updates bootstrap. We inherit from RCTAppDelegate rather than
+  // ExpoAppDelegate, so the Expo subscriber system that normally initializes
+  // the update controller never fires — we do it manually here. The wait
+  // gives the async launcher time to select the pending OTA before RN calls
+  // sourceURLForBridge; without it, bundleURL reads a nil launchAssetUrl
+  // and always falls back to the embedded bundle on the next cold launch.
+  [ESPUpdatesBootstrap initializeWithoutStarting];
+  [ESPUpdatesBootstrap startAndWait:3.0];
+
   self.moduleName = @"main";
 
   // You can add your custom initial props in the dictionary below.
@@ -133,6 +142,15 @@
 
 - (NSURL *)bundleURL
 {
+  // Prefer the OTA-cached bundle when expo-updates has one materialized on
+  // disk. The file-exists check guards against a race where the controller
+  // holds a cache row for a file the OS reaped. Falls back to Metro in
+  // Debug and the embedded bundle in Release.
+  NSURL *otaBundleURL = [ESPUpdatesBootstrap launchAssetUrl];
+  if (otaBundleURL != nil && otaBundleURL.isFileURL &&
+      [[NSFileManager defaultManager] fileExistsAtPath:otaBundleURL.path]) {
+    return otaBundleURL;
+  }
 #if DEBUG
   return [[RCTBundleURLProvider sharedSettings] jsBundleURLForBundleRoot:@".expo/.virtual-metro-entry"];
 #else
@@ -237,6 +255,61 @@ fetchCompletionHandler:(void (^)(UIBackgroundFetchResult))completionHandler {
   } else {
     NSLog(@"[AppDelegate] ESPWeChatModule instance not available for WeChat onResp");
   }
+}
+
+@end
+
+#pragma mark - UIScene lifecycle
+
+// Required by iOS 27. Attaches AppDelegate's window to the scene and
+// forwards URL / user-activity callbacks to AppDelegate.
+@interface AppSceneDelegate : UIResponder <UIWindowSceneDelegate>
+@property (strong, nonatomic) UIWindow *window;
+@end
+
+@implementation AppSceneDelegate
+
+- (void)scene:(UIScene *)scene
+    willConnectToSession:(UISceneSession *)session
+                 options:(UISceneConnectionOptions *)connectionOptions {
+  if (![scene isKindOfClass:[UIWindowScene class]]) {
+    return;
+  }
+  UIWindowScene *windowScene = (UIWindowScene *)scene;
+
+  AppDelegate *appDelegate = (AppDelegate *)[UIApplication sharedApplication].delegate;
+  UIWindow *existingWindow = appDelegate.window;
+  if (existingWindow != nil) {
+    existingWindow.windowScene = windowScene;
+    self.window = existingWindow;
+  } else {
+    self.window = [[UIWindow alloc] initWithWindowScene:windowScene];
+  }
+
+  UIApplication *application = [UIApplication sharedApplication];
+  for (UIOpenURLContext *context in connectionOptions.URLContexts) {
+    [appDelegate application:application openURL:context.URL options:@{}];
+  }
+  for (NSUserActivity *activity in connectionOptions.userActivities) {
+    [appDelegate application:application
+        continueUserActivity:activity
+          restorationHandler:^(NSArray<id<UIUserActivityRestoring>> * _Nullable restorableObjects) {}];
+  }
+}
+
+- (void)scene:(UIScene *)scene openURLContexts:(NSSet<UIOpenURLContext *> *)URLContexts {
+  AppDelegate *appDelegate = (AppDelegate *)[UIApplication sharedApplication].delegate;
+  UIApplication *application = [UIApplication sharedApplication];
+  for (UIOpenURLContext *context in URLContexts) {
+    [appDelegate application:application openURL:context.URL options:@{}];
+  }
+}
+
+- (void)scene:(UIScene *)scene continueUserActivity:(NSUserActivity *)userActivity {
+  AppDelegate *appDelegate = (AppDelegate *)[UIApplication sharedApplication].delegate;
+  [appDelegate application:[UIApplication sharedApplication]
+      continueUserActivity:userActivity
+        restorationHandler:^(NSArray<id<UIUserActivityRestoring>> * _Nullable restorableObjects) {}];
 }
 
 @end

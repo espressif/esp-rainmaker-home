@@ -15,6 +15,7 @@ import { Switch } from "tamagui";
 // Styles
 import { tokens } from "@shared/theme/tokens";
 import { globalStyles } from "@shared/theme/globalStyleSheet";
+import { switchFrameProps } from "@shared/theme/switchFrameProps";
 
 import { testProps } from "@shared/utils/testProps";
 // Types
@@ -60,13 +61,20 @@ const SettingsItem: React.FC<SettingsItemProps> = ({
   const renderRightElement = () => {
     if (type === "toggle") {
       return (
-        <Switch {...(qaId ? testProps(`${qaId}_toggle`) : {})}  size="$2.5" checked={isToggled} onCheckedChange={onToggle}>
+        <Switch
+          {...(qaId ? testProps(`${qaId}_toggle`) : {})}
+          {...switchFrameProps}
+          size="$2.5"
+          checked={isToggled}
+          onCheckedChange={onToggle}
+          style={globalStyles.switch}
+        >
           <Switch.Thumb
             animation="quicker"
             style={
               isToggled
-                ? { backgroundColor: tokens.colors.blue }
-                : { backgroundColor: tokens.colors.white }
+                ? globalStyles.switchThumbActive
+                : globalStyles.switchThumb
             }
           />
         </Switch>

@@ -46,7 +46,7 @@ class ForgotPassword(BasePage):
                 raise Exception("Failed to generate new user email for testing")
                 
         self.send_keys("email_input", email)
-        
+        self.hide_keyboard_if_visible()
         return self
         
     def go_back(self):

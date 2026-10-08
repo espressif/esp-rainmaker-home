@@ -7,6 +7,7 @@
 import { Platform } from "react-native";
 import Constants from "expo-constants";
 import { getLocales } from "expo-localization";
+import { PLATFORM_WEB } from "@shared/utils/constants";
 
 /**
  * Supported deployment regions.
@@ -93,7 +94,12 @@ let detectedRegion: AppRegion | null = null;
  *    Region is set to China — the device setting must not override which APK
  *    the user installed. (UI *language* is a separate concern and still
  *    follows the device locale; see `i18n.ts`.)
- * 3. iOS is a single binary for both regions, so `auto` resolves from the
+ * 3. Web `auto` resolves to `global`. An explicit `APP_REGION=cn` in
+ *    `.env.web` still pins CN via rule 1; unlike iOS, `auto` never falls
+ *    through to device-locale detection on web. Note that the `deploy:web`
+ *    `WEB_DEPLOY_REGION` variable selects the CDN folder segment, not this
+ *    RainMaker cloud region — the two are independent axes.
+ * 4. iOS is a single binary for both regions, so `auto` resolves from the
  *    device Region setting, once per launch.
  * @returns `cn` or `global`.
  */
@@ -102,7 +108,7 @@ export function getActiveRegion(): AppRegion {
   if (configured === REGION_CN || configured === REGION_GLOBAL) {
     return configured;
   }
-  if (Platform.OS === "android") {
+  if (Platform.OS === "android" || Platform.OS === PLATFORM_WEB) {
     return REGION_GLOBAL;
   }
   if (detectedRegion === null) {

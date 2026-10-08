@@ -4,6 +4,14 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import {
+  IMAGE_MIME_TYPE_GIF,
+  IMAGE_MIME_TYPE_JPEG,
+  IMAGE_MIME_TYPE_PNG,
+  IMAGE_MIME_TYPE_WEBP,
+  JSON_MIME_TYPE,
+} from "@shared/utils/constants";
+
 /** Top-level base-stack key in RainMaker Neo client-outputs JSON. */
 export const RMNEO_CLIENT_OUTPUTS_BASE_KEY = "rmng-base";
 
@@ -32,3 +40,36 @@ export const CONFIG_QR_LOCK_MS = 360;
  */
 export const CONFIG_SCAN_INVALID_PAYLOAD_ERROR =
   "Invalid scan: expected JSON configuration or an http(s) URL.";
+
+/** JSON file extension accepted by the web config input. */
+export const CONFIG_SCAN_JSON_EXTENSION = ".json";
+
+/** @deprecated Use shared `QR_IMAGE_BARCODE_FORMAT` — kept for config callers. */
+export const CONFIG_SCAN_QR_BARCODE_FORMAT = "qr_code";
+
+/** @deprecated Use shared `QR_IMAGE_CANVAS_CONTEXT_2D` — kept for config callers. */
+export const CONFIG_SCAN_CANVAS_CONTEXT_2D = "2d";
+
+/** @deprecated Use shared `QR_IMAGE_DECODE_MAX_EDGE` — kept for config callers. */
+export const CONFIG_SCAN_QR_MAX_EDGE = 1600;
+
+/** Hidden file-input control type. */
+export const CONFIG_SCAN_INPUT_TYPE_FILE = "file";
+
+/**
+ * `accept` attribute for the web config file picker (QR images + JSON).
+ */
+export const CONFIG_SCAN_FILE_ACCEPT = [
+  IMAGE_MIME_TYPE_PNG,
+  IMAGE_MIME_TYPE_JPEG,
+  IMAGE_MIME_TYPE_WEBP,
+  IMAGE_MIME_TYPE_GIF,
+  JSON_MIME_TYPE,
+  CONFIG_SCAN_JSON_EXTENSION,
+].join(",");
+
+/** Source-error codes thrown while reading a web QR image or file. */
+export const CONFIG_SCAN_SOURCE_ERROR_NO_QR = "NO_QR";
+export const CONFIG_SCAN_SOURCE_ERROR_UNSUPPORTED = "UNSUPPORTED_FILE";
+export const CONFIG_SCAN_SOURCE_ERROR_EMPTY = "EMPTY";
+export const CONFIG_SCAN_SOURCE_ERROR_CLIPBOARD_DENIED = "CLIPBOARD_DENIED";

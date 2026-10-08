@@ -359,6 +359,10 @@ esp-rainmaker-home/
 │   ├── sync-env-to-android.js    # Sync .env values into Android build config
 │   └── sync-env-to-ios.js        # Sync .env values into iOS build config
 │
+├── deployment/                   # Per-workstream publish infra (see deployment/README.md)
+│   ├── ota/                      # OTA (Over-The-Air) update publish + promote
+│   └── web/                      # Web build + S3/CloudFront publish
+│
 ├── docs/                         # Project documentation
 ├── test/                         # Appium UI test suite
 ├── app.config.ts                 # Expo app configuration & env variable injection
@@ -533,6 +537,7 @@ This guide includes solutions for:
 ### Project Documentation
 
 - 📖 **[Configuration & Customization Guide](./docs/CONFIGURATION.md)** - Detailed guide on configuring and customizing the app
+- 🌐 **[Web Deployment Guide (AWS S3 + CloudFront)](./deployment/web/README.md)** - Build + publish to APP_ASSETS `web/<env>/<region>/<version>/` (+ latest / `deployment/web/cdn.yaml`), manual GitLab job on `release/*`
 - 🔧 **[Troubleshooting Guide](./docs/TROUBLESHOOTING.md)** - Solutions to common issues and problems
 
 ### SDK Documentation

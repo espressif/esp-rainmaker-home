@@ -10,10 +10,12 @@ import {
   TouchableOpacity,
   ScrollView,
   TouchableWithoutFeedback,
+  Platform,
 } from "react-native";
 import { useTranslation } from "react-i18next";
-import { Check, QrCode } from "lucide-react-native";
+import { Check, QrCode, Upload } from "lucide-react-native";
 import { getResolvedActiveSdk } from "@config/sdk.config";
+import { PLATFORM_WEB } from "@shared/utils/constants";
 
 import { runtimeConfigManager } from "@config/runtime.config";
 import { ScreenWrapper, Header } from "@shared/components";
@@ -43,9 +45,18 @@ export function ConfigScanInfoView({
   onContinueWithSaved,
 }: ConfigScanInfoViewProps) {
   const { t } = useTranslation();
+  const isWeb = Platform.OS === PLATFORM_WEB;
   const activeSdk = getResolvedActiveSdk();
   const runtimeConfig = runtimeConfigManager.config;
   const hasSavedDeployment = !!savedDeploymentLabel && !!onContinueWithSaved;
+  const UpdateIcon = isWeb ? Upload : QrCode;
+  const updateLabel = isWeb
+    ? hasSavedDeployment
+      ? t("config.scan.scanNewConfigWeb")
+      : t("config.scan.updateConfigWeb")
+    : hasSavedDeployment
+      ? t("config.scan.scanNewConfig")
+      : t("config.scan.updateConfig");
 
   return (
     <ScreenWrapper {...testProps("screen_wrapper_active_sdk")} style={globalStyles.configScanNoPadding}>
@@ -172,7 +183,7 @@ export function ConfigScanInfoView({
           }
           onPress={onUpdateConfig}
         >
-          <QrCode
+          <UpdateIcon
             size={24}
             color={
               hasSavedDeployment ? tokens.colors.primary : tokens.colors.white
@@ -186,9 +197,7 @@ export function ConfigScanInfoView({
                 : globalStyles.configScanButtonText
             }
           >
-            {hasSavedDeployment
-              ? t("config.scan.scanNewConfig")
-              : t("config.scan.updateConfig")}
+            {updateLabel}
           </Text>
         </TouchableOpacity>
       </ScrollView>

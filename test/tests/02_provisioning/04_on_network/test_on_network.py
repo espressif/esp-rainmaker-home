@@ -34,7 +34,7 @@ scenarios("on_network.feature")
 # Definitive station-got-IP markers only — avoid loose tokens like "ip:" that
 # match unrelated boot output and falsely report the device as already online.
 _WIFI_CONNECTED_MARKERS = ("sta_got_ip", "esp_netif_handlers: sta ip:", "wifi:connected to")
-_CONSOLE_READY_MARKERS = ("provisioning started", "wifi-prov", "esp-rmaker", "main_task")
+_CONSOLE_READY_MARKERS = ("provisioning started",)
 # The local-control mDNS service only starts once the provisioning/BLE window
 # closes (~30-40s after boot). chal-resp-enable returns "Local control service
 # not started" if sent before this line appears, so wait for it first.

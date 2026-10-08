@@ -145,6 +145,7 @@
       "next": "Next",
       "update": "Update",
       "done": "Done",
+      "back": "Back",
       "refresh": "Refresh",
       "continue": "Continue",
       "copiedToClipboard": "Copied to clipboard",
@@ -674,6 +675,7 @@
         "title": "Scan Bluetooth Devices",
         "scanningDevices": "Scanning for devices...",
         "devicesFound": "{{count}} Device Found",
+        "devicesFoundPlural": "{{count}} Devices Found",
         "allDevices": "All Devices",
         "connectingDevice": "Connecting Device",
         "noDevicesFound": "No Devices Found",
@@ -688,7 +690,9 @@
         "grantPermission": "Grant Permission",
         "bluetoothDisabled": "Bluetooth is Off",
         "bluetoothDisabledMessage": "Bluetooth is required to scan for devices. Please turn on Bluetooth in your device settings to continue.",
-        "scanFailed": "BLE scanning failed. Please try again or check if Bluetooth is enabled."
+        "scanFailed": "BLE scanning failed. Please try again or check if Bluetooth is enabled.",
+        "webConnectDevice": "Connect Bluetooth Device",
+        "webSelectDeviceHint": "Choose your PROV_ device in the browser dialog. We will connect and continue automatically."
       },
       "qr": {
         "title": "Scan QR Code",
@@ -714,7 +718,25 @@
         "noQrCode": "I don't have a QR code",
         "bluetoothPermissionRequired": "Bluetooth permission required. Please grant permission and try again.",
         "matterAuthRequired": "Authentication required for Matter device commissioning.",
-        "matterCommissioningFailed": "Matter commissioning failed: {{error}}"
+        "matterCommissioningFailed": "Matter commissioning failed: {{error}}",
+        "webHint": "Paste a device QR image, upload a photo, or paste the QR payload text.",
+        "dropZoneTitle": "Drop a device QR image",
+        "dropZoneSubtitle": "or paste from the clipboard",
+        "chooseFile": "Choose file",
+        "pasteClipboard": "Paste from clipboard",
+        "payloadLabel": "QR payload",
+        "payloadPlaceholder": "Paste NP:… or ESP JSON QR text",
+        "applyPayload": "Use this QR payload",
+        "decodingImage": "Reading QR code…",
+        "noQrInImage": "No QR code found in this image.",
+        "unsupportedFile": "Use a QR image file.",
+        "emptyInput": "Paste a QR payload or add a QR image first.",
+        "clipboardDenied": "Clipboard access is blocked. Paste with ⌘V / Ctrl+V, or choose a file.",
+        "deviceReadyTitle": "Device found",
+        "webConnectHint": "Click Connect to open the browser Bluetooth dialog for this device.",
+        "webConnectDevice": "Connect device",
+        "softApUnsupportedOnWeb": "SoftAP provisioning from QR is not supported in the browser. Use a BLE QR or add the device without QR.",
+        "matterUnsupportedOnWeb": "Matter commissioning from QR is not supported in the browser."
       },
       "softAP": {
         "title": "Connect to Device",
@@ -1550,12 +1572,30 @@
       "cameraPermissionRequired": "Camera permission is required to scan QR codes.",
       "grantPermission": "Grant Permission",
       "back": "Back",
+      "fetching": "Processing configuration…",
       "applying": "Applying configuration…",
       "success": "Configuration applied. Restarting…",
+      "retry": "Retry",
+      "cancel": "Cancel",
       "invalidQRCode": "Unsupported QR code. Please try again.",
       "scanOverlay": "Scan deployment configuration QR code only",
       "configSourceRuntime": "Runtime (scanned)",
-      "configSourceBuildTime": "Build-time (.env)"
+      "configSourceBuildTime": "Build-time (.env)",
+      "updateConfigWeb": "Enter configuration",
+      "scanNewConfigWeb": "Enter a new configuration",
+      "webHint": "Paste a QR image, upload a file, or enter JSON / a config URL.",
+      "dropZoneTitle": "Drop a QR image or JSON file",
+      "dropZoneSubtitle": "or paste from the clipboard",
+      "chooseFile": "Choose file",
+      "pasteClipboard": "Paste from clipboard",
+      "jsonOrUrlLabel": "JSON or config URL",
+      "jsonOrUrlPlaceholder": "Paste JSON or an https:// config URL",
+      "applyConfig": "Apply configuration",
+      "decodingImage": "Reading QR code…",
+      "noQrInImage": "No QR code found in this image.",
+      "unsupportedFile": "Use a QR image or a JSON file.",
+      "emptyInput": "Paste JSON, a config URL, or add a QR image first.",
+      "clipboardDenied": "Clipboard access is blocked. Paste with ⌘V / Ctrl+V, or choose a file."
     },
     "reset": {
       "title": "Reset runtime config?",
@@ -1575,6 +1615,15 @@
     "ownDeployment": {
       "title": "Private deployment",
       "subtitle": "Scan a configuration QR code"
+    }
+  },
+  "embed": {
+    "frame": {
+      "a11y": {
+        "controls": "Embed frame controls",
+        "back": "Go back in embedded app",
+        "refresh": "Refresh embedded app"
+      }
     }
   }
 }
