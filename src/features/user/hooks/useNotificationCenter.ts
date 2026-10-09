@@ -112,7 +112,7 @@ export const useNotificationCenter = () => {
         await item.accept();
         // syncHomeWithNodes covers every home, so the accepted group's nodes
         // land in the store and get subscribed with no special-casing here.
-        await syncHomeWithNodes(true);
+        await syncHomeWithNodes({ force: true });
       } else {
         await item.decline();
       }

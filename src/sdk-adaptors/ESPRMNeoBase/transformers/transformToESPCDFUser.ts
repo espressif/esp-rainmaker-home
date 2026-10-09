@@ -95,10 +95,13 @@ import {
  * Starts MQTT once for the session, hydrates `userInfo` asynchronously, and
  * exposes CDF operations that delegate to Neo SDK / adaptor helpers.
  * @param esprmngUser - Live RMNeo user, or `null` (throws).
+ * @param initialUserId - User id read from the id token, so the CDF knows the
+ *   user (and can key its disk snapshot) before the profile call answers.
  * @returns CDF user ready for store / UI consumption.
  */
 export function transformToESPCDFUser(
   esprmngUser: ESPRMNeoUser | null,
+  initialUserId = "",
 ): ESPCDFUser {
   if (!esprmngUser) {
     throw new Error(ESPRMNEO_USER_ERR_REQUIRED);
@@ -108,7 +111,7 @@ export function transformToESPCDFUser(
   const mqttConnectionPromise = startRmneoMqttConnection(esprmngUser);
 
   const initialUserInfo: ESPCDFUserInfo = {
-    id: "",
+    id: initialUserId,
     name: "",
     email: "",
   };
@@ -592,7 +595,7 @@ export function transformToESPCDFUser(
   // Hydrate CDF userInfo early from GET /v1/users.
   mapRmneoUserInfoToCdf(esprmngUser)
     .then((userInfo) => {
-      cdfUser.userInfo = userInfo;
+      cdfUser.userInfo = { ...userInfo, id: userInfo.id || initialUserInfo.id };
     })
     .catch((error) => {
       Logger.warn(ESPRMNEO_USER_LOG_INITIAL_USER_INFO_FAILED, error);

@@ -17,6 +17,7 @@ import type {
   MatterCommissioningProgressCallbacks,
 } from "@src/types/global";
 import { ESPMatterUtilityAdapter } from "@native-adaptors/implementations/ESPMatterUtilityAdapter";
+import type { SyncHomeWithNodes } from "@context/store.context";
 import {
   MATTER_FABRIC_BOOTSTRAP_ERROR_FABRIC_ID_MISMATCH,
   MATTER_FABRIC_BOOTSTRAP_ERROR_MISSING_FABRIC_CREDENTIALS,
@@ -392,18 +393,16 @@ export async function convertHomeToMatterFabric(
  * navigation home is not blocked.
  * @example
  * ```ts
- * await syncStore(store, user, refreshMatterMappingsAndRematch);
+ * await syncStore(store, syncHomeWithNodes, refreshMatterMappingsAndRematch);
  * router.dismissTo("/(group)/Home");
  * ```
  */
 export async function syncStore(
   store: ESPCDF,
-  user: ESPCDFUser | null | undefined,
+  syncHomeWithNodes: SyncHomeWithNodes,
   refreshMappings: (cdfStore: ESPCDF) => Promise<void>,
 ): Promise<void> {
-  if (user) {
-    await user.syncHomeWithNodes?.();
-  }
+  await syncHomeWithNodes({ force: true });
 
   try {
     await refreshMappings(store);

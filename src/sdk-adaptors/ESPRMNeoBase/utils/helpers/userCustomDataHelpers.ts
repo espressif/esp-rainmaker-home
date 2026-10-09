@@ -73,6 +73,23 @@ function mergeUserCustomData(
 }
 
 /**
+ * The backend user id (`sub` of the stored id token, which the Neo backend uses
+ * as `user_id`), read without a network call. Empty when no token is stored.
+ * @param user - Authenticated RMNeo user.
+ * @returns User id or an empty string.
+ */
+export async function getRmneoUserIdFromIdToken(
+  user: ESPRMNeoUser,
+): Promise<string> {
+  try {
+    const sub = decodeToken(await user.getIdToken()).sub;
+    return typeof sub === "string" ? sub : "";
+  } catch {
+    return "";
+  }
+}
+
+/**
  * Resolves a stable per-user id for namespacing local custom data in AsyncStorage.
  * @param user - Authenticated RMNeo user.
  * @returns Stable token-derived ID or user-info fallback.

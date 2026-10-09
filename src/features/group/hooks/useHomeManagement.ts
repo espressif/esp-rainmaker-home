@@ -4,7 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo, useRef } from "react";
+import { useFocusEffect } from "expo-router";
 import type { TFunction } from "i18next";
 import type { ESPCDFGroup } from "@store";
 import {
@@ -16,6 +17,7 @@ import {
   type HomeDescriptionCounts,
 } from "@features/group/utils/homeManagement";
 import { useCDF } from "@shared/hooks/useCDF";
+import { loadHomeNodes } from "@features/group/utils/homeNodes";
 
 // --- Result types (structured outcomes for UI to interpret) ---
 
@@ -70,11 +72,27 @@ export function useHomeManagement(
     return store?.groupStore?.groupsList ?? [];
   }, [store?.groupStore?.groupsList]);
 
+  // The home cards count devices from loaded nodes, and nodes are loaded only
+  // for homes the user opened. Load the rest here, in the background, one call
+  // per home, so the counts are right and the next switch to them is instant.
+  const requestedHomeIds = useRef(new Set<string>());
+  useFocusEffect(
+    useCallback(() => {
+      for (const home of homes) {
+        const needsNodes = !home.nodeDetails?.length && (home.nodeIds?.length ?? 0) > 0;
+        if (needsNodes && !requestedHomeIds.current.has(home.id)) {
+          requestedHomeIds.current.add(home.id);
+          void loadHomeNodes(home);
+        }
+      }
+    }, [homes])
+  );
+
   const refresh = useCallback(async (): Promise<RefreshHomesResult> => {
     if (!store?.groupStore) return { status: "success" };
     setRefreshing(true);
     try {
-      await syncHomeWithNodes(true);
+      await syncHomeWithNodes({ force: true });
       return { status: "success" };
     } catch {
       return { status: "error" };

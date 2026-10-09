@@ -16,15 +16,24 @@ import React, {
 import { cdfBootstrap } from "@integrations";
 import { ESPCDF, ESPCDFUser } from "@store";
 
-/** Only one sync at a time; concurrent callers await the same run */
-let syncHomeWithNodesPromise: Promise<void> | null = null;
+export interface SyncHomeWithNodesOptions {
+  /** Fetch even when the tree is already synced (pull-to-refresh, login, changes the store cannot apply itself). */
+  force?: boolean;
+}
+
+export type SyncHomeWithNodes = (
+  options?: SyncHomeWithNodesOptions,
+) => Promise<void>;
+
+/** Only one custom-data fetch at a time; concurrent callers await the same run */
+let userCustomDataPromise: Promise<void> | null = null;
 
 interface StoreContextType {
   store: ESPCDF;
   espCDFUser: ESPCDFUser | null;
   setESPCDFUser: (user: ESPCDFUser | null) => void;
   isInitialized: boolean;
-  syncHomeWithNodes: (shouldFetchFirstPage?: boolean) => Promise<void>;
+  syncHomeWithNodes: SyncHomeWithNodes;
   initUserCustomData: () => Promise<void>;
   getActiveAdaptorIdentifier: () => string | null;
 }
@@ -73,41 +82,51 @@ export const StoreProvider: React.FC<StoreProviderProps> = ({ children }) => {
   };
 
   /**
-   * Sync homes and nodes via user.syncHomeWithNodes.
-   * Used on login and on manual refresh. Replaces legacy fetchUnifiedGroups (groupStore.syncGroupsList + pagination).
+   * Fetch the user's custom data into the store (`user.customData`).
    * Concurrent callers share the same in-flight request.
    */
-  const syncHomeWithNodes = async (
-    _shouldFetchFirstPage: boolean = true,
-  ): Promise<void> => {
-    if (syncHomeWithNodesPromise) return syncHomeWithNodesPromise;
-    if (!cdfInstanceRef.current) {
-      console.error("[CDF] Unified CDF instance not available");
-      return;
-    }
-
-    syncHomeWithNodesPromise = (async () => {
+  const initUserCustomData = async (): Promise<void> => {
+    if (userCustomDataPromise) return userCustomDataPromise;
+    const user = cdfInstanceRef.current?.userStore.user;
+    if (!user) return;
+    userCustomDataPromise = (async () => {
       try {
-        const user = cdfInstanceRef.current?.userStore.user;
-        await user?.syncHomeWithNodes?.();
-        // Subscribe to node updates after a delay to ensure the nodes are fetched
-        setTimeout(async () => {
-          await user?.subscribeToNodeUpdates?.({
-            nodeList: cdfInstanceRef.current?.nodeStore.nodesList!,
-          });
-        }, 5000);
+        await user.getCustomData();
       } finally {
-        syncHomeWithNodesPromise = null;
+        userCustomDataPromise = null;
       }
     })();
-    return syncHomeWithNodesPromise;
+    return userCustomDataPromise;
   };
 
-  const initUserCustomData = async () => {
+  /**
+   * Sync homes and nodes via user.syncHomeWithNodes.
+   * The CDF decides: once a sync has completed, a non-forced call returns the
+   * store (no network) until `force` asks for a new sync; concurrent callers
+   * share one in-flight run.
+   */
+  const syncHomeWithNodes: SyncHomeWithNodes = async ({ force = false } = {}) => {
     const user = cdfInstanceRef.current?.userStore.user;
-    if (user) {
-      await user.getCustomData();
+    if (!user) {
+      console.error("[CDF] Unified CDF instance or user not available");
+      return;
     }
+    // The sync picks the home from `lastSelectedHomeId` in custom data and
+    // persists its choice. Load custom data first so a sync that starts
+    // before the post-login fetch cannot fall back to the first home and
+    // overwrite the user's saved selection with it.
+    if (user.customData === undefined) {
+      await initUserCustomData().catch((error) => {
+        console.warn("[CDF] custom data fetch before sync failed:", error);
+      });
+    }
+    await user.syncHomeWithNodes({ force });
+    // Subscribe to node updates after a delay to ensure the nodes are fetched
+    setTimeout(async () => {
+      await user.subscribeToNodeUpdates?.({
+        nodeList: cdfInstanceRef.current?.nodeStore.nodesList!,
+      });
+    }, 5000);
   };
 
   useEffect(() => {

@@ -61,7 +61,7 @@ export const DeviceControlGroupAssignment = observer(
       [DEVICE_SETTINGS_ROUTE_PARAM_OPEN_PICKER]?: string | string[];
       [DEVICE_SETTINGS_ROUTE_PARAM_DEVICE]?: string | string[];
     }>();
-    const { store, syncHomeWithNodes } = useCDF();
+    const { store } = useCDF();
     const [isSheetVisible, setIsSheetVisible] = useState(false);
     const [updatingGroupId, setUpdatingGroupId] = useState<string | null>(null);
     const [pendingPickerGroupId, setPendingPickerGroupId] = useState<
@@ -105,34 +105,25 @@ export const DeviceControlGroupAssignment = observer(
     const canEditControlGroups =
       !home?.accessType || home.accessType === GROUP_USER_ACCESS_PRIMARY;
 
-    const allControlGroups = useMemo(
-      () => getControlGroupsForHome(home),
-      [home],
+    // Computed on every render on purpose: the store edits the group instances
+    // in place (membership, names), so a memo keyed on their identity would
+    // keep showing the group the device was in before a move. The component
+    // is an observer, so reading the groups here re-renders it on each change.
+    const allControlGroups = getControlGroupsForHome(home);
+    const compatibleGroups = getCompatibleControlGroupsForNode(
+      allControlGroups,
+      node,
+      store?.nodeStore?.nodesByIDMap,
     );
-
-    const compatibleGroups = useMemo(
-      () =>
-        getCompatibleControlGroupsForNode(
-          allControlGroups,
-          node,
-          store?.nodeStore?.nodesByIDMap,
-        ),
-      [allControlGroups, node, store?.nodeStore?.nodesByIDMap],
-    );
-
-    const options = useMemo(
-      () => getControlGroupPickerOptions(compatibleGroups),
-      [compatibleGroups],
-    );
-
-    const selectedGroupId = useMemo(
-      () => getPrimaryControlGroupIdForNode(allControlGroups, node.id),
-      [allControlGroups, node.id],
+    const options = getControlGroupPickerOptions(compatibleGroups);
+    const selectedGroupId = getPrimaryControlGroupIdForNode(
+      allControlGroups,
+      node.id,
     );
 
     const pickerSelectedGroupId = pendingPickerGroupId ?? selectedGroupId;
 
-    const selectedLabel = useMemo(() => {
+    const selectedLabel = (() => {
       if (!selectedGroupId && !pendingPickerGroupId) {
         return t("device.settings.noControlGroupAssigned");
       }
@@ -144,7 +135,7 @@ export const DeviceControlGroupAssignment = observer(
         options.find((option) => option.id === targetId)?.label ??
         (fallbackName || t("device.settings.noControlGroupAssigned"))
       );
-    }, [allControlGroups, options, pendingPickerGroupId, selectedGroupId, t]);
+    })();
 
     const isEditable = canEditControlGroups && canAddToControlGroup;
     const ineligibleDrawerMessage = canAddToControlGroup
@@ -165,24 +156,15 @@ export const DeviceControlGroupAssignment = observer(
 
       appliedReturnGroupIdRef.current = returnSelectedGroupId;
 
-      void (async () => {
-        try {
-          await syncHomeWithNodes(true);
-        } catch (error) {
-          console.warn(
-            "[DeviceControlGroupAssignment] sync after create failed:",
-            error,
-          );
-        }
-        setPendingPickerGroupId(returnSelectedGroupId);
-        setIsSheetVisible(true);
-      })();
+      // Create Group already placed the new control group in the store.
+      setPendingPickerGroupId(returnSelectedGroupId);
+      setIsSheetVisible(true);
 
       router.setParams({
         [DEVICE_SETTINGS_ROUTE_PARAM_SELECTED_CONTROL_GROUP_ID]: undefined,
         [DEVICE_SETTINGS_ROUTE_PARAM_OPEN_PICKER]: undefined,
       } as Record<string, string | undefined>);
-    }, [returnOpenPicker, returnSelectedGroupId, router, syncHomeWithNodes]);
+    }, [returnOpenPicker, returnSelectedGroupId, router]);
 
     /**
      * Closes the control group picker drawer when no save is in flight.
@@ -239,8 +221,8 @@ export const DeviceControlGroupAssignment = observer(
 
         setUpdatingGroupId(groupId);
         try {
+          // The store applies the membership change itself; no sync needed.
           await moveNodeToControlGroup(compatibleGroups, node.id, groupId);
-          await syncHomeWithNodes();
           toast.showSuccess(t("device.settings.controlGroupUpdatedSuccess"));
           setIsSheetVisible(false);
           setPendingPickerGroupId(undefined);
@@ -257,7 +239,6 @@ export const DeviceControlGroupAssignment = observer(
         isUpdating,
         node.id,
         selectedGroupId,
-        syncHomeWithNodes,
         t,
         toast,
       ],

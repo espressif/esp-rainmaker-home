@@ -20,8 +20,9 @@ import {
   DEFAULT_AGENT_ID,
   RAINMAKER_MCP_CONNECTOR_URL,
 } from "@/config/agent.config";
-import { CDFConfig } from "@config/sdk.config";
+import { getFeatures } from "@config/features.config";
 import { ESPCDF } from "@store";
+import type { SyncHomeWithNodes } from "@context/store.context";
 import { startNodeLocalDiscovery } from "@features/group/utils/localDiscovery";
 import { startMatterLocalDiscovery } from "@features/matter/utils/matterLocalDiscovery";
 
@@ -43,9 +44,10 @@ export interface PostLoginPipelineHooks {
 }
 
 export interface PostLoginPipelineBaseOptions {
-  syncHomeWithNodes: (shouldFetchFirstPage?: boolean) => Promise<void>;
+  syncHomeWithNodes: SyncHomeWithNodes;
   initUserCustomData: () => Promise<void>;
-  shouldFetchFirstPage?: boolean;
+  /** Fetch the home tree even if it is already synced (a new login). */
+  forceHomeSync?: boolean;
   skipNodesFetch?: boolean;
   store: ESPCDF;
 }
@@ -93,7 +95,7 @@ export async function executePostLoginPipeline(
     store,
     syncHomeWithNodes,
     initUserCustomData,
-    shouldFetchFirstPage = CDFConfig.autoSync,
+    forceHomeSync = false,
     skipNodesFetch = false,
     onProgress,
     onStepStart,
@@ -110,14 +112,23 @@ export async function executePostLoginPipeline(
         if (!user) {
           return;
         }
+        // Shares the sync step's custom-data fetch; lets setUserTimeZone skip
+        // the write when the stored value already matches the device.
+        await initUserCustomData();
         await setUserTimeZone(user);
       },
     },
     {
+      // The only registration on the login path. Skipped when the feature is
+      // off (e.g. CN builds without FCM); a POST only goes out when the token
+      // changed or the last registration is stale (see registerForNotification).
       name: "registerForNotification",
       optional: true,
       background: true,
-      run: () => registerForNotification(store),
+      run: async () => {
+        if (!getFeatures().notifications) return;
+        await registerForNotification(store);
+      },
     },
     {
       // Single background hydrate: custom data then homes/nodes. Must not be a
@@ -127,7 +138,7 @@ export async function executePostLoginPipeline(
       background: true,
       run: async () => {
         await initUserCustomData();
-        await syncHomeWithNodes(shouldFetchFirstPage);
+        await syncHomeWithNodes({ force: forceHomeSync });
         try {
           startNodeLocalDiscovery(store);
           startMatterLocalDiscovery(store);

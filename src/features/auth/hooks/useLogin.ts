@@ -181,6 +181,7 @@ export function useLogin() {
             store,
             syncHomeWithNodes,
             initUserCustomData,
+            forceHomeSync: true,
           })
         ).catch((error: unknown) => {
           console.warn("[useLogin] post-login pipeline failed:", error);
@@ -361,6 +362,7 @@ export function useLogin() {
             store: store!,
             syncHomeWithNodes,
             initUserCustomData,
+            forceHomeSync: true,
           },
           createOAuthPostLoginPipelineHooks(setPipelineProgress)
         );

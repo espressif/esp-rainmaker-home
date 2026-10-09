@@ -37,7 +37,7 @@ export const useSelectDeviceRoom = (): UseSelectDeviceRoomReturn => {
   const router = useRouter();
   const toast = useToast();
   const { t } = useTranslation();
-  const { store, syncHomeWithNodes } = useCDF();
+  const { store } = useCDF();
   const params = useLocalSearchParams<{
     nodeId: string;
     /** Set when returning from Create Room (provision) so the new room appears selected */
@@ -61,9 +61,14 @@ export const useSelectDeviceRoom = (): UseSelectDeviceRoomReturn => {
     [nodeId, store?.nodeStore?.nodesList]
   );
 
+  // Keyed on the subgroup array, not the home: CDF adds a created room by
+  // replacing `home.subGroups` on the same home object, so a memo keyed on
+  // `home` alone kept the pre-create (empty) list after Create Room.
+  const homeSubGroups = home?.subGroups;
   const rooms = useMemo(
     () => getSelectableRoomsForHome(home),
-    [home],
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- homeSubGroups is read through `home`
+    [home, homeSubGroups],
   );
 
   /**
@@ -167,9 +172,8 @@ export const useSelectDeviceRoom = (): UseSelectDeviceRoomReturn => {
           return;
         }
 
-        await syncHomeWithNodes();
         // New Architecture (Fabric) commit-ordering guard.
-        // syncHomeWithNodes() triggers a MobX re-render of the Home screen, which
+        // addNodes() updates the store, which re-renders the Home screen that
         // is still mounted underneath this provision stack — it grows a new room
         // tab and a new device card. If we tear the stack down (dismissTo Home) in
         // the SAME commit as that re-render, Fabric receives an interleaved
@@ -194,7 +198,6 @@ export const useSelectDeviceRoom = (): UseSelectDeviceRoomReturn => {
     rooms,
     selectedRoom,
     router,
-    syncHomeWithNodes,
     t,
     toast,
   ]);
