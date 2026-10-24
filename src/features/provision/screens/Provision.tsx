@@ -29,6 +29,7 @@ import {
 
 // Utils
 import { testProps } from "@shared/utils/testProps";
+import { resolveIllustration } from "@shared/runtimeStyle/assets";
 
 /**
  * Provision
@@ -87,7 +88,7 @@ const Provision = () => {
           >
             <Image
               {...testProps("image_provision")}
-              source={require("@assets/images/network.png")}
+              source={resolveIllustration("network", require("@assets/images/network.png"))}
               style={styles.networkImage}
               resizeMode="contain"
             />

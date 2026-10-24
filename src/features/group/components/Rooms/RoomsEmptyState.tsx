@@ -16,6 +16,7 @@ import { Plus } from "lucide-react-native";
 import { globalStyles } from "@shared/theme/globalStyleSheet";
 import { tokens } from "@shared/theme/tokens";
 import { testProps } from "@shared/utils/testProps";
+import { resolveIllustration } from "@shared/runtimeStyle/assets";
 
 export interface RoomsEmptyStateProps {
   title: string;
@@ -69,7 +70,7 @@ export const RoomsEmptyState: React.FC<RoomsEmptyStateProps> = ({
       </Text>
       <Image
         {...testProps("image_rooms")}
-        source={require("@assets/images/room.png")}
+        source={resolveIllustration("room", require("@assets/images/room.png"))}
         style={globalStyles.roomsEmptyIllustration}
         resizeMode="contain"
       />

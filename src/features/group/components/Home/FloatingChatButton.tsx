@@ -9,6 +9,7 @@ import { StyleSheet, TouchableOpacity, View, Image } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { tokens } from '@shared/theme/tokens';
+import { resolveIllustration } from "@shared/runtimeStyle/assets";
 
 interface FloatingChatButtonProps {
   style?: any;
@@ -38,7 +39,7 @@ const FloatingChatButton: React.FC<FloatingChatButtonProps> = ({ style }) => {
     >
       <View style={styles.iconContainer}>
         <Image
-          source={require('@assets/images/chat-icon.png')}
+          source={resolveIllustration("chat-icon", require("@assets/images/chat-icon.png"))}
           style={styles.chatIcon}
           resizeMode="contain"
         />

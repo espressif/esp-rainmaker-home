@@ -46,6 +46,22 @@
           return wantsEmbed() ? base + "embed" : base;
         }
 
+        /**
+         * Appends query string and hash from the bounce URL to the versioned target.
+         * @param {string} href - Path from targetUrl.
+         * @returns {string}
+         */
+        function withForwardedLocation(href) {
+          var out = href;
+          if (window.location.search) {
+            out += window.location.search;
+          }
+          if (window.location.hash) {
+            out += window.location.hash;
+          }
+          return out;
+        }
+
         fetch("manifest.json", { cache: "no-store" })
           .then(function (res) {
             if (!res.ok) {
@@ -54,7 +70,7 @@
             return res.json();
           })
           .then(function (manifest) {
-            var href = targetUrl(manifest.prefix || "");
+            var href = withForwardedLocation(targetUrl(manifest.prefix || ""));
             statusEl.textContent = "Redirecting to " + href + "…";
             window.location.replace(href);
           })

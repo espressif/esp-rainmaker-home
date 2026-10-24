@@ -360,6 +360,9 @@ export default {
       },
       // Scan configuration (binary-level app capability)
       enableScanConfiguration: process.env.ENABLE_SCAN_CONFIGURATION !== 'false',
+      // brand.json path, relative to a scanned deployment's client-outputs URL.
+      // Unset or blank falls back to `brand/brand.json`.
+      brandJsonPath: process.env.BRAND_JSON_PATH?.trim() || undefined,
       // Deployment region selector (global | cn | auto). `auto` lets the
       // single iOS binary resolve by device Region; Android flavors force one.
       appRegion: process.env.APP_REGION || 'auto',

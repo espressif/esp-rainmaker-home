@@ -111,14 +111,11 @@ export function LoginScreen() {
   // remaining login options (e.g. OAuth / sign-up) are shown.
   const hideCredentialLogin = isCnRegion();
 
-  // Names the deployment under the house mark, replacing the generic app
-  // lockup: the official wordmark for ESP RainMaker Classic / ESP RainMaker
-  // Neo, its plain label for a private deployment. The label is passed either
-  // way — where a wordmark renders, it is that image's accessibility label, so
-  // screen readers still announce the deployment by name. The kind also gates
-  // the "Change deployment" banner: null (no backend picked yet, or selector
-  // disabled) hides it.
-  const { currentDeploymentKind, deploymentLabel, deploymentWordmark } =
+  // Deployment logo and label for the Logo caption. The label shows when there
+  // is no logo image, and is the image's accessibility label when there is one.
+  // A null kind (no backend picked yet, or selector disabled) hides the
+  // change-deployment link.
+  const { currentDeploymentKind, deploymentLabel, deploymentLogo } =
     useDeploymentBranding();
 
   const usernameFieldProps = useMemo(() => {
@@ -158,15 +155,14 @@ export function LoginScreen() {
               <Logo
                 qaId="logo_login"
                 caption={deploymentLabel}
-                captionSource={deploymentWordmark}
+                captionSource={deploymentLogo}
                 onConfigTrigger={() =>
                   router.push("/(config)/ConfigScan" as never)
                 }
                 onConfigReset={handleConfigReset}
               />
 
-          {/* The wordmark above already names the deployment, so this carries
-              only the action. */}
+          {/* Change-deployment link; the caption above names the deployment. */}
           {currentDeploymentKind && (
             <TouchableOpacity
               {...testProps("button_deployment_banner")}

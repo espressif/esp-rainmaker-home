@@ -46,7 +46,7 @@ export function ForgotPasswordScreen() {
   // Same deployment mark as Login, so resetting an ESP RainMaker Classic /
   // Neo password shows that deployment's logo rather than the generic app
   // lockup.
-  const { deploymentLabel, deploymentWordmark } = useDeploymentBranding();
+  const { deploymentLabel, deploymentLogo } = useDeploymentBranding();
 
   const usernameFieldProps = useMemo(() => {
     const allowsPhone = getAuthAllowedUsernameTypes().includes("phone");
@@ -88,7 +88,7 @@ export function ForgotPasswordScreen() {
             <Logo
               qaId="logo_forgot_password"
               caption={deploymentLabel}
-              captionSource={deploymentWordmark}
+              captionSource={deploymentLogo}
             />
 
             <Text

@@ -14,8 +14,8 @@ import {
   ESPRMNeo_BASE_SDK_ID,
   ESPRMNeoMatter_BASE_SDK_ID,
 } from "@config/sdk.identifiers";
-import classicWordmark from "@assets/images/rainmaker-classic-wordmark.png";
-import neoWordmark from "@assets/images/rainmaker-neo-wordmark.png";
+import classicLogo from "@assets/images/rainmaker-classic-logo.png";
+import neoLogo from "@assets/images/rainmaker-neo-logo.png";
 
 /**
  * The three Landing choices, named so call sites compare against a constant
@@ -73,18 +73,19 @@ export function getDeploymentLabelKey(kind: CurrentDeploymentKind): string {
 }
 
 /**
- * Official wordmark for a deployment — the standard brand logo with the
- * RainMaker cloud mark removed, since the app's own house mark sits above it.
- * A private deployment has no brand asset; callers fall back to the label.
+ * Returns the bundled logo image for a deployment kind. A private deployment
+ * has none, so callers show its label instead.
+ * @param kind - Deployment kind to look up
+ * @returns The logo image, or undefined for a private deployment
  */
-export function getDeploymentWordmark(
+export function getDeploymentLogo(
   kind: CurrentDeploymentKind,
 ): ImageSourcePropType | undefined {
   switch (kind) {
     case DEPLOYMENT_KIND.RMCLASSIC:
-      return classicWordmark;
+      return classicLogo;
     case DEPLOYMENT_KIND.RMNEO:
-      return neoWordmark;
+      return neoLogo;
     case DEPLOYMENT_KIND.PRIVATE:
       return undefined;
   }

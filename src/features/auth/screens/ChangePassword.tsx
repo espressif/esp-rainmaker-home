@@ -57,7 +57,7 @@ export function ChangePasswordScreen() {
   // Same deployment mark as Login, so changing an ESP RainMaker Classic /
   // Neo password shows that deployment's logo rather than the generic app
   // lockup.
-  const { deploymentLabel, deploymentWordmark } = useDeploymentBranding();
+  const { deploymentLabel, deploymentLogo } = useDeploymentBranding();
 
   const isFormValid =
     isOldPasswordValid &&
@@ -89,7 +89,7 @@ export function ChangePasswordScreen() {
           <Logo
             qaId="logo_change_password"
             caption={deploymentLabel}
-            captionSource={deploymentWordmark}
+            captionSource={deploymentLogo}
           />
           <View
             {...testProps("view_input_change_password")}

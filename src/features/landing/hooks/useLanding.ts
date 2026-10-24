@@ -20,6 +20,7 @@ import {
 import { getRegionConfig } from "@config/region.config";
 import asyncStorageAdapter from "@native-adaptors/implementations/ESPAsyncStorage";
 import { AppRestartContext } from "@context/appRestart.context";
+import { syncSaved } from "@shared/runtimeStyle/store";
 import { resetStackTo } from "@shared/utils/navigation";
 
 import type { PlatformKind, PlatformOption } from "../config/platformOptions";
@@ -86,10 +87,47 @@ function isConfigAlreadyActive(
  * - `classic` / `neo` → persist the built-in SDK + region cloud config and
  *   restart so the SDK layer re-initialises. If that backend and config are
  *   already active, skip the restart and go straight to auth.
+ *
+ * Choosing a built-in backend clears any saved brand; if that changes the style,
+ * the JS runtime reloads so theme tokens are rebuilt.
  */
 export function useLanding(): UseLandingReturn {
   const router = useRouter();
   const { restartApp, reinitializeSdk } = useContext(AppRestartContext);
+
+  /**
+   * Rebuilds the SDK layer in place for the config just persisted, then routes
+   * to auth. On failure it reloads the JS runtime; the config is already saved.
+   */
+  const applyDeploymentSwitch = useCallback(async () => {
+    try {
+      await reinitializeSdk();
+      // Reset, not replace: this screen is usually reached by pushing Landing
+      // on top of Login ("Change deployment"), so replacing only swaps
+      // Landing for a second Login. Cycling through deployments would stack
+      // one more each time, and back would walk the user through all of them.
+      resetStackTo(router, "/(auth)/Login");
+    } catch (error) {
+      console.error("[Landing] In-place SDK switch failed, reloading JS:", error);
+      restartApp();
+    }
+  }, [router, restartApp, reinitializeSdk]);
+
+  /**
+   * Goes back when there is a screen below (usually Login), otherwise replaces
+   * this screen with Login.
+   */
+  const goToAuth = useCallback(() => {
+    if (router.canGoBack()) {
+      router.back();
+    } else {
+      // `replace`, not `push`: Landing is the root here (first launch), and
+      // the choice was just persisted so Landing is skipped from now on.
+      // Pushing would strand it under Login — and then under Home, since
+      // login replaces only the top entry.
+      router.replace("/(auth)/Login");
+    }
+  }, [router]);
 
   const selectPlatform = useCallback(
     async (option: PlatformOption) => {
@@ -102,26 +140,26 @@ export function useLanding(): UseLandingReturn {
       }
 
       const { sdk, config } = resolveBuiltInSelection(kind);
+      const alreadyActive =
+        getResolvedActiveSdk() === sdk && isConfigAlreadyActive(kind, config);
 
       // Already on the requested backend and config: persist the choice so
       // Landing is skipped on every later launch (it is the persisted selection,
       // not the build default, that marks Landing as passed), then route to
       // Login — no re-init/restart needed since the SDK is already active. If
       // Landing was pushed (from the Login deployment banner), pop back instead.
-      if (
-        getResolvedActiveSdk() === sdk &&
-        isConfigAlreadyActive(kind, config)
-      ) {
+      if (alreadyActive) {
         await runtimeConfigManager.applyAndPersist(sdk, config);
-        if (router.canGoBack()) {
-          router.back();
-        } else {
-          // `replace`, not `push`: Landing is the root here (first launch), and
-          // the choice was just persisted so Landing is skipped from now on.
-          // Pushing would strand it under Login — and then under Home, since
-          // login replaces only the top entry.
-          router.replace("/(auth)/Login");
+        // Clears any saved brand; reloads the JS runtime if that changes the style.
+        try {
+          if (await syncSaved()) {
+            restartApp();
+            return;
+          }
+        } catch (error: unknown) {
+          console.warn("[Landing] Could not drop the saved brand:", error);
         }
+        goToAuth();
         return;
       }
 
@@ -130,23 +168,20 @@ export function useLanding(): UseLandingReturn {
       // asyncStorageAdapter.clear(), so the selection just made survives.
       await asyncStorageAdapter.clear();
 
-      // Rebuild the SDK layer in place instead of relaunching the process.
-      // Falls back to the relaunch on failure: a half-initialised SDK layer is
-      // worse than a visible restart, and the config is already persisted so the
-      // fresh process comes up on the requested backend either way.
+      // Clears any saved brand. Theme tokens are built at JS load, so a change
+      // reloads the JS runtime.
       try {
-        await reinitializeSdk();
-        // Reset, not replace: this screen is usually reached by pushing Landing
-        // on top of Login ("Change deployment"), so replacing only swaps
-        // Landing for a second Login. Cycling through deployments would stack
-        // one more each time, and back would walk the user through all of them.
-        resetStackTo(router, "/(auth)/Login");
-      } catch (error) {
-        console.error("[Landing] In-place SDK switch failed, relaunching:", error);
-        restartApp();
+        if (await syncSaved()) {
+          restartApp();
+          return;
+        }
+      } catch (error: unknown) {
+        console.warn("[Landing] Could not drop the saved brand:", error);
       }
+
+      await applyDeploymentSwitch();
     },
-    [router, restartApp, reinitializeSdk],
+    [router, restartApp, applyDeploymentSwitch, goToAuth],
   );
 
   return { selectPlatform };

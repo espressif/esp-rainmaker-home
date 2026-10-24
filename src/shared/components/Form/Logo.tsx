@@ -16,6 +16,9 @@ import {
 import Constants from "expo-constants";
 
 // Styles
+import { resolveLogo } from "@shared/runtimeStyle/assets";
+import { styleConfig } from "@shared/runtimeStyle/config";
+import { getLogoScale } from "@shared/runtimeStyle/resolve";
 import { tokens } from "@shared/theme/tokens";
 
 import { testProps } from "@shared/utils/testProps";
@@ -25,7 +28,8 @@ const CONFIG_SCAN_TRIGGER = 5;
 const CONFIG_RESET_TRIGGER = 10;
 const TAP_WINDOW_MS = 1000;
 const MARK_HEIGHT_RATIO = 0.6;
-const WORDMARK_ASPECT = 1129 / 213;
+const LOGO_SCALE = getLogoScale(styleConfig);
+const DEPLOYMENT_LOGO_ASPECT = 1129 / 213;
 
 /**
  * Master switch for the hidden logo tap gestures (5-tap config scan, 10-tap config
@@ -61,13 +65,15 @@ interface LogoProps {
  *   config scan, 10 taps resets runtime config
  */
 const Logo: React.FC<LogoProps> = ({
-  size = 180,
+  size: sizeProp = 180,
   qaId,
   caption,
   captionSource,
   onConfigTrigger,
   onConfigReset,
 }) => {
+  const size = sizeProp * LOGO_SCALE;
+
   const handleTap = useMultiTap({
     windowMs: TAP_WINDOW_MS,
     triggers: [
@@ -85,7 +91,7 @@ const Logo: React.FC<LogoProps> = ({
         style={styles(size).mark}
         resizeMode="contain"
         resizeMethod="scale"
-        source={require("@assets/images/logo-mark.png")}
+        source={resolveLogo(require("@assets/images/logo-mark.png"))}
       />
       {captionSource ? (
         <Image
@@ -108,8 +114,9 @@ const Logo: React.FC<LogoProps> = ({
     <Image
       {...(qaId ? testProps(qaId) : {})}
       style={styles(size).logo}
+      resizeMode="contain"
       resizeMethod="scale"
-      source={require("@assets/images/logo.png")}
+      source={resolveLogo(require("@assets/images/logo.png"))}
     />
   );
 
@@ -158,7 +165,7 @@ const styles = (size: number) =>
     },
     captionMark: {
       width: size,
-      height: size / WORDMARK_ASPECT,
+      height: size / DEPLOYMENT_LOGO_ASPECT,
       marginTop: tokens.spacing._10,
     },
   });

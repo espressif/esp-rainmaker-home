@@ -32,7 +32,7 @@ const AboutUs: React.FC = () => {
 
   // Same deployment mark as the auth screens, so About names the deployment
   // the user is actually signed in to rather than the generic app lockup.
-  const { deploymentLabel, deploymentWordmark } = useDeploymentBranding();
+  const { deploymentLabel, deploymentLogo } = useDeploymentBranding();
 
   const handleWebsiteClick = async () => {
     try {
@@ -60,7 +60,7 @@ const AboutUs: React.FC = () => {
           <Logo
             qaId="logo_about_us"
             caption={deploymentLabel}
-            captionSource={deploymentWordmark}
+            captionSource={deploymentLogo}
           />
         </View>
 

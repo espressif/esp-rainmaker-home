@@ -15,6 +15,7 @@ import {
 import { ESPRMNeoMatter_BASE_SDK_ID } from "@config/sdk.identifiers";
 import { CONFIG_FETCH_TIMEOUT_MS } from "@shared/utils/constants";
 import {
+  CLIENT_OUTPUTS_BRAND_PATH,
   CONFIG_SCAN_INVALID_PAYLOAD_ERROR,
   CONFIG_SCAN_URL_SCHEME_HTTP,
   CONFIG_SCAN_URL_SCHEME_HTTPS,
@@ -231,11 +232,16 @@ async function fetchJsonFromUrl(url: string): Promise<unknown> {
 
 /**
  * Validates config payload. Returns validated payload or throws with message.
+ * Validation strips any `config.brandUrl` in the payload; it is set from `outputsUrl`
+ * only when that URL is https, e.g.
+ * `https://host/eu-west-1/rmng-client-outputs.json` -> `https://host/eu-west-1/brand/brand.json`.
  * @param payload - Candidate scanned config
+ * @param outputsUrl - URL the client outputs were fetched from, when the payload came from one
  * @returns Validated {@link ScannedConfigPayload}
  */
 export function validateConfig(
-  payload: ScannedConfigPayload
+  payload: ScannedConfigPayload,
+  outputsUrl?: string
 ): ScannedConfigPayload {
   const prepared = preprocessScannedPayload(payload);
   const { error, value } = CONFIG_SCHEMA.validate(prepared, {
@@ -248,7 +254,17 @@ export function validateConfig(
     throw new Error(`Invalid config format: ${messages}`);
   }
 
-  return value as ScannedConfigPayload;
+  const validated = value as ScannedConfigPayload;
+  if (!outputsUrl?.startsWith(CONFIG_SCAN_URL_SCHEME_HTTPS)) {
+    return validated;
+  }
+  return {
+    ...validated,
+    config: {
+      ...validated.config,
+      brandUrl: new URL(CLIENT_OUTPUTS_BRAND_PATH, outputsUrl).href,
+    },
+  };
 }
 
 /**
@@ -290,7 +306,7 @@ export async function resolveConfigFromScan(
   const fetched = await fetchJsonFromUrl(trimmed);
   const fromFetchedOutputs = tryMapClientOutputsDoc(fetched);
   if (fromFetchedOutputs) {
-    return validateConfig(fromFetchedOutputs);
+    return validateConfig(fromFetchedOutputs, trimmed);
   }
 
   return validateConfig(fetched as ScannedConfigPayload);

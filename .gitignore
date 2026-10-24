@@ -125,3 +125,6 @@ keystore.properties
 # `npm run web` / `npm run build:web`. Committing it would churn the working
 # tree on each dev run and would carry the Firebase web config in history.
 /public/firebase-messaging-sw.js
+
+# static web export for preview (make publish-preview)
+dist-web/

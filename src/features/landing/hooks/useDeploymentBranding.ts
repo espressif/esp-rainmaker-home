@@ -14,7 +14,7 @@ import {
   type CurrentDeploymentKind,
   getCurrentDeploymentKind,
   getDeploymentLabelKey,
-  getDeploymentWordmark,
+  getDeploymentLogo,
 } from "../utils/currentDeployment";
 
 export interface UseDeploymentBrandingReturn {
@@ -24,10 +24,10 @@ export interface UseDeploymentBrandingReturn {
    * installs never pass Landing, so they naturally stay null.
    */
   currentDeploymentKind: CurrentDeploymentKind | null;
-  /** Translated deployment name; doubles as the wordmark's accessibility label. */
+  /** Translated deployment name; doubles as the logo's accessibility label. */
   deploymentLabel?: string;
-  /** Official wordmark image; undefined for a private deployment (label renders instead). */
-  deploymentWordmark?: ImageSourcePropType;
+  /** Deployment logo image; undefined for a private deployment, which shows the label instead. */
+  deploymentLogo?: ImageSourcePropType;
 }
 
 /**
@@ -53,8 +53,8 @@ export function useDeploymentBranding(): UseDeploymentBrandingReturn {
       deploymentLabel: currentDeploymentKind
         ? t(getDeploymentLabelKey(currentDeploymentKind))
         : undefined,
-      deploymentWordmark: currentDeploymentKind
-        ? getDeploymentWordmark(currentDeploymentKind)
+      deploymentLogo: currentDeploymentKind
+        ? getDeploymentLogo(currentDeploymentKind)
         : undefined,
     }),
     [currentDeploymentKind, t],

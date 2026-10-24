@@ -13,6 +13,7 @@ import { tokens } from "@shared/theme/tokens";
 import {
   WEB_EMBED_DOCUMENT_VISIBILITY_EVENT,
   WEB_EMBED_DOCUMENT_VISIBILITY_VISIBLE,
+  WEB_EMBED_CONTROL_INK,
   WEB_EMBED_STATUS_BAR_PADDING_X,
   WEB_EMBED_STATUS_CLOCK_INTERVAL_MS,
   WEB_EMBED_WINDOW_FOCUS_EVENT,
@@ -112,8 +113,8 @@ export function EmbedStatusBar({ height }: EmbedStatusBarProps) {
               <View style={styles.boltWrap}>
                 <Zap
                   size={9}
-                  color={tokens.colors.black}
-                  fill={tokens.colors.black}
+                  color={WEB_EMBED_CONTROL_INK}
+                  fill={WEB_EMBED_CONTROL_INK}
                 />
               </View>
             ) : null}
@@ -139,7 +140,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "600",
     fontFamily: tokens.fonts.medium,
-    color: tokens.colors.black,
+    color: WEB_EMBED_CONTROL_INK,
   },
   spacer: {
     flex: 1,
@@ -153,14 +154,14 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "600",
     fontFamily: tokens.fonts.medium,
-    color: tokens.colors.black,
+    color: WEB_EMBED_CONTROL_INK,
   },
   batteryBody: {
     width: 22,
     height: 10,
     borderRadius: 2,
     borderWidth: 1,
-    borderColor: tokens.colors.black,
+    borderColor: WEB_EMBED_CONTROL_INK,
     padding: 1,
     justifyContent: "center",
     overflow: "hidden",
@@ -168,7 +169,7 @@ const styles = StyleSheet.create({
   batteryFill: {
     height: "100%",
     borderRadius: 1,
-    backgroundColor: tokens.colors.black,
+    backgroundColor: WEB_EMBED_CONTROL_INK,
   },
   boltWrap: {
     ...StyleSheet.absoluteFillObject,
@@ -180,6 +181,6 @@ const styles = StyleSheet.create({
     height: 4,
     borderTopRightRadius: 1,
     borderBottomRightRadius: 1,
-    backgroundColor: tokens.colors.black,
+    backgroundColor: WEB_EMBED_CONTROL_INK,
   },
 });

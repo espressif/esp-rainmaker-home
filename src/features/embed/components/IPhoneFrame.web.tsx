@@ -15,7 +15,10 @@ import {
 
 import { EmbedStatusBar } from "@features/embed/components/EmbedStatusBar";
 import { getEmbedFrameSize } from "@features/embed/utils/embedFrameSize";
-import { tokens } from "@shared/theme/tokens";
+import {
+  WEB_EMBED_CHASSIS_BG,
+  WEB_EMBED_GLASS_BG,
+} from "@shared/utils/constants";
 
 /** Web-only extension: RN-web accepts the CSS `transformOrigin` shortcut. */
 type WebViewStyle = ViewStyle & { transformOrigin?: string };
@@ -110,7 +113,7 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   chassis: {
-    backgroundColor: tokens.colors.black,
+    backgroundColor: WEB_EMBED_CHASSIS_BG,
     overflow: "hidden",
   },
   /** Web: scale from top-left so the layout box matches the scaled footprint. */
@@ -118,10 +121,10 @@ const styles = StyleSheet.create({
   island: {
     position: "absolute",
     zIndex: 4,
-    backgroundColor: tokens.colors.black,
+    backgroundColor: WEB_EMBED_CHASSIS_BG,
   },
   glass: {
     overflow: "hidden",
-    backgroundColor: tokens.colors.white,
+    backgroundColor: WEB_EMBED_GLASS_BG,
   },
 });

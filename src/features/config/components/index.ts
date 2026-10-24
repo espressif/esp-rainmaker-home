@@ -11,3 +11,4 @@ export { ConfigScanSuccessView } from "./ConfigScanSuccessView";
 export { ConfigScanErrorView } from "./ConfigScanErrorView";
 export { ConfigScanFooter } from "./ConfigScanFooter";
 export { ConfigScanScannerView } from "./ConfigScanScannerView";
+export { DeploymentTrustDialog } from "./DeploymentTrustDialog";

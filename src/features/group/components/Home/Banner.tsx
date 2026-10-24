@@ -84,7 +84,7 @@ const Banner: React.FC<BannerProps> = ({
   return (
     <View style={styles.banner} {...testProps("view_home_banner")}>
       <View style={styles.messageContainer}>
-        <Text {...testProps("text_title_home_banner")}>
+        <Text {...testProps("text_title_home_banner")} style={styles.title}>
           {t("group.home.homeBannerTitle")}
         </Text>
         <TouchableOpacity
@@ -144,6 +144,9 @@ const styles = StyleSheet.create({
   messageContainer: {
     flex: 1,
     minWidth: 0,
+  },
+  title: {
+    color: tokens.colors.black,
   },
   smartHomeButton: {
     flexDirection: "row",

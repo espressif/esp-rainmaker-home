@@ -45,9 +45,11 @@ import { getFeatures } from "@/config/features.config";
 // theme
 import { tokens } from "@shared/theme/tokens";
 import { globalStyles } from "@shared/theme/globalStyleSheet";
+import { syncOnLaunch } from "@shared/runtimeStyle/store";
 
 // async SDK + runtime config init
 import { cdfBootstrap, initializeApp } from "@src/integrations";
+import { runtimeConfigManager } from "@config/runtime.config";
 
 // constants
 import {
@@ -183,7 +185,11 @@ const AppInitGate = ({ generation }: { generation: number }) => {
 
   const startApp = useCallback(() => {
     initializeApp()
-      .then(() => setReady(true))
+      .then(() => {
+        setReady(true);
+        // Saves a newer published style in the background for the next start.
+        syncOnLaunch(runtimeConfigManager.config?.brandUrl);
+      })
       .catch((error: unknown) => {
         console.error("[AppInitGate] app start failed:", error);
         setStartFailed(true);
@@ -254,8 +260,8 @@ const AppInitGate = ({ generation }: { generation: number }) => {
  *
  * Exposes two ways to re-establish the SDK layer through `AppRestartContext`:
  *
- * - `restartApp` relaunches the process, for state that cannot be rebuilt in
- *   place (sign-out, a scanned private deployment). See `ESPAppRestartAdapter`.
+ * - `restartApp` reloads the JS runtime without quitting the app, for state that
+ *   is only read at start-up.
  * - `reinitializeSdk` rebuilds in place: tear the CDF runtime down (disposing the
  *   `ESPCDF` singleton so `initCDF` builds a fresh one on the new config rather
  *   than returning the cached instance), re-init, then remount via `generation`.

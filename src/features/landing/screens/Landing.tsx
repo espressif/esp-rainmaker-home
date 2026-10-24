@@ -13,15 +13,16 @@ import Constants from "expo-constants";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 
-import { tokens } from "@shared/theme/tokens";
-import { testProps } from "@shared/utils/testProps";
-
 import { PLATFORM_OPTIONS } from "@features/landing/config/platformOptions";
 import { useLanding } from "@features/landing/hooks";
 import { LandingHero, PlatformOptionCard } from "@features/landing/components";
+import { styleTheme, hasPalette } from "@shared/runtimeStyle/config";
+import { tokens } from "@shared/theme/tokens";
+import { BRAND_THEME_DARK } from "@shared/utils/constants";
+import { testProps } from "@shared/utils/testProps";
 
-// Soft brand hero: light blue at the top fading to white where the logo sits,
-// so the logo's dark wordmark stays legible without a backing badge.
+// Default hero gradient: light blue at the top fading to white behind the
+// logo, so the logo's dark text stays readable.
 const HERO_GRADIENT = ["#CFE0F5", "#EAF1FB", "#FFFFFF"] as const;
 const HERO_GRADIENT_LOCATIONS = [0, 0.6, 1] as const;
 
@@ -52,10 +53,14 @@ export function LandingScreen() {
 
   return (
     <View style={styles.root} {...testProps("view_landing")}>
-      <StatusBar style="dark" />
+      <StatusBar style={styleTheme === BRAND_THEME_DARK ? "light" : "dark"} />
 
       <LinearGradient
-        colors={HERO_GRADIENT}
+        colors={
+          hasPalette
+            ? [tokens.colors.bg3, tokens.colors.bg1, tokens.colors.white]
+            : HERO_GRADIENT
+        }
         locations={HERO_GRADIENT_LOCATIONS}
         style={[styles.hero, { paddingTop: insets.top + tokens.spacing._40 }]}
       >
