@@ -438,6 +438,7 @@
 				8790E6632FF7C82C0020344B /* Embed Frameworks */,
 				AEEAA3814FD603E8D689E640 /* [CP-User] [RNFB] Core Configuration */,
 				FBC75A1E8B2C4D73A5E601F8 /* [CP] FirebaseCrashlytics Run */,
+				87757D68D96B1CA039CAF45E /* [CP-User] [RNFB] Crashlytics Configuration */,
 			);
 			buildRules = (
 			);
@@ -601,6 +602,20 @@
 			shellPath = /bin/sh;
 			shellScript = "\"${PODS_ROOT}/Target Support Files/Pods-APP/Pods-APP-frameworks.sh\"\n";
 			showEnvVarsInLog = 0;
+		};
+		87757D68D96B1CA039CAF45E /* [CP-User] [RNFB] Crashlytics Configuration */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputPaths = (
+				"${DWARF_DSYM_FOLDER_PATH}/${DWARF_DSYM_FILE_NAME}/Contents/Resources/DWARF/${TARGET_NAME}",
+				"$(BUILT_PRODUCTS_DIR)/$(INFOPLIST_PATH)",
+			);
+			name = "[CP-User] [RNFB] Crashlytics Configuration";
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "#!/usr/bin/env bash\n#\n# Copyright (c) 2016-present Invertase Limited & Contributors\n#\n# Licensed under the Apache License, Version 2.0 (the \"License\");\n# you may not use this library except in compliance with the License.\n# You may obtain a copy of the License at\n#\n#   http://www.apache.org/licenses/LICENSE-2.0\n#\n# Unless required by applicable law or agreed to in writing, software\n# distributed under the License is distributed on an \"AS IS\" BASIS,\n# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.\n# See the License for the specific language governing permissions and\n# limitations under the License.\n#\nset -e\n\nif [[ ${PODS_ROOT} && -f \"${PODS_ROOT}/FirebaseCrashlytics/run\" ]]; then\n  echo \"info: Exec FirebaseCrashlytics Run from Pods\"\n  \"${PODS_ROOT}/FirebaseCrashlytics/run\" -gsp \"${PROJECT_DIR}/APP/GoogleService-Info-Global.plist\"\nelif [[ -f \"${PROJECT_DIR}/FirebaseCrashlytics.framework/run\" ]]; then\n  echo \"info: Exec FirebaseCrashlytics Run from framework\"\n  \"${PROJECT_DIR}/FirebaseCrashlytics.framework/run\"\nelse\n  # SPM: upload-symbols is at a known path in the SourcePackages checkout.\n  # BUILD_DIR is typically DerivedData/Project-hash/Build/Products — strip from /Build onward\n  # to get the DerivedData project root where SourcePackages lives.\n  SPM_CRASHLYTICS_DIR=\"${BUILD_DIR%Build/*}SourcePackages/checkouts/firebase-ios-sdk/Crashlytics\"\n  SPM_UPLOAD_SYMBOLS=\"${SPM_CRASHLYTICS_DIR}/upload-symbols\"\n  if [[ -x \"${SPM_UPLOAD_SYMBOLS}\" ]]; then\n    echo \"info: Exec FirebaseCrashlytics upload-symbols from SPM\"\n    \"${SPM_UPLOAD_SYMBOLS}\" -gsp \"${PROJECT_DIR}/GoogleService-Info.plist\" -p ios \"${DWARF_DSYM_FOLDER_PATH}/${DWARF_DSYM_FILE_NAME}\"\n  elif [[ -f \"${SPM_UPLOAD_SYMBOLS}\" ]]; then\n    echo \"info: Exec FirebaseCrashlytics upload-symbols from SPM (chmod +x)\"\n    chmod +x \"${SPM_UPLOAD_SYMBOLS}\"\n    \"${SPM_UPLOAD_SYMBOLS}\" -gsp \"${PROJECT_DIR}/GoogleService-Info.plist\" -p ios \"${DWARF_DSYM_FOLDER_PATH}/${DWARF_DSYM_FILE_NAME}\"\n  else\n    echo \"warning: FirebaseCrashlytics run script not found at CocoaPods, framework, or SPM paths. Skipping dSYM upload.\"\n    echo \"warning: Checked: \\${PODS_ROOT}/FirebaseCrashlytics/run, \\${PROJECT_DIR}/FirebaseCrashlytics.framework/run, ${SPM_UPLOAD_SYMBOLS}\"\n  fi\nfi\n";
 		};
 		A7F12FBBF9A4E41E417078CA /* [CP] Check Pods Manifest.lock */ = {
 			isa = PBXShellScriptBuildPhase;

@@ -15,6 +15,10 @@ project 'APP.xcodeproj'
 
 prepare_react_native_project!
 
+# Opt RNFirebase out of SPM so Firebase pods are resolved via CocoaPods and
+# work under this project's static linkage (RNFirebase 26+ default).
+$RNFirebaseDisableSPM = true
+
 target 'APP' do
   use_expo_modules!
 
