@@ -34,7 +34,9 @@ rmneo:
   password: "${RMNEO_DEPLOYMENT_PASSWORD:-Welcome01!}"
   features:
     open_wifi: ${FEATURE_OPEN_WIFI:-false}
-    matter_only: false
+    # Matter suites also need a Neo Matter build (commit message with "neo" and "matter").
+    matter_only: true
+    # RainMaker+Matter nodes work only on the Neo staging cloud so far, not this one.
     rmneo_matter: false
     scene: false
     third_party: false

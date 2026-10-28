@@ -17,6 +17,7 @@ import { useCDF } from "@shared/hooks/useCDF";
 import { stableStringify } from "@shared/utils/common";
 import { useDraftBaseline } from "@shared/hooks/useUnsavedChangesGuard";
 import { useAutomation } from "@context/automation.context";
+import { getDeviceDisplayName } from "@shared/utils/deviceDisplayName";
 
 // --- Result types (structured outcomes for UI to interpret) ---
 
@@ -87,6 +88,8 @@ export interface UseCreateAutomationResult {
   eventInfo: CreateAutomationEventInfo | null;
   /** Device for event (from store) for display */
   eventDevice: ESPCDFDevice | null;
+  /** Name the event device shows, read live so a rename shows here too */
+  eventDeviceDisplayName: string;
   /** Action cards for list UI */
   actionCards: CreateAutomationActionCard[];
   /** Create new automation. Caller handles toast and navigation. */
@@ -172,6 +175,13 @@ export function useCreateAutomation(
     return device ?? null;
   }, [eventInfo, state.nodeId, store.nodeStore.nodesByIDMap]);
 
+  const eventDeviceDisplayName = eventDevice
+    ? getDeviceDisplayName(
+        eventDevice,
+        store.nodeStore.nodesByIDMap?.[state.nodeId ?? ""],
+      )
+    : eventInfo?.deviceName ?? "";
+
   const actionCards = useMemo(
     () =>
       getActionCardsFromActions(
@@ -249,6 +259,7 @@ export function useCreateAutomation(
     hasUnsavedChanges,
     eventInfo,
     eventDevice,
+    eventDeviceDisplayName,
     actionCards,
     createAutomation,
     updateAutomation,

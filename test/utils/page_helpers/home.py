@@ -125,6 +125,12 @@ class Home(BasePage):
                 self.click("id", "button_tab_home", timeout=5)
                 time.sleep(1)
                 return self
+            # Leaving Device Settings with an unsaved name asks Save / Discard; back only closes it.
+            if self.is_id_visible("text_title_unsaved_device_name", 1):
+                logger.info("go_home: unsaved device name dialog shown, tapping Discard")
+                self.click("id", "button_cancel_dialog", timeout=3)
+                time.sleep(1)
+                continue
             if self.is_id_visible("button_back", 2):
                 self.click("id", "button_back", timeout=3)
             else:
@@ -251,6 +257,19 @@ class Home(BasePage):
         """Whether any home card shows the 'Available on WLAN' local-control badge."""
         return self.is_visible("local_control_badge", timeout=timeout)
 
+    def _assert_device_name_saved_on_done(self):
+        """Leave Device Settings once after Done; an unsaved-name dialog means Done did not save, so fail instead of letting go_home discard it."""
+        if self.is_id_visible("button_back", 3):
+            self.click("id", "button_back", timeout=3)
+        else:
+            try:
+                self.driver.back()
+            except Exception:
+                pass
+        if self.is_id_visible("text_title_unsaved_device_name", 3):
+            self.click("id", "button_cancel_dialog", timeout=3)
+            raise RuntimeError("Done did not save the device name: leaving Device Settings asked to save it")
+
     def ensure_device_name(self, target, aliases=()):
         """Make sure a device named `target` is on the home screen; if it's listed under one of its own former names, rename it to `target` via the device settings screen. An alias shown on more than one card is never renamed — it may be another job's device. Re-enters home first so a just-applied cloud rename has refreshed into the list."""
         target = resolve_device_name(target)
@@ -269,8 +288,10 @@ class Home(BasePage):
                 self.click("id", "button_more", timeout=10)
                 self.click("id", "button_edit_device_name", timeout=10)
                 self.send_keys("id", "input_device_name", target, clear_first=True, timeout=10)
-                self.hide_keyboard_if_visible()
+                # Only the keyboard's Done saves a name; hiding the keyboard keeps it a draft.
+                self.commit_text_input("id", "input_device_name")
                 time.sleep(2)
+                self._assert_device_name_saved_on_done()
                 self.go_home()
                 if self.is_device_visible(target, timeout=15):
                     return self

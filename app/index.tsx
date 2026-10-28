@@ -14,6 +14,7 @@ import { useCDF } from "@shared/hooks/useCDF";
 import { useRouter, usePathname, useFocusEffect } from "expo-router";
 // components
 import { Logo } from "@shared/components";
+import { endUserSession } from "@shared/utils/userSession";
 import { executePostLoginPipeline, navigateToHomeAfterAuth } from "@features/auth/utils/postLoginPipeline";
 import { isConsentAccepted } from "@features/consent";
 import { isCnRegion } from "@config/region.config";
@@ -71,6 +72,7 @@ const Index = () => {
         router.replace(getPreAuthRoute() as never);
       }
     } catch {
+      await endUserSession();
       await user?.logout();
       router.replace(getPreAuthRoute() as never);
     }

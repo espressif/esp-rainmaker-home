@@ -5,8 +5,13 @@
  */
 
 import { PARAM_CONTROLS } from "@/config/params.config";
+import {
+  findCompoundMatch,
+  type ParamControlConfig,
+} from "@shared/utils/deviceParams";
 import type { ESPCDFDeviceParam } from "@store";
 import type { DeviceParamGroup } from "@src/types/global";
+import { isIdentifyParam } from "@shared/utils/deviceIdentify";
 import {
   ESPRM_CCT_PARAM_TYPE,
   ESPRM_HUE_PARAM_TYPE,
@@ -22,6 +27,13 @@ import {
   PARAM_CONTROL_INVOKE_VALUE,
   PARAM_VALUE_UNKNOWN,
 } from "./constants";
+import {
+  MATTER_COLOR_ATTRIBUTE_COLOR_TEMPERATURE_MIREDS,
+  MATTER_COLOR_ATTRIBUTE_CURRENT_HUE,
+  MATTER_COLOR_ATTRIBUTE_CURRENT_SATURATION,
+  MATTER_COLOR_ATTRIBUTE_CURRENT_X,
+  MATTER_COLOR_ATTRIBUTE_CURRENT_Y,
+} from "./matterParamConstants";
 
 // --- Control lookup ---
 
@@ -53,6 +65,11 @@ export const getParamControlComponent = (
   param: ESPCDFDeviceParam,
   paramsUIMap?: Record<string, DeviceParamGroup["control"]>
 ): any => {
+  // Compound rules are more specific than either flat lookup below.
+  const compound = findCompoundMatch(param);
+  if (compound?.control) {
+    return compound.control as any;
+  }
   const uiMap = paramsUIMap || getParamsUIMap();
   let Control = uiMap[param.uiType ?? ""]?.control as any;
   if (!Control) {
@@ -62,6 +79,46 @@ export const getParamControlComponent = (
     return null;
   }
   return Control || null;
+};
+
+/**
+ * Maps each declared `type`/`uiType` to the role of the entry owning it;
+ * entries without a `paramType` contribute nothing, so a generic control
+ * never shadows a specific one.
+ * @returns Lookup from type or uiType to canonical role
+ */
+const buildParamRoleMap = (): Record<string, string> =>
+  (PARAM_CONTROLS as ParamControlConfig[]).reduce((acc, control) => {
+    if (!control.paramType) return acc;
+    control.types.forEach((type) => {
+      acc[type] = control.paramType as string;
+    });
+    return acc;
+  }, {} as Record<string, string>);
+
+// `PARAM_CONTROLS` is static, so the map is built once instead of per lookup
+// (observer panels call `getParamRole` several times per render).
+let cachedParamRoleMap: Record<string, string> | undefined;
+const getParamRoleMap = (): Record<string, string> =>
+  (cachedParamRoleMap ??= buildParamRoleMap());
+
+/**
+ * Canonical role of a param as declared by `params.config`, so a screen can
+ * ask what a param is without knowing which stack produced it.
+ * @param param - The device parameter
+ * @param roleMap - Optional pre-computed role map (for performance)
+ * @returns The declared role, or undefined when the param has none
+ */
+export const getParamRole = (
+  param: ESPCDFDeviceParam,
+  roleMap?: Record<string, string>
+): string | undefined => {
+  const compound = findCompoundMatch(param);
+  if (compound?.paramType) {
+    return compound.paramType;
+  }
+  const map = roleMap || getParamRoleMap();
+  return map[param.uiType ?? ""] ?? map[param.type ?? ""];
 };
 
 /**
@@ -167,7 +224,7 @@ export type ParamTypeMetadata = {
 /**
  * Resolves the effective data type of a param value.
  *
- * Normalizes the declared `dataType` (rmng-base-sdk >= 1.2.1 delivers it
+ * Normalizes the declared `dataType` (rainmaker-neo-base-sdk >= 1.2.1 delivers it
  * reliably; older versions dropped it on the node-config cache round trip).
  * For params with no usable declaration, falls back to boolean-control
  * labels and the current value's JS type.
@@ -280,20 +337,31 @@ export function defaultWritableParamValue(param: ESPCDFDeviceParam): unknown {
 }
 
 /**
- * Filters out parameters with excluded types (name and hidden parameters)
+ * Filters out params that must never appear in schedule / automation pickers.
+ *
+ * `identify` is a momentary Matter passthrough — writing seconds blinks the
+ * device *now* — so it is meaningless on a timer. FW will not mark it
+ * `esp.ui.hidden`, so this list is the only thing hiding it: keep the entry.
  * @param params - Array of device parameters to filter
- * @returns Filtered array excluding name and hidden parameters
+ * @returns Filtered array excluding name, hidden and identify params
  */
 export const filterExcludedParamTypes = (
   params?: ESPCDFDeviceParam[]
 ): ESPCDFDeviceParam[] | undefined => {
   if (!params) return undefined;
-  return params.filter(
-    (param) =>
-      ![ESPRM_NAME_PARAM_TYPE, ESPRM_UI_HIDDEN_PARAM_TYPE].includes(
-        param.type ?? "",
-      ),
-  );
+  return params.filter((param) => {
+    // A uiType, so check it there too — `type` alone missed FW-hidden params.
+    if (
+      param.uiType === ESPRM_UI_HIDDEN_PARAM_TYPE ||
+      param.type === ESPRM_UI_HIDDEN_PARAM_TYPE
+    ) {
+      return false;
+    }
+    if (isIdentifyParam(param)) {
+      return false;
+    }
+    return (param.type ?? "").trim() !== ESPRM_NAME_PARAM_TYPE;
+  });
 };
 
 // --- Param bounds (cross-SDK; set by adaptors on `param.bounds`) ---
@@ -340,6 +408,8 @@ export type ParamDisabledWhenSiblingValue = {
 /** Typed subset of CDF `param.bounds` used by ParamControls. */
 export type ParamControlBounds = {
   validStrings?: string[];
+  validValues?: ParamValueLabel[];
+  unit?: string;
   labels?: Record<string, string>;
   rawModes?: Record<string, number>;
   [PARAM_BOUNDS_CONTROL_BOARD_ACTIONS]?: Record<string, ParamControlBoardActionSpec>;
@@ -358,6 +428,212 @@ export function getParamControlBounds(
   param: ESPCDFDeviceParam,
 ): ParamControlBounds {
   return (param.bounds ?? {}) as ParamControlBounds;
+}
+
+// --- Param schema: declared unit and enumerated values ---
+//
+// Two optional schema fields a param may carry:
+//
+//   "unit": "celsius"                       — a machine token, never a symbol
+//   "valid_values": [{ "value": 2, "label": "Jammed" }, ...]
+//
+// `value` is the param's own value (int / string / bool); `label` is what the
+// user sees. `valid_strs: ["Off","Auto"]` is the compact spelling of the case
+// where value === label, so it is normalized into the same shape here and the
+// controls keep one renderer. `bounds` still describes the numeric domain —
+// both may appear on one param (a fan speed is ordinal *and* labelled). Both
+// fields are optional: a param declaring neither renders exactly as before.
+
+/** One enumerated value a param can take, with the text shown for it. */
+export type ParamValueLabel = {
+  /** The param's own value, as written on the wire (int / string / bool). */
+  value: string | number | boolean;
+  /** Display text for that value. */
+  label: string;
+};
+
+/**
+ * Reads an optional schema field from a param across the carriers the
+ * different stacks use, most specific first: the CDF param itself, the
+ * underlying SDK param it wraps (`_raw`, where RMNeo keeps `validStrings`),
+ * and the open `bounds` bag the Matter adaptors compile enum config into.
+ * Snake-case is accepted alongside camelCase so a raw node-config param works
+ * untransformed.
+ * @param param - Device param to read from.
+ * @param camelKey - Field name as the SDKs expose it.
+ * @param snakeKey - Field name as the node config spells it.
+ * @returns First defined value found, or `undefined`.
+ */
+function readParamSchemaField(
+  param: ESPCDFDeviceParam | undefined,
+  camelKey: string,
+  snakeKey: string,
+): unknown {
+  const carriers: unknown[] = [
+    param,
+    (param as unknown as { _raw?: unknown } | undefined)?._raw,
+    param?.bounds,
+  ];
+  for (const carrier of carriers) {
+    if (!carrier || typeof carrier !== "object") continue;
+    const record = carrier as Record<string, unknown>;
+    if (record[camelKey] !== undefined) return record[camelKey];
+    if (record[snakeKey] !== undefined) return record[snakeKey];
+  }
+  return undefined;
+}
+
+/**
+ * Canonical unit token a param declares, e.g. `"celsius"`.
+ * The token stays a token here; `resolveParamUnitSymbol` in `./paramUnits`
+ * owns the symbol, so the wire value never reaches the screen unmapped.
+ * @param param - Device param to read.
+ * @returns Declared unit token, or `undefined` when the param declares none.
+ */
+export function resolveParamUnit(
+  param: ESPCDFDeviceParam,
+): string | undefined {
+  const declared = readParamSchemaField(param, "unit", "unit");
+  if (typeof declared !== "string") return undefined;
+  const token = declared.trim();
+  return token.length > 0 ? token : undefined;
+}
+
+/**
+ * Normalizes one wire entry into a {@link ParamValueLabel}.
+ * @param entry - Raw `valid_values` element.
+ * @returns Normalized pair, or `null` when the entry carries no usable value.
+ */
+function toParamValueLabel(entry: unknown): ParamValueLabel | null {
+  if (!entry || typeof entry !== "object") return null;
+  const { value, label } = entry as { value?: unknown; label?: unknown };
+  if (
+    typeof value !== "string" &&
+    typeof value !== "number" &&
+    typeof value !== "boolean"
+  ) {
+    return null;
+  }
+  const text =
+    typeof label === "string" && label.trim().length > 0
+      ? label
+      : String(value);
+  return { value, label: text };
+}
+
+/**
+ * The param's enumerated values in declared order, with `valid_strs` folded
+ * into the same `{value, label}` shape so controls see one source.
+ *
+ * An entry whose label is just its value carries no display text of its own —
+ * every `valid_strs` entry is like this by construction — so an
+ * adaptor-compiled `bounds.labels` entry is used for it where one exists. That
+ * keeps `["idle","docked"]` + `labels` rendering as "Idle" / "Docked" rather
+ * than regressing to the raw slugs, while a label the device itself declared
+ * is always left as it is.
+ * @param param - Device param to read.
+ * @returns Enumerated values, or `undefined` when the value set is not enumerable.
+ */
+export function resolveParamValidValues(
+  param: ESPCDFDeviceParam,
+): ParamValueLabel[] | undefined {
+  const enumerated = readParamEnumeratedValues(param);
+  if (!enumerated) return undefined;
+
+  const fallbackLabels = getParamControlBounds(param).labels;
+  if (!fallbackLabels) return enumerated;
+
+  return enumerated.map((entry) => {
+    if (entry.label !== String(entry.value)) return entry;
+    const mapped = fallbackLabels[String(entry.value)];
+    return mapped ? { ...entry, label: mapped } : entry;
+  });
+}
+
+/**
+ * Reads the enumerated values exactly as the param declares them, preferring
+ * `valid_values` over the compact `valid_strs` spelling.
+ * @param param - Device param to read.
+ * @returns Enumerated values, or `undefined` when none are declared.
+ */
+function readParamEnumeratedValues(
+  param: ESPCDFDeviceParam,
+): ParamValueLabel[] | undefined {
+  const declared = readParamSchemaField(param, "validValues", "valid_values");
+  if (Array.isArray(declared)) {
+    const normalized = declared
+      .map(toParamValueLabel)
+      .filter((entry): entry is ParamValueLabel => entry !== null);
+    if (normalized.length > 0) return normalized;
+  }
+
+  const strings = readParamSchemaField(param, "validStrings", "valid_strs");
+  if (Array.isArray(strings)) {
+    const normalized = strings
+      .filter((entry): entry is string => typeof entry === "string")
+      .map((entry) => ({ value: entry, label: entry }));
+    if (normalized.length > 0) return normalized;
+  }
+
+  return undefined;
+}
+
+/**
+ * Indexes display labels by stringified value, for controls that already take
+ * a `labels` map (status readouts, indexed level sliders).
+ * @param validValues - Normalized enumerated values.
+ * @returns Value → label map, or `undefined` when there is nothing to index.
+ */
+export function paramValueLabelMap(
+  validValues: ParamValueLabel[] | undefined,
+): Record<string, string> | undefined {
+  if (!validValues?.length) return undefined;
+  return Object.fromEntries(
+    validValues.map((entry) => [String(entry.value), entry.label]),
+  );
+}
+
+/** Display metadata handed to every param control, assembled in one place. */
+export type ParamControlMeta = ParamControlBounds &
+  Record<string, unknown> & {
+    dataType?: string;
+    unit?: string;
+    validValues?: ParamValueLabel[];
+    labels?: Record<string, string>;
+  };
+
+/**
+ * Builds the `meta` every param control receives.
+ *
+ * The single normalization point: `valid_strs` becomes `valid_values`, those
+ * labels are indexed into the `labels` map the readouts and indexed sliders
+ * already consume, and the declared unit token is carried through for the
+ * controls that render a suffix. A label the device declared for a value wins
+ * over an adaptor-compiled `bounds.labels` entry, since the config is the
+ * authoritative, self-describing source; where the device declared no display
+ * text, {@link resolveParamValidValues} has already adopted the adaptor's.
+ * @param param - Device param being rendered.
+ * @returns Metadata object passed to controls as `meta`.
+ */
+export function buildParamControlMeta(
+  param: ESPCDFDeviceParam,
+): ParamControlMeta {
+  const bounds = getParamControlBounds(param);
+  const validValues = resolveParamValidValues(param);
+  const declaredLabels = paramValueLabelMap(validValues);
+
+  return {
+    ...bounds,
+    dataType: param.dataType,
+    unit: resolveParamUnit(param),
+    validValues,
+    labels: declaredLabels
+      ? { ...bounds.labels, ...declaredLabels }
+      : bounds.labels,
+    [PARAM_BOUNDS_VALUE_SUFFIX]: bounds[PARAM_BOUNDS_VALUE_SUFFIX] ?? "",
+    [PARAM_BOUNDS_CONTROL_BOARD_ACTIONS]:
+      bounds[PARAM_BOUNDS_CONTROL_BOARD_ACTIONS],
+  };
 }
 
 /**
@@ -456,10 +732,32 @@ export function isUnknownParamValue(value: unknown): boolean {
 /** Cluster id key for Color Control, as it appears in endpoint metadata. */
 const MATTER_COLOR_CONTROL_CLUSTER_KEYS = ["0x300", "0x0300"] as const;
 
-/** Backing Color Control (0x300) attribute id for each color param. */
-const MATTER_COLOR_ATTRIBUTE_CURRENT_HUE = 0x0;
-const MATTER_COLOR_ATTRIBUTE_CURRENT_SATURATION = 0x1;
-const MATTER_COLOR_ATTRIBUTE_COLOR_TEMPERATURE_MIREDS = 0x7;
+/**
+ * Marker field set on Hue/Saturation params that are driven through CIE XY
+ * (`CurrentX`/`CurrentY` + `MoveToColor`) rather than the HS attributes —
+ * synthesized by the Matter adaptor for XY-only color lights. The color
+ * support filter below keeps such params when the XY attribute pair is
+ * advertised, where an HS-backed param would be dropped.
+ */
+export const MATTER_XY_COLOR_PARAM_FLAG = "matterXyColor";
+
+/** Whether a param is an XY-driven color param (see {@link MATTER_XY_COLOR_PARAM_FLAG}). */
+export function isMatterXyColorParam(param: ESPCDFDeviceParam): boolean {
+  if (
+    (param as unknown as Record<string, unknown>)[
+      MATTER_XY_COLOR_PARAM_FLAG
+    ] === true
+  ) {
+    return true;
+  }
+  // Classic stack: the CDF param wraps the SDK's ESPRMMatterDeviceParam in
+  // `_raw`, which carries the XY marker as `xyColorComponent` (Neo stamps the
+  // flag above during its Matter decoration instead).
+  return (
+    (param as unknown as { _raw?: { xyColorComponent?: unknown } })._raw
+      ?.xyColorComponent !== undefined
+  );
+}
 
 /** Reads Color Control (0x300) attribute ids from persisted `matter_data.endpoints`. */
 function readColorAttributesFromMatterDataEndpoints(
@@ -593,6 +891,19 @@ export function filterUnsupportedMatterColorParams<T extends ESPCDFDeviceParam>(
   return params.filter((param) => {
     const backingAttribute = matterColorParamBackingAttribute(param);
     if (backingAttribute === null) return true;
-    return advertised.has(backingAttribute);
+    if (advertised.has(backingAttribute)) return true;
+    // XY-driven Hue/Saturation params are backed by the CurrentX/CurrentY
+    // pair instead of the HS attributes they are named after.
+    if (
+      isMatterXyColorParam(param) &&
+      (backingAttribute === MATTER_COLOR_ATTRIBUTE_CURRENT_HUE ||
+        backingAttribute === MATTER_COLOR_ATTRIBUTE_CURRENT_SATURATION)
+    ) {
+      return (
+        advertised.has(MATTER_COLOR_ATTRIBUTE_CURRENT_X) &&
+        advertised.has(MATTER_COLOR_ATTRIBUTE_CURRENT_Y)
+      );
+    }
+    return false;
   });
 }

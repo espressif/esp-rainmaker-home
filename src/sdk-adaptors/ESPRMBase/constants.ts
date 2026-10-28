@@ -7,7 +7,6 @@
 export { ESPRMBaseAdaptorIdentifier } from "@config/sdk.identifiers";
 
 // SUPPORTED PARAM TYPES
-export const ESPRM_NAME_PARAM_TYPE = "esp.param.name";
 export const ESPRM_POWER_PARAM_TYPE = "esp.param.power";
 export const ESPRM_BRIGHTNESS_PARAM_TYPE = "esp.param.brightness";
 export const ESPRM_CCT_PARAM_TYPE = "esp.param.cct";
@@ -50,7 +49,3 @@ export const ESPRM_PARAM_WRITE_PROPERTY = "write";
 export const ESPRM_PARAM_READ_PROPERTY = "read";
 export const ESPRM_PARAM_TIME_SERIES_PROPERTY = "time_series";
 export const ESPRM_PARAM_SIMPLE_TIME_SERIES_PROPERTY = "simple_ts";
-
-// Matter metadata (node-level; device name for Matter-commissioned nodes)
-export const MATTER_METADATA_KEY = "Matter";
-export const MATTER_METADATA_DEVICE_NAME_KEY = "deviceName";

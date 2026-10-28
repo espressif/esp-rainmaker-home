@@ -9,6 +9,7 @@ import 'react-native-get-random-values';
 
 import { Buffer } from 'buffer';
 import CryptoJS from 'crypto-js';
+import { installTimerFreeFetch } from './timerFreeFetch';
 // import { TextEncoder, TextDecoder } from 'util';
 
 declare const global: typeof globalThis & {
@@ -144,3 +145,9 @@ global.crypto.createHmac = (algorithm: string, key: any) => {
   const dataBytes = typeof data === 'string' ? CryptoJS.enc.Utf8.parse(data) : data;
   return CryptoJS.HmacSHA256(dataBytes, keyBytes);
 };
+
+// React Native's fetch hands every answer back through a JS timer, and some
+// Android phones run no JS timers while another app's screen covers ours
+// (Google's Matter commissioning screen). Swap in a fetch that settles without
+// one; Android only, other platforms keep React Native's fetch.
+installTimerFreeFetch();

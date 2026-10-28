@@ -12,6 +12,7 @@ import { globalStyles } from "@shared/theme/globalStyleSheet";
 import { DeviceAction } from "@shared/components";
 import type { ScheduleDeviceSelectionData } from "@src/types/global";
 import { testProps } from "@shared/utils/testProps";
+import { getDeviceDisplayName } from "@shared/utils/deviceDisplayName";
 
 interface ScheduleDeviceItemProps {
   device: ScheduleDeviceSelectionData;
@@ -58,7 +59,7 @@ export const ScheduleDeviceItem = ({
     >
       <DeviceAction
         device={device.device.type!}
-        displayDeviceName={device.device.displayName!}
+        displayDeviceName={getDeviceDisplayName(device.device, device.node)}
         actions={getDeviceActionValues(device)}
         onPress={() => !disabled && onDeviceSelect(device)}
         qaId={qaId || "device_action"}

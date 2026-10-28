@@ -9,10 +9,14 @@ import type { ESPMatterCommissioningAdaptorInterface } from "@espressif/rainmake
 import { rejectWebUnsupported } from "@native-adaptors/utils/webPlatform";
 
 /** No-op Matter commissioning adaptor for web */
-export const matterCommissioningAdaptor: ESPMatterCommissioningAdaptorInterface = {
+export const matterCommissioningAdaptor: ESPMatterCommissioningAdaptorInterface & {
+  cancelCommissioning: () => Promise<void>;
+} = {
   generateCSR: () => rejectWebUnsupported("Matter commissioning"),
   startEcosystemCommissioning: () => rejectWebUnsupported("Matter commissioning"),
   postMessage: () => rejectWebUnsupported("Matter commissioning"),
+  // Nothing to end on web; leaving the screen must not throw.
+  cancelCommissioning: () => Promise.resolve(),
 };
 
 export default matterCommissioningAdaptor;

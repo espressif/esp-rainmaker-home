@@ -6,6 +6,8 @@
 
 package com.app.matter
 
+import android.Manifest
+import android.annotation.SuppressLint
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothGatt
@@ -20,6 +22,7 @@ import android.bluetooth.le.ScanSettings
 import android.content.Context
 import android.os.ParcelUuid
 import android.util.Log
+import androidx.annotation.RequiresPermission
 import chip.platform.BleCallback
 import java.util.UUID
 import kotlin.coroutines.resume
@@ -65,6 +68,9 @@ class ChipToolBluetoothManager(private val chipClient: ChipClient) : BleCallback
      * @param timeoutMs Scan timeout window in milliseconds.
      * @return The first matching [BluetoothDevice] or null if the scan times out.
      */
+    @RequiresPermission(
+        allOf = [Manifest.permission.BLUETOOTH_SCAN, Manifest.permission.BLUETOOTH_CONNECT]
+    )
     suspend fun getBluetoothDevice(
         discriminator: Int,
         isShortDiscriminator: Boolean = false,
@@ -93,6 +99,10 @@ class ChipToolBluetoothManager(private val chipClient: ChipClient) : BleCallback
         return withTimeoutOrNull(timeoutMs) {
             callbackFlow {
                 val scanCallback = object : ScanCallback() {
+                    // Reading `device.name` needs BLUETOOTH_CONNECT, which the caller
+                    // already holds — getBluetoothDevice declares both permissions, but
+                    // lint scopes that annotation to the function, not this callback.
+                    @SuppressLint("MissingPermission")
                     override fun onScanResult(callbackType: Int, result: ScanResult) {
                         val device = result.device
                         Log.i(TAG, "Bluetooth device scanned: ${device.address} ${device.name}")
@@ -137,6 +147,7 @@ class ChipToolBluetoothManager(private val chipClient: ChipClient) : BleCallback
      * @return The live [BluetoothGatt] handle, ready to be passed to
      *         `ChipDeviceController.pairDevice()`, or null if connection failed.
      */
+    @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
     suspend fun connect(context: Context, device: BluetoothDevice): BluetoothGatt? {
         return suspendCancellableCoroutine { continuation ->
             val callback = buildBluetoothGattCallback(continuation)
@@ -151,6 +162,7 @@ class ChipToolBluetoothManager(private val chipClient: ChipClient) : BleCallback
         }
     }
 
+    @SuppressLint("MissingPermission")
     private fun buildBluetoothGattCallback(
         continuation: CancellableContinuation<BluetoothGatt?>
     ): BluetoothGattCallback {
@@ -252,6 +264,7 @@ class ChipToolBluetoothManager(private val chipClient: ChipClient) : BleCallback
         connectionId = 0
     }
 
+    @SuppressLint("MissingPermission")
     override fun onNotifyChipConnectionClosed(connId: Int) {
         Log.d(TAG, "onNotifyChipConnectionClosed: connId=$connId")
         bleGatt?.close()

@@ -49,6 +49,7 @@ export function CreateAutomationScreen() {
     hasUnsavedChanges,
     eventInfo,
     eventDevice,
+    eventDeviceDisplayName,
     actionCards,
     createAutomation,
     updateAutomation,
@@ -176,8 +177,7 @@ export function CreateAutomationScreen() {
   const eventDeviceShape = eventDevice
     ? { type: eventDevice.type ?? "switch", name: eventDevice.name }
     : null;
-  const eventDisplayName =
-    eventDevice?.displayName ?? eventInfo?.deviceName ?? "";
+  const eventDisplayName = eventDeviceDisplayName;
   const hasEvents = state.events.length > 0;
   const hasActions = Object.keys(state.actions).length > 0;
   const showEventsEmpty = !hasEvents;

@@ -353,6 +353,7 @@
       "homeBannerTitle": "欢迎使用",
       "addYourFirstDeviceBannerTitle": "添加您的第一个设备！",
       "addYourFirstDeviceBannerDescription": "点击下方或右上角的按钮。",
+      "loadFailedMessage": "无法加载您的设备，正在重试…",
       "migrationPromptTitle": "Migration update",
       "migrationPromptMessage": "If some devices aren’t visible, please re-add them under your preferred home.",
       "migrationPromptUnderstood": "Got it"
@@ -784,6 +785,7 @@
         "notSupportedGeneric": "此部署不支持 Matter 配网。",
         "notSupportedHint": "请切换到支持 Matter 的部署后再添加此设备。",
         "enterCodeAgainHint": "请返回并重新输入配对码。",
+        "notAllowedSharedHome": "只有家庭所有者才能添加 Matter 设备。请让所有者添加此设备，或切换到您自己的家庭。",
         "convertTitle": "为此家庭启用 Matter",
         "convertMessage": "需要先为“{{homeName}}”配置 Matter Fabric 才能添加设备。是否继续转换此家庭？",
         "convertConfirm": "继续",
@@ -800,6 +802,9 @@
         "placeholder": "11 位或 21 位配对码",
         "invalidCode": "请输入有效的 11 位或 21 位 Matter 配对码。",
         "authRequired": "请先登录后再进行 Matter 设备调试。"
+      },
+      "setup": {
+        "nameSaveFailed": "无法保存设备名称。您可以稍后在设备设置中重命名。"
       }
     },
     "wifi": {
@@ -827,6 +832,7 @@
       "otaUpdateStarted": "更新已开始",
       "deviceNameTitle": "设备名称",
       "enterDeviceNamePlaceholder": "输入设备名称",
+      "unsavedDeviceNameDescription": "您修改了设备名称但尚未保存。离开前要保存吗？",
       "deviceInfoTitle": "节点信息",
       "deviceInfoIdLabel": "节点 ID",
       "deviceInfoVersionLabel": "版本",
@@ -873,6 +879,12 @@
       "deviceListUpdated": "已请求刷新设备列表",
       "deviceListUpdateFailed": "无法刷新设备列表，请重试。"
     },
+    "identify": {
+      "action": "识别",
+      "running": "识别中...",
+      "hint": "闪烁或发出提示音 {{count}} 秒",
+      "failed": "无法连接到设备，请重试。"
+    },
     "panels": {
       "light": {
         "whiteTab": "白光",
@@ -915,7 +927,8 @@
       }
     },
     "validation": {
-      "deviceNameCannotBeEmpty": "设备名称不能为空"
+      "deviceNameCannotBeEmpty": "设备名称不能为空",
+      "deviceNameTooLong": "名称过长，此设备最多支持 32 个英文字符（约 10 个中文字）。"
     },
     "status": {
       "outOfSync": "不同步"
@@ -1191,8 +1204,7 @@
       "refreshFailed": "刷新自动化失败",
       "failedToFetchAutomation": "获取自动化失败",
       "failedToActionAutomation": "{{action}} 自动化失败",
-      "failedToCreateAutomation": "创建自动化失败",
-      "rmngEnableDisableNotSupported": "RMNG 暂不支持启用或禁用自动化。"
+      "failedToCreateAutomation": "创建自动化失败"
     }
   },
   "schedule": {

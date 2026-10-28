@@ -9,6 +9,7 @@ import type {
   ESPCDFGroup,
   ESPCDFMatterFabricDetails,
   ESPCDFMatterPrecommissionInfo,
+  ESPCDFNode,
   ESPCDFUser,
 } from "@store";
 import type {
@@ -17,12 +18,23 @@ import type {
   MatterCommissioningProgressCallbacks,
 } from "@src/types/global";
 import { ESPMatterUtilityAdapter } from "@native-adaptors/implementations/ESPMatterUtilityAdapter";
+import { markForceFreshCsrForFabric } from "@native-adaptors/implementations/ESPMatterAdapter";
 import type { SyncHomeWithNodes } from "@context/store.context";
 import {
   MATTER_FABRIC_BOOTSTRAP_ERROR_FABRIC_ID_MISMATCH,
   MATTER_FABRIC_BOOTSTRAP_ERROR_MISSING_FABRIC_CREDENTIALS,
 } from "@features/matter/constants";
-import { MATTER_DISCOVERY_VERIFY_LOG } from "@shared/utils/matterNodeIdHex";
+import {
+  cleanupDepartedMatterFabricState,
+  isUserNocStaleForFabric,
+  recordIssuedCatForFabric,
+  repairRotatedCatAcls,
+} from "@features/matter/utils/matterCatRotation";
+import {
+  MATTER_DISCOVERY_VERIFY_LOG,
+  normalizeMatterNodeIdHex,
+} from "@shared/utils/matterNodeIdHex";
+import { readMatterNodeIdFromCdfNode } from "@shared/utils/matterDeviceStateEvents";
 
 /**
  * Decides whether commissioning can start on the active home or must pause for fabric conversion.
@@ -100,6 +112,7 @@ export function buildCommissioningFabricData(
   userNoc: string,
   fabricId: string,
   errorMessage: string,
+  matterUserIdFromNoc?: string,
 ): ESPCDFMatterPrecommissionInfo {
   const fabricDetails = fabric.fabricDetails;
   if (!fabricDetails) {
@@ -107,7 +120,10 @@ export function buildCommissioningFabricData(
   }
 
   const rootCa = fabricDetails.rootCa ?? "";
-  const matterUserId = fabricDetails.matterUserId ?? "";
+  // The two stacks carry this on different payloads: RainMaker returns it with
+  // the fabric details, Neo only with the issued NoC. Prefer the fabric so RM is
+  // untouched, and fall back to the certificate for Neo.
+  const matterUserId = fabricDetails.matterUserId || matterUserIdFromNoc || "";
 
   if (!userNoc || !rootCa || !matterUserId) {
     throw new Error(errorMessage);
@@ -183,9 +199,13 @@ export async function issueNoc(
     userNoc,
     fabricId,
     messages.missingFabricCredentials,
+    certificate?.matterUserId,
   );
 
   await user.storePrecommissionInfo(precommissionInfo);
+  // Remember which CAT version this NOC carries so a later CAT rotation
+  // (member removed from the fabric) can be detected and the NOC re-issued.
+  await recordIssuedCatForFabric(fabric);
 }
 
 /**
@@ -241,10 +261,6 @@ export async function hydrateNativeFabricSessionIfNeeded(
     throw new Error(MATTER_FABRIC_BOOTSTRAP_ERROR_MISSING_FABRIC_CREDENTIALS);
   }
 
-  console.log(
-    `${MATTER_DISCOVERY_VERIFY_LOG} hydrateNativeFabricSession fabricId=${fabricId} groupId=${fabric.id} hasMatterUserId=${Boolean(details.matterUserId)}`,
-  );
-
   await ESPMatterUtilityAdapter.syncFabricSession({
     groupId: fabric.id,
     fabricId,
@@ -293,6 +309,18 @@ async function ensureNocReadyForFabric(
     if (await isNocRequired(fabric, user)) {
       onIssuingCertificate?.();
       await issueNoc(fabric, user, messages);
+    } else if (await isUserNocStaleForFabric(fabric)) {
+      // The group's CAT version moved past the stored NOC's (a member was
+      // removed and the CAT rotated) — re-issue so this phone keeps matching
+      // device ACLs once the primary's sweep raises their minimum version.
+      // Matter treats ACL CAT versions as minimums, so re-issuing before the
+      // sweep lands is always safe.
+      // The KeyStore already holds a chain for this fabric, which would make
+      // Android's generateCSR short-circuit without a CSR — force a fresh
+      // keypair for this one issuance (key + NOC are rebound together below).
+      markForceFreshCsrForFabric(fabricId);
+      onIssuingCertificate?.();
+      await issueNoc(fabric, user, messages);
     } else {
       await hydrateNativeFabricSessionIfNeeded(fabric, user);
     }
@@ -326,6 +354,129 @@ export async function prepareFabric(
 }
 
 /**
+ * Ensures the given Matter home has a stored user NOC and a hydrated native fabric session.
+ *
+ * Works for any home the user can access — owned or shared. For a shared home the
+ * NOC issuance is the fabric-join step: the cloud embeds the operate CAT for a
+ * secondary member, and devices already grant that CAT via the ACL entry written
+ * at commissioning time, so no device interaction is needed here.
+ *
+ * No-ops (without error) when the home is not a Matter fabric or has no fabricId.
+ * Serialized per fabricId via {@link ensureNocReadyForFabric}.
+ * @param home - Matter home / fabric group from the store (owned or shared).
+ * @param user - Current CDF user used for NOC issuance when needed.
+ */
+export async function bootstrapMatterFabricForHome(
+  home: ESPCDFGroup,
+  user: ESPCDFUser,
+): Promise<void> {
+  if (!home.isMatter) {
+    return;
+  }
+
+  const fabricId = home.fabricId ?? "";
+  if (!fabricId) {
+    console.warn(`${MATTER_DISCOVERY_VERIFY_LOG} fabric bootstrap: missing fabricId on home`);
+    return;
+  }
+
+  // Classic's home-list sync never carries fabric credentials (the request
+  // flag that would fetch them is coupled to an is_matter filter that drops
+  // non-Matter homes from the list), so a shared home reaches here with no
+  // fabricDetails and NOC issuance would fail. Hydrate on demand — Neo homes
+  // arrive hydrated and skip this. Best-effort: on failure fall through so
+  // the NOC path surfaces the real error.
+  if (!home.fabricDetails) {
+    try {
+      await home.getFabricDetails();
+    } catch (error) {
+      console.warn(
+        `${MATTER_DISCOVERY_VERIFY_LOG} fabric bootstrap: getFabricDetails failed for home id=${home.id}:`,
+        error,
+      );
+    }
+  }
+
+  await ensureNocReadyForFabric(
+    home,
+    user,
+    {
+      fabricIdMismatch: MATTER_FABRIC_BOOTSTRAP_ERROR_FABRIC_ID_MISMATCH,
+      missingFabricCredentials: MATTER_FABRIC_BOOTSTRAP_ERROR_MISSING_FABRIC_CREDENTIALS,
+    },
+  );
+
+  // Revocation follow-up (primary only, no-op without a detected rotation):
+  // sweep device ACLs to the current operate/admin CAT versions. Runs after
+  // NOC readiness so this phone's own re-issue (above) always precedes the
+  // sweep. Fire-and-forget — a partial sweep retries on the next bootstrap.
+  void repairRotatedCatAcls(home).catch((error: unknown) => {
+    console.warn(
+      `${MATTER_DISCOVERY_VERIFY_LOG} CAT ACL sweep failed for ${home.id}:`,
+      error,
+    );
+  });
+}
+
+/**
+ * Runs the fabric bootstrap for every Matter home among the given group ids.
+ *
+ * Shared sync-then-bootstrap follow-up for group-membership events (share
+ * accepted, member removed): call after the store has been synced so the
+ * affected groups carry fresh `fabricDetails`. Each home gets the full
+ * {@link bootstrapMatterFabricForHome} treatment — user NOC issuance or
+ * re-issuance when the CAT rotated, plus the primary's device ACL sweep.
+ *
+ * Fire-and-forget semantics: per-home failures are logged only, since the
+ * triggering operation already succeeded and the home-focus bootstrap retries
+ * later as the safety net. Non-Matter groups are skipped silently.
+ * @param store - CDF store, synced so the affected groups are present.
+ * @param groupIds - Group ids touched by the triggering event. A room
+ * (subgroup) id resolves to the Matter home that owns it, so room-scoped
+ * shares still bootstrap the parent fabric.
+ * @param logContext - Greppable tag + event prefix for the failure log line, e.g.
+ * `"[SHARED-FABRIC-VERIFY] share accepted"`.
+ */
+export async function bootstrapMatterFabricsForGroups(
+  store: ESPCDF,
+  groupIds: readonly string[],
+  logContext: string,
+): Promise<void> {
+  const user = store.userStore.user;
+  if (!user) {
+    return;
+  }
+
+  const homes = store.groupStore.groupsList ?? [];
+  // A room (subgroup) share carries the subgroup id, not the home id — the
+  // room itself is never a Matter home, so resolve each id to the top-level
+  // home that owns it before filtering on isMatter.
+  const matterHomesById = new Map<string, ESPCDFGroup>();
+  for (const groupId of groupIds) {
+    const home =
+      homes.find((candidate) => candidate.id === groupId) ??
+      homes.find((candidate) =>
+        (candidate.subGroups ?? []).some((subGroup) => subGroup.id === groupId),
+      );
+    if (home?.isMatter) {
+      matterHomesById.set(home.id, home);
+    }
+  }
+  const matterHomes = [...matterHomesById.values()];
+
+  for (const home of matterHomes) {
+    try {
+      await bootstrapMatterFabricForHome(home, user);
+    } catch (error) {
+      console.warn(
+        `${logContext}: fabric bootstrap failed for home id=${home.id} (will retry on next bootstrap):`,
+        error,
+      );
+    }
+  }
+}
+
+/**
  * Prepares native fabric session for operational discovery on the active Matter home.
  *
  * Fetches cloud fabric details via `home.getFabricDetails()`, issues/stores user NOC when
@@ -348,24 +499,12 @@ export async function bootstrapMatterFabricForOperationalDiscovery(
     return;
   }
 
-  const fabricId = home.fabricId ?? "";
-  if (!fabricId) {
-    console.warn(`${MATTER_DISCOVERY_VERIFY_LOG} fabric bootstrap: missing fabricId on home`);
-    return;
-  }
+  // Drop CAT-rotation state for homes that left the account (unshared/deleted),
+  // so a re-share later starts from a fresh baseline. Best-effort.
+  const groupIds = (store.groupStore.groupsList ?? []).map((group) => group.id);
+  void cleanupDepartedMatterFabricState(groupIds);
 
-  await ensureNocReadyForFabric(
-    home,
-    user,
-    {
-      fabricIdMismatch: MATTER_FABRIC_BOOTSTRAP_ERROR_FABRIC_ID_MISMATCH,
-      missingFabricCredentials: MATTER_FABRIC_BOOTSTRAP_ERROR_MISSING_FABRIC_CREDENTIALS,
-    },
-    () =>
-      console.log(
-        `${MATTER_DISCOVERY_VERIFY_LOG} fabric bootstrap: issuing user NOC for fabricId=${fabricId}`,
-      ),
-  );
+  await bootstrapMatterFabricForHome(home, user);
 }
 
 /**
@@ -412,4 +551,63 @@ export async function syncStore(
       error,
     );
   }
+}
+
+/**
+ * Resolves a commissioned node's cloud node id by matching its Matter node id
+ * against the synced store.
+ *
+ * Classic pure Matter has no other source for the cloud id: the confirm
+ * response returns only `{status, description}` (the cloud mints the node id
+ * at confirm time but does not echo it back), so the completion event's
+ * cloud-id keys arrive blank. After {@link syncStore} the minted node is in
+ * the store carrying the Matter node id the event does have.
+ * @param store - CDF store, synced after commissioning completed.
+ * @param matterNodeId - Matter node id from the completion event payload.
+ * @returns Cloud node id, or `undefined` when no synced node matches.
+ */
+export function findCloudNodeIdByMatterNodeId(
+  store: ESPCDF,
+  matterNodeId: unknown,
+): string | undefined {
+  const target = normalizeMatterNodeIdHex(
+    typeof matterNodeId === "string" ? matterNodeId : undefined,
+  );
+  if (!target) {
+    return undefined;
+  }
+
+  return findSyncedNode(
+    store,
+    (node) =>
+      normalizeMatterNodeIdHex(readMatterNodeIdFromCdfNode(node)) === target,
+  )?.id;
+}
+
+/**
+ * Finds a node in the freshly synced store.
+ *
+ * Two places have to be checked: the node store can lag a per-group sync, and
+ * until it catches up the commissioned node is only reachable through its
+ * home's `nodeDetails`.
+ * @param store - CDF store, synced after commissioning completed.
+ * @param matches - Predicate identifying the wanted node.
+ * @returns The node, or `undefined` when neither list holds it yet.
+ */
+function findSyncedNode(
+  store: ESPCDF,
+  matches: (node: ESPCDFNode) => boolean,
+): ESPCDFNode | undefined {
+  const fromNodeStore = (store.nodeStore?.nodesList ?? []).find(matches);
+  if (fromNodeStore) {
+    return fromNodeStore;
+  }
+
+  for (const home of store.groupStore?.groupsList ?? []) {
+    const fromHome = (home.nodeDetails ?? []).find(matches);
+    if (fromHome) {
+      return fromHome;
+    }
+  }
+  return undefined;
 }

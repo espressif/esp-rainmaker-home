@@ -54,11 +54,32 @@ class DeviceSerial:
         return count - 1 if count and not text.endswith(("\n", "\r")) else count
 
     def set_param(self, param, value):
-        """Inject a param write on the device (also reported to cloud)."""
+        """Inject a param write on the device (also reported to cloud).
+
+        Fails at once when the firmware has no `set-param` command, instead of a
+        later check failing because the device never changed.
+        """
         cmd = f"set-param {self.device_name} {param} {_fmt(value)}"
         logger.info("Serial: %s", cmd)
+        since = self.marker()
         self._rm.serial_logger.send_command(self._resource, cmd)
         time.sleep(2)
+        # Classic and Neo firmware both confirm with "Successfully set <device>.<param> to ...";
+        # Neo prints nothing at all when the command is not built in.
+        confirm = f"Successfully set {self.device_name}.{param}"
+        deadline = time.time() + 3
+        reply = [line.strip() for line in self.lines()[since:] if line.strip()]
+        while not any(confirm in line for line in reply) and time.time() < deadline:
+            time.sleep(0.5)
+            reply = [line.strip() for line in self.lines()[since:] if line.strip()]
+        # Shown in the CI log so a command the board ignores is visible; secrets left out.
+        shown = [line[:160] for line in reply[-6:] if not re.search(r"(?i)pass|pwd|ssid|secret|token", line)]
+        logger.info("Device reply to '%s': %s", cmd, " | ".join(shown) or "(nothing)")
+        if not any(confirm in line for line in reply):
+            raise AssertionError(
+                f"Device did not confirm '{cmd}'; its firmware may lack the set-param console "
+                "command (Neo builds need CONFIG_ESP_RMAKER_NEO_CONSOLE_PARAM_CMDS_ENABLE=y)"
+            )
         return self
 
     def wait_for_param(self, param, value, timeout=30, since=0, tol=2):

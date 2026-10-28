@@ -5,7 +5,7 @@
  */
 
 import type { ESPRMNeoRuntimeConfig, ScannedConfigPayload } from "@config/runtime.config";
-import { ESPRMNeo_BASE_SDK_ID } from "@config/sdk.config";
+import { ESPRMNeoMatter_BASE_SDK_ID } from "@config/sdk.identifiers";
 import {
   CLIENT_OUTPUTS_DASHBOARD_KEY,
   CLIENT_OUTPUTS_DASHBOARD_URL_FIELD,
@@ -181,9 +181,14 @@ export function mapRmneoClientOutputsToScannedPayload(
     dashboardUrl: readDashboardUrlFromClientOutputs(value),
   };
 
+  // The Matter adaptor, not the plain base one: a client-outputs document
+  // describes the deployment's URLs, not its SDK layer, and a private RMNeo
+  // deployment is as Matter-capable as the built-in one Landing resolves. The
+  // base id would leave `matterCommissioning: false`, so a scanned deployment
+  // could never commission.
   return {
     version: 1,
-    sdk: ESPRMNeo_BASE_SDK_ID,
+    sdk: ESPRMNeoMatter_BASE_SDK_ID,
     config,
   };
 }

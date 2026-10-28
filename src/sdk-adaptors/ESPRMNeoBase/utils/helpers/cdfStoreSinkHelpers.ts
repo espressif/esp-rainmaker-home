@@ -6,6 +6,7 @@
 
 import {
   ESPRMNeoBase,
+  SubscriptionChannelIds,
   type ESPNodeUpdateData,
   type ESPRMNeoNode,
 } from "@espressif/rainmaker-neo-base-sdk";
@@ -26,6 +27,7 @@ import {
   refreshRmneoCdfIfNcfgAheadOfStore,
   runNcfgShadowHandlerCoalesced,
 } from "./nodeHelpers";
+import { noteParamDelivery } from "./paramDeliveryHelpers";
 import {
   emitShadowConnectivityEvents,
   mapShadowDocumentToNodeUpdateEvents,
@@ -51,6 +53,25 @@ const isAwsShadowDocument = (shadow: unknown): shadow is object =>
   !!shadow &&
   typeof shadow === "object" &&
   (shadow as { state?: { reported?: unknown } }).state?.reported !== undefined;
+
+/**
+ * Whether a RainMaker node is served right now by a channel other than the
+ * cloud: Matter takes a RainMaker + Matter node on the home network. A pure
+ * Matter node never counts; its cloud side belongs to the Matter SDK.
+ * @param node - RMNeo SDK node.
+ * @returns True when another channel serves the node.
+ */
+export function isServedByAnotherChannel(node: ESPRMNeoNode): boolean {
+  if ((node as { isMatter?: boolean }).isMatter === true) {
+    return false;
+  }
+  const [servingChannel] =
+    ESPRMNeoBase.subscriptionManager.getAvailableChannelsForNode(node);
+  return (
+    servingChannel !== undefined &&
+    servingChannel.channelId !== SubscriptionChannelIds.MQTT
+  );
+}
 
 /**
  * Resolves the CDF `nodeUpdates.listen` sink, or an override from user subscribe.
@@ -86,7 +107,8 @@ function scheduleCdfNcfgRefresh(nodeId: string, shadow: object): void {
  * Projects one SDK `ESPNodeUpdateData` into the CDF subscription store.
  *
  * Prefers the SDK-normalized `payload` for params (no shadow re-parse).
- * Shadow is used only for connectivity + CDF ncfg rebuild.
+ * Shadow is used only for connectivity + CDF ncfg rebuild. Params from a
+ * live (non-MQTT) channel are also noted with {@link noteParamDelivery}.
  * @param update - Normalized update from `subscriptionManager`.
  * @param listenOverride - Optional listen target (user `onNodeUpdate`).
  */
@@ -113,6 +135,10 @@ export function projectRmneoUpdateToCdf(
     Object.keys(payload).length > 0
   ) {
     listen(mapNodeUpdateDataToEvent(update));
+    // Noted so a cloud update filter can spot the cloud's late copy of these values.
+    if (update.source !== SubscriptionChannelIds.MQTT) {
+      noteParamDelivery(update.nodeId, payload);
+    }
   }
 }
 

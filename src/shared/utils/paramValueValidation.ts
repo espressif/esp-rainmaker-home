@@ -17,7 +17,7 @@
  * param's typed default (lower bound or 0 for numeric, false for bool).
  *
  * The original source of bad values — params losing `data_type` on the
- * node-config cache round trip — is fixed in rmng-base-sdk 1.2.1. This layer
+ * node-config cache round trip — is fixed in rainmaker-neo-base-sdk 1.2.1. This layer
  * remains for payloads that fix cannot reach: schedules/automations already
  * stored in the cloud with `""` values, repaired here on the next save/sync.
  */

@@ -5,16 +5,24 @@
  */
 
 import type {
-  ESPMatterAdapter,
-  MatterDeviceUpdate,
-} from "@espressif/rainmaker-matter-sdk";
+  ESPMatterSubscriptionAdapterInterface,
+  ESPMatterDeviceUpdate,
+} from "../contracts/matter";
 import { ESPMatterControlAdapter } from "./ESPMatterControlAdapter";
+import { isMatterOperationalNodeIdHex } from "@shared/utils/matterNodeIdHex";
+import {
+  getSessionId,
+  isSessionActive,
+  onSessionEnd,
+} from "@shared/utils/userSession";
 
 /**
- * JS adapter that satisfies the SDK's subscription-channel `ESPMatterAdapter`
- * interface (`subscribeToDevice` / `unsubscribeFromDevice` /
+ * JS adapter that satisfies the subscription-channel contract
+ * `ESPMatterSubscriptionAdapterInterface` (`subscribeToDevice` / `unsubscribeFromDevice` /
  * `isDeviceReachable` / `initialize` / `dispose`) on top of the lower-level
- * `ESPMatterControlAdapter.subscribe` primitive.
+ * `ESPMatterControlAdapter.subscribe` primitive. The Neo SDK no longer requires
+ * `isDeviceReachable`; it stays because the classic SDK and the app contract
+ * still do, and one adapter object serves both stacks.
  *
  * Translates the SDK's `(rmNodeId, fabricId)` shape into a Matter operational
  * `matterNodeId` via an in-memory registry populated by the commissioning /
@@ -61,6 +69,12 @@ const TRANSIENT_SUBSCRIBE_ERRORS = [
 /** Retry parameters tuned to the customer firmware's BUSY wait of 5000ms. */
 const SUBSCRIBE_RETRY_MAX_ATTEMPTS = 4;
 const SUBSCRIBE_RETRY_BACKOFF_MS = [800, 2_500, 6_000];
+/**
+ * A live link sends something at least every report interval (30 s), so one
+ * silent for two intervals is treated as down: the native side can drop the
+ * controller without reporting it.
+ */
+const MATTER_LINK_QUIET_LIMIT_MS = 60_000;
 
 /**
  * @returns `true` when `error` is a CHIP error string we want to retry.
@@ -102,8 +116,8 @@ interface AttributePath {
 /**
  * Endpoint summary used to derive subscription paths for a node. Mirrors
  * the shape of `ESPRMMatterMetadataInterface.endpoints` from the Matter
- * SDK without taking a hard dependency on it (this adapter must not
- * import @espressif/* beyond the control adapter shim).
+ * SDK without taking a hard dependency on it — as with the adapter contracts
+ * in `../contracts/matter`, this adapter must not import @espressif/*.
  */
 interface MatterEndpointSummary {
   /** Application endpoint id (1, 2, …). */
@@ -139,7 +153,11 @@ const CLUSTER_DEFAULT_ATTRIBUTES: Readonly<
   // -- Light --
   [0x0006]: [0x0000], // OnOff: OnOff
   [0x0008]: [0x0000], // LevelControl: CurrentLevel
-  [0x0300]: [0x0000, 0x0001, 0x0007], // ColorControl: Hue / Saturation / ColorTemperatureMireds
+  // ColorControl: Hue / Saturation / CurrentX / CurrentY / ColorTemperatureMireds.
+  // CurrentX/CurrentY feed the XY color bridge on lights whose FW exposes
+  // XY|CT without HS (the pure Matter light example); FW that lacks any of
+  // these attributes simply never reports them.
+  [0x0300]: [0x0000, 0x0001, 0x0003, 0x0004, 0x0007],
 
   // -- Robotic Vacuum Cleaner --
   [0x0054]: [0x0001], // RvcRunMode: CurrentMode
@@ -183,6 +201,8 @@ const FALLBACK_ATTRIBUTE_PATHS: AttributePath[] = [
   { endpoint: 1, clusterId: 0x0008, attributeId: 0x0000 },
   { endpoint: 1, clusterId: 0x0300, attributeId: 0x0000 },
   { endpoint: 1, clusterId: 0x0300, attributeId: 0x0001 },
+  { endpoint: 1, clusterId: 0x0300, attributeId: 0x0003 },
+  { endpoint: 1, clusterId: 0x0300, attributeId: 0x0004 },
   { endpoint: 1, clusterId: 0x0300, attributeId: 0x0007 },
 ];
 
@@ -191,6 +211,54 @@ const matterNodeIdToRmNodeId = new Map<string, string>();
 const reachabilityByMatterNodeId = new Map<string, boolean>();
 const matterEndpointsByRmNodeId = new Map<string, MatterEndpointSummary[]>();
 const subscriptionUnsubscribers = new Map<string, () => void>();
+/** Each node's current link: whether native says it is up, and when it last spoke. */
+const subscriptionLinks = new Map<
+  string,
+  { live: boolean; heardAtMs: number }
+>();
+// A signed-out session's links say nothing about the next one.
+onSessionEnd(() => subscriptionLinks.clear());
+/** Told the node id each time a node's Matter link comes up. */
+const linkLiveListeners = new Set<(nodeId: string) => void>();
+
+/**
+ * Calls `listener` with the node id each time a node's Matter link comes up
+ * (first established or back after a drop).
+ * @param listener - Receives the id the node was subscribed under
+ * @returns Function that stops the calls
+ */
+function onMatterLinkLive(listener: (nodeId: string) => void): () => void {
+  linkLiveListeners.add(listener);
+  return () => {
+    linkLiveListeners.delete(listener);
+  };
+}
+
+/**
+ * Tells every listener a node's link came up. Runs inside a native event, so
+ * a listener that throws is only logged.
+ * @param nodeId - Id the node was subscribed under
+ */
+function notifyLinkLive(nodeId: string): void {
+  for (const listener of linkLiveListeners) {
+    try {
+      listener(nodeId);
+    } catch (error) {
+      console.warn(
+        `[ESPMatterSubscriptionAdapter] link-live listener failed for nodeId=${nodeId}:`,
+        error,
+      );
+    }
+  }
+}
+/**
+ * Counts unsubscribes per node. A subscribe still retrying when this changes
+ * gives up; a newer subscribe does not cancel an older one, because the
+ * classic SDK channel drops the node's callback when a subscribe fails.
+ */
+const unsubscribeCountByNodeId = new Map<string, number>();
+/** Nodes whose report handler already failed once, so the log is not flooded. */
+const reportFailureLoggedNodeIds = new Set<string>();
 
 /**
  * Walks a node's endpoint summaries and produces the union of subscribable
@@ -300,11 +368,20 @@ function syncMatterNodeIdMappings(
 }
 
 /**
+ * The rm↔matter mapping is registered by discovery verification, which can run
+ * only after the SDK's first subscribe (the node is built and subscribed as soon
+ * as the group loads). A pure Matter node's RainMaker node id is its Matter node
+ * id — the same rule the cloud uses to classify it — so fall back to that rather
+ * than fail the subscribe and park it in a retry queue nothing flushes on Neo.
  * @param rmNodeId - Rainmaker node id from the SDK.
  * @returns The corresponding Matter operational node id, if known.
  */
 function getMatterNodeIdForRmNodeId(rmNodeId: string): string | undefined {
-  return rmNodeIdToMatterNodeId.get(rmNodeId);
+  const registered = rmNodeIdToMatterNodeId.get(rmNodeId);
+  if (registered) return registered;
+  return isMatterOperationalNodeIdHex(rmNodeId)
+    ? rmNodeId.toLowerCase()
+    : undefined;
 }
 
 /**
@@ -321,7 +398,38 @@ function setMatterNodeReachability(
   reachabilityByMatterNodeId.set(matterNodeId.toLowerCase(), reachable);
 }
 
-const ESPMatterSubscriptionAdapter: ESPMatterAdapter = {
+/**
+ * Whether a node's Matter subscription is up right now: the native layer
+ * reported it established and has not reported a re-subscribe or an error
+ * since, and it spoke within the last minute. False while a subscribe is
+ * failing, re-subscribing or re-armed, after Matter shut down or the session
+ * ended, and on platforms that do not report link state (the cloud then stays
+ * the source).
+ * @param nodeIds - Ids the node may be subscribed under (RainMaker or Matter id)
+ * @returns True when one of the ids has a live subscription
+ */
+function isMatterSubscriptionLive(...nodeIds: (string | undefined)[]): boolean {
+  const wanted = new Set<string>();
+  for (const id of nodeIds) {
+    if (!id) continue;
+    wanted.add(id.toLowerCase());
+    const matterNodeId = rmNodeIdToMatterNodeId.get(id);
+    if (matterNodeId) wanted.add(matterNodeId.toLowerCase());
+  }
+  const now = Date.now();
+  for (const [subscribedId, link] of subscriptionLinks) {
+    if (
+      link.live &&
+      now - link.heardAtMs <= MATTER_LINK_QUIET_LIMIT_MS &&
+      wanted.has(subscribedId.toLowerCase())
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
+const ESPMatterSubscriptionAdapter: ESPMatterSubscriptionAdapterInterface = {
   async initialize(): Promise<void> {
     // Native control adapter has its own `init` which is a no-op today;
     // call it for forward compatibility.
@@ -331,29 +439,30 @@ const ESPMatterSubscriptionAdapter: ESPMatterAdapter = {
     });
   },
 
-  async dispose(): Promise<void> {
-    for (const unsubscribe of subscriptionUnsubscribers.values()) {
-      try {
-        unsubscribe();
-      } catch (error) {
-        console.warn("[ESPMatterSubscriptionAdapter] dispose: unsubscribe failed:", error);
-      }
-    }
-    subscriptionUnsubscribers.clear();
-    await ESPMatterControlAdapter.shutdown?.();
-  },
+  /**
+   * Called by an SDK subscription channel when it is retired. The Neo SDK now
+   * disposes the channel it replaces on every `configure()`, fire-and-forget,
+   * so this can run while the replacement channel is already live. The retiring
+   * channel unsubscribes its own nodes through `unsubscribeFromDevice` before
+   * it gets here, so anything left in `subscriptionUnsubscribers` belongs to a
+   * live channel and must survive. The native controller is shared by both
+   * stacks and owned by commissioning; on Android `matterControlShutdown` drops
+   * every native subscription and device pointer, which would silently kill the
+   * new channel's subscriptions. Nothing to do here.
+   */
+  async dispose(): Promise<void> {},
 
   async subscribeToDevice(
     nodeId: string,
     fabricId: string,
-    callback: (update: MatterDeviceUpdate) => void,
+    callback: (update: ESPMatterDeviceUpdate) => void,
   ): Promise<void> {
     const matterNodeId = getMatterNodeIdForRmNodeId(nodeId);
     if (!matterNodeId) {
-      console.warn(
+      // Returning would report success and leave a callback that never fires.
+      throw new Error(
         `[ESPMatterSubscriptionAdapter] subscribeToDevice: no matterNodeId for rmNodeId=${nodeId} fabricId=${fabricId}`,
       );
-      return;
     }
 
     // `AttributePath.attributeId` is optional locally (cluster-wildcard
@@ -365,29 +474,46 @@ const ESPMatterSubscriptionAdapter: ESPMatterAdapter = {
     const paths = resolveAttributePaths(nodeId) as unknown as Parameters<
       typeof ESPMatterControlAdapter.subscribe
     >[1];
-    // Probe: which attribute set this node subscribes to. `usingFallback: true`
-    // means no endpoint metadata was registered, so it fell back to the
-    // endpoint-1 Light-only set (wrong for RVC/sensors/multi-endpoint nodes).
-    console.log("[MatterProbe][sub] subscribeToDevice", {
-      rmNodeId: nodeId,
-      matterNodeId,
-      pathCount: Array.isArray(paths) ? paths.length : 0,
-      usingFallback:
-        (matterEndpointsByRmNodeId.get(nodeId)?.length ?? 0) === 0,
-    });
     const reportCallback = (report: {
       endpoint: number;
       clusterId: number;
       attributeId: number;
       value: unknown;
     }): void => {
-      callback({
-        endpointId: report.endpoint,
-        clusterId: report.clusterId,
-        attributeId: report.attributeId,
-        value: report.value,
-      });
+      const link = subscriptionLinks.get(nodeId);
+      if (link) link.heardAtMs = Date.now();
+      // This runs inside a native event listener, where a throw is uncaught
+      // and can end a release app; a bad report must only be dropped.
+      try {
+        callback({
+          endpointId: report.endpoint,
+          clusterId: report.clusterId,
+          attributeId: report.attributeId,
+          value: report.value,
+        });
+      } catch (error) {
+        if (!reportFailureLoggedNodeIds.has(nodeId)) {
+          reportFailureLoggedNodeIds.add(nodeId);
+          console.warn(
+            `[ESPMatterSubscriptionAdapter] report handler failed for nodeId=${nodeId}; dropping it:`,
+            error,
+          );
+        }
+      }
     };
+
+    // A retry can outlive its request: the device gets unsubscribed or the
+    // user logs out while it waits. Such a request stops, and closes any link
+    // it opened, instead of leaving one that nobody owns.
+    const sessionId = getSessionId();
+    const unsubscribeCount = unsubscribeCountByNodeId.get(nodeId) ?? 0;
+    const isStillWanted = (): boolean =>
+      isSessionActive(sessionId) &&
+      (unsubscribeCountByNodeId.get(nodeId) ?? 0) === unsubscribeCount;
+    const cancelledError = (): Error =>
+      new Error(
+        `[ESPMatterSubscriptionAdapter] subscribeToDevice cancelled for nodeId=${nodeId}: no longer wanted`,
+      );
 
     // Subscribe-with-retry. Post-login, the matter local discovery probe
     // and this subscribe path can both try to open a CASE session for the
@@ -404,17 +530,32 @@ const ESPMatterSubscriptionAdapter: ESPMatterAdapter = {
       attempt < SUBSCRIBE_RETRY_MAX_ATTEMPTS;
       attempt += 1
     ) {
+      if (!isStillWanted()) throw cancelledError();
+      // One per attempt, so a closed link's late news never marks the new one.
+      const link = { live: false, heardAtMs: 0 };
       const result = await ESPMatterControlAdapter.subscribe(
         matterNodeId,
         paths,
         reportCallback,
+        (live) => {
+          const cameUp = live && !link.live;
+          link.live = live;
+          if (live) link.heardAtMs = Date.now();
+          if (cameUp) notifyLinkLive(nodeId);
+        },
       );
+
+      if (!isStillWanted()) {
+        if (result.success) result.unsubscribe?.();
+        throw cancelledError();
+      }
 
       if (result.success) {
         if (result.unsubscribe) {
           const previous = subscriptionUnsubscribers.get(nodeId);
           previous?.();
           subscriptionUnsubscribers.set(nodeId, result.unsubscribe);
+          subscriptionLinks.set(nodeId, link);
         }
         if (attempt > 0) {
           console.log(
@@ -446,23 +587,35 @@ const ESPMatterSubscriptionAdapter: ESPMatterAdapter = {
       await delay(waitMs);
     }
 
-    console.warn(
-      `[ESPMatterSubscriptionAdapter] subscribeToDevice failed for nodeId=${nodeId} matterNodeId=${matterNodeId}: ${
-        lastError ?? "unknown error"
-      }`,
-    );
+    const message = `[ESPMatterSubscriptionAdapter] subscribeToDevice failed for nodeId=${nodeId} matterNodeId=${matterNodeId}: ${
+      lastError ?? "unknown error"
+    }`;
+    console.warn(message);
+    // Propagate: the SDK's matter channel marks the node attached when this
+    // resolves, after which every later subscribe (including the discovery
+    // retry once the fabric is hydrated) is an idempotent no-op. Rejecting
+    // lets the channel drop this attempt so the retry re-attaches for real.
+    throw new Error(message);
   },
 
   async unsubscribeFromDevice(
     nodeId: string,
     _fabricId: string,
   ): Promise<void> {
+    // Also stops a subscribe for this device that is still retrying.
+    unsubscribeCountByNodeId.set(
+      nodeId,
+      (unsubscribeCountByNodeId.get(nodeId) ?? 0) + 1,
+    );
     const unsubscribe = subscriptionUnsubscribers.get(nodeId);
     if (unsubscribe) {
       unsubscribe();
       subscriptionUnsubscribers.delete(nodeId);
     }
+    subscriptionLinks.delete(nodeId);
   },
+
+  isLinkLive: isMatterSubscriptionLive,
 
   async isDeviceReachable(
     nodeId: string,
@@ -482,6 +635,8 @@ export {
   syncMatterNodeIdMappings,
   getMatterNodeIdForRmNodeId,
   setMatterNodeReachability,
+  isMatterSubscriptionLive,
+  onMatterLinkLive,
 };
 export type { MatterEndpointSummary };
 export default ESPMatterSubscriptionAdapter;

@@ -16,6 +16,8 @@ export interface ParamControlProps {
   isSelected?: boolean;
   onSelect?: (selected: boolean) => void;
   onValueChange?: (value: any) => void;
+  /** Fires only when a user edit is about to be persisted, before the write. */
+  onUserEdit?: () => void;
   onOpenChart?: (param: ESPCDFDeviceParam) => void;
   children: React.ReactNode;
   style?: StyleProp<ViewStyle>;

@@ -22,16 +22,23 @@ import { DATA_TYPE_STRING } from "@shared/utils/constants";
 
 interface DropdownOption {
   label: string;
-  value: string | number;
+  value: string | number | boolean;
 }
 
 /**
  * DropdownSelector
  *
  * A dropdown component that allows selecting from a list of options.
- * Supports both string and numeric values, with optional validation bounds.
+ *
+ * Options come from `meta.validValues` when the param declares them: those
+ * carry the value the device expects *and* the text to show for it, which is
+ * what turns an `esp.param.light-mode` dropdown of "1" / "2" into "HSV" /
+ * "CCT". Enumerating `bounds` min..max stays the fallback for params that
+ * declare no values, since `bounds` describes a numeric domain and never
+ * implies an enumeration on its own.
  * @param param - The parameter object containing value, bounds, and setValue function
  * @param disabled - Optional flag to disable the control
+ * @param meta - Display metadata (`validValues`, `validStrings`, bounds, `labels`).
  * @returns Closed row that opens a modal list of enum/numeric options from `meta`
  */
 const DropdownSelector = observer(
@@ -59,8 +66,19 @@ const DropdownSelector = observer(
     const labelFor = (slug: string | number): string =>
       labelMap?.[String(slug)] ?? String(slug);
 
+    const declaredOptions: DropdownOption[] | undefined =
+      Array.isArray(meta?.validValues) && meta.validValues.length > 0
+        ? meta.validValues.map(
+            (entry: { value: string | number | boolean; label: string }) => ({
+              label: entry.label,
+              value: entry.value,
+            }),
+          )
+        : undefined;
+
     const options: DropdownOption[] =
-      "validStrings" in meta && Array.isArray(meta.validStrings)
+      declaredOptions ??
+      ("validStrings" in meta && Array.isArray(meta.validStrings)
         ? meta.validStrings.map((str: string) => ({
             label: labelFor(str),
             value: str,
@@ -72,7 +90,7 @@ const DropdownSelector = observer(
                 ? { label: String(n), value: String(n) }
                 : { label: String(n), value: n };
             })
-          : [];
+          : []);
 
     const selectedOption = options.find(
       (option) =>
@@ -81,7 +99,7 @@ const DropdownSelector = observer(
     );
 
     // Handlers
-    const handleSelect = async (selectedValue: string | number) => {
+    const handleSelect = async (selectedValue: string | number | boolean) => {
       if (disabled || !onValueChange) return;
       onValueChange(null, selectedValue);
       setIsVisible(false);

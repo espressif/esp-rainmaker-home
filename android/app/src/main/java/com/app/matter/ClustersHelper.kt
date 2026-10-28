@@ -15,10 +15,10 @@ import matter.tlv.AnonymousTag
 import matter.tlv.TlvWriter
 import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.future.future
+import kotlinx.coroutines.suspendCancellableCoroutine
 import java.util.concurrent.CompletableFuture
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
-import kotlin.coroutines.suspendCoroutine
 
 /**
  * Encapsulates the information of interest when querying a Matter device just after it has been
@@ -229,7 +229,7 @@ class ClustersHelper constructor(private val chipClient: ChipClient) {
     suspend fun readDescriptorClusterPartsListAttribute(
         devicePtr: Long, endpoint: Int
     ): List<Any>? {
-        return suspendCoroutine { continuation ->
+        return suspendCancellableCoroutine { continuation ->
             getDescriptorClusterForDevice(devicePtr, endpoint).readPartsListAttribute(object :
                     ChipClusters.DescriptorCluster.PartsListAttributeCallback {
                     override fun onSuccess(values: MutableList<Int>?) {
@@ -246,7 +246,7 @@ class ClustersHelper constructor(private val chipClient: ChipClient) {
     suspend fun readDescriptorClusterDeviceListAttribute(
         devicePtr: Long, endpoint: Int
     ): List<ChipStructs.DescriptorClusterDeviceTypeStruct> {
-        return suspendCoroutine { continuation ->
+        return suspendCancellableCoroutine { continuation ->
             getDescriptorClusterForDevice(devicePtr, endpoint).readDeviceTypeListAttribute(object :
                     ChipClusters.DescriptorCluster.DeviceTypeListAttributeCallback {
                     override fun onSuccess(
@@ -265,7 +265,7 @@ class ClustersHelper constructor(private val chipClient: ChipClient) {
     suspend fun readDescriptorClusterServerListAttribute(
         devicePtr: Long, endpoint: Int
     ): List<Long> {
-        return suspendCoroutine { continuation ->
+        return suspendCancellableCoroutine { continuation ->
             getDescriptorClusterForDevice(devicePtr, endpoint).readServerListAttribute(object :
                     ChipClusters.DescriptorCluster.ServerListAttributeCallback {
                     override fun onSuccess(values: MutableList<Long>) {
@@ -282,7 +282,7 @@ class ClustersHelper constructor(private val chipClient: ChipClient) {
     suspend fun readDescriptorClusterClientListAttribute(
         devicePtr: Long, endpoint: Int
     ): List<Long> {
-        return suspendCoroutine { continuation ->
+        return suspendCancellableCoroutine { continuation ->
             getDescriptorClusterForDevice(devicePtr, endpoint).readClientListAttribute(object :
                     ChipClusters.DescriptorCluster.ClientListAttributeCallback {
                     override fun onSuccess(values: MutableList<Long>) {

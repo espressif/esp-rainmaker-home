@@ -6,12 +6,18 @@
 
 
 import React, { useState, useMemo } from "react";
-import { View, Text, TouchableOpacity, ActivityIndicator } from "react-native";
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  ActivityIndicator,
+} from "react-native";
 import { useTranslation } from "react-i18next";
 
 // Styles
 import { tokens } from "@shared/theme/tokens";
 import { globalStyles } from "@shared/theme/globalStyleSheet";
+import { deviceOperationsStyles } from "@features/control/theme";
 
 // Utils
 import {
@@ -24,14 +30,29 @@ import {
 import { useToast } from "@shared/hooks/useToast";
 
 // Components
-import { CollapsibleCard, ConfirmationDialog } from "@shared/components";
+import {
+  CollapsibleCard,
+  ConfirmationDialog,
+  IdentifyGlyph,
+} from "@shared/components";
 import { router } from "expo-router";
 
+import { testProps } from "@shared/utils/testProps";
+
 import { ESPCDFNode, ESPCDFServiceParam } from "@store";
+
+/** Glyph shown beside the label while a device identifies itself. */
+const IDENTIFY_GLYPH_SIZE = 17;
 
 interface DeviceOperationsProps {
   node: ESPCDFNode;
   disabled?: boolean;
+  /** Whether asking this device to show itself would reach it */
+  showIdentify?: boolean;
+  /** True while the device is visibly identifying itself */
+  isIdentifying?: boolean;
+  /** Sends the identify request */
+  onIdentify?: () => void;
 }
 
 /**
@@ -53,6 +74,9 @@ interface DeviceOperationsProps {
 const DeviceOperations: React.FC<DeviceOperationsProps> = ({
   node,
   disabled,
+  showIdentify = false,
+  isIdentifying = false,
+  onIdentify,
 }) => {
   const { t } = useTranslation();
   const toast = useToast();
@@ -96,12 +120,12 @@ const DeviceOperations: React.FC<DeviceOperationsProps> = ({
     });
   }, [availableParams]);
 
-  // Don't render if service doesn't exist or no params available
-  if (!systemService || !availableParams || availableParams.length === 0) {
-    return null;
-  }
+  const canOperate = Boolean(
+    systemService && availableParams?.length && node.isPrimaryUser,
+  );
 
-  if (!node.isPrimaryUser) {
+  // A pure Matter node has no system service, so identify alone can carry the card.
+  if (!canOperate && !showIdentify) {
     return null;
   }
 
@@ -205,46 +229,65 @@ const DeviceOperations: React.FC<DeviceOperationsProps> = ({
         }}
       >
         <View style={{ gap: tokens.spacing._10 }}>
-          {sortedParams.map((param) => (
+          {showIdentify && (
             <TouchableOpacity
-              key={param.name}
+              {...testProps("button_identify_device")}
               style={[
+                deviceOperationsStyles.actionButton,
                 {
-                  paddingVertical: tokens.spacing._10,
-                  paddingHorizontal: tokens.spacing._15,
-                  borderRadius: tokens.radius.md,
-                  backgroundColor: isDestructiveOperation(param)
-                    ? tokens.colors.red
-                    : tokens.colors.primary,
-                  opacity: disabled || isOperating ? 0.5 : 1,
+                  backgroundColor: tokens.colors.primary,
+                  opacity: disabled ? 0.5 : 1,
                 },
               ]}
-              onPress={() => handleButtonPress(param)}
-              disabled={disabled || isOperating}
+              onPress={onIdentify}
+              disabled={disabled || isIdentifying}
+              accessibilityRole="button"
+              accessibilityLabel={
+                isIdentifying
+                  ? t("device.identify.running")
+                  : t("device.identify.action")
+              }
+              accessibilityState={{ busy: isIdentifying }}
             >
-              <View
-                style={{
-                  flexDirection: "row",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  gap: tokens.spacing._10,
-                }}
-              >
-                {isOperating && confirmDialog.param?.name === param.name && (
-                  <ActivityIndicator size="small" color={tokens.colors.white} />
-                )}
-                <Text
-                  style={{
-                    color: tokens.colors.white,
-                    fontSize: tokens.fontSize.sm,
-                    fontFamily: tokens.fonts.medium,
-                  }}
-                >
-                  {getParamLabel(param)}
+              <View style={deviceOperationsStyles.actionContent}>
+                {/* Balances the glyph, so the label keeps the centre it has at rest. */}
+                {isIdentifying && <View style={{ width: IDENTIFY_GLYPH_SIZE }} />}
+                <Text style={deviceOperationsStyles.actionLabel}>
+                  {t("device.identify.action")}
                 </Text>
+                {isIdentifying && (
+                  <IdentifyGlyph isIdentifying size={IDENTIFY_GLYPH_SIZE} />
+                )}
               </View>
             </TouchableOpacity>
-          ))}
+          )}
+
+          {canOperate &&
+            sortedParams.map((param) => (
+              <TouchableOpacity
+                key={param.name}
+                style={[
+                  deviceOperationsStyles.actionButton,
+                  {
+                    backgroundColor: isDestructiveOperation(param)
+                      ? tokens.colors.red
+                      : tokens.colors.primary,
+                    opacity: disabled || isOperating ? 0.5 : 1,
+                  },
+                ]}
+                onPress={() => handleButtonPress(param)}
+                disabled={disabled || isOperating}
+              >
+                <View style={deviceOperationsStyles.actionContent}>
+                  {isOperating && confirmDialog.param?.name === param.name && (
+                    <ActivityIndicator size="small" color={tokens.colors.white} />
+                  )}
+                  <Text style={deviceOperationsStyles.actionLabel}>
+                    {getParamLabel(param)}
+                  </Text>
+                </View>
+              </TouchableOpacity>
+            ))}
         </View>
       </CollapsibleCard>
 

@@ -10,6 +10,7 @@ import { useRouter } from "expo-router";
 import { useTranslation } from "react-i18next";
 import { useToast } from "@shared/hooks/useToast";
 import { resetStackTo } from "@shared/utils/navigation";
+import { endUserSession } from "@shared/utils/userSession";
 import {
   createPasswordValidator,
   createNewPasswordValidator,
@@ -80,6 +81,7 @@ export function useChangePassword() {
     try {
       const user = store?.userStore.user;
       const res = await user?.changePassword(oldPassword, newPassword);
+      await endUserSession();
       await user?.logout();
       toast.showSuccess(t("auth.changePassword.passwordChangedSuccessfully"), res?.description || undefined);
       // Changing the password signs the user out, so reset the stack — a plain

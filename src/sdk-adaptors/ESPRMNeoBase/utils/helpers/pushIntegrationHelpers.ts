@@ -354,26 +354,26 @@ function pushEndpointKey(userId: string): string {
  * Persists the `{ integrationId, endpointId }` returned by
  * `registerIntegrationEndpoint`, namespaced to the RMNeo user, so the endpoint
  * can be removed on a later logout even across app restarts.
- * @param esprmngUser - Authenticated RMNeo user.
+ * @param esprmneoUser - Authenticated RMNeo user.
  * @param endpoint - Registered integration and endpoint IDs.
  */
 export async function savePushEndpoint(
-  esprmngUser: ESPRMNeoUser,
+  esprmneoUser: ESPRMNeoUser,
   endpoint: StoredPushEndpoint,
 ): Promise<void> {
-  const userId = await resolveRmneoUserIdForCustomDataStorage(esprmngUser);
+  const userId = await resolveRmneoUserIdForCustomDataStorage(esprmneoUser);
   await AsyncStorage.setItem(pushEndpointKey(userId), JSON.stringify(endpoint));
 }
 
 /**
  * Reads the persisted push endpoint for the RMNeo user, or `null` if none/invalid.
- * @param esprmngUser - Authenticated RMNeo user.
+ * @param esprmneoUser - Authenticated RMNeo user.
  * @returns Stored push endpoint or `null`.
  */
 export async function readPushEndpoint(
-  esprmngUser: ESPRMNeoUser,
+  esprmneoUser: ESPRMNeoUser,
 ): Promise<StoredPushEndpoint | null> {
-  const userId = await resolveRmneoUserIdForCustomDataStorage(esprmngUser);
+  const userId = await resolveRmneoUserIdForCustomDataStorage(esprmneoUser);
   const raw = await AsyncStorage.getItem(pushEndpointKey(userId));
   if (!raw) {
     return null;
@@ -399,11 +399,11 @@ export async function readPushEndpoint(
 
 /**
  * Clears the persisted push endpoint for the RMNeo user.
- * @param esprmngUser - Authenticated RMNeo user.
+ * @param esprmneoUser - Authenticated RMNeo user.
  */
 export async function clearPushEndpoint(
-  esprmngUser: ESPRMNeoUser,
+  esprmneoUser: ESPRMNeoUser,
 ): Promise<void> {
-  const userId = await resolveRmneoUserIdForCustomDataStorage(esprmngUser);
+  const userId = await resolveRmneoUserIdForCustomDataStorage(esprmneoUser);
   await AsyncStorage.removeItem(pushEndpointKey(userId));
 }

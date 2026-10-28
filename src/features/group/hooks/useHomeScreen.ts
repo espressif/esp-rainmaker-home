@@ -25,9 +25,13 @@ import { loadHomeNodes } from "@features/group/utils/homeNodes";
 import type { RoomTab } from "@src/types/global";
 import { getFeatures } from "@/config/features.config";
 import { DEFAULT_HOME_GROUP_NAME } from "@shared/utils/constants";
+import { retryHomeLoadUntilItWorks } from "@features/group/utils/retryHomeLoad";
+import { onHomeSyncSucceeded } from "@shared/utils/homeSyncTracker";
 
 export interface UseHomeScreenResult {
   isLoading: boolean;
+  /** True while the last home load failed (e.g. offline); it is retried by itself. */
+  homeLoadFailed: boolean;
   /** True while a push to Scan QR / add-device is in flight (Home only). */
   isNavigatingToAddDevice: boolean;
   refreshing: boolean;
@@ -74,6 +78,10 @@ export function useHomeScreen(): UseHomeScreenResult {
   const addDeviceNavFrameRef = useRef<number | null>(null);
 
   const [isLoading, setIsLoading] = useState(true);
+  const [homeLoadFailed, setHomeLoadFailed] = useState(false);
+  // The store's sync function changes every render; the retry reads the latest.
+  const syncHomeWithNodesRef = useRef(syncHomeWithNodes);
+  syncHomeWithNodesRef.current = syncHomeWithNodes;
   const [isNavigatingToAddDevice, setIsNavigatingToAddDevice] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [selectedRoom, setSelectedRoom] = useState<RoomTab>(
@@ -147,6 +155,7 @@ export function useHomeScreen(): UseHomeScreenResult {
       void syncHomeWithNodes()
         .catch((error: unknown) => {
           console.error("Failed to initialize home:", error);
+          setHomeLoadFailed(true);
           toast.showError(
             t("group.errors.failedToInitializeHome"),
             t("layout.shared.manualRefreshHelperText")
@@ -186,7 +195,7 @@ export function useHomeScreen(): UseHomeScreenResult {
     try {
       if (homes.length > 0) {
         await unifiedUser?.setCurrentHome?.(homes[0]);
-        await loadHomeNodes(homes[0]);
+        await loadHomeNodes(homes[0], store);
         return;
       }
 
@@ -230,6 +239,35 @@ export function useHomeScreen(): UseHomeScreenResult {
     }
   }, [isStoreInitialized]);
 
+  // Any home sync that works clears the failed state, whoever started it
+  // (first load, pull-to-refresh, home switch, another screen, the retry).
+  useEffect(() => onHomeSyncSucceeded(() => setHomeLoadFailed(false)), []);
+
+  // A failed home load is retried by itself: at once when the internet comes
+  // back, otherwise after growing waits. Stops when it works or Home closes.
+  useEffect(() => {
+    if (!homeLoadFailed) return;
+    return retryHomeLoadUntilItWorks(
+      () => syncHomeWithNodesRef.current({ force: true }),
+      () => setHomeLoadFailed(false),
+    );
+  }, [homeLoadFailed]);
+
+  // Matter discovery started while the home could not load had no home to
+  // look in (e.g. app started offline), so start it again once it loads.
+  // Node discovery needs no home and adds a listener per start, so not here.
+  const homeLoadHadFailed = useRef(false);
+  useEffect(() => {
+    if (homeLoadFailed) {
+      homeLoadHadFailed.current = true;
+      return;
+    }
+    if (homeLoadHadFailed.current) {
+      homeLoadHadFailed.current = false;
+      startMatterLocalDiscovery(store);
+    }
+  }, [homeLoadFailed, store]);
+
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     try {
@@ -239,6 +277,7 @@ export function useHomeScreen(): UseHomeScreenResult {
       await syncPromise;
     } catch (error) {
       console.error("Error refreshing home:", error);
+      setHomeLoadFailed(true);
     } finally {
       setRefreshing(false);
     }
@@ -249,7 +288,7 @@ export function useHomeScreen(): UseHomeScreenResult {
       if (home?.id) {
         await unifiedUser?.setCurrentHome?.(home);
         // One node_details call for this home; cached nodes show at once.
-        await loadHomeNodes(home);
+        await loadHomeNodes(home, store);
         startNodeLocalDiscovery(store);
         startMatterLocalDiscovery(store);
         setTooltipVisible(false);
@@ -331,6 +370,7 @@ export function useHomeScreen(): UseHomeScreenResult {
 
   return {
     isLoading,
+    homeLoadFailed,
     isNavigatingToAddDevice,
     refreshing,
     selectedRoom: activeRoom,

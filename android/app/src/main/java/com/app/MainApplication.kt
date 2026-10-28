@@ -12,6 +12,7 @@ import android.media.AudioAttributes
 import com.oney.WebRTCModule.WebRTCModuleOptions
 import org.webrtc.audio.JavaAudioDeviceModule
 import com.app.utils.ESPAppUtilityModule
+import com.app.utils.BackupTimerChoreographerProvider
 import com.app.discovery.ESPDiscoveryModule
 import com.app.googlesignin.GoogleSignInModuleProvider
 import com.app.local_control.ESPLocalControlModule
@@ -148,6 +149,9 @@ class MainApplication : Application(), ReactApplication {
             .createAudioDeviceModule()
 
         super.onCreate()
+        // Before React Native starts: keeps JS timers (and so fetch) running while
+        // another app's screen covers ours, e.g. Google's Matter commissioning screen.
+        BackupTimerChoreographerProvider.install()
         loadReactNative(this)
         try {
             ApplicationLifecycleDispatcher.onApplicationCreate(this)

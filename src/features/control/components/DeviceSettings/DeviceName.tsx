@@ -26,6 +26,10 @@ import { tokens } from "@shared/theme/tokens";
 import { DeviceNameProps } from "@src/types/global";
 import { globalStyles } from "@shared/theme/globalStyleSheet";
 import { testProps } from "@shared/utils/testProps";
+import {
+  DEVICE_NAME_PROBLEM_MESSAGE_KEYS,
+  findDeviceNameProblem,
+} from "@shared/utils/deviceNaming";
 
 /**
  * DeviceName Component
@@ -47,12 +51,15 @@ const DeviceName: React.FC<DeviceNameProps> = ({
   onSave,
   isSaving,
   disabled,
+  maxNameLength,
 }) => {
   const { t } = useTranslation();
   const inputRef = useRef<TextInput>(null);
 
   /**
-   * Triggers persist when the field blurs or the keyboard Done key is pressed.
+   * Saves on the keyboard's Done key only. Losing focus never saves: closing
+   * the keyboard with Back or leaving the screen must not store a half-typed
+   * name (leaving asks first).
    */
   const handleSaveDeviceName = () => {
     if (disabled || isSaving) {
@@ -69,19 +76,15 @@ const DeviceName: React.FC<DeviceNameProps> = ({
   };
 
   /**
-   * Validates device name before saving
-   * Ensures name is not empty and triggers save
+   * Shows the rule a typed name breaks; the same check blocks the save.
    * @param value - Candidate device name
    * @returns Validation result for the Input control
    */
   const deviceNameValidator = (value: string) => {
-    if (!value?.trim()) {
-      return {
-        isValid: false,
-        error: t("device.validation.deviceNameCannotBeEmpty"),
-      };
-    }
-    return { isValid: true };
+    const problem = findDeviceNameProblem(value ?? "", maxNameLength);
+    return problem
+      ? { isValid: false, error: t(DEVICE_NAME_PROBLEM_MESSAGE_KEYS[problem]) }
+      : { isValid: true };
   };
 
   return (
@@ -100,6 +103,9 @@ const DeviceName: React.FC<DeviceNameProps> = ({
         style={[styles.inputContainer]}
         onPress={() => inputRef.current?.focus()}
         disabled={disabled}
+        // Only forwards taps to the field, so it must not take focus itself
+        // (Android greys a focused view after the keyboard's Done).
+        focusable={false}
         {...testProps("button_edit_device_name")}
       >
         <Input
@@ -109,7 +115,7 @@ const DeviceName: React.FC<DeviceNameProps> = ({
           onFieldChange={(value) => setDeviceName(value)}
           validator={deviceNameValidator}
           onFocus={handleFocus}
-          onBlur={handleSaveDeviceName}
+          onSubmitEditing={handleSaveDeviceName}
           validateOnBlur={true}
           placeholder={t("device.settings.enterDeviceNamePlaceholder")}
           border={false}
@@ -117,11 +123,6 @@ const DeviceName: React.FC<DeviceNameProps> = ({
           marginBottom={false}
           editable={!disabled}
           returnKeyType="done"
-          onSubmitEditing={() => {
-            if (deviceName?.trim() && !disabled && !isSaving) {
-              handleSaveDeviceName();
-            }
-          }}
           qaId="device_name"
         />
         <View style={[styles.editIcon]}>

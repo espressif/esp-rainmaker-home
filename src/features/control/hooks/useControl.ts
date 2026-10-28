@@ -15,9 +15,9 @@ import { extractErrorMessage } from "@shared/utils/common";
 import {
   extractDeviceType,
   findDeviceConfig,
-  getSubDeviceInitialDisplayName,
   type DeviceConfig,
 } from "@shared/utils/device";
+import { getDeviceDisplayName } from "@shared/utils/deviceDisplayName";
 
 interface UseControlReturn {
   node: ESPCDFNode | undefined;
@@ -110,7 +110,7 @@ export const useControl = (): UseControlReturn => {
 
   const displayName =
     device && node
-      ? getSubDeviceInitialDisplayName(device, node) || t("device.control.title")
+      ? getDeviceDisplayName(device, node) || t("device.control.title")
       : t("device.control.title");
 
   return {

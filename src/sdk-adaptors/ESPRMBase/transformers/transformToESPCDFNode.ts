@@ -19,8 +19,12 @@ import {
     ESPRM_NAME_PARAM_TYPE,
     HEADLESS_ERROR_UNKNOWN,
 } from "@shared/utils/constants";
+import { isPureMatterNode } from "@shared/utils/matterNodeType";
 import { safeTransform } from "@sdk-adaptors/shared/utils/safeTransform";
-import { syncCdfDeviceDisplayName } from "@sdk-adaptors/shared/utils/common";
+import {
+    syncCdfDeviceDisplayName,
+    syncCdfNodeDisplayNames,
+} from "@sdk-adaptors/shared/utils/common";
 import { tryFactoryResetBeforeDelete } from "@sdk-adaptors/shared/utils/factoryReset";
 import { projectRegisteredTransportsOntoRawNode } from "@sdk-adaptors/shared/utils/projectRegisteredTransports";
 import { transformToESPCDFDevice } from "./transformToESPCDFDevice";
@@ -74,9 +78,7 @@ const createPropertyChangeSyncCallback = (
                 case 'metadataChanged': {
                     // Direct property on node
                     rawNode.metadata = event.metadata;
-                    for (const device of cdfNode.devices ?? []) {
-                        syncCdfDeviceDisplayName(cdfNode, device.name);
-                    }
+                    syncCdfNodeDisplayNames(cdfNode);
                     break;
                 }
 
@@ -129,10 +131,7 @@ export function transformToESPCDFNode(
     const devices = safeTransform<ESPRMDevice, ReturnType<typeof transformToESPCDFDevice>>(
         node.nodeConfig?.devices,
         "node.devices",
-        (device) =>
-            transformToESPCDFDevice(device, {
-                nodeMetadata: node.metadata as Record<string, unknown> | undefined,
-            }),
+        (device) => transformToESPCDFDevice(device),
         ({ index, error }) => {
             const message = error instanceof Error ? error.message : HEADLESS_ERROR_UNKNOWN;
             console.warn("Node device transform skipped", {
@@ -217,6 +216,13 @@ export function transformToESPCDFNode(
         availableTransports: node.availableTransports,
         _raw: node,
     });
+
+    // Classic pure Matter keeps one name per node, shown on every endpoint.
+    if (isPureMatterNode(cdfNode)) {
+        cdfNode.sharesNodeName = true;
+    }
+    // Names need the whole node (its Matter name and device count).
+    syncCdfNodeDisplayNames(cdfNode);
 
     // Subscribe to property change events to sync to _raw
     // This creates an event-based sync mechanism

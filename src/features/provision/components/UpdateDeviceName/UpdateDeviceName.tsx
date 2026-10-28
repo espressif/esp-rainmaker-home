@@ -14,6 +14,10 @@ import { getDeviceImage } from "@shared/utils/device";
 import { Input } from "@shared/components";
 import { tokens } from "@shared/theme/tokens";
 import { testProps } from "@shared/utils/testProps";
+import {
+  DEVICE_NAME_PROBLEM_MESSAGE_KEYS,
+  findDeviceNameProblem,
+} from "@shared/utils/deviceNaming";
 import type { ESPCDFDevice } from "@store";
 
 type Styles = typeof updateDeviceNameStyles;
@@ -25,6 +29,9 @@ export interface UpdateDeviceNameSectionProps {
   provisionedNodeId: string | undefined;
   getDeviceName: (deviceNameKey: string) => string;
   setDeviceName: (deviceNameKey: string, name: string) => void;
+  /** Longest name the device can keep; unset means no limit. */
+  maxNameLength?: number;
+  renderRowAction?: (device: ESPCDFDevice) => React.ReactNode;
 }
 
 /**
@@ -37,8 +44,21 @@ export const UpdateDeviceNameSection: React.FC<UpdateDeviceNameSectionProps> = (
   provisionedNodeId,
   getDeviceName,
   setDeviceName,
+  maxNameLength,
+  renderRowAction,
 }) => {
   const { t } = useTranslation();
+
+  /** Shows the rule a typed name breaks; Continue refuses the same names. */
+  const validateDeviceName = useCallback(
+    (value: string) => {
+      const problem = findDeviceNameProblem(value ?? "", maxNameLength);
+      return problem
+        ? { isValid: false, error: t(DEVICE_NAME_PROBLEM_MESSAGE_KEYS[problem]) }
+        : { isValid: true };
+    },
+    [maxNameLength, t],
+  );
 
   // One TextInput handle per row, keyed by device name, so the row's pencil
   // knows which field to focus. Callback refs clear themselves to null on
@@ -76,6 +96,8 @@ export const UpdateDeviceNameSection: React.FC<UpdateDeviceNameSectionProps> = (
                     value={getDeviceName(d.name)}
                     placeholder={t("device.deviceDetails.enterName")}
                     onFieldChange={(val) => setDeviceName(d.name, val)}
+                    validator={validateDeviceName}
+                    validateOnBlur={true}
                     border={false}
                     marginBottom={false}
                     qaId="device_name"
@@ -91,6 +113,7 @@ export const UpdateDeviceNameSection: React.FC<UpdateDeviceNameSectionProps> = (
                 >
                   <Edit3 size={20} color={tokens.colors.text_secondary} />
                 </Pressable>
+                {renderRowAction ? renderRowAction(d) : null}
               </View>
             </View>
           </View>

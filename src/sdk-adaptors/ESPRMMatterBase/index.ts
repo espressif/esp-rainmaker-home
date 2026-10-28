@@ -22,11 +22,11 @@ import {
     MatterSubscriptionChannelIds,
     SubscriptionChannelIds,
 } from "@espressif/rainmaker-matter-sdk";
+import { ESPRMBase as ESPRMBaseFromBaseSdk } from "@espressif/rainmaker-base-sdk";
 import { transformToESPCDFUser } from "./transformers";
 import { ESPRMMatterBaseAdaptorIdentifier } from "./constants";
 import { getActiveMatterFabricId } from "@native-adaptors/implementations/ESPMatterUtilityAdapter";
 import { installCrossClusterInvokePatch } from "./installCrossClusterInvokePatch";
-import { getResolvedActiveSdk, isRmneoStackSdkId } from "@config/sdk.config";
 
 export { ESPRMMatterBaseAdaptorIdentifier };
 export type {
@@ -58,15 +58,26 @@ export class ESPRMMatterBaseSDKAdaptor {
 
     constructor(config: ESPRMMatterBaseConfig) {
         this.config = config;
-        this.initializeSDK(this.config);
     }
 
-    async initializeSDK(config: ESPRMMatterBaseConfig): Promise<ESPSDKAdaptorAPIResponse> {
+    /**
+     * Configures the Matter SDK, installs the cross-cluster patch and registers
+     * the Matter subscription channel.
+     *
+     * Called by the bootstrap on the adaptor it makes active, never from the
+     * constructor. That is what keeps this off the shared native Matter layer in
+     * a deployment where the Neo stack owns it.
+     * @returns CDF response indicating successful initialization.
+     */
+    async initializeSDK(): Promise<ESPSDKAdaptorAPIResponse> {
         ESPRMMatterBase.setTransportOrder([
             ESPTransportMode.local,
             ESPTransportMode.cloud,
         ]);
-        ESPRMMatterBase.configure(config);
+        ESPRMMatterBase.configure(this.config);
+        // The matter SDK re-exports its own ESPRMBase, so configuring it leaves the
+        // base-sdk copy this app subscribes through unconfigured.
+        ESPRMBaseFromBaseSdk.configure(this.config);
         this._authInstance = ESPRMMatterBase.getAuthInstance();
 
         // Install the cross-cluster invoke prototype patch *after*
@@ -95,15 +106,7 @@ export class ESPRMMatterBaseSDKAdaptor {
         // Best-effort: a registration failure should not block SDK init —
         // we still want commissioning / control paths to work, just without
         // matter-channel subscriptions until the next login.
-        //
-        // In an RMNG build this RM Matter adaptor is still constructed (for
-        // potential SDK switching) but is NOT the active stack. It shares the
-        // SAME native Matter adapters as the RMNG stack, so initializing the RM
-        // Matter subscription here co-initializes the shared native Matter layer
-        // and re-orders the global channel list — churn that destabilizes the
-        // RMNG stack's operational discovery. Skip it unless RM is active.
-        const isRmngActive = isRmneoStackSdkId(getResolvedActiveSdk());
-        if (config.matterSubscriptionAdapter && !isRmngActive) {
+        if (this.config.matterSubscriptionAdapter) {
             try {
                 // `registerChannel` throws when the id is already present, which
                 // happens on an in-place SDK re-init (deployment switch): the

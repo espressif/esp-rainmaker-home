@@ -17,6 +17,7 @@ import { useToast } from "@shared/hooks/useToast";
 import { createCodeValidator } from "@features/auth/utils/authHelper";
 import { getPreAuthRoute } from "@features/landing";
 import { resetStackTo } from "@shared/utils/navigation";
+import { endUserSession } from "@shared/utils/userSession";
 
 /**
  * Manages delete account state and related actions.
@@ -75,6 +76,8 @@ export const useDeleteAccount = () => {
     setIsLoading(true);
     try {
       await user?.confirmAccountDeletion(code.trim());
+      // The account is gone: end its session (stops discovery and old session work).
+      await endUserSession();
       await StorageAdapter.clear();
       toast.showSuccess(t("user.deleteAccount.deleteConfirmed"));
       // Account is gone: same helper the logout flow uses — Landing only if

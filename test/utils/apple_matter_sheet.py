@@ -65,6 +65,22 @@ DECISION_DIALOGS = (
     ("Uncertified Accessory", "Add Anyway"),
 )
 
+# Apple's naming step. The app skips its own name screen on iOS, so the test names the
+# device here. Unlike the rest of the sheet, its buttons ("Clear text", "Continue") are
+# reachable through the alert API.
+NAME_MARKERS = ("Accessory Name",)
+# iOS 27 drops keys from a fast multi-key send; one key at a time with this pause keeps them all.
+NAME_KEY_PAUSE_S = 0.25
+NAME_TYPE_ATTEMPTS = 3
+# OCR reads look-alike characters as each other: the iOS run suffix "I233601" came back
+# "1233601". The name check folds them together (after casefold, so I is already i).
+NAME_OCR_LOOKALIKES = str.maketrans("1l|0", "iiio")
+
+
+def _name_key(text):
+    """`text` as the name check compares it: no spaces, casefolded, OCR look-alikes folded."""
+    return "".join(text.split()).casefold().translate(NAME_OCR_LOOKALIKES)
+
 
 class AppleMatterSheet:
     """Screenshot-and-coordinate bridge across Apple's Matter pairing sheet."""
@@ -203,19 +219,52 @@ class AppleMatterSheet:
         time.sleep(1)
         return True
 
-    def complete_commissioning(self, timeout=240, poll=3, appear_timeout=90):
+    def _press_sheet_button(self, label):
+        """Press a sheet button by its label through the alert API; False when it is not up."""
+        try:
+            buttons = self.driver.execute_script("mobile: alert", {"action": "getButtons"}) or []
+            if label not in buttons:
+                return False
+            self.driver.execute_script("mobile: alert", {"action": "accept", "buttonLabel": label})
+            return True
+        except Exception as error:
+            logger.warning("Could not press Apple sheet button %r: %s", label, error)
+            return False
+
+    def enter_name(self, name):
+        """Replace the suggested accessory name with `name`, check it by OCR, then continue."""
+        wanted = _name_key(name)
+        for attempt in range(1, NAME_TYPE_ATTEMPTS + 1):
+            if not self._press_sheet_button("Clear text"):
+                raise RuntimeError("Apple's naming step has no 'Clear text' button")
+            for key in name:
+                self.driver.execute_script("mobile: keys", {"keys": [key]})
+                time.sleep(NAME_KEY_PAUSE_S)
+            shown = [text for text, _ in self.read_lines("name")]
+            if any(_name_key(text) == wanted for text in shown):
+                logger.info("Apple naming step shows %r", name)
+                if not (self._press_sheet_button("Continue") or self.tap_text(("Continue",), timeout=5)):
+                    raise RuntimeError("Could not press Continue on Apple's naming step")
+                return True
+            logger.warning("Apple naming step shows %r, not %r (try %s/%s)",
+                           shown, name, attempt, NAME_TYPE_ATTEMPTS)
+        raise AssertionError(f"Could not type {name!r} into Apple's naming step")
+
+    def complete_commissioning(self, timeout=240, poll=3, appear_timeout=90, name=None):
         """Wait for Apple's sheet, drive consent -> progress, and return once it closes.
 
         Absence of the sheet counts as completion only *after* it has been seen. Called
         straight after the QR scan it is simply not up yet, and treating that first empty
         poll as success returns a never-commissioned device to the caller.
 
+        `name`, when given, is typed into Apple's naming step instead of keeping its suggestion.
+
         Raises on an Apple-reported failure, quoting the OCR text, because the sheet gives us
         no error element to assert against.
         """
         deadline = time.time() + timeout
         appear_deadline = time.time() + appear_timeout
-        appeared = consented = False
+        appeared = consented = named = False
         answered = {}
         consent_taps = 0
         consent_seen_at = None
@@ -229,6 +278,8 @@ class AppleMatterSheet:
 
             if not self._match(lines, SHEET_MARKERS):
                 if appeared:
+                    if name and not named:
+                        logger.warning("Apple Matter sheet closed without its naming step; %r not typed", name)
                     logger.info("Apple Matter sheet closed; commissioning handed back to the app")
                     return True
                 if time.time() > appear_deadline:
@@ -266,6 +317,11 @@ class AppleMatterSheet:
                     continue
 
             if self._match(lines, PROGRESS_MARKERS):
+                time.sleep(poll)
+                continue
+
+            if name and not named and self._match(lines, NAME_MARKERS):
+                named = self.enter_name(name)
                 time.sleep(poll)
                 continue
 

@@ -10,14 +10,18 @@ import asyncStorageAdapter from "@native-adaptors/implementations/ESPAsyncStorag
 import { ESPRMBaseSDKAdaptor, ESPRMBaseAdaptorIdentifier } from '@sdk-adaptors/ESPRMBase';
 import { ESPRMNeoBaseSDKAdaptor, ESPRMNeoBaseAdaptorIdentifier } from '@sdk-adaptors/ESPRMNeoBase';
 import { ESPRMMatterBaseSDKAdaptor, ESPRMMatterBaseAdaptorIdentifier } from '@sdk-adaptors/ESPRMMatterBase';
+import { ESPRMNeoMatterBaseSDKAdaptor, ESPRMNeoMatterBaseAdaptorIdentifier } from '@sdk-adaptors/ESPRMNeoMatterBase';
 import { runtimeConfigManager } from '@config/runtime.config';
 import { ESPMQTTAdapter } from '@native-adaptors/implementations/ESPMQTTAdapter';
 import { ESPMatterControlAdapter } from '@native-adaptors/implementations/ESPMatterControlAdapter';
+import { endUserSession } from '@shared/utils/userSession';
+import { initializeActiveAdaptor } from './initializeActiveAdaptor';
 import {
   getResolvedActiveSdk,
   getRMSDKConfig,
   getRMNeoSDKConfig,
   getMatterSDKConfig,
+  getNeoMatterSDKConfig,
 } from "@config/sdk.config";
 /**
  * Available adaptor identifiers.
@@ -27,18 +31,30 @@ export const ADAPTOR_IDENTIFIERS = {
     ESPRM_BASE: ESPRMBaseAdaptorIdentifier,
     ESPRM_MATTER: ESPRMMatterBaseAdaptorIdentifier,
     ESPRMNEO_BASE: ESPRMNeoBaseAdaptorIdentifier,
+    ESPRMNEO_MATTER: ESPRMNeoMatterBaseAdaptorIdentifier,
 } as const;
+
+/**
+ * An adaptor that has a configure step of its own.
+ *
+ * `ESPSDKAdaptor` describes the CDF operations only, so the bootstrap needs this
+ * to reach `initializeSDK()` on the adaptor it activates.
+ */
+type ConfigurableSDKAdaptor = ESPSDKAdaptor & {
+    initializeSDK(): Promise<unknown>;
+};
 
 /**
  * Responsible for instantiating all SDK adaptors.
  * To integrate a new SDK: add its adaptor to the array returned by createAll().
  */
 class AdaptorFactory {
-    createAll(): ESPSDKAdaptor[] {
+    createAll(): ConfigurableSDKAdaptor[] {
         return [
           new ESPRMBaseSDKAdaptor(getRMSDKConfig()),
           new ESPRMMatterBaseSDKAdaptor(getMatterSDKConfig()),
           new ESPRMNeoBaseSDKAdaptor(getRMNeoSDKConfig()),
+          new ESPRMNeoMatterBaseSDKAdaptor(getNeoMatterSDKConfig()),
         ];
     }
 }
@@ -101,13 +117,30 @@ class CDFBootstrap {
                 );
             });
 
+            const resolvedSdk = getResolvedActiveSdk() as string;
             this.safeExecute(
-                () =>
-                    this.sdkRegistry.setActiveAdaptor(
-                        getResolvedActiveSdk() as string
-                    ),
+                () => this.sdkRegistry.setActiveAdaptor(resolvedSdk),
                 '[CDFBootstrap] Failed to set active adaptor:'
             );
+
+            // Configure only the stack this session will use.
+            //
+            // All four adaptors are built above so the registry can name any of
+            // them, but configuring one means calling `configure()` on its SDK's
+            // statics and, for the Matter adaptors, registering a channel on the
+            // shared native Matter layer — which the deployment that is actually
+            // running would then be sharing with a stack nobody asked for. The
+            // active adaptor only changes through reset() → initialize(), so the
+            // one chosen here stays the right one for this runtime's lifetime.
+            //
+            // Awaited, unlike the old constructor call: registration is async, and
+            // CDF's synchronizers subscribe as soon as initCDF resolves.
+            const activeAdaptor = adaptors.find(
+                adaptor => adaptor._identifier === resolvedSdk
+            );
+            if (activeAdaptor) {
+                await initializeActiveAdaptor(activeAdaptor);
+            }
 
             this.cdfInstance = await initCDF({
                 sdkAdaptorRegistry: this.sdkRegistry,
@@ -131,29 +164,18 @@ class CDFBootstrap {
         return this._isInitialized;
     }
 
-    syncActiveAdaptor(): void {
-        if (!this.cdfInstance) {
-            throw new Error('[CDFBootstrap] CDF instance not initialized. Call initialize() first.');
-        }
-        this.safeExecute(
-            () =>
-                this.cdfInstance!.sdkAdaptorRegistry.setActiveAdaptor(
-                    getResolvedActiveSdk() as string
-                ),
-            '[CDFBootstrap] Failed to sync active adaptor:'
-        );
-    }
-
     /**
      * Resets the CDF runtime and clears the adaptor registry.
      * A subsequent initialize() call will re-register all adaptors fresh.
      *
      * Teardown order matters:
-     *   1. Live native connections (MQTT, Matter subscriptions), owned by native
+     *   1. End the session: stops Matter discovery, which holds the old store,
+     *      and makes unfinished session work stop writing.
+     *   2. Live native connections (MQTT, Matter subscriptions), owned by native
      *      module instances tied to the current JS runtime. A `restartApp()`
      *      recreates that runtime but does not close connections opened on the
      *      old one, leaving orphaned native sockets under the fresh instances.
-     *   2. `disposeCDF()`, which releases the store synchronizers' subscriptions
+     *   3. `disposeCDF()`, which releases the store synchronizers' subscriptions
      *      and drops the `ESPCDF.instance` singleton. Nulling our own reference
      *      is not enough: `initCDF` returns the cached instance and DISCARDS the
      *      config it is given, so a re-initialise against a different backend
@@ -164,6 +186,8 @@ class CDFBootstrap {
     async reset(): Promise<void> {
         this._isInitialized = false;
         this.cdfInstance = null;
+
+        await endUserSession();
 
         await Promise.allSettled([
             ESPMQTTAdapter.disconnect(),

@@ -414,8 +414,11 @@ export const paramControlStyles = StyleSheet.create({
   },
 
   // Toggle Switch Styles.
-  // Web-only overrides: padding: 0 + explicit border avoid Tamagui web
-  // thumb overflow. Native switches keep their pre-web-embed appearance.
+  // Web: padding 0 + explicit border keeps the Tamagui thumb math right.
+  // Native: `switchFrameProps` zeroes the 2dp border Tamagui sizes the frame
+  // for, so the frame padding and thumb margin put that inset back. Without
+  // them the thumb travels to the frame edge and sits flush with the top-right
+  // corner, poking out of the pill. Same geometry as `globalStyles.switch`.
   toggleSwitch: {
     backgroundColor: tokens.colors.bg2,
     ...(isWeb
@@ -424,15 +427,17 @@ export const paramControlStyles = StyleSheet.create({
           borderWidth: 2,
           padding: 0,
         }
-      : null),
+      : { paddingHorizontal: 3 }),
   },
 
   toggleThumb: {
     backgroundColor: tokens.colors.white,
+    ...(isWeb ? null : { marginVertical: 2 }),
   },
 
   toggleThumbActive: {
     backgroundColor: tokens.colors.primary,
+    ...(isWeb ? null : { marginVertical: 2 }),
   },
 
   // Trigger Button Styles

@@ -6,6 +6,7 @@
 
 import {
   MATTER_COMMISSIONING_SOURCE_GPS,
+  STATUS_FAILED,
   STATUS_SUCCESS,
 } from "@shared/utils/constants";
 
@@ -38,6 +39,11 @@ export function commissioningPayloadIndicatesFailure(
   const st = String(payload.status ?? "").toLowerCase();
   if (st && st !== "success") return true;
   return false;
+}
+
+/** True once the SDK's progress stream says its cloud confirm finished, either way. */
+export function isCommissioningProgressSettled(status: unknown): boolean {
+  return status === STATUS_SUCCESS || status === STATUS_FAILED;
 }
 
 /**

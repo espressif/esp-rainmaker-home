@@ -5,60 +5,17 @@
  */
 
 import { makeObservable, observable } from "mobx";
-import type { ESPCDFDevice, ESPCDFNode } from "@store";
-import {
-  ESPRM_NAME_PARAM_TYPE,
-  MATTER_METADATA_DEVICE_NAME_KEY,
-  MATTER_METADATA_KEY,
-} from "@shared/utils/constants";
+import type {
+  ESPCDFDevice,
+  ESPCDFDeviceParam,
+  ESPCDFNode,
+  ESPCDFServiceParam,
+} from "@store";
+import { getDeviceDisplayName } from "@shared/utils/deviceDisplayName";
 
 /**
- * Resolves the user-visible label for a CDF device.
- * Precedence: name param → Matter metadata deviceName → device id → node label.
- * Name param wins so remote renames via `esp.param.name` are not masked by stale metadata.
- * @param cdfDevice - Device on the CDF node
- * @param nodeLabel - Optional node info name fallback
- * @param matterDeviceName - Optional Matter metadata `deviceName`
- * @returns Resolved display name (may be empty)
- */
-export function resolveCdfDeviceDisplayName(
-  cdfDevice: ESPCDFDevice,
-  nodeLabel?: string,
-  matterDeviceName?: string,
-): string {
-  const nameParam = cdfDevice.params?.find(
-    (param) => param.type === ESPRM_NAME_PARAM_TYPE,
-  );
-  const fromNameParam = nameParam?.value as string | undefined;
-  if (typeof fromNameParam === "string" && fromNameParam.trim().length > 0) {
-    return fromNameParam;
-  }
-
-  if (typeof matterDeviceName === "string" && matterDeviceName.trim().length > 0) {
-    return matterDeviceName;
-  }
-
-  return cdfDevice.name || nodeLabel || "";
-}
-
-/**
- * Reads Matter metadata device name from a CDF node, when present.
- * @param cdfNode - Parent CDF node
- * @returns Metadata device name or `undefined`
- */
-export function readMatterMetadataDeviceName(
-  cdfNode: ESPCDFNode,
-): string | undefined {
-  const metadata = cdfNode.metadata as Record<string, unknown> | undefined;
-  const matter = metadata?.[MATTER_METADATA_KEY] as
-    | Record<string, unknown>
-    | undefined;
-  const name = matter?.[MATTER_METADATA_DEVICE_NAME_KEY];
-  return typeof name === "string" ? name : undefined;
-}
-
-/**
- * Writes `displayName` on one CDF device from current params, Matter metadata, and node label.
+ * Stores the shown name on one CDF device, for screens that read
+ * `displayName` instead of asking {@link getDeviceDisplayName} themselves.
  * @param cdfNode - Parent CDF node
  * @param deviceName - Internal device name on the node
  */
@@ -71,23 +28,67 @@ export function syncCdfDeviceDisplayName(
     return;
   }
 
-  const resolved = resolveCdfDeviceDisplayName(
-    cdfDevice,
-    cdfNode.nodeConfig?.info?.name,
-    readMatterMetadataDeviceName(cdfNode),
-  );
+  const resolved = getDeviceDisplayName(cdfDevice, cdfNode);
   if (resolved) {
     cdfDevice.displayName = resolved;
   }
 }
 
 /**
+ * Stores the shown name on every device of a CDF node.
+ * @param cdfNode - CDF node whose devices are named
+ */
+export function syncCdfNodeDisplayNames(cdfNode: ESPCDFNode): void {
+  for (const device of cdfNode.devices ?? []) {
+    syncCdfDeviceDisplayName(cdfNode, device.name);
+  }
+}
+
+/**
+ * Keeps the last known value of each param a rebuilt node has no value for.
+ *
+ * A rebuild from the cloud config carries no live values, and a Neo pure
+ * Matter light has no cloud copy of them at all, so after every home sync it
+ * showed its setup name ("Light") instead of the name it had reported.
+ * Only params that came back with no value are filled; a fresh value wins.
+ * @param devices - Devices of the rebuilt node
+ * @param previousDevices - Devices of the node it replaces, if any
+ */
+export function keepLastKnownParamValues(
+  devices: ESPCDFDevice[],
+  previousDevices: ESPCDFDevice[] | undefined,
+): void {
+  for (const device of devices) {
+    const previous = previousDevices?.find((old) => old.name === device.name);
+    for (const param of device.params ?? []) {
+      if (param.value !== undefined) {
+        continue;
+      }
+      const lastValue = previous?.params?.find(
+        (old) => old.name === param.name,
+      )?.value;
+      if (lastValue !== undefined) {
+        param.value = lastValue;
+      }
+    }
+  }
+}
+
+/** The parts of a node {@link makeCdfNodeParamsObservable} instruments. */
+interface NodeWithParams {
+  id?: string;
+  devices?: { name?: string; params?: ESPCDFDeviceParam[] }[];
+  services?: { name?: string; params?: ESPCDFServiceParam[] }[];
+}
+
+/**
  * Marks each device/service param's `value` field as MobX-observable so
  * in-place mutations from live shadow pushes trigger observer re-renders.
- * Idempotent — safe to call again on a re-transformed node.
+ * Idempotent — safe to call again on a re-transformed node. Also used on the
+ * params a device refresh returns: the store swaps them in as they are.
  * @param cdfNode - CDF node to instrument.
  */
-export function makeCdfNodeParamsObservable(cdfNode: ESPCDFNode): void {
+export function makeCdfNodeParamsObservable(cdfNode: NodeWithParams): void {
   for (const device of cdfNode.devices ?? []) {
     for (const param of device.params ?? []) {
       try {

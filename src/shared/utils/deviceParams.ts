@@ -6,7 +6,7 @@
 
 import { ESPCDFDevice, ESPCDFDeviceParam } from "@store";
 import { PARAM_CONTROLS } from "@/config/params.config";
-import { MATTER_SERVER_PARAM_TYPE_ON_OFF } from "@config/matter.constants";
+import { MATTER_SERVER_PARAM_TYPE_ON_OFF } from "@config/matter.identifiers";
 import {
   ESPRM_POWER_PARAM_TYPE,
   ESPRM_UI_HIDDEN_PARAM_TYPE,
@@ -39,6 +39,10 @@ export interface ParamControlConfig {
   control: React.ComponentType<any> | null;
   dataTypes?: string[];
   derivedMeta?: Record<string, string>[];
+  /** Canonical role this control represents, e.g. `esp.param.hue`. */
+  paramType?: string;
+  /** Matches only when every listed field matches, for params no single field identifies. */
+  matchAll?: { type?: string; uiType?: string }[];
   [key: string]: any;
 }
 
@@ -95,6 +99,14 @@ export const resolveDeviceCardPowerParam = (
   return findLegacyDeviceCardPowerParam(params);
 };
 
+/** Matter cluster param `type` token (e.g. `"server:0x300"`, `"client:0x6"`). */
+const MATTER_CLUSTER_PARAM_TYPE_PATTERN = /^(server|client):0x[0-9a-f]+$/i;
+
+/** Whether a param `type` addresses a Matter cluster rather than a semantic kind. */
+function isMatterClusterParamType(type: string): boolean {
+  return MATTER_CLUSTER_PARAM_TYPE_PATTERN.test(type);
+}
+
 /**
  * Builds a map of parameter types to their control configurations.
  * Single Responsibility: Only responsible for building the params map.
@@ -113,6 +125,23 @@ export const buildParamsMap = (): ParamsMap => {
 };
 
 /**
+ * Finds the entry whose `matchAll` rule the param satisfies, for params that
+ * no single field identifies.
+ * @param param - The device parameter
+ * @returns The matching control config, or undefined
+ */
+export const findCompoundMatch = (
+  param: ESPCDFDeviceParam
+): ParamControlConfig | undefined =>
+  (PARAM_CONTROLS as ParamControlConfig[]).find((control) =>
+    control.matchAll?.some(
+      (rule) =>
+        (rule.type === undefined || rule.type === param.type) &&
+        (rule.uiType === undefined || rule.uiType === param.uiType)
+    )
+  );
+
+/**
  * Resolves the appropriate control configuration for a given parameter.
  * Single Responsibility: Only responsible for resolving the control for a parameter.
  * @param param - The device parameter
@@ -123,6 +152,11 @@ export const resolveParamControl = (
   param: ESPCDFDeviceParam,
   paramsMap: ParamsMap
 ): ParamControlConfig | null => {
+  const compound = findCompoundMatch(param);
+  if (compound) {
+    return compound;
+  }
+
   const lookupKey = param.uiType ?? param.type;
   if (!lookupKey) {
     return null;
@@ -135,10 +169,17 @@ export const resolveParamControl = (
   // type-based control so read-only telemetry (e.g. `esp.param.temperature`
   // tagged `esp.ui.text`) renders its proper readout — including the
   // time-series chart entry — instead of a generic editable field.
+  //
+  // Never for Matter cluster types (`server:0x300` & co.): one cluster backs
+  // several params (Hue / Saturation / CCT all carry `server:0x300`), so the
+  // type map holds whichever PARAM_CONTROLS entry claimed the token last and
+  // the registry-declared uiType is the only reliable disambiguator —
+  // overriding it rendered Saturation with the Hue slider.
   if (
     param.uiType &&
     GENERIC_UI_PARAM_TYPES.has(param.uiType) &&
     param.type &&
+    !isMatterClusterParamType(param.type) &&
     paramsMap[param.type] !== undefined
   ) {
     control = paramsMap[param.type];

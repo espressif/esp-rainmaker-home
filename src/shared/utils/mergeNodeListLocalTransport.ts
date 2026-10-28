@@ -100,13 +100,17 @@ export function mergeLocalTransportFromNodeMap(
         },
       },
     );
-    const raw = merged._raw as Record<string, unknown> | undefined;
+    // Update the live SDK node in place. A `{ ...raw }` copy lost its class
+    // methods (`getShadowName`), and after the next reconnect the SDK's Matter
+    // channel held that copy and threw on every report.
+    const raw = merged._raw as
+      | { availableTransports?: Record<string, unknown> }
+      | undefined;
     if (raw && typeof raw === "object") {
-      const prevAt = raw.availableTransports as Record<string, unknown> | undefined;
-      merged._raw = {
-        ...raw,
-        availableTransports: { ...(prevAt || {}), ...carryOver },
-      } as typeof merged._raw;
+      raw.availableTransports = {
+        ...(raw.availableTransports || {}),
+        ...carryOver,
+      };
     }
     return merged;
   });

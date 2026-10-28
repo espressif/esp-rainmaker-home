@@ -28,12 +28,12 @@ import {
 import { unregisterForNotification } from "@shared/utils/notifications";
 import { teardownWebPushDelivery } from "@native-adaptors/utils/bootstrapWebPush";
 import { pipelineTask } from "@shared/utils/pipelineTask";
+import { endUserSession } from "@shared/utils/userSession";
 
 // Types
 import { UserOperationConfig, IntegrationConfig } from "@src/types/global";
 import { ESPCDFAPIError } from "@store";
 import { getFeatures } from "@/config/features.config";
-import { getResolvedActiveSdk, isRmneoStackSdkId } from "@config/sdk.config";
 import { getPreAuthRoute } from "@features/landing";
 import { resetStackTo } from "@shared/utils/navigation";
 
@@ -110,12 +110,10 @@ export const useUser = () => {
     };
   }, [user, hasProfileIdentity]);
 
-  // Logout copy depends on the active stack: the RainMaker stack (base +
-  // Matter) also signs out account-configured agents, so it carries the
-  // agents warning; the RMNeo stack shows the plain confirmation.
-  const logoutMessage = isRmneoStackSdkId(getResolvedActiveSdk())
-    ? t("user.profile.logoutModal.message")
-    : t("user.profile.logoutModal.messageWithAgents");
+  // Warn about signing out agents only where agents actually exist.
+  const logoutMessage = features.aiAgent
+    ? t("user.profile.logoutModal.messageWithAgents")
+    : t("user.profile.logoutModal.message");
 
   const userOperations: UserOperationConfig[] = [
     features.notifications && {
@@ -189,6 +187,14 @@ export const useUser = () => {
       await pipelineTask(
         [
           {
+            name: "endUserSession",
+            run: async () => {
+              // First, while the user still exists: stops Matter discovery
+              // and stops any home load still running from writing.
+              await endUserSession();
+            },
+          },
+          {
             name: "clearCurrentHome",
             run: async () => {
               store.groupStore.currentHomeId = null;
@@ -217,7 +223,7 @@ export const useUser = () => {
             run: async () => {
               await user?.logout();
             },
-            dependsOn: ["clearCurrentHome"],
+            dependsOn: ["endUserSession", "clearCurrentHome"],
           },
           {
             name: "clearUserData",

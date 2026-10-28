@@ -358,12 +358,11 @@ def matter_account_cleanup(pytestconfig, registered_user_resolver, registered_us
 
 
 @pytest.fixture
-def matter_light_name(request, helper):
-    """Home-screen name of the commissioned Matter light, which differs by pairing ecosystem.
+def matter_light_name():
+    """Home-screen name of the commissioned Matter light: every scenario names it this,
+    in the app's setup step on Android and in Apple's sheet on iOS (matter.feature).
     """
-    if helper.driver._test_info.get("platform", "android") == "ios":
-        return "Matter Accessory"
-    return "Matter Device" if _matter_scenario(request) == "rmneo_matter" else "Light"
+    return "E2E Matter Light"
 
 
 @pytest.fixture

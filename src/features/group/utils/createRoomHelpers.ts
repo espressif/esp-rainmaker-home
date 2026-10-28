@@ -5,6 +5,7 @@
  */
 
 import type { Node } from "@src/types/global";
+import { getDeviceDisplayName } from "@shared/utils/deviceDisplayName";
 
 /**
  * Maps a store node to the display shape used by room/group node lists.
@@ -12,7 +13,9 @@ import type { Node } from "@src/types/global";
 export function mapNodeToDisplay(node: any): Node {
   return {
     id: node.id,
-    name: node.devices?.map((d: any) => d.displayName).join(", ") ?? "",
+    name:
+      node.devices?.map((d: any) => getDeviceDisplayName(d, node)).join(", ") ??
+      "",
     node,
   };
 }

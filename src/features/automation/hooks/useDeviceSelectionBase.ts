@@ -6,7 +6,7 @@
 
 import { useCallback, useMemo } from "react";
 import type { ESPCDFNode } from "@store";
-import { isAutomationMatterIneligibleNode } from "@shared/utils/eventDeviceSelection";
+import { isAutomationMatterIneligibleNode } from "@features/automation/utils/automationDeviceEligibility";
 import type { DeviceSelectionData } from "@src/types/global";
 
 export interface UseDeviceSelectionBaseResult {

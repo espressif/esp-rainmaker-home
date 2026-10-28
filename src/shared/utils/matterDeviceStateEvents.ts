@@ -10,6 +10,7 @@ import {
     endpointFromInternalDeviceName,
     resolveMatterEndpointFromDeviceWithFallbacks,
 } from "./matterEndpoint";
+import { isMatterOperationalNodeIdHex } from "./matterNodeIdHex";
 
 export const MATTER_DEVICE_STATE_CHANGED = "MATTER_DEVICE_STATE_CHANGED";
 
@@ -31,7 +32,14 @@ export function readMatterNodeIdFromCdfNode(node: ESPCDFNode): string | undefine
         | { matter_node_id?: string; matterNodeId?: string }
         | undefined;
     const fromMeta = meta?.matter_node_id ?? meta?.matterNodeId;
-    return typeof fromMeta === "string" && fromMeta.trim() ? fromMeta.trim() : undefined;
+    if (typeof fromMeta === "string" && fromMeta.trim()) return fromMeta.trim();
+    // Pure Matter on RMNeo: the cloud mints node_id == matter_node_id and never
+    // echoes matter_node_id back in the node config, so the node id IS the Matter
+    // id. Gated on `isMatter`, which only the Matter adaptor sets, so a plain node
+    // that happens to have a 16-hex id can never be taken for a Matter node.
+    if ((node as { isMatter?: boolean }).isMatter !== true) return undefined;
+    const nodeId = node.id?.trim();
+    return isMatterOperationalNodeIdHex(nodeId) ? nodeId : undefined;
 }
 
 /**

@@ -91,7 +91,6 @@ class ESPMatterModule(reactContext: ReactApplicationContext) :
         }
     }
 
-
     private fun sendNOCChainToChipClientInternal(
         deviceId: String,
         requestId: String,
@@ -262,57 +261,25 @@ class ESPMatterModule(reactContext: ReactApplicationContext) :
             ?: detailsSource.optString("requestId")
             ?: fabricDetails.optString("request_id")
             ?: detailsSource.optString("request_id")
+        // Top-level and camelCase only: the nonce is the /initiate challenge, which the SDK sets
+        // on the fabric ref itself — never inside the snake_case capability blob.
+        val csrNonce = fabricDetails.optString("csrNonce")
 
         val currentFabric = FabricSessionManager.getCurrentFabric()
 
-        val preservedUserNoc =
-            if (userNoc.isNullOrEmpty() && currentFabric?.userNoc?.isNotEmpty() == true) {
-                currentFabric.userNoc
-            } else {
-                userNoc
-            }
+        // A blank incoming value never wipes a credential the session already holds.
+        fun preserve(incoming: String?, current: String?): String? =
+            if (incoming.isNullOrEmpty() && !current.isNullOrEmpty()) current else incoming
 
-        val preservedMatterUserId =
-            if (matterUserId.isNullOrEmpty() && currentFabric?.matterUserId?.isNotEmpty() == true) {
-                currentFabric.matterUserId
-            } else {
-                matterUserId
-            }
-
-        val preservedRootCa =
-            if (rootCa.isNullOrEmpty() && currentFabric?.rootCa?.isNotEmpty() == true) {
-                currentFabric.rootCa
-            } else {
-                rootCa
-            }
-
-        val preservedIpk =
-            if (ipk.isNullOrEmpty() && currentFabric?.ipk?.isNotEmpty() == true) {
-                currentFabric.ipk
-            } else {
-                ipk
-            }
-
+        val preservedUserNoc = preserve(userNoc, currentFabric?.userNoc)
+        val preservedMatterUserId = preserve(matterUserId, currentFabric?.matterUserId)
+        val preservedRootCa = preserve(rootCa, currentFabric?.rootCa)
+        val preservedIpk = preserve(ipk, currentFabric?.ipk)
         val preservedGroupCatIdOperate =
-            if (groupCatIdOperate.isNullOrEmpty() && currentFabric?.groupCatIdOperate?.isNotEmpty() == true) {
-                currentFabric.groupCatIdOperate
-            } else {
-                groupCatIdOperate
-            }
-
-        val preservedGroupCatIdAdmin =
-            if (groupCatIdAdmin.isNullOrEmpty() && currentFabric?.groupCatIdAdmin?.isNotEmpty() == true) {
-                currentFabric.groupCatIdAdmin
-            } else {
-                groupCatIdAdmin
-            }
-
-        val preservedRequestId =
-            if (requestId.isNullOrEmpty() && currentFabric?.requestId?.isNotEmpty() == true) {
-                currentFabric.requestId
-            } else {
-                requestId
-            }
+            preserve(groupCatIdOperate, currentFabric?.groupCatIdOperate)
+        val preservedGroupCatIdAdmin = preserve(groupCatIdAdmin, currentFabric?.groupCatIdAdmin)
+        val preservedRequestId = preserve(requestId, currentFabric?.requestId)
+        val preservedCsrNonce = preserve(csrNonce, currentFabric?.csrNonce)
 
         val fabricInfo = FabricInfo(
             groupId = groupId,
@@ -329,9 +296,13 @@ class ESPMatterModule(reactContext: ReactApplicationContext) :
             sigv4SecretKey = sigv4SecretKey,
             sigv4SessionToken = sigv4SessionToken,
             sigv4Expiration = sigv4Expiration,
-            requestId = preservedRequestId
+            requestId = preservedRequestId,
+            csrNonce = preservedCsrNonce
         )
 
+        // csrNonce present means RMNeo ran `/initiate` and this run is nonce-bound;
+        // absent means RainMaker, where CHIP generates its own and no later step
+        // checks it.
         FabricSessionManager.setCurrentFabric(fabricInfo)
         FabricSessionManager.syncCommissioningCredentialsToChipClient()
     }
@@ -390,13 +361,14 @@ class ESPMatterModule(reactContext: ReactApplicationContext) :
             val groupId = fabricParams.optString("groupId")
             val fabricId = fabricParams.optString("fabricId")
             val name = fabricParams.optString("name")
+            val forceNewKey = fabricParams.optBoolean(AppConstants.KEY_FORCE_NEW_KEY)
 
             if (groupId.isNullOrEmpty() || fabricId.isNullOrEmpty()) {
                 promise.reject("INVALID_PARAMS", "Group ID and Fabric ID are required")
                 return
             }
 
-            generateCSRInternal(groupId ?: "", fabricId ?: "", name ?: "", promise)
+            generateCSRInternal(groupId ?: "", fabricId ?: "", name ?: "", promise, forceNewKey)
 
         } catch (error: Exception) {
             promise.reject(
@@ -421,7 +393,8 @@ class ESPMatterModule(reactContext: ReactApplicationContext) :
         if (hasKey(key) && !isNull(key)) getBoolean(key) else defaultValue
 
     private fun generateCSRInternal(
-        groupId: String, fabricId: String, name: String, promise: Promise?
+        groupId: String, fabricId: String, name: String, promise: Promise?,
+        forceNewKey: Boolean = false
     ) {
         Log.d(TAG, "========== GENERATING CSR FOR FABRIC: $name ==========")
 
@@ -429,26 +402,31 @@ class ESPMatterModule(reactContext: ReactApplicationContext) :
             val keyStore = KeyStore.getInstance("AndroidKeyStore")
             keyStore.load(null)
 
-            try {
-                val existingChain = keyStore.getCertificateChain(fabricId)
-                val existingSize = existingChain?.size ?: 0
-                if (existingChain != null && existingChain.size >= 2) {
+            // forceNewKey: CAT rotation re-issue — the stored NOC carries a stale
+            // CAT version, so the "already stored" short-circuit must be skipped
+            // and a fresh keypair generated for a fresh NOC. The caller rebinds
+            // key + NOC together via storePrecommissionInfo (serialized in JS).
+            if (!forceNewKey) {
+                try {
+                    val existingChain = keyStore.getCertificateChain(fabricId)
+                    if (existingChain != null && existingChain.size >= 2) {
 
-                    val result = Arguments.createMap().apply {
-                        putBoolean(AppConstants.KEY_SUCCESS, true)
-                        putString(
-                            AppConstants.KEY_MESSAGE_CAMEL,
-                            AppConstants.MESSAGE_NOC_ALREADY_STORED
-                        )
-                        putString(AppConstants.KEY_GROUP_ID_CAMEL, groupId)
-                        putString(AppConstants.KEY_FABRIC_ID_CAMEL, fabricId)
-                        putString(AppConstants.KEY_NAME, name)
+                        val result = Arguments.createMap().apply {
+                            putBoolean(AppConstants.KEY_SUCCESS, true)
+                            putString(
+                                AppConstants.KEY_MESSAGE_CAMEL,
+                                AppConstants.MESSAGE_NOC_ALREADY_STORED
+                            )
+                            putString(AppConstants.KEY_GROUP_ID_CAMEL, groupId)
+                            putString(AppConstants.KEY_FABRIC_ID_CAMEL, fabricId)
+                            putString(AppConstants.KEY_NAME, name)
+                        }
+                        promise?.resolve(result)
+                        return
                     }
-                    promise?.resolve(result)
-                    return
+                } catch (e: Exception) {
+                    Log.w(TAG, "KeyStore pre-check failed for fabricId=$fabricId: ${e.message}")
                 }
-            } catch (e: Exception) {
-                Log.w(TAG, "KeyStore pre-check failed for fabricId=$fabricId: ${e.message}")
             }
 
             val keyPair = MatterFabricUtils.generateKeypair(fabricId)
@@ -612,10 +590,14 @@ class ESPMatterModule(reactContext: ReactApplicationContext) :
                         val noc = resultData.optString("noc", "")
                         val taskMatterNodeId = resultData.optString("matterNodeId", "")
                         val taskRequestId = resultData.optString("requestId", "")
+                        val taskNeoNodeId = resultData.optString(AppConstants.KEY_NEO_NODE_ID, "")
                         Log.d(TAG, "NOC received from headless task, forwarding to ChipClient")
 
                         val chipClient = FabricSessionManager.getCurrentChipClient()
                         if (chipClient != null) {
+                            if (taskNeoNodeId.isNotEmpty()) {
+                                chipClient.neoNodeId = taskNeoNodeId
+                            }
                             chipClient.receiveNOCFromTask(taskRequestId, noc, taskMatterNodeId)
                         } else {
                             Log.e(TAG, "No active ChipClient to receive NOC from headless task")
@@ -634,20 +616,39 @@ class ESPMatterModule(reactContext: ReactApplicationContext) :
                         val responseObj = resultData.optJSONObject("response")
 
                         val chipClient = FabricSessionManager.getCurrentChipClient()
-                        if (confirmNodeId.isNotEmpty() && chipClient != null && chipClient.rmNodeId.isNullOrEmpty()) {
-                            chipClient.rmNodeId = confirmNodeId
-                        }
                         val deviceName = chipClient?.lastCommissionedDeviceName
                             ?: AppConstants.DEFAULT_MATTER_DEVICE_NAME
 
                         val responseMatterNodeId = responseObj?.optString("matterNodeId", "") ?: ""
                         val responseRainmakerNodeId = responseObj?.optString("rainmakerNodeId", "") ?: ""
                         val storedMatterNodeId = chipClient?.matterNodeId ?: ""
-                        val storedRmNodeId = chipClient?.rmNodeId ?: ""
                         val matterNodeId = responseMatterNodeId.ifEmpty { storedMatterNodeId }
-                        val rainmakerNodeId = responseRainmakerNodeId.ifEmpty { storedRmNodeId }
-                        val isRainmakerNode = responseObj?.optBoolean("isRainmakerNode", false)
-                            ?: rainmakerNodeId.isNotEmpty()
+
+                        // Pure/hybrid signal: the Neo task posts it TOP-LEVEL on the
+                        // result. Classic results carry no such key, so fall back to
+                        // the id-presence heuristic (rmNodeId is set natively during
+                        // the RainMaker-cluster dance on hybrids only).
+                        val isRainmakerNode = if (resultData.has(AppConstants.KEY_IS_RAINMAKER_NODE_CAMEL)) {
+                            resultData.optBoolean(AppConstants.KEY_IS_RAINMAKER_NODE_CAMEL, false)
+                        } else {
+                            responseRainmakerNodeId.isNotEmpty() ||
+                                !chipClient?.rmNodeId.isNullOrEmpty()
+                        }
+
+                        // confirmNodeId is the Neo node id in both branches —
+                        // only a hybrid may adopt it as the RainMaker node id. For a
+                        // pure Matter node it must not poison rmNodeId.
+                        if (isRainmakerNode && confirmNodeId.isNotEmpty() &&
+                            chipClient != null && chipClient.rmNodeId.isNullOrEmpty()
+                        ) {
+                            chipClient.rmNodeId = confirmNodeId
+                        }
+
+                        val rainmakerNodeId = if (isRainmakerNode) {
+                            responseRainmakerNodeId.ifEmpty { chipClient?.rmNodeId ?: "" }
+                        } else {
+                            ""
+                        }
 
                         Log.d(
                             TAG,
@@ -663,6 +664,7 @@ class ESPMatterModule(reactContext: ReactApplicationContext) :
                             putString(AppConstants.KEY_MATTER_NODE_ID_CAMEL, matterNodeId)
                             putString(AppConstants.KEY_RAINMAKER_NODE_ID_CAMEL, rainmakerNodeId)
                             putBoolean(AppConstants.KEY_IS_RAINMAKER_NODE_CAMEL, isRainmakerNode)
+                            putString(AppConstants.KEY_NEO_NODE_ID, confirmNodeId)
                             putString(AppConstants.KEY_DEVICE_NAME_CAMEL, deviceName)
                             putBoolean(AppConstants.KEY_SUCCESS, true)
                             putString(AppConstants.KEY_SOURCE_CAMEL, "HEADLESS_JS")
@@ -752,6 +754,15 @@ class ESPMatterModule(reactContext: ReactApplicationContext) :
         promise: Promise
     ) {
         controlAdapter.invoke(matterNodeId, endpoint, clusterId, commandId, commandFields, promise)
+    }
+
+    @ReactMethod
+    fun matterUpdateCatAclSubject(
+        matterNodeId: String,
+        groupCatId: String,
+        promise: Promise
+    ) {
+        controlAdapter.updateCatAclSubject(matterNodeId, groupCatId, promise)
     }
 
     @ReactMethod

@@ -23,19 +23,18 @@ import {
   type ESPCDFPropertyChangeEvent,
   type ESPCDFTransportConfig,
 } from "@store";
-import { syncCdfDeviceDisplayName } from "@sdk-adaptors/shared/utils/common";
+import {
+  syncCdfDeviceDisplayName,
+  syncCdfNodeDisplayNames,
+} from "@sdk-adaptors/shared/utils/common";
 import { getRmneoStackAuthorizationUser } from "@sdk-adaptors/shared/rmneoAuthUser";
 import {
   defaultMergeRmneoShadowParams,
   getRmneoNcfgRefreshHooks,
 } from "@sdk-adaptors/shared/rmneoNcfgRefreshHooks";
-import { EspLocalDiscoveryAdapter } from "@native-adaptors/implementations/ESPDiscoveryAdapter";
+import { preserveMatterIdentityOnRefresh } from "@sdk-adaptors/ESPRMNeoBase/utils/matter/preserveMatterIdentityOnRefresh";
 import { mergeLocalTransportFromNodeMap } from "@shared/utils/mergeNodeListLocalTransport";
 import { kickMatterLocalDiscoveryAfterNodesInStore } from "@shared/utils/matterDiscoveryGroupCallbacks";
-import {
-  MDNS_DOMAIN_LOCAL,
-  MDNS_SERVICE_TYPE_ESP_LOCAL_CTRL,
-} from "@shared/utils/constants";
 import {
   ESPRMNEO_CDF_PROP_CHANGE,
   ESPRMNEO_NAME_PARAM_TYPE,
@@ -119,9 +118,7 @@ export function createPropertyChangeSyncCallback(
         break;
       }
       case ESPRMNEO_CDF_PROP_CHANGE.METADATA:
-        for (const device of cdfNode.devices ?? []) {
-          syncCdfDeviceDisplayName(cdfNode, device.name);
-        }
+        syncCdfNodeDisplayNames(cdfNode);
         break;
       case ESPRMNEO_CDF_PROP_CHANGE.AVAILABLE_TRANSPORTS: {
         // CDF store is SoT for LAN discovery; project only `local` onto `_raw`.
@@ -226,8 +223,9 @@ async function performNodeConfigRefresh(
         const newStoreNode = root?.nodeStore?.getNodeById?.(nodeId);
         const newRaw = newStoreNode?._raw as ESPRMNeoNode | undefined;
 
+        // Use the shadow's `online` as-is; forcing it true hid offline nodes.
         const newConnectivityStatus = {
-            isConnected: isOnline || oldConnectivityStatus?.isConnected || true,
+            isConnected: isOnline,
             lastConnectionTimestamp:
                 oldConnectivityStatus?.lastConnectionTimestamp ?? Date.now(),
         };
@@ -241,15 +239,9 @@ async function performNodeConfigRefresh(
             }
         });
 
-        try {
-            await EspLocalDiscoveryAdapter.stopDiscovery();
-            await EspLocalDiscoveryAdapter.startDiscovery(() => {}, {
-                serviceType: MDNS_SERVICE_TYPE_ESP_LOCAL_CTRL,
-                domain: MDNS_DOMAIN_LOCAL,
-            });
-        } catch {
-            // Local discovery restart failure is non-critical
-        }
+        // No discovery restart: the local transport is carried over above and
+        // the login-time mDNS browse keeps running. Restarting it here used to
+        // kill Neo and Matter discovery.
 
         const refreshedNode = root?.nodeStore?.getNodeById?.(nodeId);
         await hooks?.onRefreshComplete?.({
@@ -409,9 +401,19 @@ export function applyRefreshedCdfNodeToStore(cdfNode: ESPCDFNode): void {
     // every param the device reports (RMHOME-168). Never let a refresh shrink
     // the param list the UI already had for a device.
     const existingNode = nodeStore.getNodeById(cdfNode.id);
-    if (existingNode?.devices?.length && merged.devices?.length) {
-        mergeMissingDeviceParams(merged.devices, existingNode.devices);
+    if (existingNode?.devices?.length) {
+        if (merged.devices?.length) {
+            mergeMissingDeviceParams(merged.devices, existingNode.devices);
+        } else {
+            // A rebuild can carry no devices at all — a pure Matter node's cloud
+            // config describes `endpoints`, never `devices` — and the card list
+            // renders devices, so accepting that would blank the card outright.
+            merged.devices = existingNode.devices;
+        }
     }
+
+    // Same rule for Matter identity: a cloud refresh must never strip it.
+    preserveMatterIdentityOnRefresh(merged, existingNode);
 
     runInAction(() => {
         const stored = nodeStore.addNode(merged);

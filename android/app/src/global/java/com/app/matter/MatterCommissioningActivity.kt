@@ -103,6 +103,9 @@ class MatterCommissioningActivity : AppCompatActivity() {
                 ).build()
         }
 
+        // GPS commissions the device onto its OWN fabric first (VendorId 0x6006) and
+        // then opens a commissioning window, so our own AddNOC below is the second
+        // fabric on the device.
         Matter.getCommissioningClient(this).commissionDevice(commissionDeviceRequest)
             .addOnSuccessListener { result ->
                 commissionDeviceLauncher.launch(IntentSenderRequest.Builder(result).build())

@@ -36,6 +36,8 @@ def _tap_continue_for_current_screen(helper):
     """Tap Continue on whichever post-provision screen is currently visible."""
     continue_screens = (
         (helper.provision, helper.provision.tap_continue),
+        # Before name_device: the Matter setup screen has the same title.
+        (helper.matter_device_setup, helper.matter_device_setup.tap_continue),
         (helper.name_device, helper.name_device.tap_continue),
         (helper.add_to_room, helper.add_to_room.tap_continue),
         (helper.guide, helper.guide.tap_continue),

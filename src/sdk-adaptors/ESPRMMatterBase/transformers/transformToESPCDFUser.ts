@@ -6,8 +6,11 @@
 
 import { Platform } from "react-native";
 import { transformToESPCDFUser as transformToESPCDFUserBase } from "@sdk-adaptors/ESPRMBase/transformers/transformToESPCDFUser";
+import { transformToESPCDFNode } from "@sdk-adaptors/ESPRMBase/transformers/transformToESPCDFNode";
+import { subscribableSdkNodes } from "@sdk-adaptors/ESPRMBase/utils/subscribableNodes";
 import { ESPMatterUtilityAdapter } from "@native-adaptors/implementations/ESPMatterUtilityAdapter";
 import {
+    ESPRM_UI_HIDDEN_PARAM_TYPE,
     MDNS_DOMAIN_LOCAL,
     MATTER_LOCAL_DISCOVERY_EVENT,
     MATTER_LOCAL_DISCOVERY_LOST_EVENT,
@@ -15,12 +18,21 @@ import {
 } from "@shared/utils/constants";
 import { mapNodeUpdateDataToEvent } from "@shared/utils/subscriptionHelper";
 import { registerSubscribeRetryForUser } from "@shared/utils/matterSubscribeRetry";
-import { registerAttributeReadForUser } from "@shared/utils/matterAttributeRead";
+import {
+    readAttributesForNodeId,
+    registerAttributeReadForUser,
+} from "@shared/utils/matterAttributeRead";
+import { MATTER_CLUSTER_ID_COLOR_CONTROL } from "@config/matter.identifiers";
+import {
+    MATTER_COLOR_ATTRIBUTE_CURRENT_X,
+    MATTER_COLOR_ATTRIBUTE_CURRENT_Y,
+} from "@shared/utils/matterParamConstants";
 import { isMatterNodeLocallyReachable } from "@shared/utils/matterLocalReachability";
 import { setMatterNodeUpdateHandler } from "../matterControllerTransportHandler";
 import {
     ESPCDFGroup,
     ESPCDFMatterPrecommissionInfo,
+    ESPCDFNode,
     ESPCDFSubscribeToNodeUpdatesRequestParams,
     ESPCDFUser,
     ESPCDFPaginatedAPIResponse,
@@ -47,7 +59,9 @@ import {
 } from "../groupSync";
 import { ensureMatterInChannelOrder } from "./matterChannelOrder";
 import { rewriteMatterShadowPayload } from "./matterSubscriptionRouting";
+import { withCurrentNode } from "./subscribedNodes";
 import { addDeviceProvision } from "../utils/addDeviceProvision";
+import { restoreMatterNodeId } from "../restoreMatterNodeId";
 
 interface MatterDiscoverySubscribeConfig {
     serviceType?: string;
@@ -151,6 +165,23 @@ export function transformToESPCDFUser(esprmUser: ESPRMUser | null): ESPCDFUser {
         async getGroupById(groupId: string, options: Record<string, unknown>) {
             return getMatterGroupById(esprmUser, groupId, options);
         },
+        /**
+         * Overrides base: a node fetched on its own comes back without its
+         * Matter node id, so it gets the one the app already holds for it.
+         */
+        async getNodeDetails(nodeId: string): Promise<ESPCDFNode> {
+            const node = await esprmUser.getNodeDetails(nodeId);
+            restoreMatterNodeId(node);
+            if ((node as { matterNodeId?: string }).matterNodeId) {
+                // The store swaps this copy in with default values, so a light
+                // just added shows off while it is on: read the real ones once
+                // the store holds it.
+                setTimeout(() => {
+                    void readAttributesForNodeId(baseUser, nodeId).catch(() => {});
+                }, 0);
+            }
+            return transformToESPCDFNode(node);
+        },
 
         async isUserNocAvailableForFabric(fabricId: string): Promise<boolean> {
             return ESPMatterUtilityAdapter.isUserNocAvailableForFabric(fabricId);
@@ -204,8 +235,9 @@ export function transformToESPCDFUser(esprmUser: ESPRMUser | null): ESPCDFUser {
             params: ESPCDFSubscribeToNodeUpdatesRequestParams,
         ): Promise<void> {
             const subscriptionManager = ESPRMBase.subscriptionManager;
-            const sdkNodes = params.nodeList.map(
-                (node) => node._raw as ESPRMNode,
+            const sdkNodes = subscribableSdkNodes(
+                params.nodeList,
+                "[matterTransformToESPCDFUser]",
             );
 
             const handleNodeUpdate = (update: ESPNodeUpdateData) => {
@@ -407,24 +439,24 @@ export function transformToESPCDFUser(esprmUser: ESPRMUser | null): ESPCDFUser {
             );
             return;
         }
-        let rawNode = lastSubscribeSdkNodes.find((n) => n.id === nodeId);
-        // Fallback for nodes that weren't part of the cold-start
-        // `subscribeToAllNodes` snapshot — typically a freshly-commissioned
-        // matter device added to the CDF store mid-session. The caller
-        // (matterLocalDiscovery) supplies the raw ESPRMNode lifted off the
-        // CDF mirror so we can subscribe without re-fetching the user node
-        // list. Append it so future retries / shadow-rewrite param lookups
-        // can resolve the node by id.
-        if (!rawNode && options?.rawNode) {
-            rawNode = options.rawNode as ESPRMNode;
-            lastSubscribeSdkNodes = [...lastSubscribeSdkNodes, rawNode];
+        // The caller passes the node as the store holds it now. It replaces the
+        // snapshot's copy, which goes stale when the cloud removes and re-adds a
+        // node (same id, new Matter node id), and enrolls a node added mid-session.
+        const currentNode = options?.rawNode as ESPRMNode | undefined;
+        const snapshotNode = lastSubscribeSdkNodes.find((n) => n.id === nodeId);
+        if (currentNode && currentNode !== snapshotNode) {
+            lastSubscribeSdkNodes = withCurrentNode(
+                lastSubscribeSdkNodes,
+                currentNode,
+            );
             console.log(
-                `[matterTransformToESPCDFUser] retry subscribe: enrolling new node ${nodeId} from rawNode fallback`,
+                `[matterTransformToESPCDFUser] retry subscribe: ${snapshotNode ? "replacing the old copy of" : "enrolling new"} node ${nodeId}`,
             );
         }
+        const rawNode = currentNode ?? snapshotNode;
         if (!rawNode) {
             console.warn(
-                `[matterTransformToESPCDFUser] retry subscribe skipped for node ${nodeId}: no rawNode available (not in subscribe-all snapshot, no fallback supplied)`,
+                `[matterTransformToESPCDFUser] retry subscribe skipped for node ${nodeId}: no rawNode available (not in the subscribe-all snapshot and none passed by the caller)`,
             );
             return;
         }
@@ -437,6 +469,11 @@ export function transformToESPCDFUser(esprmUser: ESPRMUser | null): ESPCDFUser {
             console.log(
                 `[matterTransformToESPCDFUser] retry subscribe → subscribeToNode for ${nodeId}`,
             );
+            // The channel ignores a subscribe for an id it has, so drop the old one: lets
+            // rediscovery rebuild a dead Matter link, and no second callback doubles updates.
+            await ESPRMBase.subscriptionManager
+                .unsubscribeFromNode(nodeId)
+                .catch(() => {});
             await ESPRMBase.subscriptionManager.subscribeToNode(
                 rawNode,
                 lastSubscribeUpdateHandler,
@@ -497,6 +534,7 @@ export function transformToESPCDFUser(esprmUser: ESPRMUser | null): ESPCDFUser {
                             endpointId?: number;
                             clusterId?: number;
                             matterAttributeId?: number;
+                            xyColorComponent?: string;
                         }[];
                     }[];
                 };
@@ -513,6 +551,57 @@ export function transformToESPCDFUser(esprmUser: ESPRMUser | null): ESPCDFUser {
         }
 
         const reads: Promise<void>[] = [];
+        // XY-backed color params (SDK ≥ 3.2, XY-only lights) have no attribute
+        // of their own: hue/saturation derive from the CurrentX/CurrentY PAIR.
+        // Read the pair once per endpoint and emit both coordinates as raw
+        // synthetic frames — `rewriteMatterShadowPayload` pairs them into one
+        // Hue+Saturation shadow, the same way it routes live XY frames.
+        const xyEndpointsScheduled = new Set<number>();
+        const scheduleXyPairRead = (endpointId: number): void => {
+            if (xyEndpointsScheduled.has(endpointId)) return;
+            xyEndpointsScheduled.add(endpointId);
+            reads.push(
+                (async () => {
+                    const xyAttributeIds = [
+                        MATTER_COLOR_ATTRIBUTE_CURRENT_X,
+                        MATTER_COLOR_ATTRIBUTE_CURRENT_Y,
+                    ];
+                    // Both halves of the pair are independent reads; the pair
+                    // cache downstream does not care which lands first.
+                    await Promise.all(xyAttributeIds.map(async (attributeId) => {
+                        try {
+                            const result = await adapter.read(
+                                matterNodeId,
+                                endpointId,
+                                MATTER_CLUSTER_ID_COLOR_CONTROL,
+                                attributeId,
+                            );
+                            if (!result.success) return;
+                            lastSubscribeUpdateHandler?.({
+                                nodeId,
+                                source: "matter",
+                                eventType: "rmaker.event.node_params_changed",
+                                payload: {
+                                    [`cluster_${MATTER_CLUSTER_ID_COLOR_CONTROL}_attr_${attributeId}`]:
+                                        result.value,
+                                },
+                                metadata: {
+                                    endpointId,
+                                    clusterId: MATTER_CLUSTER_ID_COLOR_CONTROL,
+                                    attributeId,
+                                    timestamp: Date.now(),
+                                },
+                            });
+                        } catch (error) {
+                            console.warn(
+                                `[matterTransformToESPCDFUser] XY pair read failed for node ${nodeId} ep=${endpointId} att=0x${attributeId.toString(16)}:`,
+                                error,
+                            );
+                        }
+                    }));
+                })(),
+            );
+        };
         for (const device of devices) {
             if (!device?.params) continue;
             for (const param of device.params) {
@@ -521,16 +610,25 @@ export function transformToESPCDFUser(esprmUser: ESPRMUser | null): ESPCDFUser {
                 if (endpointId === undefined || clusterId === undefined) {
                     continue;
                 }
+                if (param.xyColorComponent !== undefined) {
+                    scheduleXyPairRead(endpointId);
+                    continue;
+                }
                 // Skip clusters the app has no UI surface for. The matter
                 // SDK transformer auto-builds CDF params for every cluster
                 // exposed by `metadata.Matter.endpoints` — including
-                // standard utility clusters (Descriptor 0x1d, Identify 0x3,
-                // Groups 0x4, Binding 0x1e, …) that exist on every Matter
-                // endpoint but have no resolver in `cluster.config.ts`.
+                // standard utility clusters (Descriptor 0x1d, Groups 0x4,
+                // Binding 0x1e, …) that exist on every Matter endpoint but
+                // have no resolver in `cluster.config.ts`.
                 // Reading them just burns a Matter round-trip and produces
                 // a `sdkParamFound=false` shadow update that CDF drops.
                 const registryEntry = getClusterRegistryEntry(clusterId);
                 if (!registryEntry) continue;
+                const paramDef = registryEntry.params.find(
+                    (p) => p.name === param.name,
+                );
+                // Identify 0x3 has a resolver but no UI surface, and reads 0 at rest.
+                if (paramDef?.uiType === ESPRM_UI_HIDDEN_PARAM_TYPE) continue;
                 // Prefer the param's own `matterAttributeId`. Fall back to
                 // the cluster registry's `valueAttribute` for params built
                 // with `writeAsCommand: true` / `matterCommandId` (e.g.
@@ -539,12 +637,8 @@ export function transformToESPCDFUser(esprmUser: ESPRMUser | null): ESPCDFUser {
                 // SDK's `buildClusterParams` strips `matterAttributeId` to
                 // `undefined`. Same fallback shape used by
                 // `rewriteMatterShadowPayload`.
-                let attributeId = param.matterAttributeId;
-                if (attributeId === undefined) {
-                    attributeId = registryEntry.params.find(
-                        (p) => p.name === param.name,
-                    )?.valueAttribute;
-                }
+                const attributeId =
+                    param.matterAttributeId ?? paramDef?.valueAttribute;
                 if (attributeId === undefined) continue;
 
                 reads.push(

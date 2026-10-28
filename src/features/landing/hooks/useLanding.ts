@@ -14,7 +14,7 @@ import {
 import { getResolvedActiveSdk } from "@config/sdk.config";
 import {
   ESPRMMatter_BASE_SDK_ID,
-  ESPRMNeo_BASE_SDK_ID,
+  ESPRMNeoMatter_BASE_SDK_ID,
   type SDKIdentifier,
 } from "@config/sdk.identifiers";
 import { getRegionConfig } from "@config/region.config";
@@ -32,7 +32,7 @@ export interface UseLandingReturn {
 /**
  * Resolves the built-in {SDK id, cloud config} for a RainMaker Classic / RainMaker Neo selection
  * from the active region's committed config. RainMaker Classic maps to the Matter-capable
- * RainMaker stack, RainMaker Neo to the RainMaker Neo stack (mirrors the region defaults and
+ * RainMaker stack, RainMaker Neo to the Matter-capable RainMaker Neo stack (mirrors the region defaults and
  * the scan-config normalization).
  */
 function resolveBuiltInSelection(kind: "classic" | "neo"): {
@@ -41,7 +41,7 @@ function resolveBuiltInSelection(kind: "classic" | "neo"): {
 } {
   const region = getRegionConfig();
   return kind === "neo"
-    ? { sdk: ESPRMNeo_BASE_SDK_ID, config: region.rmneoSdk as SDKConfig }
+    ? { sdk: ESPRMNeoMatter_BASE_SDK_ID, config: region.rmneoSdk as SDKConfig }
     : { sdk: ESPRMMatter_BASE_SDK_ID, config: region.rmSdk as SDKConfig };
 }
 

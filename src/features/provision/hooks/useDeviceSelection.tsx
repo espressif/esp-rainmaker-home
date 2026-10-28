@@ -22,7 +22,8 @@ import {
   ESPRM_SCENES_SERVICE,
   ESPRM_SCHEDULES_SERVICE,
 } from "@shared/utils/constants";
-import { isRmneoStackSdkId } from "@config/sdk.identifiers";
+import { getFeatures } from "@config/features.config";
+import { getDeviceDisplayName } from "@shared/utils/deviceDisplayName";
 
 export type DeviceServiceType =
   | typeof ESPRM_SCENES_SERVICE
@@ -45,10 +46,8 @@ export const useDeviceSelection = (
   const scheduleContext = useSchedule();
 
   const context = identifier === "scene" ? sceneContext : scheduleContext;
-  const activeAdaptorIdentifier = store.getActiveAdaptorIdentifier();
   const allowOfflineForSchedule =
-    identifier === "schedule" &&
-    isRmneoStackSdkId(activeAdaptorIdentifier);
+    identifier === "schedule" && getFeatures().offlineDeviceSchedules;
   const serviceType =
     identifier === "scene" ? ESPRM_SCENES_SERVICE : ESPRM_SCHEDULES_SERVICE;
   const paramsRoute =
@@ -158,7 +157,7 @@ export const useDeviceSelection = (
     setSelectedDevice({
       nodeId: device.node.id,
       deviceName: device.device.name,
-      displayName: device.device.displayName ?? "",
+      displayName: getDeviceDisplayName(device.device, device.node),
     });
 
     // Navigate to parameter selection screen

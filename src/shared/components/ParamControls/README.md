@@ -106,7 +106,26 @@ interface ParamControlProps {
 1. **DropdownSelector** (`esp.ui.dropdown`)
    - Selection from predefined options
    - Data types: `int`, `string`
-   - Requires `bounds` or `validStrings`
+   - Options come from `valid_values` when declared; otherwise `bounds` or `validStrings`
+
+### Param schema metadata
+
+Two optional param-schema fields reach every control through `meta`, assembled
+once by `buildParamControlMeta` (`@shared/utils/paramUtils`):
+
+- **`unit`** — a canonical machine token (`celsius`, `kelvin`, `percent`,
+  `lux`, `kpa`, `degrees`, `minutes`, `cubic_meters_per_hour`), never a display
+  symbol. `@shared/utils/paramUnits` owns the one token → symbol table; an
+  unknown or absent token renders no suffix.
+- **`valid_values`** — `[{ value, label }]`, where `value` is the param's own
+  value and `label` is the display text. `valid_strs` is the compact spelling
+  of the case where the two are equal and is normalized into the same shape on
+  read, so controls see one source. Labels are also indexed into `meta.labels`
+  for `StatusReadout` and `IndexedLevelSlider`.
+
+`bounds` still describes only the numeric domain; both may appear on one param
+(a fan speed is ordinal *and* labelled). A param declaring neither field
+renders exactly as it did before.
 </details>
 
 <details>

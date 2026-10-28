@@ -8,9 +8,11 @@ import Joi from "joi";
 import type { ScannedConfigPayload } from "@config/runtime.config";
 import {
   ESPRMNeo_BASE_SDK_ID,
+  isRmneoStackSdkId,
   normalizeSdkIdentifier,
   SUPPORTED_SDK_IDENTIFIERS,
 } from "@config/sdk.config";
+import { ESPRMNeoMatter_BASE_SDK_ID } from "@config/sdk.identifiers";
 import { CONFIG_FETCH_TIMEOUT_MS } from "@shared/utils/constants";
 import {
   CONFIG_SCAN_INVALID_PAYLOAD_ERROR,
@@ -51,8 +53,11 @@ const CONFIG_SCHEMA = Joi.object({
   sdk: Joi.string()
     .valid(...SUPPORTED_SDK_IDENTIFIERS)
     .required(),
+  // Both RMNeo ids carry the same deployment config shape; they differ only in
+  // whether the adaptor exposes the Matter fabric verbs. Matching the base id
+  // alone would send a Matter-capable RMNeo payload to the RainMaker schema.
   config: Joi.when("sdk", {
-    is: ESPRMNeo_BASE_SDK_ID,
+    is: Joi.any().valid(ESPRMNeo_BASE_SDK_ID, ESPRMNeoMatter_BASE_SDK_ID).required(),
     then: ESPRMNEO_BASE_CONFIG_SCHEMA,
     otherwise: ESPRM_BASE_CONFIG_SCHEMA,
   }),
@@ -141,12 +146,21 @@ function preprocessScannedPayload(
   payload: ScannedConfigPayload
 ): ScannedConfigPayload {
   const rawSdk = String(payload.sdk ?? "");
-  const sdk = normalizeSdkIdentifier(rawSdk) ?? rawSdk;
+  // A payload naming the plain RMNeo base is upgraded to the Matter adaptor: it
+  // is a strict superset (same stack plus the fabric verbs), and the base id
+  // resolves `matterCommissioning: false`, which silently disables commissioning
+  // for every privately scanned deployment. Built-in Neo already resolves the
+  // Matter id in `resolveBuiltInSelection`; this keeps scanned ones consistent.
+  const canonical = normalizeSdkIdentifier(rawSdk) ?? rawSdk;
+  const sdk =
+    canonical === ESPRMNeo_BASE_SDK_ID ? ESPRMNeoMatter_BASE_SDK_ID : canonical;
   const withCanonicalSdk =
     sdk !== rawSdk ? { ...payload, sdk } : payload;
 
+  // `matterCapable=false` here means the scanned deployment cannot commission at
+  // all, so this aborts before any commissioning work starts.
   if (
-    sdk !== ESPRMNeo_BASE_SDK_ID ||
+    !isRmneoStackSdkId(sdk) ||
     !withCanonicalSdk.config ||
     typeof withCanonicalSdk.config !== "object"
   ) {
@@ -154,7 +168,8 @@ function preprocessScannedPayload(
   }
   return {
     ...withCanonicalSdk,
-    sdk: ESPRMNeo_BASE_SDK_ID,
+    // Narrowed to an RMNeo id by the guard above; restates it for the type.
+    sdk,
     config: normalizeScannedNeoConfig(
       withCanonicalSdk.config as unknown as Record<string, unknown>
     ) as ScannedConfigPayload["config"],

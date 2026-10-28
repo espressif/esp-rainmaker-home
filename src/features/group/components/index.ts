@@ -21,6 +21,10 @@ export {
   HomeEmptyState,
   type HomeEmptyStateProps,
 } from "./Home/HomeEmptyState";
+export {
+  HomeLoadFailedNotice,
+  type HomeLoadFailedNoticeProps,
+} from "./Home/HomeLoadFailedNotice";
 export { default as DeviceTypeFilterTabs } from "./Home/DeviceTypeFilterTabs";
 export { default as RoomControlSwitch } from "./Home/RoomControlSwitch";
 export {

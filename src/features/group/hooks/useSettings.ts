@@ -27,8 +27,8 @@ import {
 } from "@features/group/utils/settingsHelpers";
 import { useCDF } from "@shared/hooks/useCDF";
 import { getFeatures } from "@config/features.config";
-import { getResolvedActiveSdk, isRmneoStackSdkId } from "@config/sdk.config";
 import { hasGroupLevelAccess } from "@shared/utils/groupAccess";
+import { bootstrapMatterFabricsForGroups } from "@features/matter/utils/matterCommissioningHelpers";
 import { loadHomeNodes } from "@features/group/utils/homeNodes";
 
 export interface UseSettingsOptions {
@@ -272,7 +272,7 @@ export function useSettings(options: UseSettingsOptions): UseSettingsResult {
       const nextHome = groupStore.groupsList?.[0];
       if (nextHome) {
         await user?.setCurrentHome?.(nextHome);
-        await loadHomeNodes(nextHome);
+        await loadHomeNodes(nextHome, store);
         return;
       }
 
@@ -357,9 +357,10 @@ export function useSettings(options: UseSettingsOptions): UseSettingsResult {
           makePrimary: makePrimary,
         });
       }
-      // Neo share/transfer maps API `message` → CDF `description`; prefer it for toast.
-      const neoShareMessage =
-        isRmneoStackSdkId(getResolvedActiveSdk()) &&
+      // An adaptor that returns the cloud's message as CDF `description` (Neo maps
+      // API `message` → `description`) gets it in the toast; classic resolves to a
+      // bare request id string, so the app's own wording shows there.
+      const cloudShareMessage =
         shareResult &&
         typeof shareResult === "object" &&
         "description" in shareResult &&
@@ -368,7 +369,7 @@ export function useSettings(options: UseSettingsOptions): UseSettingsResult {
           ? (shareResult as { description: string }).description.trim()
           : "";
       toast.showSuccess(
-        neoShareMessage ||
+        cloudShareMessage ||
           (transfer || transferAndAssignRole
             ? t("group.settings.transferRequestedSuccessfully")
             : t("group.settings.sharingRequestedSuccessfully"))
@@ -405,6 +406,30 @@ export function useSettings(options: UseSettingsOptions): UseSettingsResult {
     toast,
   ]);
 
+  /**
+   * Post-removal Matter fabric healing: removing a member rotates the group's
+   * CAT server-side. Sync pulls the rotated CAT into `fabricDetails`, then the
+   * fabric bootstrap re-issues this phone's NOC when stale and sweeps device
+   * ACLs to the new CAT version (see `matterCatRotation`) — closing the
+   * revocation window now instead of waiting for the next home switch or app
+   * relaunch. This phone (the removing primary) is exactly the device that
+   * must do the healing. Fire-and-forget; failures retry on the next bootstrap.
+   */
+  const healFabricAfterMemberRemoval = useCallback(async () => {
+    try {
+      await syncHomeWithNodes({ force: true });
+      if (store && homeId) {
+        await bootstrapMatterFabricsForGroups(
+          store,
+          [homeId as string],
+          "member removed",
+        );
+      }
+    } catch {
+      // Best effort: the home-focus bootstrap heals this on the next run.
+    }
+  }, [store, syncHomeWithNodes, homeId]);
+
   const handleRemoveUser = useCallback(
     async (username: string) => {
       if (!home) return;
@@ -413,13 +438,16 @@ export function useSettings(options: UseSettingsOptions): UseSettingsResult {
         await home.removeSharingFor(username);
         toast.showSuccess(t("group.settings.sharingRemovedSuccessfully"));
         getSharedUsersRef.current();
+        if (home.isMatter) {
+          void healFabricAfterMemberRemoval();
+        }
       } catch {
         toast.showError(t("group.errors.errorRemovingUser"));
       } finally {
         setRemoveUserLoading(false);
       }
     },
-    [home, t, toast]
+    [home, t, toast, healFabricAfterMemberRemoval]
   );
 
   const handleRemovePendingUser = useCallback(

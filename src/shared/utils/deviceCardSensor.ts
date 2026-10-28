@@ -17,7 +17,14 @@ import {
 import {
   isUnknownParamValue,
   PARAM_BOUNDS_VALUE_SUFFIX,
+  paramValueLabelMap,
+  resolveParamUnit,
+  resolveParamValidValues,
 } from "./paramUtils";
+import { resolveParamUnitSymbol } from "./paramUnits";
+
+/** Used when a temperature param declares no unit, matching the panel readout. */
+const TEMPERATURE_FALLBACK_UNIT_SYMBOL = "°C";
 
 const DEVICE_CARD_SENSOR_PARAM_NAMES = new Set<string>([
   DEVICE_CARD_SENSOR_PARAM_NAME_TEMPERATURE,
@@ -102,7 +109,10 @@ export function formatDeviceCardSensorReading(
     if (!Number.isFinite(numericValue)) {
       return null;
     }
-    return `${numericValue.toFixed(1)}°C`;
+    const unitSymbol =
+      resolveParamUnitSymbol(resolveParamUnit(param)) ||
+      TEMPERATURE_FALLBACK_UNIT_SYMBOL;
+    return `${numericValue.toFixed(1)}${unitSymbol}`;
   }
 
   if (param.uiType === ESPRM_UI_STATUS_PARAM_TYPE) {
@@ -114,6 +124,20 @@ export function formatDeviceCardSensorReading(
     const suffix = param.bounds?.[PARAM_BOUNDS_VALUE_SUFFIX];
     if (typeof suffix === "string" && suffix.length > 0) {
       return `${rawValue}${suffix}`;
+    }
+
+    // A declared label names the value; a declared unit only qualifies a
+    // magnitude, so an enumerated value is shown by its label either way.
+    const declaredLabel = paramValueLabelMap(resolveParamValidValues(param))?.[
+      rawValue
+    ];
+    if (declaredLabel) {
+      return declaredLabel;
+    }
+
+    const unitSymbol = resolveParamUnitSymbol(resolveParamUnit(param));
+    if (unitSymbol) {
+      return `${rawValue}${unitSymbol}`;
     }
 
     return formatSemanticSensorLabel(param, rawValue);

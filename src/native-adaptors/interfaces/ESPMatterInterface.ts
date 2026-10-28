@@ -5,7 +5,7 @@
  */
 
 import { NativeModules } from "react-native";
-import { ESPRMNativeDataPayload } from "@espressif/rainmaker-matter-sdk";
+import { ESPMatterNativeDataPayload } from "../contracts/matter";
 
 /**
  * Interface for ESP Matter Native Module
@@ -25,7 +25,10 @@ export interface ESPMatterNativeInterface {
     name: string;
   }): Promise<any>;
 
-  postMessage(payload: ESPRMNativeDataPayload): Promise<any>;
+  postMessage(payload: ESPMatterNativeDataPayload): Promise<any>;
+
+  /** iOS only: ends the commissioning session in flight, if any. */
+  cancelCommissioning?(): Promise<{ cancelled: boolean }>;
 }
 
 const matterModule =

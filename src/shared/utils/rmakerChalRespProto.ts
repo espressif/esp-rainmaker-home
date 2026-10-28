@@ -9,7 +9,7 @@
  * challenge-response user-node association flow.
  *
  * Hand-rolled with no dependencies because neither SDK can supply it here:
- * `@espressif/rmneo-base-sdk` deliberately does not re-export its
+ * `@espressif/rainmaker-neo-base-sdk` deliberately does not re-export its
  * `ChallengeResponseHelper` (it pulls generated `google-protobuf` modules that
  * crash a downstream Metro bundle — see the note in that package's
  * `utils/export.ts`), and the product/shared layer may not import `@espressif/*`

@@ -35,6 +35,13 @@ export default function MatterLayout() {
           headerShown: false,
         }}
       />
+      <Stack.Screen
+        name="DeviceSetup"
+        options={{
+          title: "DeviceSetup",
+          headerShown: false,
+        }}
+      />
     </Stack>
   );
 }

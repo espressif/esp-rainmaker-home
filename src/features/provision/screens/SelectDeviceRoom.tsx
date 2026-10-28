@@ -34,6 +34,7 @@ const SelectDeviceRoom = () => {
     handleSkip,
     isLoading,
     provisionedNode,
+    backUrl,
   } = useSelectDeviceRoom();
 
   const continueDisabled = isLoading || !selectedRoom;
@@ -43,6 +44,7 @@ const SelectDeviceRoom = () => {
       <Header
         label={t("device.deviceDetails.selectRoomTitle")}
         showBack
+        customBackUrl={backUrl}
         rightSlot={
           provisionedNode ? (
             <Pressable

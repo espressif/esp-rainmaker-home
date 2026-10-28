@@ -22,11 +22,12 @@ import {
     ESPCDFAssumeRoleResponse,
 } from "@store";
 import { mapNodeUpdateDataToEvent } from "@shared/utils/subscriptionHelper";
-import { ESPRMUser, ESPSecurity, ESPTransport, ESPRMEventType, UserCustomDataRequest, ESPGroupSharingRequest, ESPRMGroup, ESPRMBase, ESPNodeUpdateData, ESPRMNode } from "@espressif/rainmaker-base-sdk";
+import { ESPRMUser, ESPSecurity, ESPTransport, ESPRMEventType, UserCustomDataRequest, ESPGroupSharingRequest, ESPRMGroup, ESPRMBase, ESPNodeUpdateData } from "@espressif/rainmaker-base-sdk";
 import { ESPRMBaseAdaptorIdentifier } from "../constants";
 import { syncHomeWithNodes as esprmSyncHomeWithNodes, setCurrentHome as esprmSetCurrentHome, createHome as esprmCreateHome } from "../groupSync";
 import { addDeviceProvision } from "../addDeviceProvision";
 import { addOnNetworkDeviceProvision } from "../addOnNetworkDeviceProvision";
+import { subscribableSdkNodes } from "../utils/subscribableNodes";
 import { transformToESPCDFGroup } from "./transformToESPCDFGroup";
 import { transformToESPCDFGroupSharingRequest } from "./transformToESPCDFGroupSharingRequest";
 import { transformToESPCDFProvisioningDevice } from "./transformToESPCDFProvisioningDevice";
@@ -371,7 +372,7 @@ export function transformToESPCDFUser(
 
         async subscribeToNodeUpdates(params: ESPCDFSubscribeToNodeUpdatesRequestParams): Promise<void> {
             const subscriptionManager = ESPRMBase.subscriptionManager;
-            const sdkNodes = params.nodeList.map((node) => node._raw as ESPRMNode);
+            const sdkNodes = subscribableSdkNodes(params.nodeList, "[transformToESPCDFUser]");
             const handleNodeUpdate = (update: ESPNodeUpdateData) => {
                 const nodeUpdateEvent = mapNodeUpdateDataToEvent(update);
                 params.onNodeUpdate?.(nodeUpdateEvent);

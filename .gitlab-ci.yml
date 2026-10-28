@@ -47,12 +47,18 @@ workflow:
       aws sts get-caller-identity
 
 
-# Deployment/SDK select (orthogonal to the region APP_FLAVOR global/cn): ACTIVE_SDK (build) + DEPLOYMENT (test) from the commit message — contains "RMNEO" (any case) -> rmneo, else rm; a preset ACTIVE_SDK/DEPLOYMENT CI/CD variable overrides.
+# Deployment/SDK select (orthogonal to the region APP_FLAVOR global/cn): ACTIVE_SDK (build) + DEPLOYMENT (test) from the commit message — contains "NEO" (any case) -> rmneo, else rm; "NEO" plus "MATTER" builds the Neo Matter SDK so the Matter suites run on Neo; a preset ACTIVE_SDK/DEPLOYMENT CI/CD variable overrides.
 .select_deployment:
   script:
     - |
-      if printf '%s' "${CI_COMMIT_MESSAGE:-${CI_COMMIT_TITLE:-}}" | grep -qi 'NEO'; then
-        _sel_sdk="rainmaker-neo-base-sdk"; _sel_dep="rmneo"
+      _sel_msg="${CI_COMMIT_MESSAGE:-${CI_COMMIT_TITLE:-}}"
+      if printf '%s' "${_sel_msg}" | grep -qi 'NEO'; then
+        _sel_dep="rmneo"
+        if printf '%s' "${_sel_msg}" | grep -qi 'MATTER'; then
+          _sel_sdk="rainmaker-neo-matter-sdk"
+        else
+          _sel_sdk="rainmaker-neo-base-sdk"
+        fi
       else
         _sel_sdk="rainmaker-matter-sdk"; _sel_dep="rm"
       fi
