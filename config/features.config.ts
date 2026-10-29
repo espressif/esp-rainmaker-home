@@ -183,6 +183,29 @@ export function getFeatures(): Record<FeatureKey, boolean> {
 }
 
 /**
+ * Whether the Apple provider should use the system Sign in with Apple sheet
+ * instead of the hosted browser OAuth flow.
+ *
+ * Deliberately NOT a FeatureKey: this selects a transport for one provider, not
+ * whether a product surface exists, and it is opt-in rather than part of the
+ * disable-only cascade. Three conditions, all required:
+ *
+ *   • iOS — Android has no native Sign in with Apple.
+ *   • third-party auth available at all (SDK / region / binary cascade).
+ *   • the active region opts in via ENABLE_NATIVE_APPLE_SIGN_IN, which gates on
+ *     whether that deployment's backend supports the `apple` federated
+ *     provider. Default false; see .env.global.example.
+ *
+ * A false result is not a dead end — the caller uses the hosted flow, which is
+ * how Apple login works today.
+ */
+export function isNativeAppleSignInEnabled(): boolean {
+  if (Platform.OS !== 'ios') return false;
+  if (!getFeatures().thirdPartyAuth) return false;
+  return getRegionConfig().features.enableNativeAppleSignIn === true;
+}
+
+/**
  * Returns the list of enabled OAuth providers for the Login screen, in
  * display order. Provider availability is fully data-driven per region: the
  * committed region env files list exactly the providers offered there

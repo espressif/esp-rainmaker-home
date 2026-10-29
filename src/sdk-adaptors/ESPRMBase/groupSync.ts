@@ -52,9 +52,8 @@ export async function syncHomeWithNodes(
   }
 
   // Await the selected home's nodes so callers (Home empty-state gate, login)
-  // treat settle as "current-home list is authoritative." Other homes stay
-  // fire-and-forget after the primary finishes.
-  await runNodeSyncForAllGroups(finalValid, selected, callbacks);
+  // treat settle as "current-home list is authoritative."
+  await syncSelectedHomeNodes(selected, callbacks);
 
   return selected;
 }
@@ -70,45 +69,22 @@ async function fetchAllGroups(user: ESPCDFUser): Promise<ESPCDFGroup[]> {
 }
 
 /**
- * Loads nodes for the primary home (awaited), then kicks off other homes in the
- * background. Each home: home nodes + room nodes via `addNodesToGroup`.
- * @param allHomes - Homes to sync nodes for
- * @param primary - Selected home whose nodes must finish before this resolves
+ * Loads the selected home's nodes with one `node_details` call and hands them to
+ * the store, which fills the home's rooms from the same reply. Other homes are
+ * not fetched here: their nodes load when the user switches to them.
+ * @param home - Selected home, or `null` when the user has none yet
  * @param callbacks - Group-store mutators used to attach fetched nodes
  */
-async function runNodeSyncForAllGroups(
-  allHomes: ESPCDFGroup[],
-  primary: ESPCDFGroup | null,
+async function syncSelectedHomeNodes(
+  home: ESPCDFGroup | null,
   callbacks: GroupStoreCallbacks
 ): Promise<void> {
-  const fetchAndAddForGroup = async (group: ESPCDFGroup) => {
-    try {
-      const nodes = await fetchNodesForGroup(group);
-      if (nodes.length > 0) callbacks.addNodesToGroup(group.id, nodes);
-    } catch (e) {
-      console.error(`[groupSync] Failed to fetch nodes for group ${group.id}:`, e);
-    }
-  };
-
-  const fetchHomeAndRooms = async (home: ESPCDFGroup) => {
-    await fetchAndAddForGroup(home);
-    if (home.subGroups?.length) {
-      await Promise.allSettled(
-        home.subGroups.map((room) => fetchAndAddForGroup(room))
-      );
-    }
-  };
-
-  if (primary) {
-    await fetchHomeAndRooms(primary);
-    const others = allHomes.filter((h) => h.id !== primary.id);
-    others.forEach((home) => {
-      void fetchHomeAndRooms(home);
-    });
-  } else {
-    allHomes.forEach((home) => {
-      void fetchHomeAndRooms(home);
-    });
+  if (!home) return;
+  try {
+    const nodes = await fetchNodesForGroup(home);
+    if (nodes.length > 0) callbacks.addNodesToGroup(home.id, nodes);
+  } catch (e) {
+    console.error(`[groupSync] Failed to fetch nodes for home ${home.id}:`, e);
   }
 }
 
@@ -128,10 +104,16 @@ export async function setCurrentHome(
   await persistLastSelectedHomeId(user, home.id);
 }
 
+/**
+ * Persists `lastSelectedHomeId` in the user's custom data. Skips the network
+ * write when the stored value is already current (store-first; the CDF keeps
+ * `user.customData` in sync after every custom-data read and write).
+ */
 async function persistLastSelectedHomeId(
   user: ESPCDFUser,
   homeId: string
 ): Promise<void> {
+  if (user.customData?.lastSelectedHomeId?.value === homeId) return;
   try {
     await user.setCustomData({
       lastSelectedHomeId: {

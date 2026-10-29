@@ -134,7 +134,7 @@ export function useCommissioning({
   const { t } = useTranslation();
   const router = useRouter();
   const toast = useToast();
-  const { espCDFUser, store } = useCDF();
+  const { espCDFUser, store, syncHomeWithNodes } = useCDF();
 
   const [phase, setPhase] = useState<MatterCommissioningPhase>(
     MATTER_COMMISSIONING_PHASE_LOADING,
@@ -148,11 +148,13 @@ export function useCommissioning({
 
   const storeRef = useRef(store);
   const userRef = useRef(espCDFUser);
+  const syncHomeWithNodesRef = useRef(syncHomeWithNodes);
   const toastRef = useRef(toast);
   const routerRef = useRef(router);
 
   storeRef.current = store;
   userRef.current = espCDFUser;
+  syncHomeWithNodesRef.current = syncHomeWithNodes;
   toastRef.current = toast;
   routerRef.current = router;
 
@@ -399,7 +401,7 @@ export function useCommissioning({
    *   handleCommissioningFailure(extractCommissioningErrorMessage(payload));
    *   return;
    * }
-   * await syncStore(store, user, refreshMatterMappingsAndRematch);
+   * await syncStore(store, syncHomeWithNodes, refreshMatterMappingsAndRematch);
    * ```
    */
   const handleCommissioningComplete = useCallback(
@@ -426,7 +428,11 @@ export function useCommissioning({
       );
 
       try {
-        await syncStore(storeRef.current, userRef.current, async () => {});
+        await syncStore(
+          storeRef.current,
+          syncHomeWithNodesRef.current,
+          async () => {},
+        );
         routerRef.current.dismissTo("/(group)/Home");
       } catch (error) {
         console.error(

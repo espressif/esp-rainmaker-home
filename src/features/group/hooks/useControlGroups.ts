@@ -34,13 +34,6 @@ import { fetchNodesIfEmpty } from "@store";
 import type { Node } from "@src/types/global";
 import { useFocusEffect } from "expo-router";
 
-/**
- * Skip the next focus re-sync after a control-group delete so a not-yet-
- * consistent cloud `getGroups()` doesn't undo the optimistic prune
- * (read-after-write race). Set on delete, cleared on first consume.
- */
-let skipNextControlGroupsSyncForHomeId: string | null = null;
-
 export interface UseControlGroupsOptions {
   homeId: string | undefined;
   router: { push: (href: unknown) => void; canGoBack?: () => boolean };
@@ -73,11 +66,11 @@ export function useControlGroups(
     return getDeviceGroupSubGroups(subGroups);
   }, [home?.subGroups]);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (force = false) => {
     if (!homeId) return;
     setRefreshing(true);
     try {
-      await syncHomeWithNodes(true);
+      await syncHomeWithNodes({ force });
     } catch (error) {
       console.error("Error syncing home for device groups:", error);
     } finally {
@@ -90,19 +83,19 @@ export function useControlGroups(
 
   useFocusEffect(
     useCallback(() => {
-      // Right after a delete the store is already correct (synchronizer pruned
-      // the subgroup); skip this one re-sync so a stale cloud read can't re-add it.
-      if (homeId && skipNextControlGroupsSyncForHomeId === homeId) {
-        skipNextControlGroupsSyncForHomeId = null;
-        return;
+      // Control groups are derived from the home already in the store, and the
+      // create and delete flows update it themselves, so a focus must not
+      // re-download the home. Fetch only when this home is not in the store
+      // yet. Pull-to-refresh is the explicit refresh.
+      if (!groupStore?.groupsByIDMap?.[homeId as string]) {
+        loadRef.current();
       }
-      loadRef.current();
-    }, [homeId]),
+    }, [homeId, groupStore]),
   );
 
   const handleRefresh = useCallback(async () => {
     if (refreshing) return;
-    await load();
+    await load(true);
   }, [load, refreshing]);
 
   const handleAddGroup = useCallback(() => {
@@ -467,9 +460,6 @@ export function useCreateGroup(
     setIsLoading((prev) => ({ ...prev, delete: true }));
     try {
       await deviceGroup.delete();
-      // Store is now optimistically pruned; tell the ControlGroups list to skip
-      // its next focus re-sync so a stale cloud read can't re-add the group.
-      skipNextControlGroupsSyncForHomeId = homeId ?? null;
       toast.showSuccess(t("group.deviceGroups.groupRemovedSuccessfully"));
       router.dismissTo({
         pathname: "/(group)/ControlGroups",

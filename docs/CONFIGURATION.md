@@ -173,6 +173,39 @@ OAuth client in the same project, **including the debug signing key**. An
 unregistered SHA-1 makes the picker return a cancellation rather than an error,
 which reads as the user dismissing it.
 
+#### Native Sign in with Apple (iOS)
+
+| Variable                       | Description                                                     | Default |
+| ------------------------------ | --------------------------------------------------------------- | ------- |
+| `ENABLE_NATIVE_APPLE_SIGN_IN`  | Use the system Sign in with Apple sheet and exchange the identity token at `POST {BASE_URL}/{API_VERSION}/auth/federated/apple`. Disable-only: an absent key means enabled. | `true` global, `false` CN |
+
+Needs no SDK or client id — Sign in with Apple ships in Apple's own
+AuthenticationServices framework. It does need the
+`com.apple.developer.applesignin` entitlement (already in `ios/APP/APP.entitlements`,
+which is the file the target's `CODE_SIGN_ENTITLEMENTS` points at — note the
+unused `ios/APP.entitlements` at the level above is NOT it)
+and the capability enabled on the App ID in the developer portal.
+
+The flag is authoritative: it is the statement that this deployment's backend
+accepts the provider, so a rejected exchange surfaces as a login error rather
+than reopening the browser. Falling back there would make every Apple login
+present the sheet, fail, and then show a browser — two prompts for one sign-in.
+This matches Google, where only platform conditions (no picker, no account) fall
+back and backend rejections are errors.
+
+> **Currently `true` on global for native-sheet testing, while the backend
+> provider is still being added.** As of 2026-08-19 the global cloud answers that
+> path with *"Federated identity provider not supported"* (`error_code` 101113),
+> so Apple login **fails after the sheet** on that region, and the rejection is
+> logged with that `error_code` and description. Set it to `false` if you need
+> working Apple login on a shared build.
+
+CN is pinned to `false`: its cloud serves no `/auth/federated` path at all (404),
+while Apple *is* in the CN provider list, so enabling it there would break Apple
+login for CN-region users of the single iOS binary with nothing to test against.
+
+Android has no native Sign in with Apple and always uses the hosted flow.
+
 ---
 
 ### Deep Links

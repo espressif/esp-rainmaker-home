@@ -222,6 +222,8 @@ export const OAUTH_NO_BROWSER_FOUND_ERROR_TAG = "NO_BROWSER_FOUND";
 // account picker. It reaches the login flow unchanged (adapter -> SDK), so the
 // flow matches on it to tell a dismissal apart from a real failure.
 export const GOOGLE_SIGN_IN_CANCELLED_ERROR_TAG = "GOOGLE_SIGN_IN_CANCELLED";
+/** The same, for the Sign in with Apple sheet. */
+export const APPLE_SIGN_IN_CANCELLED_ERROR_TAG = "APPLE_SIGN_IN_CANCELLED";
 
 // OAUTH PROVIDER KEYS
 // Lowercased form of the provider names in THIRD_PARTY_AUTH_ENABLED_PROVIDERS

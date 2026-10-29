@@ -53,7 +53,7 @@ export const DeviceRoomAssignment = observer(
       [DEVICE_SETTINGS_ROUTE_PARAM_OPEN_PICKER]?: string | string[];
       [DEVICE_SETTINGS_ROUTE_PARAM_DEVICE]?: string | string[];
     }>();
-    const { store, syncHomeWithNodes } = useCDF();
+    const { store } = useCDF();
     const [isSheetVisible, setIsSheetVisible] = useState(false);
     const [updatingRoomId, setUpdatingRoomId] = useState<string | null>(null);
     const [pendingPickerRoomId, setPendingPickerRoomId] = useState<
@@ -93,16 +93,17 @@ export const DeviceRoomAssignment = observer(
     const canEditRoomDevices =
       !home?.accessType || home.accessType === GROUP_USER_ACCESS_PRIMARY;
 
-    const rooms = useMemo(() => getSelectableRoomsForHome(home), [home]);
-    const options = useMemo(() => getRoomPickerOptions(home), [home]);
-    const selectedRoomId = useMemo(
-      () => getPrimaryRoomIdForNode(rooms, node.id),
-      [rooms, node.id],
-    );
+    // Computed on every render on purpose: the store edits the room instances
+    // in place (membership, names), so a memo keyed on their identity would
+    // keep showing the room the device was in before a move. The component
+    // is an observer, so reading the rooms here re-renders it on each change.
+    const rooms = getSelectableRoomsForHome(home);
+    const options = getRoomPickerOptions(home);
+    const selectedRoomId = getPrimaryRoomIdForNode(rooms, node.id);
 
     const pickerSelectedRoomId = pendingPickerRoomId ?? selectedRoomId;
 
-    const selectedLabel = useMemo(() => {
+    const selectedLabel = (() => {
       if (!selectedRoomId && !pendingPickerRoomId) {
         return t("device.settings.noRoomAssigned");
       }
@@ -112,7 +113,7 @@ export const DeviceRoomAssignment = observer(
         rooms.find((room) => room.id === targetId)?.name ??
         t("device.settings.noRoomAssigned")
       );
-    }, [options, pendingPickerRoomId, rooms, selectedRoomId, t]);
+    })();
 
     const multiEndpointSubtitle = useMemo(() => {
       const count = node.devices?.length ?? 0;
@@ -138,21 +139,15 @@ export const DeviceRoomAssignment = observer(
 
       appliedReturnRoomIdRef.current = returnSelectedRoomId;
 
-      void (async () => {
-        try {
-          await syncHomeWithNodes(true);
-        } catch (error) {
-          console.warn("[DeviceRoomAssignment] sync after create failed:", error);
-        }
-        setPendingPickerRoomId(returnSelectedRoomId);
-        setIsSheetVisible(true);
-      })();
+      // Create Room already placed the new room in the store.
+      setPendingPickerRoomId(returnSelectedRoomId);
+      setIsSheetVisible(true);
 
       router.setParams({
         [DEVICE_SETTINGS_ROUTE_PARAM_SELECTED_ROOM_ID]: undefined,
         [DEVICE_SETTINGS_ROUTE_PARAM_OPEN_PICKER]: undefined,
       } as Record<string, string | undefined>);
-    }, [returnOpenPicker, returnSelectedRoomId, router, syncHomeWithNodes]);
+    }, [returnOpenPicker, returnSelectedRoomId, router]);
 
     /**
      * Closes the room picker drawer when no save is in flight.
@@ -203,8 +198,8 @@ export const DeviceRoomAssignment = observer(
 
         setUpdatingRoomId(roomId);
         try {
+          // The store applies the membership change itself; no sync needed.
           await moveNodeToRoom(rooms, node.id, roomId);
-          await syncHomeWithNodes();
           toast.showSuccess(t("device.settings.roomUpdatedSuccess"));
           setIsSheetVisible(false);
           setPendingPickerRoomId(undefined);
@@ -221,7 +216,6 @@ export const DeviceRoomAssignment = observer(
         node.id,
         rooms,
         selectedRoomId,
-        syncHomeWithNodes,
         t,
         toast,
       ],

@@ -29,6 +29,7 @@ import { useCDF } from "@shared/hooks/useCDF";
 import { getFeatures } from "@config/features.config";
 import { getResolvedActiveSdk, isRmneoStackSdkId } from "@config/sdk.config";
 import { hasGroupLevelAccess } from "@shared/utils/groupAccess";
+import { loadHomeNodes } from "@features/group/utils/homeNodes";
 
 export interface UseSettingsOptions {
   homeId: string | undefined;
@@ -271,6 +272,7 @@ export function useSettings(options: UseSettingsOptions): UseSettingsResult {
       const nextHome = groupStore.groupsList?.[0];
       if (nextHome) {
         await user?.setCurrentHome?.(nextHome);
+        await loadHomeNodes(nextHome);
         return;
       }
 
@@ -285,7 +287,7 @@ export function useSettings(options: UseSettingsOptions): UseSettingsResult {
       }
 
       // Fallback when createHome is unavailable for the active SDK.
-      await syncHomeWithNodes(true);
+      await syncHomeWithNodes({ force: true });
     },
     [store, user, syncHomeWithNodes]
   );

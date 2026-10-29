@@ -18,6 +18,8 @@
 		5A1455762E45C0D20066A31F /* ESPWeChatModule.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A1455772E45C0D20066A31F /* ESPWeChatModule.swift */; };
 		5A1455802E45C0D40066A31F /* ESPGoogleSignInModule.m in Sources */ = {isa = PBXBuildFile; fileRef = 5A1455822E45C0D40066A31F /* ESPGoogleSignInModule.m */; };
 		5A1455812E45C0D40066A31F /* ESPGoogleSignInModule.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A1455832E45C0D40066A31F /* ESPGoogleSignInModule.swift */; };
+		5A1455902E45C0D50066A31F /* ESPAppleSignInModule.m in Sources */ = {isa = PBXBuildFile; fileRef = 5A1455922E45C0D50066A31F /* ESPAppleSignInModule.m */; };
+		5A1455912E45C0D50066A31F /* ESPAppleSignInModule.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A1455932E45C0D50066A31F /* ESPAppleSignInModule.swift */; };
 		761931A5804385B28082B351 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 94D7943BDE76E78EC62286AA /* PrivacyInfo.xcprivacy */; };
 		8728E4702E98D74800DF9B82 /* MatterExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 8728E4692E98D74800DF9B82 /* MatterExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		8728E48F2E99195700DF9B82 /* RequestHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8728E48C2E99195700DF9B82 /* RequestHandler.swift */; };
@@ -105,6 +107,8 @@
 		5A1455772E45C0D20066A31F /* ESPWeChatModule.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ESPWeChatModule.swift; sourceTree = "<group>"; };
 		5A1455822E45C0D40066A31F /* ESPGoogleSignInModule.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = ESPGoogleSignInModule.m; sourceTree = "<group>"; };
 		5A1455832E45C0D40066A31F /* ESPGoogleSignInModule.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ESPGoogleSignInModule.swift; sourceTree = "<group>"; };
+		5A1455922E45C0D50066A31F /* ESPAppleSignInModule.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = ESPAppleSignInModule.m; sourceTree = "<group>"; };
+		5A1455932E45C0D50066A31F /* ESPAppleSignInModule.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ESPAppleSignInModule.swift; sourceTree = "<group>"; };
 		5FCBDEB1923C0A10AB78E478 /* Pods-APP.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-APP.debug.xcconfig"; path = "Target Support Files/Pods-APP/Pods-APP.debug.xcconfig"; sourceTree = "<group>"; };
 		6A65E7C5799BC48392D7652D /* Pods-APP.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-APP.release.xcconfig"; path = "Target Support Files/Pods-APP/Pods-APP.release.xcconfig"; sourceTree = "<group>"; };
 		8728E4692E98D74800DF9B82 /* MatterExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = MatterExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -188,6 +192,7 @@
 				5A1455712E45C0D10066A31F /* OAuth */,
 				5A1455782E45C0D30066A31F /* WeChat */,
 				5A1455842E45C0D40066A31F /* GoogleSignIn */,
+				5A1455942E45C0D50066A31F /* AppleSignIn */,
 				13B07FB51A68108700A75B9A /* Images.xcassets */,
 				13B07FB61A68108700A75B9A /* Info.plist */,
 				13B07FB71A68108700A75B9A /* main.m */,
@@ -240,6 +245,15 @@
 				5A1455832E45C0D40066A31F /* ESPGoogleSignInModule.swift */,
 			);
 			path = GoogleSignIn;
+			sourceTree = "<group>";
+		};
+		5A1455942E45C0D50066A31F /* AppleSignIn */ = {
+			isa = PBXGroup;
+			children = (
+				5A1455922E45C0D50066A31F /* ESPAppleSignInModule.m */,
+				5A1455932E45C0D50066A31F /* ESPAppleSignInModule.swift */,
+			);
+			path = AppleSignIn;
 			sourceTree = "<group>";
 		};
 		832341AE1AAA6A7D00B99B32 /* Libraries */ = {
@@ -424,6 +438,7 @@
 				8790E6632FF7C82C0020344B /* Embed Frameworks */,
 				AEEAA3814FD603E8D689E640 /* [CP-User] [RNFB] Core Configuration */,
 				FBC75A1E8B2C4D73A5E601F8 /* [CP] FirebaseCrashlytics Run */,
+				87757D68D96B1CA039CAF45E /* [CP-User] [RNFB] Crashlytics Configuration */,
 			);
 			buildRules = (
 			);
@@ -588,6 +603,20 @@
 			shellScript = "\"${PODS_ROOT}/Target Support Files/Pods-APP/Pods-APP-frameworks.sh\"\n";
 			showEnvVarsInLog = 0;
 		};
+		87757D68D96B1CA039CAF45E /* [CP-User] [RNFB] Crashlytics Configuration */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputPaths = (
+				"${DWARF_DSYM_FOLDER_PATH}/${DWARF_DSYM_FILE_NAME}/Contents/Resources/DWARF/${TARGET_NAME}",
+				"$(BUILT_PRODUCTS_DIR)/$(INFOPLIST_PATH)",
+			);
+			name = "[CP-User] [RNFB] Crashlytics Configuration";
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "#!/usr/bin/env bash\n#\n# Copyright (c) 2016-present Invertase Limited & Contributors\n#\n# Licensed under the Apache License, Version 2.0 (the \"License\");\n# you may not use this library except in compliance with the License.\n# You may obtain a copy of the License at\n#\n#   http://www.apache.org/licenses/LICENSE-2.0\n#\n# Unless required by applicable law or agreed to in writing, software\n# distributed under the License is distributed on an \"AS IS\" BASIS,\n# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.\n# See the License for the specific language governing permissions and\n# limitations under the License.\n#\nset -e\n\nif [[ ${PODS_ROOT} && -f \"${PODS_ROOT}/FirebaseCrashlytics/run\" ]]; then\n  echo \"info: Exec FirebaseCrashlytics Run from Pods\"\n  \"${PODS_ROOT}/FirebaseCrashlytics/run\" -gsp \"${PROJECT_DIR}/APP/GoogleService-Info-Global.plist\"\nelif [[ -f \"${PROJECT_DIR}/FirebaseCrashlytics.framework/run\" ]]; then\n  echo \"info: Exec FirebaseCrashlytics Run from framework\"\n  \"${PROJECT_DIR}/FirebaseCrashlytics.framework/run\"\nelse\n  # SPM: upload-symbols is at a known path in the SourcePackages checkout.\n  # BUILD_DIR is typically DerivedData/Project-hash/Build/Products — strip from /Build onward\n  # to get the DerivedData project root where SourcePackages lives.\n  SPM_CRASHLYTICS_DIR=\"${BUILD_DIR%Build/*}SourcePackages/checkouts/firebase-ios-sdk/Crashlytics\"\n  SPM_UPLOAD_SYMBOLS=\"${SPM_CRASHLYTICS_DIR}/upload-symbols\"\n  if [[ -x \"${SPM_UPLOAD_SYMBOLS}\" ]]; then\n    echo \"info: Exec FirebaseCrashlytics upload-symbols from SPM\"\n    \"${SPM_UPLOAD_SYMBOLS}\" -gsp \"${PROJECT_DIR}/GoogleService-Info.plist\" -p ios \"${DWARF_DSYM_FOLDER_PATH}/${DWARF_DSYM_FILE_NAME}\"\n  elif [[ -f \"${SPM_UPLOAD_SYMBOLS}\" ]]; then\n    echo \"info: Exec FirebaseCrashlytics upload-symbols from SPM (chmod +x)\"\n    chmod +x \"${SPM_UPLOAD_SYMBOLS}\"\n    \"${SPM_UPLOAD_SYMBOLS}\" -gsp \"${PROJECT_DIR}/GoogleService-Info.plist\" -p ios \"${DWARF_DSYM_FOLDER_PATH}/${DWARF_DSYM_FILE_NAME}\"\n  else\n    echo \"warning: FirebaseCrashlytics run script not found at CocoaPods, framework, or SPM paths. Skipping dSYM upload.\"\n    echo \"warning: Checked: \\${PODS_ROOT}/FirebaseCrashlytics/run, \\${PROJECT_DIR}/FirebaseCrashlytics.framework/run, ${SPM_UPLOAD_SYMBOLS}\"\n  fi\nfi\n";
+		};
 		A7F12FBBF9A4E41E417078CA /* [CP] Check Pods Manifest.lock */ = {
 			isa = PBXShellScriptBuildPhase;
 			buildActionMask = 2147483647;
@@ -665,6 +694,8 @@
 				5A1455762E45C0D20066A31F /* ESPWeChatModule.swift in Sources */,
 				5A1455802E45C0D40066A31F /* ESPGoogleSignInModule.m in Sources */,
 				5A1455812E45C0D40066A31F /* ESPGoogleSignInModule.swift in Sources */,
+				5A1455902E45C0D50066A31F /* ESPAppleSignInModule.m in Sources */,
+				5A1455912E45C0D50066A31F /* ESPAppleSignInModule.swift in Sources */,
 				13B07FBC1A68108700A75B9A /* AppDelegate.mm in Sources */,
 				F1B6027F2E30C240003DA0C4 /* ESPNotificationModule.swift in Sources */,
 				F1B602802E30C240003DA0C4 /* ESPNotificationModule.m in Sources */,

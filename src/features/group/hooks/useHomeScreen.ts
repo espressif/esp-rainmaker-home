@@ -21,6 +21,7 @@ import {
 } from "@features/provision/constants";
 import { startNodeLocalDiscovery } from "@features/group/utils/localDiscovery";
 import { startMatterLocalDiscovery } from "@features/matter/utils/matterLocalDiscovery";
+import { loadHomeNodes } from "@features/group/utils/homeNodes";
 import type { RoomTab } from "@src/types/global";
 import { getFeatures } from "@/config/features.config";
 import { DEFAULT_HOME_GROUP_NAME } from "@shared/utils/constants";
@@ -85,7 +86,7 @@ export function useHomeScreen(): UseHomeScreenResult {
   const selectedHome = store.getCurrentHome() ?? null;
   const activeHomeNodes = store.getNodesForCurrentHome();
 
-  const { roomTabs, roomDevices, rooms, groupControlGroups: raw } =
+  const { roomTabs, roomDevices, rooms, groupControlGroups: raw, activeRoom } =
     useHomeViewModel({
       selectedHome,
       selectedRoom,
@@ -100,14 +101,14 @@ export function useHomeScreen(): UseHomeScreenResult {
 
   useEffect(() => {
     setSelectedDeviceTypeFilter(FILTER_ALL);
-  }, [selectedRoom.id]);
+  }, [activeRoom.id]);
 
   const selectedRoomGroup = useMemo(
     () =>
-      selectedRoom.id !== ALL_DEVICES_TAB_ID
-        ? rooms.find((r) => r.id === selectedRoom.id)
+      activeRoom.id !== ALL_DEVICES_TAB_ID
+        ? rooms.find((r) => r.id === activeRoom.id)
         : undefined,
-    [selectedRoom.id, rooms]
+    [activeRoom.id, rooms]
   );
 
   const filteredRoomDevices = useMemo(() => {
@@ -143,7 +144,7 @@ export function useHomeScreen(): UseHomeScreenResult {
 
       startNodeLocalDiscovery(store);
       startMatterLocalDiscovery(store);
-      void syncHomeWithNodes(true)
+      void syncHomeWithNodes()
         .catch((error: unknown) => {
           console.error("Failed to initialize home:", error);
           toast.showError(
@@ -185,6 +186,7 @@ export function useHomeScreen(): UseHomeScreenResult {
     try {
       if (homes.length > 0) {
         await unifiedUser?.setCurrentHome?.(homes[0]);
+        await loadHomeNodes(homes[0]);
         return;
       }
 
@@ -197,7 +199,7 @@ export function useHomeScreen(): UseHomeScreenResult {
         return;
       }
 
-      await syncHomeWithNodes(true);
+      await syncHomeWithNodes();
     } catch (error: unknown) {
       console.error("Failed to recover stale home selection:", error);
     }
@@ -231,7 +233,7 @@ export function useHomeScreen(): UseHomeScreenResult {
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     try {
-      const syncPromise = syncHomeWithNodes(true);
+      const syncPromise = syncHomeWithNodes({ force: true });
       startNodeLocalDiscovery(store);
       startMatterLocalDiscovery(store);
       await syncPromise;
@@ -246,13 +248,14 @@ export function useHomeScreen(): UseHomeScreenResult {
     async (home: ESPCDFGroup) => {
       if (home?.id) {
         await unifiedUser?.setCurrentHome?.(home);
-        await syncHomeWithNodes(true);
+        // One node_details call for this home; cached nodes show at once.
+        await loadHomeNodes(home);
         startNodeLocalDiscovery(store);
         startMatterLocalDiscovery(store);
         setTooltipVisible(false);
       }
     },
-    [unifiedUser, syncHomeWithNodes, store]
+    [unifiedUser, store]
   );
 
   const handleDropdownPress = useCallback(
@@ -330,7 +333,7 @@ export function useHomeScreen(): UseHomeScreenResult {
     isLoading,
     isNavigatingToAddDevice,
     refreshing,
-    selectedRoom,
+    selectedRoom: activeRoom,
     setSelectedRoom,
     roomTabs,
     roomDevices,

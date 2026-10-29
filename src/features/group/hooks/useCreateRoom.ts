@@ -31,10 +31,8 @@ import {
   normalizeGroupSharingInviteForApi,
 } from "@features/group/utils/settingsHelpers";
 import { getNodeDiff, mapNodeToDisplay } from "@features/group/utils/createRoomHelpers";
-import {
-  reconcilePendingCreatedRoom,
-  rememberPendingCreatedRoom,
-} from "@features/group/utils/pendingCreatedRoom";
+import { assignNodesToRoom } from "@features/group/utils/roomMembership";
+import { getRoomSubGroups } from "@features/group/utils/roomsHelpers";
 import { useCDF } from "@shared/hooks/useCDF";
 import { fetchNodesIfEmpty } from "@store";
 import type { Node } from "@src/types/global";
@@ -352,29 +350,22 @@ export function useCreateRoom(
   const handleSave = useCallback(() => {
     if (!home) return;
     setIsLoading((prev) => ({ ...prev, save: true }));
+    // Create the room empty, then place the devices through the same path as an
+    // edit: out of their other rooms, into this one. The store's room is the
+    // one returned here, so a failed add still leaves the room on screen.
+    const otherRooms = getRoomSubGroups(home.subGroups ?? []);
     home
       .createSubGroup({
         name: roomName,
-        nodeIds: selectedNodesIds,
+        nodeIds: [],
         customData: {},
         type: GROUP_TYPE_ROOM,
         mutuallyExclusive: true,
       })
       .then(async (group) => {
         if (group) {
-          // Rooms focus-sync can return a pre-create getGroups snapshot and wipe
-          // this subgroup from the store — remember it until cloud lists it.
-          if (homeId) {
-            rememberPendingCreatedRoom(homeId, group);
-          }
+          await assignNodesToRoom(otherRooms, selectedNodesIds, group);
           toast.showSuccess(t("group.createRoomSuccess.title"));
-          try {
-            await syncHomeWithNodes(true);
-            reconcilePendingCreatedRoom(homeId, store?.groupStore);
-          } catch (error) {
-            console.warn("[CreateRoom] sync after create failed:", error);
-            reconcilePendingCreatedRoom(homeId, store?.groupStore);
-          }
           const runNavigation = () =>
             navigateAfterRoomFlow({
               selectedRoomId: group.id,
@@ -398,11 +389,7 @@ export function useCreateRoom(
     selectedNodesIds,
     toast,
     t,
-    router,
-    homeId,
     dismissTo,
-    syncHomeWithNodes,
-    store,
     navigateAfterRoomFlow,
   ]);
 
@@ -416,9 +403,8 @@ export function useCreateRoom(
       if (toRemove.length > 0) {
         await room.removeNodes(toRemove);
       }
-      if (toAdd.length > 0) {
-        await room.addNodes(toAdd);
-      }
+      // One room per device: added devices leave their other rooms first.
+      await assignNodesToRoom(getRoomSubGroups(home?.subGroups ?? []), toAdd, room);
       toast.showSuccess(t("group.createRoomSuccess.title"));
       navigateAfterRoomFlow({});
     } catch (error: any) {
@@ -426,6 +412,7 @@ export function useCreateRoom(
     }
   }, [
     room,
+    home,
     roomName,
     selectedNodesIds,
     toast,
@@ -459,10 +446,15 @@ export function useCreateRoom(
     setIsLeavingRoom(true);
     try {
       await room.leave();
-      toast.showSuccess(t("group.createRoom.roomLeftSuccessfully"));
       // Leaving the only shared room removes the user's whole home association
-      // on the backend, so Rooms/Settings for this home may no longer exist —
-      // land on the Home screen, which re-syncs the home list on focus.
+      // on the backend. The store cannot know which case this was, so sync once
+      // before landing on Home; Home then reselects if this home is gone.
+      try {
+        await syncHomeWithNodes({ force: true });
+      } catch (error) {
+        console.warn("[CreateRoom] sync after leaving room failed:", error);
+      }
+      toast.showSuccess(t("group.createRoom.roomLeftSuccessfully"));
       router.dismissTo("/(group)/Home");
     } catch (error: any) {
       toast.showError(error.description ?? t("group.errors.errorLeavingRoom"));
@@ -470,7 +462,7 @@ export function useCreateRoom(
       setIsLeavingRoom(false);
       setShowLeaveDialog(false);
     }
-  }, [room, toast, t, router]);
+  }, [room, toast, t, router, syncHomeWithNodes]);
 
   const getRoomSharedUsers = useCallback(async () => {
     if (!room) return;

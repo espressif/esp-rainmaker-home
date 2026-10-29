@@ -6,7 +6,7 @@
 
 import "../i18n";
 import { StyleSheet, View } from "react-native";
-import { useCallback, useEffect } from "react";
+import { useCallback } from "react";
 // Initialize Matter adapter early
 import "@native-adaptors/implementations/ESPMatterAdapter";
 // hooks
@@ -14,10 +14,8 @@ import { useCDF } from "@shared/hooks/useCDF";
 import { useRouter, usePathname, useFocusEffect } from "expo-router";
 // components
 import { Logo } from "@shared/components";
-import { registerForNotification } from "@shared/utils/notifications";
 import { executePostLoginPipeline, navigateToHomeAfterAuth } from "@features/auth/utils/postLoginPipeline";
 import { isConsentAccepted } from "@features/consent";
-import { getFeatures } from "@config/features.config";
 import { isCnRegion } from "@config/region.config";
 import { getPreAuthRoute } from "@features/landing";
 // theme
@@ -87,25 +85,6 @@ const Index = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional hook deps
     }, [store, isInitialized]),
   );
-
-  // Initialize notification when user is logged in. Skipped when the
-  // notifications feature is disabled (e.g. CN builds, which ship without
-  // Firebase/FCM), so we never attempt to fetch an FCM token there.
-  useEffect(() => {
-    if (user && isInitialized && getFeatures().notifications) {
-      initNotification();
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional hook deps
-  }, [user, isInitialized]);
-
-  const initNotification = async () => {
-    try {
-      await registerForNotification(store);
-    } catch (err) {
-      console.error(err);
-      console.error("Failed to initialize notification");
-    }
-  };
 
   return (
     <View style={styles.splashScreen}>

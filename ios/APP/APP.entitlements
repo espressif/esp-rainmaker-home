@@ -6,6 +6,10 @@
 	<string>development</string>
 	<key>com.apple.developer.matter.allow-setup-payload</key>
 	<true/>
+	<key>com.apple.developer.applesignin</key>
+	<array>
+		<string>Default</string>
+	</array>
 	<key>com.apple.developer.associated-domains</key>
 	<array>
 		<string>$(ASSOCIATED_DOMAIN_ENTITLEMENT)</string>
