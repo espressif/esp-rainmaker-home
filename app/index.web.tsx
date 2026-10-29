@@ -6,7 +6,7 @@
 
 import "../i18n";
 import { StyleSheet, View, useWindowDimensions } from "react-native";
-import { useCallback, useEffect } from "react";
+import { useCallback } from "react";
 import { useCDF } from "@shared/hooks/useCDF";
 import {
   useRouter,
@@ -15,13 +15,11 @@ import {
   Redirect,
 } from "expo-router";
 import { Logo } from "@shared/components";
-import { registerForNotification } from "@shared/utils/notifications";
 import {
   executePostLoginPipeline,
   navigateToHomeAfterAuth,
 } from "@features/auth/utils/postLoginPipeline";
 import { isConsentAccepted } from "@features/consent";
-import { getFeatures } from "@config/features.config";
 import { isCnRegion } from "@config/region.config";
 import { getPreAuthRoute } from "@features/landing";
 import { shouldShowWebDesktopEmbedPhone } from "@features/embed/utils/shouldShowWebDesktopEmbedPhone";
@@ -90,31 +88,6 @@ const Index = () => {
       // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional hook deps
     }, [store, isInitialized, useDesktopEmbedPhone]),
   );
-
-  useEffect(() => {
-    if (
-      useDesktopEmbedPhone ||
-      !user ||
-      !isInitialized ||
-      !getFeatures().notifications
-    ) {
-      return;
-    }
-    void initNotification();
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional hook deps
-  }, [user, isInitialized, useDesktopEmbedPhone]);
-
-  /**
-   * Registers for push notifications when the feature is enabled.
-   */
-  const initNotification = async () => {
-    try {
-      await registerForNotification(store);
-    } catch (err) {
-      console.error(err);
-      console.error("Failed to initialize notification");
-    }
-  };
 
   if (useDesktopEmbedPhone) {
     return <Redirect href={WEB_EMBED_ROUTE as never} />;

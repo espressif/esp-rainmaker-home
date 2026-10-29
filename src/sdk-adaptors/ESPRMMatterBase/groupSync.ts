@@ -7,7 +7,6 @@
 import {
   ESPCDFUser,
   ESPCDFGroup,
-  ESPCDFNode,
   GroupStoreCallbacks,
   ESPCDFPaginatedAPIResponse,
 } from "@store";
@@ -18,15 +17,12 @@ import {
   categorizeGroupsByOwnership,
   ensureDefaultHomeForNewOrMigratedUser,
 } from "@store";
-import { transformToESPCDFNodes } from "@sdk-adaptors/ESPRMBase/transformers/transformToESPCDFNode";
 import { setCurrentHome as esprmSetCurrentHome } from "@sdk-adaptors/ESPRMBase/groupSync";
 import type { ESPRMGroup, ESPRMUser } from "@espressif/rainmaker-matter-sdk";
 import type { ESPRMGetGroupsRequestParams } from "@espressif/rainmaker-matter-sdk";
-import { ESPRMFabric } from "@espressif/rainmaker-matter-sdk";
 import { ESPRMMatterBaseAdaptorIdentifier } from "./constants";
 import { transformToESPCDFGroup } from "./transformers/transformToESPCDFGroup";
-import { subscribeMatterControllerTransport } from "./matterControllerTransportHandler";
-import { getMatterNodeId } from "@shared/utils/matterLocalStorage";
+import { fetchMatterGroupNodes } from "./nodeFetch";
 
 type MatterSdkGroupsPage = {
   groups?: ESPRMGroup[];
@@ -180,121 +176,32 @@ export async function syncHomeWithNodes(
   }
 
   // Await the selected home's nodes so callers treat settle as authoritative
-  // for the current-home list. Other homes stay fire-and-forget after primary.
-  await runNodeSyncForAllGroups(finalValid, selected, callbacks, esprmUser);
+  // for the current-home list.
+  await syncSelectedHomeNodes(selected, callbacks, esprmUser);
 
   return selected;
 }
 
 /**
- * Loads nodes for the primary home (awaited), then kicks off other homes in the
- * background. Each home: home nodes + room nodes via `addNodesToGroup`.
- * @param allHomes - Homes to sync nodes for
- * @param primary - Selected home whose nodes must finish before this resolves
+ * Loads the selected home's nodes with one `node_details` call and hands them to
+ * the store, which fills the home's rooms from the same reply. Other homes are
+ * not fetched here: their nodes load when the user switches to them.
+ * @param home - Selected home, or `null` when the user has none yet
  * @param callbacks - Group-store mutators used to attach fetched nodes
- * @param esprmUser - Matter SDK user used when fetching group node details
+ * @param esprmUser - Matter SDK user used when fetching node details
  */
-async function runNodeSyncForAllGroups(
-  allHomes: ESPCDFGroup[],
-  primary: ESPCDFGroup | null,
+async function syncSelectedHomeNodes(
+  home: ESPCDFGroup | null,
   callbacks: GroupStoreCallbacks,
   esprmUser: ESPRMUser,
 ): Promise<void> {
-  const fetchAndAddForGroup = async (group: ESPCDFGroup) => {
-    try {
-      const nodes = await fetchNodesForGroup(group, esprmUser);
-      if (nodes.length > 0) callbacks.addNodesToGroup(group.id, nodes);
-    } catch (e) {
-      console.error(`[matterGroupSync] Failed to fetch nodes for group ${group.id}:`, e);
-    }
-  };
-
-  const fetchHomeAndRooms = async (home: ESPCDFGroup) => {
-    await fetchAndAddForGroup(home);
-    if (home.subGroups?.length) {
-      await Promise.allSettled(
-        home.subGroups.map((room) => fetchAndAddForGroup(room)),
-      );
-    }
-  };
-
-  if (primary) {
-    await fetchHomeAndRooms(primary);
-    const others = allHomes.filter((h) => h.id !== primary.id);
-    others.forEach((home) => {
-      void fetchHomeAndRooms(home);
-    });
-  } else {
-    allHomes.forEach((home) => {
-      void fetchHomeAndRooms(home);
-    });
+  if (!home) return;
+  try {
+    const nodes = await fetchMatterGroupNodes(home, esprmUser);
+    if (nodes.length > 0) callbacks.addNodesToGroup(home.id, nodes);
+  } catch (e) {
+    console.error(`[matterGroupSync] Failed to fetch nodes for home ${home.id}:`, e);
   }
-}
-
-/** SDK node shape enriched in place before CDF transform. */
-type MatterSdkNodeLike = {
-  id?: string;
-  matterNodeId?: string;
-  metadata?: Record<string, unknown>;
-};
-
-/**
- * Re-attaches the operational Matter node id the cloud omitted for hybrid
- * RainMaker+Matter nodes (persisted at commissioning by `setMatterNodeId`), so
- * local discovery can target them. Stamps both the direct field and
- * `metadata.matter_node_id`, which `transformToESPCDFNode` copies by reference.
- * @param nodes - Raw SDK nodes from `getNodesWithDetails`, mutated in place.
- */
-async function injectLocalMatterNodeIds(nodes: MatterSdkNodeLike[]): Promise<void> {
-  await Promise.all(
-    nodes.map(async (node) => {
-      const nodeId = node?.id;
-      if (!nodeId) return;
-      const meta = node.metadata as
-        | { matter_node_id?: string; matterNodeId?: string }
-        | undefined;
-      const existing =
-        node.matterNodeId ?? meta?.matter_node_id ?? meta?.matterNodeId;
-      if (typeof existing === "string" && existing.trim()) return;
-
-      const stored = await getMatterNodeId(nodeId);
-      if (!stored) return;
-
-      node.matterNodeId = stored;
-      const target = (node.metadata ??= {});
-      target.matter_node_id = stored;
-    }),
-  );
-}
-
-/**
- * Loads node details for a group via the Matter SDK raw group instance.
- * @param group - CDF group whose `_raw` SDK instance provides node details
- * @returns Transformed CDF nodes for the group
- */
-async function fetchNodesForGroup(group: ESPCDFGroup, esprmUser: ESPRMUser): Promise<ESPCDFNode[]> {
-  const raw = (group as { _raw?: ESPRMGroup | ESPRMFabric })._raw;
-  if (!raw) return [];
-
-  const nodes = group.isMatter
-    ? await (raw instanceof ESPRMFabric
-        ? raw
-        : new ESPRMFabric(raw as ESPRMGroup)
-      ).getNodesWithDetails()
-    : await (raw as ESPRMGroup & {
-      getNodesWithDetails?: () => Promise<unknown[]>;
-    }).getNodesWithDetails?.() ?? [];
-
-  // Re-attach locally-persisted matter_node_id the cloud omitted for hybrid nodes.
-  if (group.isMatter) {
-    await injectLocalMatterNodeIds(nodes as unknown as MatterSdkNodeLike[]);
-  }
-
-  const cdfNodes = transformToESPCDFNodes(nodes, "matterGroupSync.fetchNodesForGroup");
-
-  subscribeMatterControllerTransport(esprmUser);
-
-  return cdfNodes;
 }
 
 

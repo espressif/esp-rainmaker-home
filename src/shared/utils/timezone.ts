@@ -532,6 +532,8 @@ export const getNodeTimezoneConfig = (node: ESPCDFNode | undefined) => {
  * Sets the user's timezone using the device's current timezone
  * Gets the IANA formatted timezone string from the device and sets it on the user instance
  * Uses the built-in Intl API which provides timezone in IANA format
+ * Skips the network write when `user.customData` already holds that value
+ * (store-first; custom data is fetched at login before this runs)
  * @param user - The user instance
  */
 export const setUserTimeZone = async (user: ESPCDFUser) => {
@@ -539,6 +541,10 @@ export const setUserTimeZone = async (user: ESPCDFUser) => {
   const timezone = canonicalizeIana(
     Intl.DateTimeFormat().resolvedOptions().timeZone
   );
+  const stored = (
+    user.customData as { timeZone?: { value?: string } } | undefined
+  )?.timeZone?.value;
+  if (stored === timezone) return;
   await user.setTimeZone(timezone);
 };
 

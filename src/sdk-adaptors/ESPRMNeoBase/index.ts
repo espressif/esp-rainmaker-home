@@ -24,6 +24,7 @@ import {
 } from "@espressif/rainmaker-neo-base-sdk";
 import { ESPCDFUser } from "@store";
 import { transformToESPCDFUser } from "./transformers/transformToESPCDFUser";
+import { getRmneoUserIdFromIdToken } from "./utils/helpers/userCustomDataHelpers";
 import {
     assertSignupPasswordPolicy,
     mapRMNeoLoginCatchError,
@@ -137,7 +138,10 @@ export class ESPRMNeoBaseSDKAdaptor implements ESPSDKAdaptor {
             if (!esprmngUser) {
                 throw new Error(ESPRMNEO_AUTH_ERR_LOGIN_NO_USER);
             }
-            const cdfUser = transformToESPCDFUser(esprmngUser);
+            const cdfUser = transformToESPCDFUser(
+                esprmngUser,
+                await getRmneoUserIdFromIdToken(esprmngUser),
+            );
             return {
                 status: SUCESS,
                 description: ESPRMNEO_AUTH_DESC_LOGIN_SUCCESS,
@@ -162,7 +166,10 @@ export class ESPRMNeoBaseSDKAdaptor implements ESPSDKAdaptor {
             if (!esprmngUser) {
                 throw new Error(ESPRMNEO_AUTH_ERR_NO_LOGGED_IN_USER);
             }
-            const cdfUser = transformToESPCDFUser(esprmngUser);
+            const cdfUser = transformToESPCDFUser(
+                esprmngUser,
+                await getRmneoUserIdFromIdToken(esprmngUser),
+            );
             return {
                 status: SUCESS,
                 description: ESPRMNEO_AUTH_DESC_CURRENT_USER_FETCHED,

@@ -5,6 +5,7 @@
  */
 
 import { getSelectableRoomsForHome } from "@features/provision/utils/selectDeviceRoomHelpers";
+import { assignNodesToRoom } from "@features/group/utils/roomMembership";
 import type { ESPCDFGroup } from "@store";
 
 /** Label + id pair for settings list pickers. */
@@ -59,8 +60,7 @@ export function getPrimaryRoomIdForNode(
 }
 
 /**
- * Moves a node into a room: removes from other rooms, then adds to the target.
- * Sequential add/remove avoids MQTT resync races (same as room edit flow).
+ * Moves a node into a room and out of every other room (one room per device).
  * @param rooms - All selectable rooms on the home
  * @param nodeId - Node to assign
  * @param targetRoomId - Chosen room subgroup id
@@ -70,24 +70,9 @@ export async function moveNodeToRoom(
   nodeId: string,
   targetRoomId: string,
 ): Promise<void> {
-  const currentRooms = getRoomsContainingNode(rooms, nodeId);
-  const alreadyInTarget = currentRooms.some((room) => room.id === targetRoomId);
-
-  if (alreadyInTarget && currentRooms.length === 1) {
-    return;
+  const targetRoom = rooms.find((room) => room.id === targetRoomId);
+  if (!targetRoom) {
+    throw new Error("Target room not found");
   }
-
-  for (const room of currentRooms) {
-    if (room.id !== targetRoomId) {
-      await room.removeNodes([nodeId]);
-    }
-  }
-
-  if (!alreadyInTarget) {
-    const targetRoom = rooms.find((room) => room.id === targetRoomId);
-    if (!targetRoom) {
-      throw new Error("Target room not found");
-    }
-    await targetRoom.addNodes([nodeId]);
-  }
+  await assignNodesToRoom(rooms, [nodeId], targetRoom);
 }

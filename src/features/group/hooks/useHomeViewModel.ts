@@ -33,11 +33,22 @@ export interface UseHomeViewModelResult {
   devices: ReturnType<typeof transformNodesToDevices>;
   roomDevices: ReturnType<typeof getFilteredDevices>;
   processedHome: ESPCDFGroup | null;
+  /**
+   * The selected tab as it is now: same id with the room's current name, or the
+   * first tab when the selected room no longer exists (deleted elsewhere).
+   */
+  activeRoom: RoomTab;
 }
 
 /**
  * View model hook for the Home screen.
  * Derives roomTabs, rooms, devices, and roomDevices from home and node data.
+ *
+ * Deliberately not memoized on the home object: the CDF keeps the same home and
+ * room instances and edits them in place (a room created, renamed or deleted),
+ * so a memo keyed on `selectedHome` would never recompute. The Home screen is a
+ * MobX observer, so computing here makes it track every field it reads (the
+ * room list, each room's name and node ids) and re-render on exactly those.
  */
 export function useHomeViewModel({
   selectedHome,
@@ -45,38 +56,19 @@ export function useHomeViewModel({
   activeHomeNodes,
   defaultTabs,
 }: UseHomeViewModelParams): UseHomeViewModelResult {
-  const processedHome = useMemo(
-    () => validateHomeData(selectedHome),
-    [selectedHome]
-  );
-
-  const roomTabs = useMemo(
-    () => createRoomTabs(processedHome, defaultTabs),
-    [processedHome, defaultTabs]
-  );
+  const processedHome = validateHomeData(selectedHome);
+  const subGroups = (selectedHome?.subGroups as ESPCDFGroup[]) ?? [];
+  const roomTabs = createRoomTabs(processedHome, defaultTabs);
+  const rooms = getRoomSubGroups(subGroups);
+  const groupControlGroups = getDeviceGroupSubGroups(subGroups);
+  const activeRoom =
+    roomTabs.find((tab) => tab.id === selectedRoom.id) ?? roomTabs[0] ?? selectedRoom;
 
   const devices = useMemo(
     () => transformNodesToDevices(activeHomeNodes),
     [activeHomeNodes]
   );
-
-  const rooms = useMemo(
-    () => getRoomSubGroups((selectedHome?.subGroups as ESPCDFGroup[]) ?? []),
-    [selectedHome?.subGroups]
-  );
-
-  const groupControlGroups = useMemo(
-    () =>
-      getDeviceGroupSubGroups(
-        (selectedHome?.subGroups as ESPCDFGroup[]) ?? []
-      ),
-    [selectedHome?.subGroups]
-  );
-
-  const roomDevices = useMemo(
-    () => getFilteredDevices(selectedRoom, rooms, activeHomeNodes, devices),
-    [selectedRoom, rooms, activeHomeNodes, devices]
-  );
+  const roomDevices = getFilteredDevices(activeRoom, rooms, activeHomeNodes, devices);
 
   return {
     roomTabs,
@@ -85,5 +77,6 @@ export function useHomeViewModel({
     devices,
     roomDevices,
     processedHome,
+    activeRoom,
   };
 }

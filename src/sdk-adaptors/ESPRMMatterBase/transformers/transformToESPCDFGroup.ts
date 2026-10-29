@@ -18,6 +18,7 @@ import {
 } from "@espressif/rainmaker-matter-sdk";
 import { transformToESPCDFGroup as transformToESPCDFGroupFromESPRMBase } from "@sdk-adaptors/ESPRMBase/transformers/transformToESPCDFGroup";
 import { MATTER_NEEDS_FABRIC_CONVERSION } from "../constants";
+import { fetchMatterGroupNodes } from "../nodeFetch";
 
 /**
  * Maps SDK fabric details to the CDF {@link ESPCDFMatterFabricDetails} shape.
@@ -113,6 +114,9 @@ export function transformToESPCDFGroup(
 
     baseGroup.operations = {
         ...baseGroup.operations,
+        // Node details through the Matter-aware fetch (fabric wrap, local Matter
+        // ids, controller transport), the same path the login sync uses.
+        getNodes: () => fetchMatterGroupNodes(baseGroup, user),
         ...matterFabricOperations,
     };
     baseGroup.identifier = identifier;

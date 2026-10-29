@@ -5,6 +5,36 @@ All notable changes to the ESP RainMaker Home app will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [6.4.0]
+
+### Added
+
+- **Native Sign in with Apple**
+  - Sign in with Apple uses the system account sheet instead of a browser tab
+  - Falls back to the hosted OAuth flow automatically on Android, or when a deployment opts out via `ENABLE_NATIVE_APPLE_SIGN_IN`
+
+### Changed
+
+- **Home data cache and disk snapshot**
+  - Fetch nodes once per home instead of once per room; skip the separate custom-data fetch on login
+  - Skip settings writes (timezone, selected home, push token) when the value is unchanged
+  - Serve home, rooms and devices from the in-memory store after the first sync
+  - Restore the home tree from disk on launch so Home paints before the first network reply
+  - Login loads only the selected home; other homes load on first open and refresh in the background
+  - Update devices and rooms in place during sync instead of replacing lists
+
+- **RainMaker Neo**
+  - Look up a device's home from the cached store instead of an extra groups request
+
+- Update `@espressif/rainmaker-base-cdf` to 2.4.0
+
+### Fixed
+
+- **RainMaker Neo MQTT connection and credential refresh**
+  - Brand-new accounts come online: the first-login `409 User has no groups` is treated as expected and MQTT connects once the default home exists, instead of retrying with backoff
+  - MQTT credentials are re-vended after accepting a shared home or creating a home, so devices in a home gained mid-session subscribe without restarting the app
+  - A failed reconnect no longer fails the share accept or home creation; the watchdog and resume paths retry later
+
 ## [6.3.2]
 
 ### Fixed

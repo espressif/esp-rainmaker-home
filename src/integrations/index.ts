@@ -5,6 +5,8 @@
  */
 
 import { ESPCDF, AdaptorRegistry, initCDF, disposeCDF, ESPSDKAdaptor } from "@store";
+import { snapshotConfigFor } from "@config/snapshot.config";
+import asyncStorageAdapter from "@native-adaptors/implementations/ESPAsyncStorage";
 import { ESPRMBaseSDKAdaptor, ESPRMBaseAdaptorIdentifier } from '@sdk-adaptors/ESPRMBase';
 import { ESPRMNeoBaseSDKAdaptor, ESPRMNeoBaseAdaptorIdentifier } from '@sdk-adaptors/ESPRMNeoBase';
 import { ESPRMMatterBaseSDKAdaptor, ESPRMMatterBaseAdaptorIdentifier } from '@sdk-adaptors/ESPRMMatterBase';
@@ -107,7 +109,10 @@ class CDFBootstrap {
                 '[CDFBootstrap] Failed to set active adaptor:'
             );
 
-            this.cdfInstance = await initCDF({ sdkAdaptorRegistry: this.sdkRegistry });
+            this.cdfInstance = await initCDF({
+                sdkAdaptorRegistry: this.sdkRegistry,
+                snapshot: snapshotConfigFor(asyncStorageAdapter),
+            });
             this._isInitialized = true;
 
             return this.cdfInstance;

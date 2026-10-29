@@ -11,6 +11,7 @@ import {
   ESPCDFProvisioningDevice,
   ESPCDFSubscribeToNodeUpdatesRequestParams,
   ESPCDFUserInfo,
+  ESPCDF,
 } from "@store";
 import {
   ESPDevice,
@@ -19,6 +20,7 @@ import {
   ESPRMNeoUser,
   ESPTransport,
   type ESPNodeUpdateData,
+  ESPRMNeoGroup,
 } from "@espressif/rainmaker-neo-base-sdk";
 import { STATUS_SUCCESS } from "@shared/utils/constants";
 import { createCDFProvisioningDevice } from "../../transformers/transformToESPCDFProvisioningDevice";
@@ -49,6 +51,7 @@ import { logRmneoDeviceParamsRaw, logRmneoNodeConfigRaw } from "./debugLogHelper
 import {
   getRmneoGroupsShared,
   orderSdkGroupsForNodeLookup,
+  sdkGroupContainsNodeId,
 } from "./groupHelpers";
 import {
   clearPushEndpoint,
@@ -121,6 +124,22 @@ export async function searchRmneoBleDevicesByCustomerId(
 }
 
 /**
+ * The SDK home group in the CDF store whose membership (home or rooms) lists `nodeId`.
+ * @param nodeId - Node id to resolve.
+ * @returns The SDK group behind the store's home entity, or undefined.
+ */
+function findSdkHomeGroupInStore(nodeId: string): ESPRMNeoGroup | undefined {
+  const homes = ESPCDF.instance?.groupStore?.groupsList ?? [];
+  for (const home of homes) {
+    const raw = home._raw as unknown;
+    if (raw instanceof ESPRMNeoGroup && sdkGroupContainsNodeId(raw, nodeId)) {
+      return raw;
+    }
+  }
+  return undefined;
+}
+
+/**
  * Looks up a node across the user's SDK groups (ordered for cache locality) and
  * returns the CDF node transform.
  * @param esprmngUser - Authenticated RMNeo user.
@@ -131,6 +150,18 @@ export async function getRmneoCdfNodeById(
   esprmngUser: ESPRMNeoUser,
   nodeId: string,
 ): Promise<ESPCDFNode> {
+  // The home a node belongs to is already in the store; no need to download the
+  // group list first. Fall back to the cloud list if membership has moved.
+  const storeHome = findSdkHomeGroupInStore(nodeId);
+  if (storeHome) {
+    try {
+      const rmngNode = await storeHome.getNode(nodeId, { cache: false });
+      return transformToESPCDFNode(rmngNode);
+    } catch {
+      /* membership may have changed since the last sync */
+    }
+  }
+
   const groups = await getRmneoGroupsShared(esprmngUser);
   let lastError: unknown;
   for (const group of orderSdkGroupsForNodeLookup(groups, nodeId)) {
@@ -270,6 +301,10 @@ function handleRmneoNodeUpdate(
 /**
  * Subscribes the Neo subscription manager to all nodes in `params.nodeList`,
  * skipping nodes whose current SDK object is already registered.
+ *
+ * Nodes restored from the CDF disk snapshot carry `_raw: null` until the
+ * first live sync adopts the SDK node; they are skipped here (the sync
+ * subscribes them) so a reconnect during that window cannot throw.
  * @param params - CDF subscribe request (node list + callback).
  * @param subscriptionState - Current node-id to SDK-node registrations.
  */
@@ -279,8 +314,11 @@ export async function subscribeRmneoUserToNodeUpdates(
 ): Promise<void> {
   const subscriptionManager = ESPRMNeoBase.subscriptionManager;
   const sdkNodes = params.nodeList
-    .map((node) => node._raw as ESPRMNeoNode)
-    .filter((node) => subscriptionState.get(node.nodeId) !== node);
+    .map((node) => node._raw as ESPRMNeoNode | null | undefined)
+    .filter(
+      (node): node is ESPRMNeoNode =>
+        !!node?.nodeId && subscriptionState.get(node.nodeId) !== node,
+    );
 
   if (sdkNodes.length === 0) {
     return;

@@ -51,26 +51,40 @@ export function transformToESPCDFUser(
         throw new Error("ESPRMUser is required for transformation");
     }
 
-    const getUserInfoFromESPRMUser = async (): Promise<ESPCDFUserInfo> => {
+    const getUserInfoFromESPRMUser = async (
+        withCustomData = false,
+    ): Promise<ESPCDFUserInfo & { customData?: Record<string, any> }> => {
         try {
             // Try to get user info via the SDK method
-            const userInfo = await esprmUser.getUserInfo();
+            const userInfo = await esprmUser.getUserInfo(withCustomData);
             return {
                 id: userInfo.userId,
                 name: userInfo.name || '',
                 email: userInfo.username || '',
                 nickname: userInfo.name || undefined,
                 phone: userInfo.phoneNumber || undefined,
-
+                ...(userInfo.customData && { customData: userInfo.customData }),
             }
         } catch (error) {
             throw error;
         }
     };
 
-    // Initial user info (will be populated asynchronously)
+    /**
+     * Custom data carried by the initial `GET user2?custom_data=true`, consumed by
+     * the first `getCustomData()` call so login does not also issue
+     * `GET user/custom_data`. Later calls go to the network as before.
+     */
+    let initialCustomData: Promise<Record<string, any> | undefined> | null = null;
+
+    // Initial user info: the id comes from the stored id token so it is known
+    // before the profile call answers (the CDF keys its disk snapshot by it);
+    // the rest is populated asynchronously. Read the static off the instance's
+    // own class: the Matter SDK is loaded through the base SDK's CommonJS entry
+    // while app code gets the ESM entry, so `ESPRMUser` here can be a different
+    // copy of the class from the one that constructed `esprmUser`.
     const initialUserInfo: ESPCDFUserInfo = {
-        id: '',
+        id: (esprmUser.constructor as typeof ESPRMUser).userId ?? '',
         name: '',
         email: '',
     };
@@ -102,6 +116,12 @@ export function transformToESPCDFUser(
         },
 
         async getCustomData(): Promise<any> {
+            if (initialCustomData) {
+                const pending = initialCustomData;
+                initialCustomData = null;
+                const customData = await pending;
+                if (customData) return customData;
+            }
             return await esprmUser.getCustomData();
         },
 
@@ -427,10 +447,17 @@ export function transformToESPCDFUser(
         identifier: ESPRMBaseAdaptorIdentifier,
     });
 
-    // Fetch and update user info asynchronously
-    getUserInfoFromESPRMUser()
-        .then((userInfo) => {
-            cdfUser.userInfo = userInfo;
+    // Fetch and update user info asynchronously. One call carries custom data
+    // as well, so the first getCustomData() can be served from it.
+    const initialUserInfo$ = getUserInfoFromESPRMUser(true);
+    // Never rejects: a failed user-info call just means a normal custom-data GET later.
+    initialCustomData = initialUserInfo$.then((userInfo) => userInfo.customData, () => undefined);
+    initialUserInfo$
+        .then(({ customData, ...userInfo }) => {
+            cdfUser.userInfo = { ...userInfo, id: userInfo.id || initialUserInfo.id };
+            if (customData && cdfUser.customData === undefined) {
+                cdfUser.customData = customData;
+            }
         })
         .catch((error) => {
             console.error("[transformToESPCDFUser] Failed to fetch initial user info:", error);

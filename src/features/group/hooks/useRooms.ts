@@ -7,7 +7,6 @@
 import { useState, useCallback, useMemo, useRef } from "react";
 import type { ESPCDFGroup } from "@store";
 import { getRoomSubGroups } from "@features/group/utils/roomsHelpers";
-import { reconcilePendingCreatedRoom } from "@features/group/utils/pendingCreatedRoom";
 import { useCDF } from "@shared/hooks/useCDF";
 import { useFocusEffect } from "expo-router";
 import { hasGroupLevelAccess } from "@shared/utils/groupAccess";
@@ -30,7 +29,8 @@ export interface UseRoomsResult {
 
 /**
  * Hook that encapsulates Rooms list business logic and state.
- * Derives rooms from current home in store; syncs on focus and refresh.
+ * Derives rooms from the current home in the store. Syncs on pull-to-refresh,
+ * and on focus only when the home is not in the store yet.
  */
 export function useRooms(options: UseRoomsOptions): UseRoomsResult {
   const { homeId, router } = options;
@@ -48,32 +48,37 @@ export function useRooms(options: UseRoomsOptions): UseRoomsResult {
     return getRoomSubGroups(subGroups);
   }, [home?.subGroups]);
 
-  const loadRooms = useCallback(async () => {
+  const loadRooms = useCallback(async (force = false) => {
     if (!homeId) return;
     setRefreshing(true);
     try {
-      await syncHomeWithNodes(true);
-      // Re-attach a just-created room if sync returned a stale groups list.
-      reconcilePendingCreatedRoom(homeId, groupStore);
+      await syncHomeWithNodes({ force });
     } catch (error) {
       console.error("Error fetching group:", error);
     } finally {
       setRefreshing(false);
     }
-  }, [homeId, syncHomeWithNodes, groupStore]);
+  }, [homeId, syncHomeWithNodes]);
 
   const loadRoomsRef = useRef(loadRooms);
   loadRoomsRef.current = loadRooms;
 
   useFocusEffect(
     useCallback(() => {
-      loadRoomsRef.current();
-    }, [])
+      // The store already holds the rooms after the home sync, and the create
+      // and delete flows sync on their own, so a focus must not re-download the
+      // whole home. Fetch only when this home is not in the store yet (screen
+      // opened before the first sync landed). Pull-to-refresh is the explicit
+      // refresh.
+      if (!groupStore?.groupsByIDMap?.[homeId as string]) {
+        loadRoomsRef.current();
+      }
+    }, [homeId, groupStore])
   );
 
   const handleRefresh = useCallback(async () => {
     if (refreshing) return;
-    await loadRooms();
+    await loadRooms(true);
   }, [loadRooms, refreshing]);
 
   const handleAddRoom = useCallback(() => {
