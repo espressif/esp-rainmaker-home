@@ -168,6 +168,8 @@ code_quality:
   stage: quality
   tags: [mac-mini-runner]
   interruptible: true
+  variables:
+    SKIP_SKIA_DOWNLOAD: "1"
   before_script: []
   rules:
     - if: $CI_MERGE_REQUEST_ID
@@ -186,8 +188,8 @@ android_apk:
   stage: build
   tags: [mac-mobile-runner]
   interruptible: true
-  # Cold builds already take up to ~58 min on this runner, just under the 1h default.
-  timeout: 90m
+  # Cold builds take up to ~58 min alone and hit 90 min on 29 Oct with other pipelines on this runner.
+  timeout: 2h
   variables:
     # CI APKs get shared for testing, so also build for 32-bit phones.
     # Gradle reads ORG_GRADLE_PROJECT_* as a project property, ahead of
@@ -289,6 +291,8 @@ ios_ipa:
   stage: build
   tags: [mac-mini-runner]
   interruptible: true
+  # Hit the 1h default on 29 Oct with other pipelines on this runner.
+  timeout: 2h
   before_script: []
   needs:
     - job: code_quality
@@ -440,7 +444,8 @@ ios_sourcemap:
 .device_test:
   stage: test
   tags: [mac-mini-runner]
-  timeout: 3h
+  # iOS regression already took 2h58 on 26 Oct, just under the old 3h.
+  timeout: 4h
   variables:
     GIT_CLEAN_FLAGS: -ffdx -e test/.venv
   artifacts:
@@ -513,7 +518,10 @@ ios_sourcemap:
 android_test:
   extends: .device_test
   resource_group: android_moto
+  # Release MRs test both deployments in android_test_release instead.
   rules:
+    - if: '$CI_MERGE_REQUEST_TARGET_BRANCH_NAME =~ /^release\/v/'
+      when: never
     - if: '$CI_MERGE_REQUEST_ID && $FS_KEYSTORE_GLOBAL_FILE'
     - when: never
   needs:
@@ -537,7 +545,10 @@ ios_test:
   extends: .device_test
   resource_group: iphone_air
   before_script: []
+  # Release MRs test both deployments in ios_test_release instead.
   rules:
+    - if: '$CI_MERGE_REQUEST_TARGET_BRANCH_NAME =~ /^release\/v/'
+      when: never
     - if: '$CI_MERGE_REQUEST_ID && $IOS_P12_PASSWORD && $XCODE_ORG_ID'
     - when: never
   needs:
@@ -558,6 +569,29 @@ ios_test:
     # WebDriverAgent is built fresh from the Apple account signed in to Xcode on
     # this runner (no prebuilt-WDA bootstrap).
     - !reference [.device_test_run, script]
+
+# Release MRs: full regression on both deployments from the same build. The
+# matrix values win over the commit-message pick in .select_deployment; the two
+# jobs share the phone's resource_group, so they run one after the other.
+.both_deployments:
+  parallel:
+    matrix:
+      - DEPLOYMENT: rm
+        ACTIVE_SDK: rainmaker-matter-sdk
+      - DEPLOYMENT: rmneo
+        ACTIVE_SDK: rainmaker-neo-matter-sdk
+
+android_test_release:
+  extends: [android_test, .both_deployments]
+  rules:
+    - if: '$CI_MERGE_REQUEST_TARGET_BRANCH_NAME =~ /^release\/v/ && $CI_MERGE_REQUEST_ID && $FS_KEYSTORE_GLOBAL_FILE'
+    - when: never
+
+ios_test_release:
+  extends: [ios_test, .both_deployments]
+  rules:
+    - if: '$CI_MERGE_REQUEST_TARGET_BRANCH_NAME =~ /^release\/v/ && $CI_MERGE_REQUEST_ID && $IOS_P12_PASSWORD && $XCODE_ORG_ID'
+    - when: never
 
 # OTA publish — see deployment/ota/README.md for the flow, trigger model, and rotation.
 .ota_publish:
@@ -702,6 +736,8 @@ web_deploy:
   stage: deploy
   tags: [mac-mini-runner]
   interruptible: false
+  # Runs take about an hour on this runner, right at the 1h default (two timed out on 29 Oct).
+  timeout: 2h
   rules:
     - if: '$CI_COMMIT_BRANCH =~ /^release\// && $AWS_ACCESS_KEY_ID && $APP_ASSETS_S3_BUCKET && $CLOUDFRONT_DISTRIBUTION_ID'
       when: manual

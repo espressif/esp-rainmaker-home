@@ -24,23 +24,34 @@ class DeviceSerial:
         self._resource = resource
         self.device_name = device_name
 
-    def lines(self):
-        """Return all captured serial lines (full on-disk log; falls back to the bounded live buffer)."""
+    def _log_text(self):
+        """The full on-disk serial log, or None when it cannot be read."""
         path = getattr(self._resource, "serial_log_path", None)
         if path:
             try:
                 with open(path, "r", errors="replace") as fh:
-                    return fh.read().splitlines()
+                    return fh.read()
             except Exception:
                 pass
+        return None
+
+    def lines(self):
+        """Return all captured serial lines (full on-disk log; falls back to the bounded live buffer)."""
+        text = self._log_text()
+        if text is not None:
+            return text.splitlines()
         try:
             return list(self._rm.serial_logger.get_live_lines(self._resource))
         except Exception:
             return []
 
     def marker(self):
-        """Return an index into the live buffer to scope later waits to new output."""
-        return len(self.lines())
+        """Return an index into the log scoping later waits to new output; a last line still missing its newline (the console '>> ' prompt) stays in scope, because the next log line is appended onto it."""
+        text = self._log_text()
+        if text is None:
+            return len(self.lines())
+        count = len(text.splitlines())
+        return count - 1 if count and not text.endswith(("\n", "\r")) else count
 
     def set_param(self, param, value):
         """Inject a param write on the device (also reported to cloud)."""
@@ -71,6 +82,16 @@ class DeviceSerial:
                     return True
             time.sleep(1)
         logger.warning("Serial did not confirm: Received value = %s%s", _fmt(value), suffix)
+        return False
+
+    def wait_for_name_write(self, name, since=0, timeout=20):
+        """True when the device logs a received cloud/local write of Name=<name> after log index `since`."""
+        needle = f'"Name":"{name}"'
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            if any("Received params" in line and needle in line for line in self.lines()[since:]):
+                return True
+            time.sleep(1)
         return False
 
     def reported_params(self):

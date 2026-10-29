@@ -7,7 +7,7 @@
 
 import time
 
-from selenium.common.exceptions import StaleElementReferenceException
+from selenium.common.exceptions import NoSuchElementException, StaleElementReferenceException
 
 from .base import BasePage
 
@@ -87,33 +87,34 @@ class GroupSharing(BasePage):
             time.sleep(0.5)
         return False
 
+    def _open_remove_dialog_for(self, email, timeout=10):
+        """Tap the remove button on the user's row once it has rendered (a just-sent invite reaches the pending list a few seconds after the modal closes)."""
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            for name_locator, button_locator in (
+                ("shared_user_name", "remove_shared_user_button"),
+                ("pending_user_name", "remove_pending_user_button"),
+            ):
+                index = self._index_of(name_locator, email)
+                if index is not None:
+                    self.find_all(button_locator)[index].click()
+                    return
+            time.sleep(0.5)
+        raise AssertionError(f"{email} not listed in sharing or pending sections within {timeout}s")
+
     def revoke_sharing_for(self, email):
         """Remove one user from whichever section lists them, then confirm the dialog."""
-        for name_locator, button_locator in (
-            ("shared_user_name", "remove_shared_user_button"),
-            ("pending_user_name", "remove_pending_user_button"),
-        ):
-            index = self._index_of(name_locator, email)
-            if index is not None:
-                self.find_all(button_locator)[index].click()
-                self.click("revoke_confirm_button", timeout=5)
-                time.sleep(1)
-                return self
+        self._open_remove_dialog_for(email)
+        self.click("revoke_confirm_button", timeout=5)
+        time.sleep(1)
         return self
 
     def dismiss_revoke_dialog_for(self, email):
         """Open the remove dialog for a listed user, then cancel it."""
-        for name_locator, button_locator in (
-            ("shared_user_name", "remove_shared_user_button"),
-            ("pending_user_name", "remove_pending_user_button"),
-        ):
-            index = self._index_of(name_locator, email)
-            if index is not None:
-                self.find_all(button_locator)[index].click()
-                self.click("revoke_cancel_button", timeout=5)
-                time.sleep(1)
-                return self
-        raise AssertionError(f"{email} not listed in sharing or pending sections")
+        self._open_remove_dialog_for(email)
+        self.click("revoke_cancel_button", timeout=5)
+        time.sleep(1)
+        return self
 
     def is_invitation_present(self, from_text, timeout=5):
         """True when a sharing invitation matching from_text is in the notification list."""
@@ -125,9 +126,12 @@ class GroupSharing(BasePage):
         return False
 
     def leave_shared_home(self):
-        """Leave the shared home from its settings screen and confirm the dialog."""
+        """Leave the shared home from its settings screen once it has finished sliding in, and confirm the dialog."""
         home_management = self._home_management()
-        home_management.click("leave_home_button", timeout=10)
+        button = home_management.find_settled("leave_home_button", timeout=10)
+        if button is None:
+            raise NoSuchElementException("Leave Home button did not settle on the home settings screen within 10s")
+        button.click()
         self.click("revoke_confirm_button", timeout=5)
         time.sleep(2)
         return self

@@ -8,24 +8,15 @@ Sign Up Page Helper
 """
 import logging
 import time
-from .base import BasePage
+from .base import PasswordFormPage
 from utils.mailosaur_helper import generate_email
 
 logger = logging.getLogger(__name__)
 
-class Signup(BasePage):
+class Signup(PasswordFormPage):
     def __init__(self, driver, page_helper_manager=None):
         super().__init__(driver, page_helper_manager)
-    
-    def is_password_visible(self):
-        """Check if password is currently visible as text"""
-        try:
-            # Check if password field shows actual text vs masked
-            password_text = self.get_text("password_input")
-            return not all(char == '•' or char == '*' for char in password_text if char)
-        except Exception:
-            return False
-    
+
     def is_confirm_password_visible(self):
         """Check if confirm password is currently visible as text"""
         try:
@@ -62,11 +53,6 @@ class Signup(BasePage):
         self.click("terms_checkbox")
         return self
     
-    def toggle_password_visibility(self):
-        """Toggle password visibility"""
-        logger.info("Toggling password visibility")
-        self.click("password_toggle")
-        return self
     
     def perform_signup(self, email: str, password: str, confirm_password: str, accept_terms=True, wait_for_completion=True):
         """Complete signup flow with credentials"""

@@ -117,14 +117,15 @@ class EmailSender:
     
     def _create_email_body(self, report_path: str = None, report_url: str = None,
                           summary_stats: Dict = None, screenshot_path: str = None,
-                          app_version: str = "", git_info: Dict = None) -> str:
+                          app_version: str = "", git_info: Dict = None,
+                          deployment_label: str = "") -> str:
         """Create HTML email body"""
         # App version banner — prominent, right below the heading
         app_version_html = ""
         if app_version:
             app_version_html = f'''
             <div style="text-align: center; margin: 6px 0 14px 0;">
-                <span style="display: inline-block; background: #667eea; color: #ffd54f; font-size: 18px; font-weight: 800; letter-spacing: 0.5px; padding: 6px 18px; border-radius: 14px;">App Version: v{app_version}</span>
+                <span style="display: inline-block; background: #667eea; color: #ffd54f; font-size: 18px; font-weight: 800; letter-spacing: 0.5px; padding: 6px 18px; border-radius: 14px;">App Version: v{app_version}{f" · {deployment_label}" if deployment_label else ""}</span>
             </div>
             '''
 
@@ -250,7 +251,7 @@ class EmailSender:
                          report_path: str = None, report_url: str = None,
                          summary_stats: Dict = None, attach_report: bool = True,
                          attach_screenshot: bool = True, app_version: str = "",
-                         git_info: Dict = None) -> bool:
+                         git_info: Dict = None, deployment_label: str = "") -> bool:
         """
         Send test report email via SMTP
         
@@ -280,7 +281,8 @@ class EmailSender:
                 screenshot_path = self._capture_report_screenshot(report_path)
             
             # Create email body (with screenshot embedded)
-            html_body = self._create_email_body(report_path, report_url, summary_stats, screenshot_path, app_version, git_info)
+            html_body = self._create_email_body(report_path, report_url, summary_stats, screenshot_path, app_version, git_info,
+                                               deployment_label=deployment_label)
             
             # Create message
             msg = MIMEMultipart('related')  # Use 'related' to support embedded images

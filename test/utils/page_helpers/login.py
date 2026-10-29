@@ -6,13 +6,15 @@
 """Login Page Helper."""
 import logging
 import time
-from .base import BasePage
+from .base import PasswordFormPage
 
 logger = logging.getLogger(__name__)
 
 POST_PLATFORM_PICK_TIMEOUT = 60
 
-class Login(BasePage):
+class Login(PasswordFormPage):
+    KEYBOARD_NEUTRAL_LOCATORS = ("3p_login_text", "logo")
+
     def __init__(self, driver, page_helper_manager=None):
         super().__init__(driver, page_helper_manager)
         self.platform_kind = "rm"
@@ -61,17 +63,7 @@ class Login(BasePage):
             if self.is_visible("landing_view", timeout=1):
                 self.click(option, timeout=5)
         raise AssertionError("Login screen did not appear after selecting the landing platform")
-    
-        
-    def is_password_visible(self):
-        """Check if password is currently visible as text"""
-        try:
-            # Check if password field shows actual text vs masked
-            password_text = self.get_text("password_input")
-            return not all(char == '•' or char == '*' for char in password_text if char)
-        except Exception:
-            return False
-    
+
     def is_login_button_enabled(self):
         """Check if login button is enabled"""
         try:

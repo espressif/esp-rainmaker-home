@@ -16,11 +16,17 @@ from selenium.common.exceptions import (
     StaleElementReferenceException,
     TimeoutException,
 )
+from utils.device_names import resolve_device_name
 from utils.locator_loader import LocatorLoader
 
 logger = logging.getLogger(__name__)
 
 IOS_KEYBOARD_SETTLE_S = 0.6
+# Pause between keys on a retype: iOS 27 drops keys when the keyboard switches
+# between letters and digits mid-string (a PoP like 1b66c7a3 came out as 17a3).
+IOS_RETYPE_KEY_PAUSE_S = 0.25
+# The field's value can trail the last key by a moment; wait before reading it.
+IOS_VALUE_SETTLE_S = 0.5
 
 
 def _is_stale_reference_error(error):
@@ -163,17 +169,39 @@ class BasePage:
         raise last_err
 
     def _ios_type(self, element, text):
-        """Focus the field, let the keyboard settle, type, and retype once if WDA dropped characters."""
-        for attempt in (1, 2):
+        """Focus the field, let the keyboard settle, type, and retype if WDA dropped characters.
+        Retypes go one key at a time, so the keyboard can switch between letters and digits."""
+        text = str(text)
+        for attempt in (1, 2, 3):
             element.click()
             time.sleep(IOS_KEYBOARD_SETTLE_S)
-            element.send_keys(text)
-            typed = element.get_attribute("value") or ""
-            if typed == str(text) or "\u2022" in typed:
-                return
-            logger.warning("iOS typed %r instead of %r on attempt %s", typed[:24], str(text)[:24], attempt)
             if attempt == 1:
-                element.clear()
+                element.send_keys(text)
+            else:
+                self._ios_type_key_by_key(element, text)
+            time.sleep(IOS_VALUE_SETTLE_S)
+            typed = element.get_attribute("value") or ""
+            # A password field shows one bullet per character: compare the count.
+            if typed == text or ("\u2022" in typed and len(typed) == len(text)):
+                return
+            logger.warning("iOS typed %r instead of %r on attempt %s", typed[:24], text[:24], attempt)
+            if attempt < 3:
+                self._ios_clear(element)
+
+    def _ios_type_key_by_key(self, element, text):
+        """Type one key at a time; the caller checks the whole value afterwards.
+        No resend per key: an empty field reads as its placeholder and the value
+        can trail a key behind, so resending on a short read doubles keys."""
+        for key in text:
+            element.send_keys(key)
+            time.sleep(IOS_RETYPE_KEY_PAUSE_S)
+
+    def _ios_clear(self, element):
+        """Empty the field; the app's text fields can ignore clear(), so backspace over what is left."""
+        element.clear()
+        left = element.get_attribute("value") or ""
+        if left:
+            element.send_keys("\ue003" * (len(left) + 2))
 
 
     def clear(self, locator_name_or_type, value=None, timeout=None, poll=0.5):
@@ -206,6 +234,24 @@ class BasePage:
             )
         except TimeoutException:
             return None
+
+    def find_settled(self, locator_name_or_type, value=None, timeout=10, poll=0.3):
+        """Return the element once it is visible and its frame has stopped moving (a screen push/slide-in has finished), else None."""
+        deadline = time.time() + timeout
+        last = None
+        while time.time() < deadline:
+            element = self.find_visible(locator_name_or_type, value=value, timeout=1, poll=poll)
+            if element is not None:
+                try:
+                    rect = element.rect
+                except StaleElementReferenceException:
+                    last = None
+                    continue
+                if rect == last:
+                    return element
+                last = rect
+            time.sleep(poll)
+        return None
 
     def is_visible(self, locator_name_or_type, value=None, timeout=2, poll=0.5):
         """Check if element is visible (quick check)"""
@@ -360,8 +406,10 @@ class BasePage:
             # would otherwise each pay a ~1s Android alert poll on every miss.
             if handle_alerts and not quiet and self._clear_blocking_system_alert():
                 logger.info("System alert cleared; rechecking %s screen", self.page_name)
+                # The screen can take a few seconds to move on once the alert
+                # is gone (6 s seen on iOS 27), so 5 s was too short.
                 return self.check_screen_displayed(
-                    timeout=min(timeout, 5), poll=poll, quiet=quiet, handle_alerts=False
+                    timeout=min(timeout, 15), poll=poll, quiet=quiet, handle_alerts=False
                 )
             return False
         except Exception as e:
@@ -632,6 +680,7 @@ class BasePage:
 
     def select_named_device(self, name, timeout=15, attempts=3):
         """Select a device on any device-selection screen by its name-specific id; clicks the visible label (the row's tap target may not register as 'clickable') and re-taps if the sheet does not advance. On a retry, the label being gone means the earlier tap already advanced."""
+        name = resolve_device_name(name)
         for attempt in range(attempts):
             element = self.find_visible("id", value=f"text_{name}_device_name", timeout=timeout if attempt == 0 else 3)
             if not element:
@@ -711,6 +760,20 @@ class BasePage:
             self.driver.press_keycode(66)
             self.hide_keyboard_if_visible()
         return self
+
+    def _ios_settle_keyboard(self, *neutral_locators):
+        """iOS 27 (Xcode 27 DDI): the first touch after typing re-attaches the software keyboard and is lost; spend it on a tap on static screen text (the first of `neutral_locators` on screen; the tap also dismisses the keyboard) before the real tap."""
+        for _ in range(2):
+            element = next((found for found in (self.find_visible(locator, timeout=2) for locator in neutral_locators)
+                            if found is not None), None)
+            if element is None:
+                logger.warning("Neutral elements %s not visible; cannot settle the iOS keyboard", neutral_locators)
+                return
+            element.click()
+            time.sleep(IOS_KEYBOARD_SETTLE_S)
+            if not self._is_keyboard_shown():
+                break
+        time.sleep(IOS_KEYBOARD_SETTLE_S)
 
     def hide_keyboard_if_visible(self):
         """Hide keyboard if visible; return True only when keyboard is gone (or was never shown)."""
@@ -792,6 +855,27 @@ class BasePage:
             logger.warning("Toast element not found")
             return None, None
         return title, message
+
+
+class PasswordFormPage(BasePage):
+    """Base for the login and sign-up screens, which share the password field; KEYBOARD_NEUTRAL_LOCATORS is static content on the screen, in order of preference, that absorbs the iOS post-typing touch."""
+    KEYBOARD_NEUTRAL_LOCATORS = ("logo",)
+
+    def is_password_visible(self):
+        """Check if password is currently visible as text"""
+        try:
+            password_text = self.get_text("password_input")
+            return not all(char == '•' or char == '*' for char in password_text if char)
+        except Exception:
+            return False
+
+    def toggle_password_visibility(self):
+        """Toggle password visibility once the keyboard from typing has settled."""
+        logger.info("Toggling password visibility")
+        if self.platform == "ios":
+            self._ios_settle_keyboard(*self.KEYBOARD_NEUTRAL_LOCATORS)
+        self.click("password_toggle")
+        return self
 
 
 class PageHelperManager:

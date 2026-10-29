@@ -23,6 +23,8 @@ class Pop(BasePage):
         if pop_code:
             logger.info("Entering proof of possession code")
             self.send_keys("pop_input", pop_code, clear_first=True)
+            if self.platform == "ios":
+                self._ios_settle_keyboard("subtitle")
         else:
             logger.info("No PoP for this device; submitting the screen empty")
         self.click("verify_button", timeout=10)

@@ -96,11 +96,19 @@ class PhoneSettings(BasePage):
             time.sleep(1)
         return False
 
+    def _ios_wifi_switch(self):
+        """The tappable Wi-Fi master switch on the open iOS Wi-Fi pane, or None; iOS 27 nests it inside a cell-wide switch element whose centre tap is a no-op."""
+        try:
+            row = self.driver.find_element("-ios predicate string", "type == 'XCUIElementTypeSwitch'")
+            nested = row.find_elements("-ios predicate string", "type == 'XCUIElementTypeSwitch'")
+            return nested[-1] if nested else row
+        except Exception:
+            return None
+
     def _ios_wifi_switch_value(self):
         """'1'/'0' of the Wi-Fi master switch on the open iOS Wi-Fi pane, or None."""
         try:
-            switch = self.driver.find_element("-ios predicate string", "type == 'XCUIElementTypeSwitch'")
-            return (switch.get_attribute("value") or "").strip()
+            return (self._ios_wifi_switch().get_attribute("value") or "").strip()
         except Exception:
             return None
 
@@ -130,7 +138,9 @@ class PhoneSettings(BasePage):
             for _ in range(3):
                 if ok:
                     break
-                self.ios_tap_first(["type == 'XCUIElementTypeSwitch'"], timeout=3)
+                switch = self._ios_wifi_switch()
+                if switch is not None:
+                    switch.click()
                 poll_end = time.time() + max(timeout // 2, 8)
                 while time.time() < poll_end:
                     if self._ios_wifi_switch_value() == target:

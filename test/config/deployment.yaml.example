@@ -41,6 +41,8 @@ rmneo:
     softap: false
     delete_account: false
     max_schedule_badge: false
+    # No list of sent invites and no cancel on RMNEO, so these checks cannot run here.
+    pending_invites: false
   # registered_users is keyed by device model so parallel Android/iOS runs use
   # separate credential pools and never sign in with each other's account.
   # Filled in automatically on first run (--model picks the bucket); pre-seed

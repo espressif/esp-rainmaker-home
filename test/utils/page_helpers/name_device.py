@@ -8,6 +8,8 @@ Name Device Page Helper
 """
 import logging
 
+from utils.device_names import unique_device_name
+
 from .base import BasePage
 
 logger = logging.getLogger(__name__)
@@ -19,7 +21,8 @@ class NameDevice(BasePage):
 
 
     def rename_device(self, device_name: str):
-        """Replace the default device name with a new value."""
+        """Replace the default device name with this run's unique variant of `device_name`."""
+        device_name = unique_device_name(device_name)
         logger.info("Renaming device to: %s", device_name)
         self.send_keys("device_name_input", device_name, clear_first=True)
         self.hide_keyboard_if_visible()

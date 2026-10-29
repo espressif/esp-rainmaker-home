@@ -22,6 +22,8 @@ class MatterManual(BasePage):
         """Type the Matter manual pairing code and continue into commissioning."""
         logger.info("Entering Matter manual pairing code")
         self.send_keys("pairing_code_input", pairing_code)
+        if self.platform == "ios":
+            self._ios_settle_keyboard("subtitle")
         self.click("continue_button", timeout=10)
         return self
 

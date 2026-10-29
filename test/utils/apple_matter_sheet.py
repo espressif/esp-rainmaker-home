@@ -50,6 +50,7 @@ ERROR_MARKERS = ("Unable to Add", "Not Found", "Accessory Not Found", "Couldn't 
 SHEET_MARKERS = (("Accessory", "This may take a few minutes")
                  + CONSENT_MARKERS + CONSENT_BUTTONS + ERROR_MARKERS)
 
+CONSENT_TAP_LIMIT = 3
 POST_CONSENT_LABELS = ("Continue", "Done", "Allow", "Next")
 ADVANCE_LABELS = CONSENT_BUTTONS + POST_CONSENT_LABELS
 CYRILLIC_TO_LATIN_LOOKALIKES = str.maketrans(
@@ -122,6 +123,12 @@ class AppleMatterSheet:
         ab.pointer_action.pause(0.1)
         ab.pointer_action.pointer_up()
         ab.perform()
+
+    @staticmethod
+    def _settled(previous, current, tolerance=3):
+        """The OCR box has not moved since the previous read, i.e. the sheet has finished sliding up."""
+        return previous is not None and abs(previous[0] - current[0]) <= tolerance \
+            and abs(previous[1] - current[1]) <= tolerance
 
     def _match(self, lines, phrases):
         """First match by phrase priority, not by screen order.
@@ -210,6 +217,8 @@ class AppleMatterSheet:
         appear_deadline = time.time() + appear_timeout
         appeared = consented = False
         answered = {}
+        consent_taps = 0
+        consent_seen_at = None
         while time.time() < deadline:
             lines = self.read_lines("flow")
 
@@ -234,19 +243,27 @@ class AppleMatterSheet:
                 appeared = True
                 logger.info("Apple Matter sheet appeared")
 
-            if not consented and self._match(lines, CONSENT_MARKERS):
-                hit = self._match(lines, CONSENT_BUTTONS)
-                if hit:
-                    text, (x, y), _ = hit
-                    logger.info("Accepting Apple pairing consent via %r at (%s, %s)", text, x, y)
-                    self._tap_point(x, y)
-                    consented = True
-                    time.sleep(poll)
-                    continue
-
             if self._answer_decision_dialog(lines, answered):
                 time.sleep(poll)
                 continue
+
+            retap_blocked = consent_taps and self._match(lines, PROGRESS_MARKERS)
+            if consent_taps < CONSENT_TAP_LIMIT and not retap_blocked and self._match(lines, CONSENT_MARKERS):
+                hit = self._match(lines, CONSENT_BUTTONS)
+                if hit:
+                    text, (x, y), _ = hit
+                    if not self._settled(consent_seen_at, (x, y)):
+                        consent_seen_at = (x, y)
+                        time.sleep(1)
+                        continue
+                    consent_taps += 1
+                    logger.info("Accepting Apple pairing consent via %r at (%s, %s) (tap %s/%s)",
+                                text, x, y, consent_taps, CONSENT_TAP_LIMIT)
+                    self._tap_point(x, y)
+                    consented = True
+                    consent_seen_at = None
+                    time.sleep(poll)
+                    continue
 
             if self._match(lines, PROGRESS_MARKERS):
                 time.sleep(poll)

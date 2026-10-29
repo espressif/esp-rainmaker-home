@@ -7,6 +7,8 @@
 import logging
 import time
 
+from utils.device_names import resolve_device_name
+
 from .base import BasePage
 
 logger = logging.getLogger(__name__)
@@ -40,7 +42,7 @@ class Home(BasePage):
             raise ValueError(f"Invalid action: {action}")
         return self
 
-    def open_add_device(self, timeout=15):
+    def open_add_device(self, timeout=25):
         """
         Tap Add Device on home — header button when devices exist,
         or empty-state banner button when no devices are provisioned yet.
@@ -68,17 +70,28 @@ class Home(BasePage):
 
     def open_device(self, device_name: str, timeout=10):
         """Open a provisioned device's control screen by its display name."""
+        device_name = resolve_device_name(device_name)
         end_time = time.monotonic() + timeout
         while time.monotonic() < end_time:
-            for label in self.find_all("device_names_text"):
+            for label in self._labels_named(device_name):
                 try:
-                    if (label.text or "").strip() == device_name and label.is_displayed():
-                        label.click()
-                        return self
+                    label.click()
+                    return self
                 except Exception:
                     continue
             time.sleep(0.5)
         raise RuntimeError(f"Device '{device_name}' not found on home screen")
+
+    def _labels_named(self, device_name):
+        """Visible home-card name labels reading exactly `device_name`."""
+        labels = []
+        for label in self.find_all("device_names_text"):
+            try:
+                if (label.text or "").strip() == device_name and label.is_displayed():
+                    labels.append(label)
+            except Exception:
+                continue
+        return labels
 
     def acknowledge_migration_dialog(self):
         """Acknowledge the migration prompt if it is shown."""
@@ -138,6 +151,7 @@ class Home(BasePage):
 
     def is_device_visible(self, device_name: str, timeout=10, attempts=1):
         """Check whether a provisioned device name is visible on the home screen (polling up to timeout)."""
+        device_name = resolve_device_name(device_name)
         logger.info("Checking device visibility on home: %s", device_name)
         for attempt in range(attempts):
             if attempt:
@@ -145,10 +159,9 @@ class Home(BasePage):
                 self._refresh_home_device_list()
             end_time = time.monotonic() + timeout
             while time.monotonic() < end_time:
-                for label in self.find_all("device_names_text"):
-                    if (label.text or "").strip() == device_name and label.is_displayed():
-                        logger.info("Device '%s' is visible on home screen", device_name)
-                        return True
+                if self._labels_named(device_name):
+                    logger.info("Device '%s' is visible on home screen", device_name)
+                    return True
                 time.sleep(0.5)
 
         logger.warning(
@@ -160,6 +173,7 @@ class Home(BasePage):
 
     def is_device_online(self, device_name, timeout=120):
         """Poll until the named device's home card is online. The app renders the offline badge (text_offline_device_card) only when a device is offline, so online = that badge is absent from the device's card. Long default since a freshly-commissioned Matter node is slow to establish its cloud link."""
+        device_name = resolve_device_name(device_name)
         logger.info("Waiting up to %ss for device '%s' to be online on home", timeout, device_name)
         name_by = self.get_element_locator("device_names_text")
         offline_by = self.get_element_locator("device_offline_badge")
@@ -199,6 +213,7 @@ class Home(BasePage):
     def read_card_power(self, device_name, timeout=10):
         """Return 'on'/'off' from the device's home-card power switch."""
         from appium.webdriver.common.appiumby import AppiumBy
+        device_name = resolve_device_name(device_name)
         deadline = time.monotonic() + timeout
         while time.monotonic() < deadline:
             try:
@@ -215,6 +230,7 @@ class Home(BasePage):
 
     def set_card_power(self, device_name, target_on, timeout=15):
         """Set the device's home-card power switch to target_on, verified via readback plus a persistence re-check."""
+        device_name = resolve_device_name(device_name)
         want = "on" if target_on else "off"
         logger.info("Setting home-card power of '%s' to %s", device_name, want)
         deadline = time.monotonic() + timeout
@@ -236,13 +252,17 @@ class Home(BasePage):
         return self.is_visible("local_control_badge", timeout=timeout)
 
     def ensure_device_name(self, target, aliases=()):
-        """Make sure a device named `target` is on the home screen; if it's listed under a known alias (e.g. left by provisioning or a prior name), rename it to `target` via the device settings screen. Re-enters home first so a just-applied cloud rename has refreshed into the list."""
+        """Make sure a device named `target` is on the home screen; if it's listed under one of its own former names, rename it to `target` via the device settings screen. An alias shown on more than one card is never renamed — it may be another job's device. Re-enters home first so a just-applied cloud rename has refreshed into the list."""
+        target = resolve_device_name(target)
         for attempt in range(3):
             self.go_home()
             if self.is_device_visible(target, timeout=10):
                 return self
             for alias in aliases:
                 if not self.is_device_visible(alias, timeout=3):
+                    continue
+                if len(self._labels_named(alias)) != 1:
+                    logger.info("Alias '%s' is shown on more than one card; not renaming it", alias)
                     continue
                 logger.info("Renaming device '%s' -> '%s'", alias, target)
                 self.open_device(alias)

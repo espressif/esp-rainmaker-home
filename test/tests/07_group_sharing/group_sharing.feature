@@ -53,12 +53,14 @@ Feature: Group sharing end-to-end
     Then "registered user 2" should not be listed under "shared with"
     And user renames the home to "Home"
 
+  @pending_invites
   Scenario: Cancel a pending invitation before it is accepted
     When user opens the home sharing settings for "Home"
     And user shares the home with "registered user 2"
     And user revokes home sharing for "registered user 2"
     And user opens the home sharing settings for "Home"
-    Then "registered user 2" should not be listed under "shared with"
+    Then "registered user 2" should not be listed under "pending"
+    And "registered user 2" should not be listed under "shared with"
     When user switches to "registered user 2"
     And user opens the notification center
     Then no sharing invitation from "registered user 1" is present
@@ -83,6 +85,7 @@ Feature: Group sharing end-to-end
     And user shares the home with "registered user 1" expecting rejection
     Then the sharing invite should be rejected
 
+  @pending_invites
   Scenario: Sharing the home with an unregistered user is rejected
     When user opens the home sharing settings for "Home"
     And user shares the home with "unregistered.qa@invalid.test" expecting rejection

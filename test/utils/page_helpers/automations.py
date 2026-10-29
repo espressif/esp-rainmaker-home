@@ -8,6 +8,8 @@
 import logging
 import time
 
+from utils.device_names import resolve_device_name
+
 from .base import BasePage
 
 logger = logging.getLogger(__name__)
@@ -48,11 +50,11 @@ class Automations(BasePage):
 
     def select_event_device_by_name(self, name):
         """Select a device row on the event device-selection screen."""
-        return self.select_list_item("event_device_item", name)
+        return self.select_list_item("event_device_item", resolve_device_name(name))
 
     def select_action_device_by_name(self, name):
         """Select a device row on the action device-selection screen (multi-select: tap the row, not the label, so it navigates to the param config)."""
-        return self.select_list_item("action_device_item", name)
+        return self.select_list_item("action_device_item", resolve_device_name(name))
 
     def select_event_param(self, param_name, value):
         """Open a named event trigger param, set its value/condition, finish the event."""
