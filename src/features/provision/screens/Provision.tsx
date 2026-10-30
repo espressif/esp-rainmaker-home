@@ -13,6 +13,7 @@ import { globalStyles } from "@shared/theme/globalStyleSheet";
 // Hooks
 import { useTranslation } from "react-i18next";
 import { useProvision } from "@features/provision/hooks";
+import { useProvisionKeepAwake } from "@features/provision/hooks/useProvisionKeepAwake";
 import { mapStageStatusToProvisionStatus } from "@features/provision/utils/provisionHelper";
 
 // Components
@@ -36,10 +37,13 @@ import { resolveIllustration } from "@shared/runtimeStyle/assets";
  *
  * Main component for handling device provisioning process
  * Shows progress steps and handles Node provisioning steps
+ * Keeps the screen awake while open: a run can outlast the auto-lock timeout,
+ * and a locked phone pauses the app mid-provisioning
  * @returns Full-screen flow with header, scrollable step list, and continue when complete
  */
 const Provision = () => {
   const { t } = useTranslation();
+  useProvisionKeepAwake();
   const {
     stages,
     isComplete,

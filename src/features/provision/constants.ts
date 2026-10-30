@@ -56,6 +56,9 @@ export const PROVISION_SCAN_QR_ROUTE = "/(provision)/ScanQR";
 export const PROVISION_ADD_DEVICE_SELECTION_ROUTE =
   "/(provision)/AddDeviceSelection";
 
+/** expo-keep-awake tag held while the Provision screen is mounted. */
+export const PROVISION_KEEP_AWAKE_TAG = "provision-screen";
+
 /** Hidden file-input control type for web QR upload. */
 export const PROVISION_QR_INPUT_TYPE_FILE = "file";
 
