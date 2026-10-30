@@ -11,7 +11,6 @@ import android.content.pm.PackageManager
 import android.os.Build
 import android.view.View
 import androidx.core.content.ContextCompat
-import com.app.MainActivity
 import com.app.consent.ConsentPrefs
 import com.facebook.react.ReactPackage
 import com.facebook.react.bridge.*
@@ -115,8 +114,13 @@ class ESPAppUtilityModule(private val reactCtx: ReactApplicationContext) :
     }
 
     /**
-     * (Optional) Mirrors iOS’s requestAllPermissions().
-     * Triggers OS dialogs for the minimal set required on this API level.
+     * Mirrors iOS’s requestAllPermissions(). Triggers the OS dialogs for the
+     * minimal Bluetooth / location set required on this API level.
+     *
+     * On the CN build, callers MUST show the in-app purpose dialog
+     * (`src/shared/permissions`) and get an explicit “Allow” before invoking
+     * this — the system prompt on its own does not state why the app needs the
+     * permission.
      */
     @ReactMethod
     fun requestAllPermissions() {
@@ -126,8 +130,12 @@ class ESPAppUtilityModule(private val reactCtx: ReactApplicationContext) :
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                 if (!has(Manifest.permission.BLUETOOTH_SCAN)) add(Manifest.permission.BLUETOOTH_SCAN)
                 if (!has(Manifest.permission.BLUETOOTH_CONNECT)) add(Manifest.permission.BLUETOOTH_CONNECT)
-            } else {
-                if (!has(Manifest.permission.ACCESS_FINE_LOCATION)) add(Manifest.permission.ACCESS_FINE_LOCATION)
+            }
+            // Location is requested on every API level: SoftAP provisioning needs
+            // it to enumerate Wi-Fi networks, and on API 30 and below it is also
+            // what gates BLE scanning.
+            if (!has(Manifest.permission.ACCESS_FINE_LOCATION)) {
+                add(Manifest.permission.ACCESS_FINE_LOCATION)
             }
         }
         
@@ -141,18 +149,15 @@ class ESPAppUtilityModule(private val reactCtx: ReactApplicationContext) :
     }
 
     /**
-     * Records the CN-region privacy consent natively and runs the startup
-     * permission prompts that MainActivity deferred until consent was given.
-     * No-op effect on non-CN builds (consent is never deferred there).
+     * Records the CN-region privacy consent natively.
+     *
+     * Deliberately triggers no permission prompts: sensitive permissions are
+     * requested at the point of use, after the in-app purpose dialog.
      */
     @ReactMethod
     fun acceptCnConsent(promise: Promise) {
         try {
             ConsentPrefs.setAccepted(reactCtx, true)
-            val activity = reactApplicationContext.currentActivity
-            if (activity is MainActivity) {
-                activity.runOnUiThread { activity.runStartupPermissionChecks() }
-            }
             promise.resolve(true)
         } catch (t: Throwable) {
             promise.reject("ERR_ACCEPT_CONSENT", t)

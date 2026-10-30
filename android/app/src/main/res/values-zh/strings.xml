@@ -1,0 +1,8 @@
+<resources>
+  <!-- Purpose explanation shown before the system Bluetooth permission prompt,
+       so the user is told what is requested and why at the same time. -->
+  <string name="permission_rationale_ble_title">是否允许访问附近的设备？</string>
+  <string name="permission_rationale_ble_message">申请的权限：附近的设备（蓝牙扫描与连接）。\n\n对应功能：添加 Matter 设备。\n\n使用目的：Android 系统要求应用具备该权限，才能搜索待添加设备的蓝牙信号并与其建立连接，从而将其配置到您的 Wi-Fi 网络。本应用不会收集、存储或上传您的位置信息。\n\n该权限为可选权限。若不允许，仅无法添加 Matter 设备。</string>
+  <string name="permission_rationale_allow">允许</string>
+  <string name="permission_rationale_not_now">暂不允许</string>
+</resources>

@@ -21,6 +21,11 @@ export interface UseScanBLEReturn {
   isChecking: boolean;
   allPermissionsGranted: boolean;
   handleScanAgain: () => void;
+  /**
+   * Explains the purpose, then shows the OS prompt (native) or the browser
+   * permission prompt (web) only after the user agrees.
+   */
+  requestPermissions: () => Promise<void>;
   handleBleDeviceConnect: (device: ESPCDFProvisioningDevice) => void;
   handleAgentTermsComplete: () => void;
   handleAgentTermsClose: () => void;

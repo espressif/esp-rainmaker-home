@@ -2,6 +2,52 @@
     xmlns:tools="http://schemas.android.com/tools">
 
     <!--
+      No external-storage permissions in the CN build.
+
+      READ_/WRITE_EXTERNAL_STORAGE reach the merged manifest from
+      expo-image-picker / expo-file-system / expo-image (and READ from the
+      main manifest). The only code that would request them is the chat
+      image attachment (src/features/agent/hooks/useChatMediaAttachment.ts),
+      which the CN build does not ship (ENABLE_AI_AGENT=false) — and on
+      API 33+ even that uses the system photo picker, which needs no
+      permission. A declared permission with no matching feature is a
+      finding in app-store privacy review on its own, so they are removed
+      here rather than justified in each store's permission declaration
+      form.
+
+      Keep this in sync with ENABLE_AI_AGENT for the CN region: if the chat
+      agent is ever enabled in a CN build, gallery picking on API 32 and
+      below needs READ_EXTERNAL_STORAGE back.
+    -->
+    <!--
+      No POST_NOTIFICATIONS in the CN build either. The CN flavor ships
+      without Firebase/FCM (notification feature flag off, PushBootstrap is
+      a no-op, ESPNotificationModule is a stub), and the only code that
+      posts a notification is FCMService in the `global` source set — so the
+      permission is never requested here. Restore it if CN ever gains a push
+      transport (HMS / Xiaomi Push / self-hosted).
+    -->
+    <uses-permission
+        android:name="android.permission.POST_NOTIFICATIONS"
+        tools:node="remove" />
+
+    <uses-permission
+        android:name="android.permission.READ_EXTERNAL_STORAGE"
+        tools:node="remove" />
+    <uses-permission
+        android:name="android.permission.WRITE_EXTERNAL_STORAGE"
+        tools:node="remove" />
+
+    <!--
+      No SYSTEM_ALERT_WINDOW in CN release builds: the app draws nothing
+      outside its own window. Only React Native's dev menu needs it, and
+      src/debug/AndroidManifest.xml declares it for debug builds.
+    -->
+    <uses-permission
+        android:name="android.permission.SYSTEM_ALERT_WINDOW"
+        tools:node="remove" />
+
+    <!--
       CN-flavor-only components. WeChat login ships only in the CN build (the
       WeChat SDK and its native modules live in the `cn` source set).
     -->

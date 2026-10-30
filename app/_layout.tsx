@@ -35,7 +35,12 @@ import { ESPAppRestartAdapter } from "@native-adaptors/implementations/ESPAppRes
 import { useTranslation } from "react-i18next";
 
 // components
-import { Button, FooterTabs, ToastContainer } from "@shared/components";
+import {
+  Button,
+  FooterTabs,
+  PermissionRationaleHost,
+  ToastContainer,
+} from "@shared/components";
 
 // icons
 import { Home, Calendar, User, History, Zap } from "lucide-react-native";
@@ -148,6 +153,8 @@ const InnerLayout = () => {
                     {/* Other components */}
                   </Stack>
                   {isUserRoute && <FooterTabs tabs={tabs} />}
+                  {/* Explains every sensitive permission before the OS prompt (Android CN build). */}
+                  <PermissionRationaleHost />
                   <ToastContainer />
                   <ToastViewport
                     multipleToasts

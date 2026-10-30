@@ -5,11 +5,11 @@
  */
 
 import { useState, useRef, useCallback, useEffect } from "react";
-import { Platform, PermissionsAndroid } from "react-native";
 import type { ESPCDFAssumeRoleResponse } from "@store";
 import { useCDF } from "./useCDF";
 import { useToast } from "./useToast";
 import { useTranslation } from "react-i18next";
+import { ensureMicrophonePermission } from "@shared/permissions";
 import {
   WEBRTC_CONNECTION_STATE,
   WEBRTC_TRANSLATION_KEYS,
@@ -309,24 +309,6 @@ export const useCameraWebRTC = (
   }, []);
 
   /**
-   * Requests Android microphone permission for mic-send. iOS/other return true
-   * (handled by the OS prompt on getUserMedia). Returns false when unavailable
-   * so audio gracefully degrades to receive-only.
-   * @returns Whether mic capture may proceed.
-   */
-  const ensureMicPermission = useCallback(async (): Promise<boolean> => {
-    if (Platform.OS !== "android") return true;
-    try {
-      const result = await PermissionsAndroid.request(
-        PermissionsAndroid.PERMISSIONS.RECORD_AUDIO
-      );
-      return result === PermissionsAndroid.RESULTS.GRANTED;
-    } catch {
-      return false;
-    }
-  }, []);
-
-  /**
    * Configures the peer connection media for one-way video + two-way audio:
    * a recvonly video transceiver, plus a sendrecv audio path carrying the local
    * mic (started muted). If the mic is unavailable/denied, falls back to a
@@ -341,7 +323,7 @@ export const useCameraWebRTC = (
     });
 
     try {
-      if (!(await ensureMicPermission())) {
+      if (!(await ensureMicrophonePermission())) {
         throw new Error("Microphone permission not granted");
       }
       const micStream = (await mediaDevices.getUserMedia({
@@ -364,7 +346,7 @@ export const useCameraWebRTC = (
         direction: WEBRTC_TRANSCEIVER_DIRECTION_RECVONLY,
       });
     }
-  }, [ensureMicPermission]);
+  }, []);
 
   /**
    * Setup signaling client event handlers

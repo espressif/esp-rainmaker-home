@@ -24,4 +24,10 @@
   <string name="chiptool_wifi_dialog_positive">Commission</string>
   <string name="chiptool_wifi_dialog_negative">Cancel</string>
   <string name="chiptool_wifi_dialog_validation">Wi-Fi SSID and password are required.</string>
+  <!-- Purpose explanation shown before the system Bluetooth permission prompt,
+       so the user is told what is requested and why at the same time. -->
+  <string name="permission_rationale_ble_title">Allow nearby devices access?</string>
+  <string name="permission_rationale_ble_message">Permission requested: Nearby devices (Bluetooth scan and connect).\n\nFeature: Adding a Matter device.\n\nWhat it is used for: Android requires this permission to discover the Bluetooth signal of the device being added and connect to it so it can be commissioned onto your Wi-Fi network. Your location is not collected, stored, or uploaded.\n\nThis permission is optional. If you decline, only Matter device setup is unavailable.</string>
+  <string name="permission_rationale_allow">Allow</string>
+  <string name="permission_rationale_not_now">Not now</string>
 </resources>

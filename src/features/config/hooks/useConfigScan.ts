@@ -6,7 +6,6 @@
 
 import { useState, useContext, useRef, useCallback } from "react";
 import { useRouter } from "expo-router";
-import { useCameraPermissions } from "expo-camera";
 import { useTranslation } from "react-i18next";
 import { runtimeConfigManager } from "@config/runtime.config";
 import type { SDKConfig } from "@config/runtime.config";
@@ -18,6 +17,7 @@ import { getPreAuthRoute } from "@features/landing/utils/currentDeployment";
 import { useApplyDeploymentSwitch } from "@shared/hooks/useApplyDeploymentSwitch";
 import { useToast } from "@shared/hooks/useToast";
 import { UnreadableStyleError, syncSaved } from "@shared/runtimeStyle/store";
+import { useCameraPermissionsWithPurpose } from "@shared/permissions";
 import { AUTH_LOGIN_SCREEN_ROUTE } from "@shared/utils/constants";
 import { resetStackTo } from "@shared/utils/navigation";
 import type { ConfigScanPhase } from "@src/types/global";
@@ -72,7 +72,7 @@ export function useConfigScan(): UseConfigScanReturn {
   const { applyDeploymentSwitch } = useApplyDeploymentSwitch({
     logPrefix: "[ConfigScan]",
   });
-  const [permission, requestPermission] = useCameraPermissions();
+  const [permission, requestPermission] = useCameraPermissionsWithPurpose();
 
   const [phase, setPhase] = useState<ConfigScanPhase>("info");
   const [showScanner, setShowScanner] = useState(false);
@@ -163,11 +163,11 @@ export function useConfigScan(): UseConfigScanReturn {
   );
 
   /**
-   * Opens the camera scanner, requesting permission when it is not granted.
+   * Opens the camera scanner (explains and requests permission when needed).
    */
   const handleUpdateConfig = useCallback(() => {
     if (!permission?.granted) {
-      requestPermission();
+      void requestPermission();
     }
     setShowScanner(true);
   }, [permission?.granted, requestPermission]);

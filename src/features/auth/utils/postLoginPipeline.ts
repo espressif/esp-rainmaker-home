@@ -7,6 +7,7 @@
 import type { useRouter } from "expo-router";
 import { pipelineTask, PipelineStep } from "@shared/utils/pipelineTask";
 import { registerForNotification } from "@shared/utils/notifications";
+import { ensureNotificationPermission } from "@shared/permissions";
 import { setUserTimeZone } from "@shared/utils/timezone";
 import { RAINMAKER_MCP_CONNECTOR_ID } from "@features/agent/utils";
 import {
@@ -127,6 +128,11 @@ export async function executePostLoginPipeline(
       background: true,
       run: async () => {
         if (!getFeatures().notifications) return;
+        // Android CN build: explains the purpose, then shows the OS prompt
+        // (Android 13+); other builds asked at launch. Registration still runs
+        // when declined so the endpoint exists if the user enables
+        // notifications later from system settings.
+        await ensureNotificationPermission();
         await registerForNotification(store);
       },
     },

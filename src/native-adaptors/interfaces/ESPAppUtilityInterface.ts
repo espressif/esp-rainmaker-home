@@ -28,14 +28,18 @@ interface ESPAppUtilityInterface {
   isBluetoothEnabled(): Promise<boolean>;
   
   /**
-   * Requests all required permissions.
+   * Triggers the OS Bluetooth + location prompts. No-op on iOS, which asks at
+   * launch.
+   *
+   * Only `promptBleAndLocationPermissions()` (src/shared/permissions) calls
+   * this; on the Android CN build only after the purpose dialog was answered
+   * "Allow".
    */
   requestAllPermissions(): void;
 
   /**
-   * Records that the CN-region privacy consent was accepted and runs the
-   * startup permission prompts that were deferred until consent (no-op on
-   * non-CN builds).
+   * Records that the CN-region privacy consent was accepted; iOS then asks for
+   * Bluetooth + location.
    */
   acceptCnConsent(): Promise<boolean>;
 

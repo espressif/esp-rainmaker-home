@@ -7,10 +7,7 @@
 import { useState, useEffect, useRef, useCallback, type RefObject } from "react";
 import { useFocusEffect, useRouter } from "expo-router";
 import { Dimensions, Vibration, Linking } from "react-native";
-import {
-  useCameraPermissions,
-  type BarcodeScanningResult,
-} from "expo-camera";
+import type { BarcodeScanningResult, PermissionResponse } from "expo-camera";
 import { useTranslation } from "react-i18next";
 
 import { ESPCDFProvisioningDevice } from "@store";
@@ -23,6 +20,7 @@ import {
   type DetectedQrBounds,
 } from "@shared/utils/qrBounds";
 import { getQRScanErrorType } from "@shared/utils/device";
+import { useCameraPermissionsWithPurpose } from "@shared/permissions";
 import {
   QR_CODE_TYPE,
   CAMERA_TYPE_FRONT,
@@ -64,7 +62,7 @@ type CameraFacing =
 
 export interface UseScanQRReturn {
   /** Expo camera permission object (null while loading). */
-  permission: ReturnType<typeof useCameraPermissions>[0];
+  permission: PermissionResponse | null;
   bleGranted: boolean | null;
   locationGranted: boolean | null;
   bluetoothEnabled: boolean | null;
@@ -83,6 +81,8 @@ export interface UseScanQRReturn {
   scannerGatesOpen: boolean;
   navigateWithoutQr: () => void;
   handleRequestCameraPermission: () => Promise<void>;
+  /** Explains the purpose, then shows the OS Bluetooth/location prompt. */
+  requestBluetoothPermissions: () => Promise<void>;
   toggleCamera: () => void;
   handleScanAgain: () => void;
   handleScannedQRCode: (result: BarcodeScanningResult) => Promise<void>;
@@ -98,7 +98,7 @@ export const useScanQR = (): UseScanQRReturn => {
   const { store } = useCDF();
   const router = useRouter();
   const { t } = useTranslation();
-  const [permission, requestPermission] = useCameraPermissions();
+  const [permission, requestPermission] = useCameraPermissionsWithPurpose();
   const {
     bleGranted,
     locationGranted,
@@ -130,12 +130,15 @@ export const useScanQR = (): UseScanQRReturn => {
   }, [router]);
 
   /**
-   * Shows the native camera permission dialog. If the OS will not prompt again
-   * (user previously denied), opens system Settings so camera access can be enabled.
+   * Explains why the camera is needed, then shows the native camera permission
+   * dialog. If the OS will not prompt again (user previously denied), opens
+   * system Settings so camera access can be enabled. Declining the explanation
+   * leaves the camera untouched.
    */
   const handleRequestCameraPermission = useCallback(async () => {
     const result = await requestPermission();
-    if (!result.granted && !result.canAskAgain) {
+    // null is "Not now": the OS was not asked, so do not open Settings.
+    if (result && !result.granted && !result.canAskAgain) {
       await Linking.openSettings();
     }
   }, [requestPermission]);
@@ -700,6 +703,7 @@ export const useScanQR = (): UseScanQRReturn => {
     scannerGatesOpen,
     navigateWithoutQr,
     handleRequestCameraPermission,
+    requestBluetoothPermissions,
     toggleCamera,
     handleScanAgain,
     handleScannedQRCode,

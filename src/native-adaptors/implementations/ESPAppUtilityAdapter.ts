@@ -60,7 +60,12 @@ export const ESPAppUtilityAdapter = {
   },
 
   /**
-   * Requests all required permissions.
+   * Triggers the OS Bluetooth + location prompts. No-op on iOS, which asks at
+   * launch.
+   *
+   * Only `promptBleAndLocationPermissions()` (src/shared/permissions) calls
+   * this; on the Android CN build only after the purpose dialog was answered
+   * "Allow".
    */
   requestAllPermissions(): void {
     try {
@@ -71,8 +76,8 @@ export const ESPAppUtilityAdapter = {
   },
 
   /**
-   * Records CN-region privacy consent natively and triggers the startup
-   * permission prompts deferred until consent. Safe to call on any build.
+   * Records CN-region privacy consent natively; iOS then asks for Bluetooth +
+   * location. Safe to call on any build.
    * @returns Resolves true once consent is recorded (false on error).
    */
   async acceptCnConsent(): Promise<boolean> {

@@ -1,5 +1,29 @@
 {
-  "_comment": "System permission dialog locators. Union XPaths cover both platforms: the foreign branch simply matches nothing.",
+  "_comment": "Permission dialog locators. On the Android CN build the app shows its own purpose dialog (permission name / feature / what it is used for) immediately before every OS prompt, so the in-app rationale_* entries are answered first; the OS entries use union XPaths where the foreign platform's branch simply matches nothing.",
+  "rationale_dialog": {
+    "by": "id",
+    "value": "dialog_permission_rationale"
+  },
+  "rationale_title": {
+    "by": "id",
+    "value": "text_title_permission_rationale"
+  },
+  "rationale_allow": {
+    "by": "id",
+    "value": "button_allow_permission_rationale"
+  },
+  "rationale_deny": {
+    "by": "id",
+    "value": "button_decline_permission_rationale"
+  },
+  "native_rationale_allow": {
+    "by": "xpath",
+    "value": "//android.widget.Button[@resource-id='android:id/button1']"
+  },
+  "native_rationale_deny": {
+    "by": "xpath",
+    "value": "//android.widget.Button[@resource-id='android:id/button2']"
+  },
   "allow_button": {
     "by": "xpath",
     "value": "//android.widget.Button[@resource-id='com.android.permissioncontroller:id/permission_allow_button'] | //XCUIElementTypeButton[@name='Allow']"

@@ -20,9 +20,9 @@ import { useConsent } from "@features/consent/hooks/useConsent";
  *
  * Presents the privacy policy full-screen in an in-app WebView with a primary
  * "Accept & Continue" action and a de-emphasized decline action floating over
- * the bottom of the policy. Shown (before login / permission prompts) only when
- * the active region is CN and consent has not yet been accepted. Accepting
- * continues the normal startup flow; declining exits the app.
+ * the bottom of the policy. Shown before login only when the active region is
+ * CN and consent has not yet been accepted. Accepting continues the normal
+ * startup flow; declining exits the app.
  */
 export function ConsentScreen() {
   const { t, i18n } = useTranslation();
