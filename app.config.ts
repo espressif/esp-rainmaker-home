@@ -140,10 +140,7 @@ function buildRegionConfig(env: Record<string, string>) {
       enableOta: flag(env.ENABLE_OTA),
       enableAiAgent: flag(env.ENABLE_AI_AGENT),
       enableThirdPartyAuth: flag(env.ENABLE_THIRD_PARTY_AUTH),
-      // Defaults ON when the key is absent (same disable-only `flag()` semantics
-      // as the keys around it), so a region opts OUT by setting it to "false" —
-      // which .env.cn.example does, because the CN cloud serves no
-      // /auth/federated path. See .env.global.example.
+      enableNativeGoogleSignIn: flag(env.ENABLE_NATIVE_GOOGLE_SIGN_IN),
       enableNativeAppleSignIn: flag(env.ENABLE_NATIVE_APPLE_SIGN_IN),
       enableVoiceAssistants: flag(env.ENABLE_VOICE_ASSISTANTS),
       enableControlGroups: flag(env.ENABLE_CONTROL_GROUPS),

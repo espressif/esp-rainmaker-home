@@ -160,12 +160,20 @@ returns a Google ID token, which the app exchanges for RainMaker tokens at
 | ----------------------- | ----------------------------------------------------------------- | -------- |
 | `GOOGLE_WEB_CLIENT_ID`  | OAuth **Web application** client registered as the deployment's Google identity provider. The ID token is minted for this audience because that is what the backend verifies. | Both     |
 | `GOOGLE_IOS_CLIENT_ID`  | OAuth **iOS** client from the same Google Cloud project. Its reversed form is derived into the Info.plist URL scheme by `scripts/sync-env-to-ios.js`. | iOS      |
+| `ENABLE_NATIVE_GOOGLE_SIGN_IN` | Whether this region uses the native picker. `false` does not remove Google login — it routes it through the hosted browser flow, even with the client ids set. Disable-only: an absent key means enabled. `true` global, `false` CN. | Both     |
 
-Both keys are optional. Leave either blank and that platform reports the picker
-unavailable, so Google login falls back to the hosted browser flow and keeps
-working. CN leaves both blank: the CN APK ships no Google Play services, the CN
-cloud has no `/auth/federated` endpoint, and Google is not in the CN provider
-list.
+The client ids are optional. Leave either blank and that platform reports the
+picker unavailable, so Google login falls back to the hosted browser flow and
+keeps working.
+
+`ENABLE_NATIVE_GOOGLE_SIGN_IN` is the deliberate switch, and it is separate from
+the ids for a reason: the ids decide whether the build *can* show the picker,
+the flag whether the region *should*. The ids cannot do both because they are
+build identity — the single iOS binary is built with `.env.global`'s ids and
+carries them in every region — so a per-region off switch has to be the flag.
+CN leaves both ids blank **and** sets the flag `false`: the CN APK ships no
+Google Play services, the CN cloud has no `/auth/federated` endpoint, and Google
+is not in the CN provider list.
 
 Android needs no per-app client id — the app is identified by package name plus
 signing certificate — but that pairing **must** be registered on an Android
