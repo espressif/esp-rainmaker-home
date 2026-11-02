@@ -5,6 +5,21 @@ All notable changes to the ESP RainMaker Home app will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [6.6.0]
+
+### Added
+
+- **Runtime style engine for home customisation**
+  - Load deployment-specific brand configurations at app launch and resolve them into runtime theme tokens
+  - Show a deployment-trust dialog before accepting configurations from new brand sources
+  - Cache trusted brand configurations locally for subsequent launches
+  - Apply style updates in-place using a banner, with a native app restart as a fallback
+
+### Enhanced
+
+- **Provisioning**
+  - Keep the device awake during provisioning on Android and iOS to prevent long-running operations from timing out
+
 ## [6.5.0]
 
 ### Added
