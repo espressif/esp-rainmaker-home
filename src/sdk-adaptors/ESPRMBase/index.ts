@@ -30,15 +30,22 @@ export class ESPRMBaseSDKAdaptor implements ESPSDKAdaptor {
 
     constructor(config: ESPRMBaseConfig) {
         this.config = config;
-        this.initializeSDK(this.config);
     }
 
-    async initializeSDK(config: ESPRMBaseConfig): Promise<ESPSDKAdaptorAPIResponse> {
+    /**
+     * Configures the underlying SDK and caches its auth instance.
+     *
+     * Called by the bootstrap on the adaptor it makes active, never from the
+     * constructor: every adaptor is built on every start, and configuring one
+     * that is not active reaches shared state the live stack is using.
+     * @returns CDF response indicating successful initialization.
+     */
+    async initializeSDK(): Promise<ESPSDKAdaptorAPIResponse> {
         ESPRMBase.setTransportOrder([
             ESPTransportMode.local,
             ESPTransportMode.cloud,
         ]);
-        ESPRMBase.configure(config);
+        ESPRMBase.configure(this.config);
         this._authInstance = ESPRMBase.getAuthInstance();
         return {
             status: "success",

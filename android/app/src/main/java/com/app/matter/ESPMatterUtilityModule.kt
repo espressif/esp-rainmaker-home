@@ -90,8 +90,17 @@ class ESPMatterUtilityModule (reactContext: ReactApplicationContext) :
 
         try {
             if (groupId.isNullOrEmpty() || fabricId.isNullOrEmpty() || userNoc.isNullOrEmpty() || rootCa.isNullOrEmpty() || matterUserId.isNullOrEmpty()) {
-                Log.e(TAG, "Missing required parameters:")
-                promise.reject("INVALID_PARAMS", "Group ID, Fabric ID, User NOC, Root CA, and Matter User ID are required")
+                // Name the offenders: a generic "missing parameters" costs a
+                // whole test cycle to narrow down.
+                val missing = listOfNotNull(
+                    "groupId".takeIf { groupId.isNullOrEmpty() },
+                    "fabricId".takeIf { fabricId.isNullOrEmpty() },
+                    "userNoc".takeIf { userNoc.isNullOrEmpty() },
+                    "rootCa".takeIf { rootCa.isNullOrEmpty() },
+                    "matterUserId".takeIf { matterUserId.isNullOrEmpty() },
+                ).joinToString(",")
+                Log.e(TAG, "[MatterCommission] storePrecommissionInfo MISSING: $missing")
+                promise.reject("INVALID_PARAMS", "Missing required parameter(s): $missing")
                 return
             }
 
@@ -101,7 +110,14 @@ class ESPMatterUtilityModule (reactContext: ReactApplicationContext) :
 
             val privateKey = keyStore.getKey(fabricId, null)
             if (privateKey == null) {
-                Log.e(TAG, "KEY_NOT_FOUND")
+                // The alias is created by generateCSR. Listing what IS present
+                // distinguishes "CSR never ran" from "CSR used a different alias".
+                val aliases = runCatching { keyStore.aliases().toList() }.getOrDefault(emptyList())
+                Log.e(
+                    TAG,
+                    "[MatterCommission] KEY_NOT_FOUND for alias=$fabricId;" +
+                        " keystore holds ${aliases.size} alias(es): $aliases",
+                )
                 promise.reject("KEY_NOT_FOUND", "Private key not found for fabric: $fabricId")
                 return
             }

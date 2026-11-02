@@ -7,14 +7,14 @@
 import { NativeEventEmitter, Platform } from "react-native";
 import ESPMatterModule from "../interfaces/ESPMatterInterface";
 import {
-  ESPMatterCommissioningAdaptorInterface,
-  ESPRMConfirmRequestEventData,
-  ESPRMCSRGenerationResult,
-  ESPRMFabric,
-  ESPRMGenerateCSRRequest,
-  ESPRMNativeDataPayload,
-  ESPRMNoCRequestEventData,
-} from "@espressif/rainmaker-matter-sdk";
+  ESPMatterCommissioningAdapterInterface,
+  ESPMatterFabricRef,
+  ESPMatterConfirmRequestEventData,
+  ESPMatterCSRGenerationResult,
+  ESPMatterGenerateCSRRequest,
+  ESPMatterNativeDataPayload,
+  ESPMatterNoCRequestEventData,
+} from "../contracts/matter";
 import {
   MATTER_COMMISSIONING_EVENT,
   MATTER_EVENT_NODE_NOC_REQUEST,
@@ -22,8 +22,8 @@ import {
   MATTER_EVENT_COMMISSIONING_CONFIRMATION_RESPONSE,
   MATTER_EVENT_COMMISSIONING_COMPLETE,
   MATTER_EVENT_COMMISSIONING_ERROR,
-  MATTER_EVENT_RMNG_ATTESTATION_CHALLENGE,
-  MATTER_EVENT_RMNG_MATTER_ATTESTATION_DATA,
+  MATTER_EVENT_RMNEO_ATTESTATION_CHALLENGE,
+  MATTER_EVENT_RMNEO_MATTER_ATTESTATION_DATA,
   HEADLESS_HANDLED_TYPES,
 } from "@shared/utils/constants";
 
@@ -34,15 +34,37 @@ import {
  * - Android: HeadlessJS tasks handle API calls in background
  * - iOS: SDK makes API calls directly via event handlers
  */
-export const matterCommissioningAdaptor: ESPMatterCommissioningAdaptorInterface = {
+/**
+ * Fabric ids whose NEXT CSR generation must regenerate the keypair even though
+ * a NOC chain already sits in the KeyStore (Android short-circuits otherwise).
+ *
+ * Used by the CAT-rotation stale-NOC re-issue: the SDK owns the `generateCSR`
+ * call, so the app marks the fabric here right before `issueUserNoC` and the
+ * adapter consumes the marker on the next call (one-shot).
+ */
+const forceFreshCsrFabricIds = new Set<string>();
+
+/**
+ * Marks the fabric so its next `generateCSR` regenerates the keypair despite a
+ * stored NOC chain. Call only from a flow that immediately re-issues and
+ * re-stores the NOC (key + NOC must always be rebound together).
+ * @param fabricId - Fabric whose next CSR must use a fresh keypair.
+ */
+export function markForceFreshCsrForFabric(fabricId: string): void {
+  if (fabricId) {
+    forceFreshCsrFabricIds.add(fabricId);
+  }
+}
+
+export const matterCommissioningAdaptor: ESPMatterCommissioningAdapterInterface = {
   /**
    * Generates CSR for fabric certificate using native secure storage.
    * @param fabricInfo - Fabric info containing groupId, fabricId, and name
    * @returns CSR generation result with csr, requestBody, and metadata
    */
   async generateCSR(
-    fabricInfo: ESPRMGenerateCSRRequest
-  ): Promise<ESPRMCSRGenerationResult> {
+    fabricInfo: ESPMatterGenerateCSRRequest
+  ): Promise<ESPMatterCSRGenerationResult> {
     const nativeGenerateCSR =
       ESPMatterModule?.generateCSR ?? (ESPMatterModule as any)?.generateUserNOC;
 
@@ -50,10 +72,19 @@ export const matterCommissioningAdaptor: ESPMatterCommissioningAdaptorInterface 
       throw new Error("Native module method generateCSR not available");
     }
 
+    // One-shot: consume the CAT-rotation force-fresh marker for this fabric.
+    const forceNewKey = fabricInfo.fabricId
+      ? forceFreshCsrFabricIds.delete(fabricInfo.fabricId)
+      : false;
+    // iOS native rejects a missing `name`; the RMNeo SDK forwards the group
+    // name verbatim, which can be absent on freshly converted fabrics.
     const csrResult = await nativeGenerateCSR.call(ESPMatterModule, {
       groupId: fabricInfo.groupId,
       fabricId: fabricInfo.fabricId,
-      name: fabricInfo.name,
+      name: fabricInfo.name || "Matter",
+      // Android skips its "NOC already stored" short-circuit when set; iOS
+      // always generates and ignores the extra key.
+      forceNewKey,
     });
 
     return {
@@ -72,10 +103,10 @@ export const matterCommissioningAdaptor: ESPMatterCommissioningAdaptorInterface 
    */
   async startEcosystemCommissioning(
     onboardingPayload: string,
-    fabric: ESPRMFabric,
+    fabric: ESPMatterFabricRef,
     onEvent: (
       eventType: string,
-      data: ESPRMNoCRequestEventData | ESPRMConfirmRequestEventData
+      data: ESPMatterNoCRequestEventData | ESPMatterConfirmRequestEventData
     ) => void
   ): Promise<() => void> {
     if (!onboardingPayload?.trim()) {
@@ -94,13 +125,15 @@ export const matterCommissioningAdaptor: ESPMatterCommissioningAdaptorInterface 
 
     const isIOS = Platform.OS === "ios";
     let eventListener: any = null;
-    let isRmngSession = false;
+    let isRmneoSession = false;
 
     const eventEmitter = new NativeEventEmitter(ESPMatterModule as any);
 
     eventListener = eventEmitter.addListener(
       MATTER_COMMISSIONING_EVENT,
       (event: any) => {
+        // On Android most of these are owned by HeadlessJS and return early from
+        // the isIOS guards below; iOS is what actually forwards to `onEvent`.
         let normalizedEvent: any;
 
         switch (event.eventType) {
@@ -149,16 +182,16 @@ export const matterCommissioningAdaptor: ESPMatterCommissioningAdaptorInterface 
             };
             break;
 
-          case MATTER_EVENT_RMNG_ATTESTATION_CHALLENGE: {
+          case MATTER_EVENT_RMNEO_ATTESTATION_CHALLENGE: {
             if (!isIOS) return;
-            isRmngSession = true;
+            isRmneoSession = true;
 
             const challengeBody =
               event.requestBody && typeof event.requestBody === "object"
                 ? event.requestBody
                 : event;
             normalizedEvent = {
-              eventType: MATTER_EVENT_RMNG_ATTESTATION_CHALLENGE,
+              eventType: MATTER_EVENT_RMNEO_ATTESTATION_CHALLENGE,
               requestData: {
                 attestationChallenge: challengeBody.attestationChallenge ?? "",
               },
@@ -166,16 +199,16 @@ export const matterCommissioningAdaptor: ESPMatterCommissioningAdaptorInterface 
             break;
           }
 
-          case MATTER_EVENT_RMNG_MATTER_ATTESTATION_DATA: {
+          case MATTER_EVENT_RMNEO_MATTER_ATTESTATION_DATA: {
             if (!isIOS) return;
-            isRmngSession = true;
+            isRmneoSession = true;
 
             const attestationBody =
               event.requestBody && typeof event.requestBody === "object"
                 ? event.requestBody
                 : event;
             normalizedEvent = {
-              eventType: MATTER_EVENT_RMNG_MATTER_ATTESTATION_DATA,
+              eventType: MATTER_EVENT_RMNEO_MATTER_ATTESTATION_DATA,
               requestData: {
                 requestId: attestationBody.requestId ?? "",
                 nocsrElements: attestationBody.nocsrElements ?? "",
@@ -188,17 +221,25 @@ export const matterCommissioningAdaptor: ESPMatterCommissioningAdaptorInterface 
             break;
           }
 
-          case MATTER_EVENT_COMMISSIONING_COMPLETE:
-            if (!isIOS || !isRmngSession) return;
+          case MATTER_EVENT_COMMISSIONING_COMPLETE: {
+            if (!isIOS || !isRmneoSession) return;
+
+            const completeBody =
+              event.requestBody && typeof event.requestBody === "object"
+                ? event.requestBody
+                : event;
+
+            // iOS also emits COMMISSIONING_COMPLETE with `success:false` on
+            // native failures; the SDK's complete handler would still run the
+            // cloud confirm, so only successful completions cross into it.
+            if (completeBody.success === false) return;
 
             normalizedEvent = {
               eventType: MATTER_EVENT_COMMISSIONING_COMPLETE,
-              requestData:
-                event.requestBody && typeof event.requestBody === "object"
-                  ? event.requestBody
-                  : event,
+              requestData: completeBody,
             };
             break;
+          }
 
           case MATTER_EVENT_COMMISSIONING_CONFIRMATION_RESPONSE:
           case MATTER_EVENT_COMMISSIONING_ERROR:
@@ -212,10 +253,18 @@ export const matterCommissioningAdaptor: ESPMatterCommissioningAdaptorInterface 
       }
     );
 
-    await (ESPMatterModule as any).startEcosystemCommissioning(
-      onboardingPayload,
-      fabric as ESPRMFabric
-    );
+    // The listener is live from here, so a failed handoff has to take it down —
+    // the caller never receives the teardown below when this throws.
+    try {
+      await (ESPMatterModule as any).startEcosystemCommissioning(
+        onboardingPayload,
+        fabric
+      );
+    } catch (error) {
+      eventListener?.remove();
+      eventListener = null;
+      throw error;
+    }
 
     return () => {
       eventListener?.remove();
@@ -228,7 +277,7 @@ export const matterCommissioningAdaptor: ESPMatterCommissioningAdaptorInterface 
    * @param payload - Data payload with type and data to send
    * @returns Native response (Android skips HeadlessJS-handled types)
    */
-  async postMessage(payload: ESPRMNativeDataPayload): Promise<any> {
+  async postMessage(payload: ESPMatterNativeDataPayload): Promise<any> {
     const isIOS = Platform.OS === "ios";
 
     // Android: HeadlessJS handles these; iOS: SDK handles
@@ -241,6 +290,21 @@ export const matterCommissioningAdaptor: ESPMatterCommissioningAdaptorInterface 
     }
 
     return ESPMatterModule.postMessage(payload);
+  },
+
+  /**
+   * Ends the native commissioning session, if any. A native build without the
+   * method (Android, whose next start never waits on an old one) does nothing.
+   */
+  async cancelCommissioning(): Promise<void> {
+    if (typeof ESPMatterModule?.cancelCommissioning !== "function") {
+      return;
+    }
+    try {
+      await ESPMatterModule.cancelCommissioning();
+    } catch (error) {
+      console.warn("[ESPMatterAdapter] cancelCommissioning failed:", error);
+    }
   },
 };
 

@@ -36,6 +36,7 @@ object AppConstants {
     const val KEY_FABRIC_ID = "fabric_id"
     const val KEY_FABRIC_ID_CAMEL = "fabricId"
     const val KEY_NAME = "name"
+    const val KEY_FORCE_NEW_KEY = "forceNewKey"
     const val KEY_USER_NOC = "userNoc"
     const val KEY_MATTER_USER_ID = "matterUserId"
     const val KEY_ROOT_CA_CAMEL = "rootCa"
@@ -86,6 +87,9 @@ object AppConstants {
     const val PRIVILEGE_OPERATE = 3
     const val ENDPOINT_0 = 0
 
+    /** Cap on the post-commission ACL read/write: covers CHIP's ~3.7s MRP retransmit budget plus slack for a sluggish ESP node. */
+    const val MATTER_ACL_SETUP_TIMEOUT_MS = 6_000L
+
     // Matter CASE Authenticated Tag (CAT) NodeId prefix. Per Matter spec, ACL subjects
     // and NOC subjects of type CAT live in the NodeId range
     // 0xFFFFFFFD_00000000 - 0xFFFFFFFD_FFFFFFFF, where the lower 32 bits split into
@@ -125,13 +129,19 @@ object AppConstants {
     const val KEY_SIGV4_EXPIRATION = "sigv4Expiration"
     /** Native to React Native event payload key for the RainMaker flag. */
     const val KEY_IS_RAINMAKER_NODE_CAMEL = "isRainmakerNode"
-    /** Cloud Matter metadata flag key, aligned with reference Android/iOS apps. */
+    /**
+     * Neo node id from node association, threaded NOC-task result → ChipClient →
+     * confirm intent extra, so the confirm task survives a recycled headless
+     * JS runtime (its in-memory requestId→nodeId map dies with the runtime).
+     */
+    const val KEY_NEO_NODE_ID = "neoNodeId"
+    /** Matter metadata flag key, aligned with reference Android/iOS apps. */
     const val KEY_IS_RAINMAKER = "isRainmaker"
     const val KEY_MATTER = "Matter"
     const val KEY_DEVICE_TYPE = "deviceType"
     const val KEY_SOFTWARE_VERSION = "softwareVersion"
     const val KEY_SOFTWARE_VERSION_STRING = "softwareVersionString"
-    /** Cloud Matter metadata: nested endpoints.{0xEP}.clusters.{servers|clients}.{0xCID}.attributes */
+    /** Matter metadata: nested endpoints.{0xEP}.clusters.{servers|clients}.{0xCID}.attributes */
     const val KEY_ENDPOINTS = "endpoints"
     const val KEY_CLUSTERS = "clusters"
     const val KEY_SERVERS = "servers"
@@ -197,8 +207,16 @@ object AppConstants {
     const val KEY_MATTER_NODE_IDS = "matterNodeIds"
     /** Interval between CHIP operational reachability probes while discovery is active. */
     const val MATTER_DISCOVERY_POLL_INTERVAL_MS = 8_000L
-    /** IM read timeout when verifying an already-connected node is still on the LAN. */
-    const val MATTER_DISCOVERY_LIVENESS_TIMEOUT_MS = 3_000L
+    /**
+     * IM read timeout when verifying an already-connected node is still on the LAN.
+     *
+     * Must outlast CHIP's MRP retransmit budget for one read. A sluggish-but-alive
+     * ESP node was observed retransmitting for ~3s and answering at ~4s: at 3s the
+     * read timed out, the node was declared LOST, its `matter_local` transport was
+     * torn down, and the ReportData that arrived a second later was dropped as
+     * "unexpected message on exchange".
+     */
+    const val MATTER_DISCOVERY_LIVENESS_TIMEOUT_MS = 6_000L
     /**
      * `getConnectedDevicePointer` below this elapsed time reuses a cached CASE session
      * without network I/O — follow with a liveness read before reporting reachable.
@@ -212,6 +230,15 @@ object AppConstants {
     const val MATTER_DISCOVERY_CONNECT_TIMEOUT_MS = 10_000L
     /** Max concurrent per-node probes per cycle (bounds in-flight CASE sessions). */
     const val MATTER_DISCOVERY_MAX_CONCURRENT_PROBES = 5
+    /**
+     * Consecutive failed probes before a reachable node is declared lost.
+     *
+     * One miss is not evidence a device left the LAN — a dropped UDP datagram or a
+     * busy node costs a probe. Tearing the transport down on the first failure made
+     * local control flap; the node is only dropped once it misses this many probes
+     * in a row (worst case ~1 poll interval of staleness).
+     */
+    const val MATTER_DISCOVERY_LOST_FAILURE_THRESHOLD = 2
     // Matter commissioning back-end identifiers (must match values accepted by
     // build.gradle's MATTER_COMMISSIONING_METHOD validation).
     const val COMMISSIONING_METHOD_GOOGLE_PLAY_SERVICES = "GooglePlayServices"

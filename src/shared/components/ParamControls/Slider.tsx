@@ -20,14 +20,21 @@ import { paramControlStyles as styles } from "./lib/styles";
 import { useDragBubble } from "./lib/useDragBubble";
 import { tokens } from "@shared/theme/tokens";
 import { testProps } from "@shared/utils/testProps";
+import { resolveParamUnitSymbol } from "@shared/utils/paramUnits";
 
 /**
  * SliderControl
  *
  * A basic slider component for controlling numeric parameters.
  * Provides a simple slider interface with current value display.
+ *
+ * This is the one slider whose quantity is unknown up front — the purpose-built
+ * ones (brightness, volume, CCT) carry their unit in their identity — so a
+ * declared unit is shown on every number it prints. An undeclared unit renders
+ * the bare number, exactly as before.
  * @param param - The device parameter to control
  * @param disabled - Whether the control is disabled
+ * @param meta - Bounds (`min`, `max`, `step`) and the declared `unit` token.
  * @returns Generic labeled slider with min/max from `meta`
  */
 const SliderControl = observer(
@@ -40,6 +47,7 @@ const SliderControl = observer(
     compact = false,
   }: ParamControlChildProps) => {
     const { min, max, step = 1 } = meta;
+    const unitSymbol = resolveParamUnitSymbol(meta?.unit);
 
     const n = Number(value);
     const displayValue = Number.isFinite(n)
@@ -80,7 +88,10 @@ const SliderControl = observer(
             >
               {label}
             </Text>
-            <Text {...testProps(`slider_${label}_value`)} style={styles.compactValue}>{value}</Text>
+            <Text
+              {...testProps(`slider_${label}_value`)}
+              style={styles.compactValue}
+            >{`${value}${unitSymbol}`}</Text>
           </View>
         ) : (
           <>
@@ -91,8 +102,8 @@ const SliderControl = observer(
             </Text>
 
             <View style={styles.rangeRow}>
-              <Text style={styles.value}>{min}</Text>
-              <Text style={styles.value}>{max}</Text>
+              <Text style={styles.value}>{`${min}${unitSymbol}`}</Text>
+              <Text style={styles.value}>{`${max}${unitSymbol}`}</Text>
             </View>
           </>
         )}
@@ -109,7 +120,7 @@ const SliderControl = observer(
               ]}
             >
               <View style={styles.bubble}>
-                <Text style={styles.bubbleText}>{displayValue}</Text>
+                <Text style={styles.bubbleText}>{`${displayValue}${unitSymbol}`}</Text>
               </View>
               <View style={styles.bubbleArrow} />
             </View>
@@ -168,9 +179,7 @@ const SliderControl = observer(
                   opacity: isDragging ? 0 : 1,
                 },
               ]}
-            >
-              {displayValue}
-            </Text>
+            >{`${displayValue}${unitSymbol}`}</Text>
           </View>
         )}
       </View>

@@ -32,6 +32,7 @@ import {
   ESPRMNEO_GROUP_ERR_SUBGROUP_MISSING_PARENT_ID,
 } from "../constants";
 import { applyRefreshedCdfNodeToStore, clearCdfProjectedNcfg } from "./nodeHelpers";
+import { rearmMatterNodeInstance } from "@sdk-adaptors/ESPRMNeoBase/utils/matter/rearmMatterNodeInstance";
 import {
   transformToESPCDFNode,
   transformToESPCDFNodes,
@@ -57,18 +58,36 @@ export type RmneoChildGroup = ESPRMNeoGroup & {
 
 /**
  * Maps RMNeo SDK groups to CDF groups for group-store synchronization.
- * @param esprmngUser - Authenticated RMNeo SDK user required by the transformer.
+ * @param esprmneoUser - Authenticated RMNeo SDK user required by the transformer.
  * @param groups - RMNeo SDK groups to transform.
  * @returns CDF groups ready for the group store.
  */
 export function transformRmneoSdkGroupsToCdf(
-  esprmngUser: ESPRMNeoUser,
+  esprmneoUser: ESPRMNeoUser,
   groups: ESPRMNeoGroup[],
+  transformGroup: ESPRMNeoGroupTransform = defaultGroupTransform,
 ): ESPCDFGroup[] {
-  return groups.map((group) =>
-    transformToESPCDFGroup(group, esprmngUser, ESPRMNeoBaseAdaptorIdentifier),
-  );
+  return groups.map((group) => transformGroup(group, esprmneoUser));
 }
+
+/**
+ * Builds a CDF group from an SDK group, with the adaptor identifier pre-bound.
+ *
+ * The seam that lets a layer built on this base — the Neo Matter adaptor —
+ * substitute its own group transform. Without it the group-producing operations
+ * would hardcode this base's transform, and a subclass could not reach them:
+ * the imports are static and resolved at module load, not through `this`.
+ */
+export type ESPRMNeoGroupTransform = (
+  group: ESPRMNeoGroup,
+  esprmneoUser: ESPRMNeoUser,
+) => ESPCDFGroup;
+
+/** This base's transform, used whenever no override is injected. */
+export const defaultGroupTransform: ESPRMNeoGroupTransform = (
+  group,
+  esprmneoUser,
+) => transformToESPCDFGroup(group, esprmneoUser, ESPRMNeoBaseAdaptorIdentifier);
 
 /**
  * True when this instance is a nested group (child of another group).
@@ -617,7 +636,7 @@ let coalescedFlush: Promise<void> | null = null;
  * pull-to-refresh. Best-effort: never throws.
  */
 export async function resyncMqttAfterSubgroupChange(
-    esprmngUser: ESPRMNeoUser,
+    esprmneoUser: ESPRMNeoUser,
     nodeIdsToRefresh: string[],
 ): Promise<void> {
     const ids = [...new Set(nodeIdsToRefresh)].filter(Boolean);
@@ -626,9 +645,9 @@ export async function resyncMqttAfterSubgroupChange(
     }
 
     if (!coalescedBatch) {
-        coalescedBatch = { user: esprmngUser, ids: new Set(), waiters: [] };
+        coalescedBatch = { user: esprmneoUser, ids: new Set(), waiters: [] };
     } else {
-        coalescedBatch.user = esprmngUser;
+        coalescedBatch.user = esprmneoUser;
     }
     for (const id of ids) {
         coalescedBatch.ids.add(id);
@@ -658,20 +677,25 @@ async function flushCoalescedResync(): Promise<void> {
 }
 
 async function runFullMqttResync(
-    esprmngUser: ESPRMNeoUser,
+    esprmneoUser: ESPRMNeoUser,
     ids: string[],
 ): Promise<void> {
     if (ids.length === 0) {
         return;
     }
 
+    // Same order as the reconnect resubscribe, since a home may be subscribing
+    // its nodes meanwhile (subscribes and unsubscribes run in one queue per
+    // user): reset first, then unsubscribe all once any queued subscribe is
+    // done, and read the node list again just before subscribing. A node
+    // subscribed meanwhile is kept or subscribed again, never left out.
     const cdfUser = ESPCDF.instance?.userStore?.user;
-    await cdfUser?.unsubscribeFromNodeUpdates?.().catch(() => {});
     await resetMqttNodeRegistrations(ids);
+    await cdfUser?.unsubscribeFromNodeUpdates?.().catch(() => {});
 
     let groups: Awaited<ReturnType<ESPRMNeoUser["getGroups"]>> = [];
     try {
-        groups = await esprmngUser.getGroups();
+        groups = await esprmneoUser.getGroups();
     } catch (error) {
         console.warn("[subgroupMembershipResync] getGroups failed during subgroup resync", error);
     }
@@ -682,6 +706,9 @@ async function runFullMqttResync(
             if (!sdkGroupContainsNodeId(home, nodeId)) continue;
             try {
                 const fresh = await home.getNode(nodeId);
+                // The fresh instance drops a hybrid's local Matter control, so
+                // writes would go to the cloud until the next home sync.
+                await rearmMatterNodeInstance(fresh as never);
                 // Rebuild CDF devices/params so DeviceCard setValue WeakRefs
                 // point at this fresh SDK node (MQTT transport lives there).
                 // Swapping only `_raw` left control on the pre-resync node with
@@ -774,17 +801,17 @@ let pendingGetGroups: Promise<ESPRMNeoGroup[]> | null = null;
  *
  * Used by getNodeDetails when the CDF loads several new nodes at once
  * (each node triggers getNodeDetails in parallel).
- * @param esprmngUser - Logged-in RMNeo user used for `getGroups()`.
+ * @param esprmneoUser - Logged-in RMNeo user used for `getGroups()`.
  * @returns Cloud group list from the in-flight or newly started fetch.
  */
 export async function getRmneoGroupsShared(
-  esprmngUser: ESPRMNeoUser,
+  esprmneoUser: ESPRMNeoUser,
 ): Promise<ESPRMNeoGroup[]> {
   if (pendingGetGroups) {
     console.log(`${LOG_GET_GROUPS_SHARED} reusing getGroups() already in progress`);
     return pendingGetGroups;
   }
-  pendingGetGroups = esprmngUser.getGroups().finally(() => {
+  pendingGetGroups = esprmneoUser.getGroups().finally(() => {
     pendingGetGroups = null;
   });
   return pendingGetGroups;

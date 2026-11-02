@@ -42,7 +42,7 @@ import kotlinx.coroutines.withTimeoutOrNull
 /**
  * Matter operational local discovery backed by CHIP — not RainMaker mDNS.
  *
- * Given known Matter node ids (from cloud / CDF), probes each node via
+ * Given known Matter node ids supplied by the JS layer, probes each node via
  * [ChipDeviceController.getConnectedDevicePointer] so CHIP performs operational
  * mDNS matching and CASE setup. Emits the same `DiscoveryUpdate` / `DiscoveryLost`
  * events consumed by the JS [MatterDiscoverAdapter].
@@ -60,6 +60,8 @@ class MatterDiscoveryModule(reactContext: ReactApplicationContext) :
     private val reachableNodeIds = ConcurrentHashMap.newKeySet<String>()
     private val lastKnownHostByNodeId = ConcurrentHashMap<String, String>()
     private val lastKnownPortByNodeId = ConcurrentHashMap<String, Int>()
+    /** Consecutive failed probes per reachable node; reset by any success. */
+    private val consecutiveFailuresByNodeId = ConcurrentHashMap<String, Int>()
     private var targetMatterNodeIds: List<String> = emptyList()
     private val pollCycleCounter = AtomicLong(0L)
     private var multicastLock: WifiManager.MulticastLock? = null
@@ -111,6 +113,7 @@ class MatterDiscoveryModule(reactContext: ReactApplicationContext) :
         reachableNodeIds.clear()
         lastKnownHostByNodeId.clear()
         lastKnownPortByNodeId.clear()
+        consecutiveFailuresByNodeId.clear()
         pollCycleCounter.set(0L)
         releaseMulticastLock()
     }
@@ -131,6 +134,9 @@ class MatterDiscoveryModule(reactContext: ReactApplicationContext) :
     fun setTargetMatterNodeIds(nodeIds: ReadableArray) {
         val previousTargets = targetMatterNodeIds
         targetMatterNodeIds = readableArrayToNodeIds(nodeIds)
+        // Drop miss counters for nodes no longer targeted, so a re-added node does
+        // not inherit a stale count and get declared lost one miss early.
+        consecutiveFailuresByNodeId.keys.retainAll(targetMatterNodeIds.toSet())
         val probeAlreadyRunning = discoveryJob?.isActive == true
 
         Log.i(
@@ -357,17 +363,12 @@ class MatterDiscoveryModule(reactContext: ReactApplicationContext) :
                         "(cap ${AppConstants.MATTER_DISCOVERY_CONNECT_TIMEOUT_MS}ms): " +
                         "matterNodeId=$matterNodeIdHex deviceId=$deviceId elapsedMs=$elapsedMs",
                 )
-                if (wasReachable && reachableNodeIds.remove(matterNodeIdHex)) {
-                    lastKnownHostByNodeId.remove(matterNodeIdHex)
-                    lastKnownPortByNodeId.remove(matterNodeIdHex)
-                    Log.i(
-                        TAG,
-                        "$LOG_PREFIX pollCycle #$cycle LOST: matterNodeId=$matterNodeIdHex (connect timed out)",
-                    )
-                    emitDiscoveryLost(matterNodeIdHex)
-                    return ProbeOutcome.LOST
-                }
-                return ProbeOutcome.UNREACHABLE
+                return handleProbeFailure(
+                    matterNodeIdHex,
+                    wasReachable,
+                    cycle,
+                    "connect timed out",
+                )
             }
             val connectElapsedMs = System.currentTimeMillis() - probeStartMs
 
@@ -414,23 +415,18 @@ class MatterDiscoveryModule(reactContext: ReactApplicationContext) :
                         "$LOG_PREFIX pollCycle #$cycle liveness failed: matterNodeId=$matterNodeIdHex " +
                             "wasReachable=$wasReachable connectElapsedMs=$connectElapsedMs",
                     )
-                    lastKnownHostByNodeId.remove(matterNodeIdHex)
-                    lastKnownPortByNodeId.remove(matterNodeIdHex)
-                    if (wasReachable && reachableNodeIds.remove(matterNodeIdHex)) {
-                        Log.i(
-                            TAG,
-                            "$LOG_PREFIX pollCycle #$cycle LOST: matterNodeId=$matterNodeIdHex " +
-                                "(cached session stale or device offline)",
-                        )
-                        emitDiscoveryLost(matterNodeIdHex)
-                        return ProbeOutcome.LOST
-                    }
-                    return ProbeOutcome.UNREACHABLE
+                    return handleProbeFailure(
+                        matterNodeIdHex,
+                        wasReachable,
+                        cycle,
+                        "cached session stale or device offline",
+                    )
                 }
             }
 
             lastKnownHostByNodeId[matterNodeIdHex] = host
             lastKnownPortByNodeId[matterNodeIdHex] = port
+            consecutiveFailuresByNodeId.remove(matterNodeIdHex)
 
             if (!wasReachable) {
                 reachableNodeIds.add(matterNodeIdHex)
@@ -460,20 +456,60 @@ class MatterDiscoveryModule(reactContext: ReactApplicationContext) :
                     "matterNodeId=$matterNodeIdHex deviceId=$deviceId elapsedMs=$elapsedMs " +
                     "error=${e.javaClass.simpleName}: ${e.message}",
             )
-            if (wasReachable && reachableNodeIds.remove(matterNodeIdHex)) {
-                lastKnownHostByNodeId.remove(matterNodeIdHex)
-                lastKnownPortByNodeId.remove(matterNodeIdHex)
-                Log.i(
-                    TAG,
-                    "$LOG_PREFIX pollCycle #$cycle LOST: matterNodeId=$matterNodeIdHex " +
-                        "(was reachable, CHIP connection failed)",
-                )
-                emitDiscoveryLost(matterNodeIdHex)
-                ProbeOutcome.LOST
-            } else {
-                ProbeOutcome.UNREACHABLE
-            }
+            handleProbeFailure(
+                matterNodeIdHex,
+                wasReachable,
+                cycle,
+                "CHIP connection failed",
+            )
         }
+    }
+
+    /**
+     * Records a failed probe and decides whether the node has really gone.
+     *
+     * One miss is not evidence a device left the LAN: a dropped datagram or a busy
+     * node costs a probe, and tearing `matter_local` down on the first failure made
+     * local control flap on a device that was still answering. A reachable node now
+     * survives up to [AppConstants.MATTER_DISCOVERY_LOST_FAILURE_THRESHOLD]
+     * consecutive misses, keeping its last known host/port so a recovery needs no
+     * re-resolve. A node that was already unreachable is unaffected.
+     */
+    private fun handleProbeFailure(
+        matterNodeIdHex: String,
+        wasReachable: Boolean,
+        cycle: Long,
+        reason: String,
+    ): ProbeOutcome {
+        if (!wasReachable) {
+            consecutiveFailuresByNodeId.remove(matterNodeIdHex)
+            return ProbeOutcome.UNREACHABLE
+        }
+
+        val threshold = AppConstants.MATTER_DISCOVERY_LOST_FAILURE_THRESHOLD
+        val failures = (consecutiveFailuresByNodeId[matterNodeIdHex] ?: 0) + 1
+        if (failures < threshold) {
+            consecutiveFailuresByNodeId[matterNodeIdHex] = failures
+            Log.i(
+                TAG,
+                "$LOG_PREFIX pollCycle #$cycle probe miss $failures/$threshold " +
+                    "(still reachable): matterNodeId=$matterNodeIdHex ($reason)",
+            )
+            return ProbeOutcome.STILL_REACHABLE
+        }
+
+        consecutiveFailuresByNodeId.remove(matterNodeIdHex)
+        // Lost only once: a concurrent probe for the same node must not re-emit.
+        if (!reachableNodeIds.remove(matterNodeIdHex)) {
+            return ProbeOutcome.UNREACHABLE
+        }
+        Log.i(
+            TAG,
+            "$LOG_PREFIX pollCycle #$cycle LOST: matterNodeId=$matterNodeIdHex " +
+                "($reason, $failures consecutive misses)",
+        )
+        emitDiscoveryLost(matterNodeIdHex)
+        return ProbeOutcome.LOST
     }
 
     private fun formatMatterDeviceId(matterNodeIdHex: String, deviceId: Long): String {

@@ -34,13 +34,17 @@ rmneo:
   password: "${RMNEO_DEPLOYMENT_PASSWORD:-Welcome01!}"
   features:
     open_wifi: ${FEATURE_OPEN_WIFI:-false}
-    matter_only: false
+    # Matter suites also need a Neo Matter build (commit message with "neo" and "matter").
+    matter_only: true
+    # RainMaker+Matter nodes work only on the Neo staging cloud so far, not this one.
     rmneo_matter: false
     scene: false
     third_party: false
     softap: false
     delete_account: false
     max_schedule_badge: false
+    # No list of sent invites and no cancel on RMNEO, so these checks cannot run here.
+    pending_invites: false
   # registered_users is keyed by device model so parallel Android/iOS runs use
   # separate credential pools and never sign in with each other's account.
   # Filled in automatically on first run (--model picks the bucket); pre-seed

@@ -22,10 +22,6 @@ import {
   Platform,
 } from "react-native";
 import {
-  formatMatterNodeIdForChipLog,
-  MATTER_DISCOVERY_VERIFY_LOG,
-} from "@shared/utils/matterNodeIdHex";
-import {
   getMatterDiscoveryTargetNodeIds,
   syncMatterDiscoveryTargetNodeIds,
 } from "./matterDiscoveryTargets";
@@ -183,18 +179,6 @@ export const matterLocalDiscoveryAdapter: ESPLocalDiscoveryAdapterInterface & {
           const incoming =
             typeof data?.serviceType === "string" ? data.serviceType : undefined;
           const forwarded = shouldForwardDiscoveryEvent(incoming, expectedServiceType);
-          // Probe: log EVERY native mDNS event BEFORE the service-type filter.
-          // If nothing resolves on WLAN this reveals whether native emits any
-          // _matter._tcp event at all (device not advertising / not on-LAN) vs
-          // emits events that get filtered out (serviceType mismatch).
-          console.log("[MatterProbe][discovery] native event", {
-            serviceType: incoming,
-            expected: expectedServiceType,
-            forwarded,
-            matterNodeId: data?.matterNodeId,
-            host: data?.host,
-            port: data?.port,
-          });
           if (!forwarded) {
             return;
           }
@@ -204,16 +188,6 @@ export const matterLocalDiscoveryAdapter: ESPLocalDiscoveryAdapterInterface & {
       );
 
       if (shouldStartNativeBrowse && MatterNativeDiscoveryModule?.startDiscovery) {
-        console.log(
-          `${MATTER_DISCOVERY_VERIFY_LOG} matterLocalDiscoveryAdapter.startDiscovery → native:`,
-          {
-            serviceType: nativeParams.serviceType,
-            domain: nativeParams.domain,
-            matterNodeIds: (
-              nativeParams[MATTER_DISCOVERY_CONFIG_KEY_NODE_IDS] as string[] | undefined
-            )?.map((id) => formatMatterNodeIdForChipLog(id)),
-          },
-        );
         MatterNativeDiscoveryModule.startDiscovery(nativeParams);
       }
 
@@ -294,12 +268,6 @@ export const matterLocalDiscoveryAdapter: ESPLocalDiscoveryAdapterInterface & {
         const incoming =
           typeof data?.serviceType === "string" ? data.serviceType : undefined;
         const forwarded = shouldForwardDiscoveryEvent(incoming, expectedServiceType);
-        console.log("[MatterProbe][discovery] native LOST event", {
-          serviceType: incoming,
-          expected: expectedServiceType,
-          forwarded,
-          matterNodeId: data?.matterNodeId,
-        });
         if (!forwarded) {
           return;
         }

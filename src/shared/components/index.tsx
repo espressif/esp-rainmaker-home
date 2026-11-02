@@ -47,6 +47,10 @@ export { default as SwitchButton } from "./Form/SwitchButton";
 
 // Info
 export { default as InfoRow } from "./Info/InfoRow";
+export { default as IdentifyGlyph } from "./Info/IdentifyGlyph";
+export type { IdentifyGlyphProps } from "./Info/IdentifyGlyph";
+export { default as IdentifyDeviceButton } from "./Info/IdentifyDeviceButton";
+export type { IdentifyDeviceButtonProps } from "./Info/IdentifyDeviceButton";
 
 // Layout
 export { default as ToastContainer } from "./Layout/ToastContainer";

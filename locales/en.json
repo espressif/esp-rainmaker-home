@@ -353,6 +353,7 @@
       "homeBannerTitle": "Welcome to",
       "addYourFirstDeviceBannerTitle": "Add Your First Device!",
       "addYourFirstDeviceBannerDescription": "Tap the button below or on the top right.",
+      "loadFailedMessage": "Couldn't load your devices. Trying again…",
       "migrationPromptTitle": "Migration update",
       "migrationPromptMessage": "If some devices aren’t visible, please re-add them under your preferred home.",
       "migrationPromptUnderstood": "Got it"
@@ -774,6 +775,7 @@
         "notSupportedGeneric": "Matter commissioning is not supported for this deployment.",
         "notSupportedHint": "Switch to a deployment that supports Matter to add this device.",
         "enterCodeAgainHint": "Go back and enter the pairing code again.",
+        "notAllowedSharedHome": "Only the home owner can add Matter devices. Ask the owner to add this device, or switch to a home you own.",
         "convertTitle": "Enable Matter for this home",
         "convertMessage": "\"{{homeName}}\" must be set up as a Matter fabric before you can add devices. Continue to convert this home?",
         "convertConfirm": "Continue",
@@ -790,6 +792,9 @@
         "placeholder": "11 or 21 digit pairing code",
         "invalidCode": "Enter a valid 11 or 21 digit Matter pairing code.",
         "authRequired": "Please sign in to commission Matter devices."
+      },
+      "setup": {
+        "nameSaveFailed": "Could not save the device name. You can rename it later from device settings."
       }
     },
     "wifi": {
@@ -822,6 +827,7 @@
       "otaUpdateStarted": "Update started",
       "deviceNameTitle": "Device Name",
       "enterDeviceNamePlaceholder": "Enter device name",
+      "unsavedDeviceNameDescription": "You changed the device name but did not save it. Save it before leaving?",
       "deviceInfoTitle": "Node Information",
       "deviceInfoIdLabel": "Node ID",
       "deviceInfoVersionLabel": "Version",
@@ -874,6 +880,12 @@
       "deviceListUpdated": "Device list refresh requested",
       "deviceListUpdateFailed": "Couldn't refresh the device list. Please try again."
     },
+    "identify": {
+      "action": "Identify",
+      "running": "Identifying...",
+      "hint": "Flashes or beeps for {{count}} seconds",
+      "failed": "Couldn't reach the device. Please try again."
+    },
     "panels": {
       "light": {
         "whiteTab": "White",
@@ -916,7 +928,8 @@
       }
     },
     "validation": {
-      "deviceNameCannotBeEmpty": "Device name cannot be empty"
+      "deviceNameCannotBeEmpty": "Device name cannot be empty",
+      "deviceNameTooLong": "Name is too long for this device. Use up to 32 characters (about 10 Chinese characters)."
     },
     "status": {
       "outOfSync": "Out of sync"
@@ -1239,8 +1252,7 @@
       "refreshFailed": "Failed to refresh automations",
       "failedToFetchAutomation": "Failed to fetch automation",
       "failedToActionAutomation": "Failed to {{action}} automation",
-      "failedToCreateAutomation": "Failed to create automation",
-      "rmngEnableDisableNotSupported": "Enabling and disabling automations is not supported for RMNG."
+      "failedToCreateAutomation": "Failed to create automation"
     }
   },
   "schedule": {

@@ -47,8 +47,8 @@ import {
   connectWithTimeout,
   isConnectTimeout,
   safeDisconnect,
-  withTimeout,
 } from "@features/provision/utils/scanBLEHelper";
+import { withTimeout } from "@shared/utils/asyncTimeout";
 import {
   parseProvisionQrData,
   type ParsedQrPayload,

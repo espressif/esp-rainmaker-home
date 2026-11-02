@@ -40,8 +40,9 @@ def _build_note(summary: dict) -> str:
     status_icon = {"ALL PASSED": "✅", "PASSED": "✅", "MOSTLY PASSED": "⚠️"}.get(summary.get("status"), "❌")
     report_url = summary.get("report_url") or "report URL unavailable (artifact host offline?)"
     device = f" on {summary['model']}" if summary.get("model") else ""
+    deployment = f" ({os.environ['DEPLOYMENT']})" if os.environ.get("DEPLOYMENT") else ""
     lines = [
-        f"## {status_icon} {_platform_label()} Test Report — {summary.get('status', 'UNKNOWN')}{device}",
+        f"## {status_icon} {_platform_label()}{deployment} Test Report — {summary.get('status', 'UNKNOWN')}{device}",
         "",
         "| Total | Pass | Fail | Skip | Abort |",
         "|-------|------|------|------|-------|",

@@ -48,6 +48,10 @@ const ContentWrapper: React.FC<ContentWrapperProps> = ({
       {...(qaId ? testProps(`button_${qaId}`) : {})}
       style={[styles.container, style]}
       onPress={onPress}
+      // A card that does nothing on press must not take focus: after the
+      // keyboard's Done, Android handed it focus and greyed it with its focus
+      // highlight until something else was touched.
+      focusable={onPress !== undefined}
     >
       {title && (
         <View style={styles.header}>

@@ -8,7 +8,8 @@ import { useState, useCallback, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { useToast } from "@shared/hooks/useToast";
 import { broadcastGroupParam } from "@features/group/utils/controlGroupHelpers";
-import { ESPRM_POWER_PARAM_TYPE, ERROR_CODES } from "@shared/utils/constants";
+import { ESPRM_POWER_PARAM_TYPE } from "@shared/utils/constants";
+import { messageKeyForFailedWrite } from "@shared/utils/deviceWriteErrorMessage";
 import { LOADER_VISIBLE_DURATION_MS, POWER_ACTION_ON, POWER_ACTION_OFF } from "@features/group/utils/constants";
 import type { RoomPowerEntry, RoomControlSwitchProps } from "@src/types/global";
 
@@ -88,10 +89,7 @@ export function useRoomControl(
       }));
       broadcastGroupParam(roomGroup, broadcastTargets, value, {
         onSetParamsError: (err: unknown) => {
-          const code = (err as { code?: string })?.code;
-          const key =
-            code && ERROR_CODES[code as keyof typeof ERROR_CODES];
-          toast.showError(key ? t(key) : t("group.errors.fallback"));
+          toast.showError(t(messageKeyForFailedWrite(err)));
         },
       });
 

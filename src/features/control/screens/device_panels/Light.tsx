@@ -35,6 +35,10 @@ import {
   readMatterNodeIdFromCdfNode,
   resolveMatterEndpointsForDevice,
 } from "@shared/utils/matterDeviceStateEvents";
+import {
+  filterUnsupportedMatterColorParams,
+  getParamRole,
+} from "@shared/utils/paramUtils";
 
 // Types
 import { ControlPanelProps, Tab } from "@src/types/global";
@@ -46,7 +50,6 @@ import {
   ESPRM_BRIGHTNESS_PARAM_TYPE,
   ESPRM_CCT_PARAM_TYPE,
   ESPRM_LIGHT_MODE_PARAM_TYPE,
-  ESPRM_UI_TOGGLE_PARAM_TYPE,
   COLOR_TAB,
   WHITE_TAB,
 } from "@shared/utils/constants";
@@ -61,6 +64,10 @@ import {
  * - White: brightness + temperature (esp.param.temperature) and/or CCT (esp.param.cct)
  * - Light mode (esp.param.light-mode) synced with White / Color tab when present
  * - Scene presets (coming soon)
+ *
+ * Serves every light stack from one panel: params are matched by the role
+ * `params.config` declares for them, not by which stack produced them. Pure
+ * Matter lights have no light-mode param, so tab state follows HS presence.
  *
  * Content-only (no nested ScrollView): Control owns the shared scroll + pull-to-refresh.
  * @param props - Node, device, and optional parent scroll lock callback
@@ -81,34 +88,34 @@ const Light: React.FC<ControlPanelProps> = ({
     setScrollEnabled?.(!updating);
   };
 
-  // Device Parameters
-  const powerParam = device?.params?.find(
-    (param) =>
-      param.type === ESPRM_POWER_PARAM_TYPE ||
-      param.uiType === ESPRM_UI_TOGGLE_PARAM_TYPE,
+  // Colour params the device cannot back are dropped before the lookups.
+  const params = filterUnsupportedMatterColorParams(node, device?.params ?? []);
+
+  const powerParam = params.find(
+    (param) => getParamRole(param) === ESPRM_POWER_PARAM_TYPE,
   );
 
-  const brightnessParam = device?.params?.find(
-    (param) => param.type === ESPRM_BRIGHTNESS_PARAM_TYPE,
+  const brightnessParam = params.find(
+    (param) => getParamRole(param) === ESPRM_BRIGHTNESS_PARAM_TYPE,
   );
 
-  const hueParam = device?.params?.find(
-    (param) => param.type === ESPRM_HUE_PARAM_TYPE,
+  const hueParam = params.find(
+    (param) => getParamRole(param) === ESPRM_HUE_PARAM_TYPE,
   );
 
-  const saturationParam = device?.params?.find(
-    (param) => param.type === ESPRM_SATURATION_PARAM_TYPE,
+  const saturationParam = params.find(
+    (param) => getParamRole(param) === ESPRM_SATURATION_PARAM_TYPE,
   );
 
-  const temperatureParam = device?.params?.find(
+  const temperatureParam = params.find(
     (param) => param.type === ESPRM_TEMPERATURE_PARAM_TYPE,
   );
 
-  const cctParam = device?.params?.find(
-    (param) => param.type === ESPRM_CCT_PARAM_TYPE,
+  const cctParam = params.find(
+    (param) => getParamRole(param) === ESPRM_CCT_PARAM_TYPE,
   );
 
-  const lightModeParam = device?.params?.find(
+  const lightModeParam = params.find(
     (param) => param.type === ESPRM_LIGHT_MODE_PARAM_TYPE,
   );
 
@@ -202,20 +209,9 @@ const Light: React.FC<ControlPanelProps> = ({
     lightModeMax,
   ]);
 
-  /**
-   * Writes light-mode when switching to Color (White is firmware-driven).
-   * @param tab - Tab the user selected
-   */
-  const setLightModeForTab = async (tab: Tab) => {
-    // Firmware now auto-switches to white mode on its own once it receives a
-    // CCT/temperature update, so the app must not explicitly write
-    // light-mode when switching to the White tab (and the old CCT/temperature
-    // resend workaround for that case is no longer needed either).
-    if (tab === WHITE_TAB) {
-      return;
-    }
-
-    const nextVal = lightModeValueForTab(tab);
+  /** Colour mode on a real hue/sat edit; selecting a tab must not change the light. */
+  const ensureColorLightMode = async () => {
+    const nextVal = lightModeValueForTab(COLOR_TAB);
     if (
       nextVal === null ||
       !device ||
@@ -228,17 +224,8 @@ const Light: React.FC<ControlPanelProps> = ({
       await lightModeParam.setValue(nextVal);
       lightModeParam.value = nextVal;
     } catch (e) {
-      console.error("[Light] setLightModeForTab failed:", e);
+      console.error("[Light] ensureColorLightMode failed:", e);
     }
-  };
-
-  /**
-   * Updates local tab state and syncs light-mode when needed.
-   * @param tab - Selected White or Color tab
-   */
-  const handleTabChange = (tab: Tab) => {
-    setActiveTab(tab);
-    void setLightModeForTab(tab);
   };
 
   /**
@@ -251,7 +238,7 @@ const Light: React.FC<ControlPanelProps> = ({
       key={tab}
       style={[styles.tab, activeTab === tab && styles.activeTab]}
       {...testProps(`button_light_${tab.toLowerCase()}`)}
-      onPress={() => handleTabChange(tab)}
+      onPress={() => setActiveTab(tab)}
     >
       <Text style={[styles.tabText, activeTab === tab && styles.activeTabText]}>
         {tab === WHITE_TAB
@@ -355,6 +342,7 @@ const Light: React.FC<ControlPanelProps> = ({
                 param={hueParam}
                 disabled={!isConnected}
                 setUpdating={onSetUpdating}
+                onUserEdit={() => void ensureColorLightMode()}
                 style={styles.paramControlWrap}
               >
                 <HueSlider />
@@ -366,6 +354,7 @@ const Light: React.FC<ControlPanelProps> = ({
                 param={saturationParam}
                 disabled={!isConnected}
                 setUpdating={onSetUpdating}
+                onUserEdit={() => void ensureColorLightMode()}
                 style={styles.paramControlWrap}
               >
                 <SaturationSlider />

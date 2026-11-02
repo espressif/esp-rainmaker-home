@@ -11,21 +11,46 @@ import type {
   GroupStoreCallbacks,
 } from "@store";
 import { DEFAULT_HOME_GROUP_NAME, ESPCDF } from "@store";
-import type { ESPRMNeoGroup, ESPRMNeoUser } from "@espressif/rainmaker-neo-base-sdk";
+import type {
+  ESPRMNeoGroup,
+  ESPRMNeoUser,
+} from "@espressif/rainmaker-neo-base-sdk";
 import { USER_PERMISSION } from "@shared/utils/constants";
+import { withTimeout } from "@shared/utils/asyncTimeout";
+import {
+  getSessionId,
+  isSessionActive,
+  throwIfSessionEnded,
+} from "@shared/utils/userSession";
+import {
+  getHomeSyncGiveUpCount,
+  HomeSyncGivenUpError,
+  throwIfHomeSyncGivenUp,
+} from "@shared/utils/homeSyncTracker";
+import {
+  chooseHomeToShow,
+  forgetHomeShownWithoutSaving,
+} from "@sdk-adaptors/shared/utils/homeToShow";
 import {
   ensureRmneoMqttConnected,
   refreshRmneoMqttCredentials,
 } from "./utils/helpers/mqttConnectionHelpers";
-import { logRmneoGroupsRaw } from "./utils/helpers/debugLogHelpers";
 import {
   buildNodeSubgroupMembershipMap,
   diffChangedSubgroupMembershipNodeIds,
   resyncMqttAfterSubgroupChange,
   transformRmneoSdkGroupsToCdf,
+  defaultGroupTransform,
+  type ESPRMNeoGroupTransform,
 } from "./utils/helpers/groupHelpers";
 import { Logger } from "./utils/logger";
 import { ESPRMNEO_CUSTOM_DATA_KEY_LAST_SELECTED_HOME_ID } from "./utils/constants";
+
+/**
+ * How long the home load waits for MQTT before it loads over HTTP without it.
+ * Its nodes are subscribed once MQTT is up.
+ */
+const MQTT_WAIT_BEFORE_HOME_MS = 4000;
 
 type LastSelectedHomeCustomData = {
   [ESPRMNEO_CUSTOM_DATA_KEY_LAST_SELECTED_HOME_ID]?: { value?: string };
@@ -39,19 +64,46 @@ type LastSelectedHomeCustomData = {
  * `lastSelectedHomeId`, and resyncs MQTT when subgroup membership changed.
  * Sequencing is intentional — preferred home first, then priority others,
  * then MQTT resync, then background homes — do not reorder.
+ *
+ * Stops before writing if the user logged out meanwhile, so the old
+ * account's homes never come back after logout.
  * @param user - CDF user used for custom data and node-update subscriptions.
  * @param callbacks - Group-store mutators (`setGroupsList`, `addNodesToGroup`, …).
- * @param esprmngUser - RMNeo SDK user for groups / MQTT APIs.
- * @param mqttConnectionPromise - In-flight MQTT connect to await before node fetch.
+ * @param esprmneoUser - RMNeo SDK user for groups / MQTT APIs.
+ * @param mqttConnectionPromise - In-flight MQTT connect, waited for at most
+ *   {@link MQTT_WAIT_BEFORE_HOME_MS} before node fetch.
  * @returns The selected home group, or `null` when none exist after sync.
+ * @throws SessionEndedError when the user logged out during the sync.
+ * @throws HomeSyncGivenUpError when the store gave up on this sync.
  */
 export async function syncHomeWithNodes(
   user: ESPCDFUser,
   callbacks: GroupStoreCallbacks,
-  esprmngUser: ESPRMNeoUser,
+  esprmneoUser: ESPRMNeoUser,
   mqttConnectionPromise: Promise<unknown>,
+  transformGroup: ESPRMNeoGroupTransform = defaultGroupTransform,
 ): Promise<ESPCDFGroup | null> {
-  await mqttConnectionPromise;
+  const sessionId = getSessionId();
+  const giveUpCountAtStart = getHomeSyncGiveUpCount();
+  // Stops before any write once the user logged out, or once the store gave
+  // up on this sync (it ran too long and a fresh one started).
+  const stopIfSessionEnded = () => {
+    throwIfSessionEnded(sessionId, "syncHomeWithNodes");
+    throwIfHomeSyncGivenUp(giveUpCountAtStart, "syncHomeWithNodes");
+  };
+
+  // On a good network MQTT is up within this wait, which keeps the usual
+  // order. Otherwise the home loads without it and the reconnect below
+  // subscribes its nodes once MQTT is up; it never blocks the home.
+  await withTimeout(
+    mqttConnectionPromise,
+    MQTT_WAIT_BEFORE_HOME_MS,
+    "MQTT is not up yet",
+  ).catch(() => {});
+  ensureRmneoMqttConnected(esprmneoUser).catch((error: unknown) => {
+    Logger.warn("MQTT is not up yet; the home loads without it", error);
+  });
+  stopIfSessionEnded();
 
   // Snapshot subgroup membership before this sync overwrites the store, so we
   // can tell afterwards which nodes' rooms/control groups changed and need an
@@ -60,27 +112,33 @@ export async function syncHomeWithNodes(
   const priorHomes = ESPCDF.instance?.groupStore?.groupsList ?? [];
   const membershipBeforeSync = buildNodeSubgroupMembershipMap(priorHomes);
 
-  const groups = await esprmngUser.getGroups();
-  logRmneoGroupsRaw("syncHomeWithNodes", {
-    sdkGroups: groups,
-  });
+  const groups = await esprmneoUser.getGroups();
+  stopIfSessionEnded();
 
-  let cdfGroups = transformRmneoSdkGroupsToCdf(esprmngUser, groups);
+  let cdfGroups = transformRmneoSdkGroupsToCdf(
+    esprmneoUser,
+    groups,
+    transformGroup,
+  );
 
   if (cdfGroups.length === 0) {
-    const newHome = await esprmngUser.createGroup(DEFAULT_HOME_GROUP_NAME);
-    cdfGroups = transformRmneoSdkGroupsToCdf(esprmngUser, [newHome]);
+    const newHome = await esprmneoUser.createGroup(DEFAULT_HOME_GROUP_NAME);
+    stopIfSessionEnded();
+    cdfGroups = transformRmneoSdkGroupsToCdf(
+      esprmneoUser,
+      [newHome],
+      transformGroup,
+    );
     // MQTT could not connect at login (assume-role answers 409 while the user
-    // has no groups); now that a home exists, connect under its policy.
-    await refreshRmneoMqttCredentials(esprmngUser, "home.create");
+    // has no groups); now that a home exists, connect under its policy. Same
+    // short wait as above: the home never waits on MQTT.
+    await withTimeout(
+      refreshRmneoMqttCredentials(esprmneoUser, "home.create"),
+      MQTT_WAIT_BEFORE_HOME_MS,
+      "MQTT is not up yet",
+    ).catch(() => {});
+    stopIfSessionEnded();
   }
-
-  // Only now is MQTT worth ensuring: nothing above needs the transport, and
-  // for a brand-new user it cannot connect until the default home exists.
-  // Subscribes below need it up.
-  await ensureRmneoMqttConnected(esprmngUser);
-
-  callbacks.setGroupsList(cdfGroups);
 
   // Membership changes include newly accepted shared homes. Defer MQTT reset
   // until those nodes are in the store, then run the same full resync CG
@@ -93,12 +151,26 @@ export async function syncHomeWithNodes(
         )
       : [];
 
-  const selectedHome = resolveSelectedHome(user, cdfGroups);
+  // This session's home, else the saved choice (read again if it never
+  // loaded), else the first home; a fallback never replaces a saved choice.
+  const choice = await chooseHomeToShow(
+    user,
+    cdfGroups,
+    ESPCDF.instance?.groupStore?.currentHomeId,
+  );
+  stopIfSessionEnded();
+  const selectedHome = choice.home;
+  // The list goes in only now: Home must never see homes with no current one
+  // while the saved choice is read, or its recovery would save the first home.
+  callbacks.setGroupsList(cdfGroups);
   callbacks.setCurrentHomeId(selectedHome?.id ?? null);
 
   if (selectedHome) {
-    await persistLastSelectedHomeId(user, selectedHome.id);
-    await syncNodesForGroup(selectedHome, callbacks, user);
+    if (choice.saveAsLastChoice) {
+      await persistLastSelectedHomeId(user, selectedHome.id);
+    }
+    stopIfSessionEnded();
+    await syncNodesForGroup(selectedHome, callbacks, user, sessionId);
   }
 
   const { priorityOtherHomes, backgroundHomes } = partitionOtherHomes(
@@ -110,17 +182,19 @@ export async function syncHomeWithNodes(
   if (priorityOtherHomes.length > 0) {
     await Promise.all(
       priorityOtherHomes.map((home) =>
-        syncNodesForGroup(home, callbacks, user),
+        syncNodesForGroup(home, callbacks, user, sessionId),
       ),
     );
   }
 
+  stopIfSessionEnded();
   if (changedNodeIds.length > 0) {
-    await resyncMqttAfterSubgroupChange(esprmngUser, changedNodeIds);
+    await resyncMqttAfterSubgroupChange(esprmneoUser, changedNodeIds);
+    stopIfSessionEnded();
   }
 
   backgroundHomes.forEach((home) => {
-    void syncNodesForGroup(home, callbacks, user);
+    void syncNodesForGroup(home, callbacks, user, sessionId);
   });
 
   Logger.log("syncHomeWithNodes complete", {
@@ -143,42 +217,26 @@ export async function setCurrentHome(
   callbacks: GroupStoreCallbacks,
   home: ESPCDFGroup,
 ): Promise<void> {
+  forgetHomeShownWithoutSaving();
   callbacks.setCurrentHomeId(home.id);
   await persistLastSelectedHomeId(user, home.id);
 }
 
 /**
  * Creates a new SDK home group. CDF mapping is done by the caller.
- * @param esprmngUser - RMNeo SDK user used to create the group.
+ * @param esprmneoUser - RMNeo SDK user used to create the group.
  * @param params - Create-home request (`name`, …).
  * @returns The newly created SDK group.
  */
 export async function createHome(
-  esprmngUser: ESPRMNeoUser,
+  esprmneoUser: ESPRMNeoUser,
   params: ESPCDFCreateHomeRequestParams,
 ): Promise<ESPRMNeoGroup> {
-  const created = await esprmngUser.createGroup(params.name);
+  const created = await esprmneoUser.createGroup(params.name);
   // New home -> new group id outside the current IoT policy. Re-vend now so
   // the first device provisioned here is subscribable on the first attempt.
-  await refreshRmneoMqttCredentials(esprmngUser, "home.create");
+  await refreshRmneoMqttCredentials(esprmneoUser, "home.create");
   return created;
-}
-
-/**
- * Resolves the preferred home from live store id, then persisted custom data,
- * then the first group in the list.
- * @param user - CDF user that may carry `lastSelectedHomeId` in custom data.
- * @param cdfGroups - Current CDF home list after this sync.
- * @returns Selected home, or `null` when the list is empty.
- */
-function resolveSelectedHome(
-  user: ESPCDFUser,
-  cdfGroups: ESPCDFGroup[],
-): ESPCDFGroup | null {
-  const storeCurrentHomeId = ESPCDF.instance?.groupStore?.currentHomeId ?? null;
-  const persistedId = getPersistedLastSelectedHomeId(user);
-  const preferredId = storeCurrentHomeId ?? persistedId;
-  return cdfGroups.find((home) => home.id === preferredId) ?? cdfGroups[0] ?? null;
 }
 
 /**
@@ -222,18 +280,21 @@ function partitionOtherHomes(
  * Fetches nodes for one home, adds them to the store, and subscribes to updates.
  *
  * Errors are logged and swallowed so one home cannot fail the whole sync.
+ * Nodes that arrive after logout are dropped.
  * @param group - CDF home / group to sync.
  * @param callbacks - Group-store mutators.
  * @param user - CDF user used for `subscribeToNodeUpdates`.
+ * @param sessionId - Session the sync started in.
  */
 async function syncNodesForGroup(
   group: ESPCDFGroup,
   callbacks: GroupStoreCallbacks,
   user: ESPCDFUser,
+  sessionId: number,
 ): Promise<void> {
   try {
     const nodes = await group.getNodes();
-    if (nodes.length === 0) {
+    if (nodes.length === 0 || !isSessionActive(sessionId)) {
       return;
     }
 
@@ -244,18 +305,15 @@ async function syncNodesForGroup(
     try {
       await user.subscribeToNodeUpdates({ nodeList: nodes });
     } catch (error) {
-      Logger.warn(
-        "subscribeToNodeUpdates failed for group",
-        group.id,
-        error,
-      );
+      Logger.warn("subscribeToNodeUpdates failed for group", group.id, error);
     }
   } catch (error) {
-    Logger.error(
-      "Failed to sync nodes for group",
-      group.id,
-      error,
-    );
+    // A sync the store gave up on stops here on purpose: not an error.
+    if (error instanceof HomeSyncGivenUpError) {
+      Logger.log("Skipped late nodes for group", group.id, error.message);
+      return;
+    }
+    Logger.error("Failed to sync nodes for group", group.id, error);
   }
 }
 
@@ -277,10 +335,7 @@ async function persistLastSelectedHomeId(
     await user.setCustomData({
       [ESPRMNEO_CUSTOM_DATA_KEY_LAST_SELECTED_HOME_ID]: {
         value: homeId,
-        perms: [
-          { read: [USER_PERMISSION] },
-          { write: [USER_PERMISSION] },
-        ],
+        perms: [{ read: [USER_PERMISSION] }, { write: [USER_PERMISSION] }],
       },
     });
   } catch (error) {

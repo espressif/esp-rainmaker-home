@@ -24,13 +24,15 @@ data class FabricInfo(
     val sigv4SecretKey: String? = null,
     val sigv4SessionToken: String? = null,
     val sigv4Expiration: String? = null,
-    val requestId: String? = null
+    val requestId: String? = null,
+    val csrNonce: String? = null
 )
 
 object FabricSessionManager {
     private const val TAG = "FabricSessionManager"
 
     private var currentFabric: FabricInfo? = null
+    @Volatile
     private var currentChipClient: ChipClient? = null
 
     fun setCurrentFabric(fabricInfo: FabricInfo) {
@@ -75,6 +77,7 @@ object FabricSessionManager {
         val fabric = currentFabric ?: return
         val client = currentChipClient ?: return
         fabric.requestId?.let { client.requestId = it }
+        fabric.csrNonce?.let { client.csrNonce = it }
     }
 
     /**
@@ -124,13 +127,6 @@ object FabricSessionManager {
             return null
         }
 
-        Log.i(
-            TAG,
-            "[MatterProbe][fabric] resolveChipClient: creating ChipClient fabricId=$fabricId groupId=$groupId " +
-                "userNocPresent=${!userNoc.isNullOrEmpty()} matterUserIdPresent=${!fabric.matterUserId.isNullOrEmpty()} " +
-                "(operational identity = userNoc/KeyStore chain; matterUserId is NOT required to build ChipClient)",
-        )
-
         return ChipClient(
             context.applicationContext,
             groupId,
@@ -141,8 +137,8 @@ object FabricSessionManager {
             fabric.groupCatIdOperate ?: "",
             fabric.groupCatIdAdmin ?: "",
         ).also { client ->
-            fabric.requestId?.let { client.requestId = it }
             currentChipClient = client
+            syncCommissioningCredentialsToChipClient()
             Log.d(TAG, "[MatterDiscovery] resolveChipClient: ChipClient cached for fabricId=$fabricId")
         }
     }

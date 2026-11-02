@@ -13,24 +13,30 @@
 export const ESPRM_BASE_SDK_ID = "rainmaker-base-sdk" as const;
 export const ESPRMMatter_BASE_SDK_ID = "rainmaker-matter-sdk" as const;
 export const ESPRMNeo_BASE_SDK_ID = "rainmaker-neo-base-sdk" as const;
+// Must equal the npm package name — ACTIVE_SDK carries it and setActiveAdaptor
+// matches on it, so the two move together.
+export const ESPRMNeoMatter_BASE_SDK_ID = "rainmaker-neo-matter-sdk" as const;
 export const DEFAULT_ACTIVE_SDK_ID = ESPRMMatter_BASE_SDK_ID;
 
 /** CDF / adaptor identifier — same value as the corresponding SDK id. */
 export const ESPRMBaseAdaptorIdentifier = ESPRM_BASE_SDK_ID;
 export const ESPRMMatterBaseAdaptorIdentifier = ESPRMMatter_BASE_SDK_ID;
 export const ESPRMNeoBaseAdaptorIdentifier = ESPRMNeo_BASE_SDK_ID;
+export const ESPRMNeoMatterBaseAdaptorIdentifier = ESPRMNeoMatter_BASE_SDK_ID;
 
 
 export type SDKIdentifier =
   | typeof ESPRM_BASE_SDK_ID
   | typeof ESPRMMatter_BASE_SDK_ID
-  | typeof ESPRMNeo_BASE_SDK_ID;
+  | typeof ESPRMNeo_BASE_SDK_ID
+  | typeof ESPRMNeoMatter_BASE_SDK_ID;
 
 /** Values allowed in scanned / runtime SDK field (Joi, UI, etc.). */
 export const SUPPORTED_SDK_IDENTIFIERS = [
   ESPRM_BASE_SDK_ID,
   ESPRMMatter_BASE_SDK_ID,
   ESPRMNeo_BASE_SDK_ID,
+  ESPRMNeoMatter_BASE_SDK_ID,
 ] as const satisfies readonly SDKIdentifier[];
 
 /**
@@ -52,9 +58,10 @@ export function normalizeSdkIdentifier(
   return null;
 }
 
-/** True when the active stack is RainMaker Neo (`rainmaker-neo-base-sdk`). */
+/** True when the active stack is either RainMaker Neo stack: base or Matter. */
 export function isRmneoStackSdkId(
   sdk: string | null | undefined,
-): sdk is typeof ESPRMNeo_BASE_SDK_ID {
-  return normalizeSdkIdentifier(sdk) === ESPRMNeo_BASE_SDK_ID;
+): sdk is typeof ESPRMNeo_BASE_SDK_ID | typeof ESPRMNeoMatter_BASE_SDK_ID {
+  const id = normalizeSdkIdentifier(sdk);
+  return id === ESPRMNeo_BASE_SDK_ID || id === ESPRMNeoMatter_BASE_SDK_ID;
 }

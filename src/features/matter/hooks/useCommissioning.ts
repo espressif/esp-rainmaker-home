@@ -14,18 +14,26 @@ import { useRouter } from "expo-router";
 import { useTranslation } from "react-i18next";
 
 import {
+  getMatterSharedHomeNotAllowedMessage,
   getMatterUnsupportedMessage,
+  isMatterCommissioningAllowedForHome,
   isMatterCommissioningSupported,
 } from "@features/matter/utils/matterSupport";
 import { useCDF } from "@shared/hooks/useCDF";
 import { useToast } from "@shared/hooks/useToast";
 import {
   DEFAULT_MATTER_DEVICE_NAME,
+  DEVICE_WRITE_TIMEOUT_MS,
+  MATTER_CLOUD_CONFIRM_WAIT_TIMEOUT_ERROR,
+  MATTER_CLOUD_CONFIRM_WAIT_TIMEOUT_MS,
   MATTER_COMMISSIONING_EVENT,
   MATTER_EVENT_COMMISSIONING_COMPLETE,
   MATTER_EVENT_COMMISSIONING_CONFIRMATION_RESPONSE,
   MATTER_EVENT_COMMISSIONING_ERROR,
+  MATTER_POST_COMMISSION_SYNC_TIMEOUT_ERROR,
+  MATTER_POST_COMMISSION_SYNC_TIMEOUT_MS,
 } from "@shared/utils/constants";
+import { withTimeout } from "@shared/utils/asyncTimeout";
 import type { ESPCDFGroup } from "@store";
 import type {
   UseCommissioningParams,
@@ -38,18 +46,29 @@ import {
   extractCommissioningDeviceName,
   extractCommissioningErrorMessage,
   getMatterCommissioningPayload,
+  isCommissioningProgressSettled,
   isMatterCommissioningTerminalComplete,
   resolveCommissioningFailureMessage,
 } from "@features/matter/utils/commissioningEvents";
 import ESPMatterModule from "@native-adaptors/interfaces/ESPMatterInterface";
+import { matterCommissioningAdaptor } from "@native-adaptors/implementations/ESPMatterAdapter";
 import {
   convertHomeToMatterFabric,
+  findCloudNodeIdByMatterNodeId,
   isFabricReady,
   prepareFabric,
   syncStore,
 } from "@features/matter/utils/matterCommissioningHelpers";
-import { applyMatterCommissionedNodeTimezone } from "@shared/utils/timezone";
+import { applyPostCommissioningNodeSetup } from "@shared/utils/matterPostCommissioning";
 import { startMatterLocalDiscovery } from "@features/matter/utils/matterLocalDiscovery";
+import {
+  initialSetupName,
+  MATTER_NAME_STEP_SHOWN,
+  planSetupNames,
+  saveSetupNames,
+  sheetDeviceName,
+} from "@features/matter/utils/matterSetupNames";
+import { findProvisionedNodeById } from "@features/provision/utils/selectDeviceRoomHelpers";
 import {
   MATTER_COMMISSIONING_PHASE_COMMISSIONING,
   MATTER_COMMISSIONING_PHASE_CONVERTING,
@@ -61,6 +80,14 @@ import {
 } from "@features/matter/constants";
 
 export type { UseCommissioningParams, UseCommissioningResult } from "@src/types/global";
+
+/**
+ * Frees the native commissioning session after an add that failed or was left,
+ * so the next add can start (iOS otherwise refuses it as "already in progress").
+ */
+const releaseNativeCommissioning = (): void => {
+  void matterCommissioningAdaptor.cancelCommissioning?.();
+};
 
 /**
  * Orchestrates end-to-end Matter device commissioning for the **active home**.
@@ -77,13 +104,15 @@ export type { UseCommissioningParams, UseCommissioningResult } from "@src/types/
  * 3. Prepare the fabric: `getFabricDetails()`, issue/store user NOC if needed.
  * 4. Start ecosystem commissioning with `fabric.startCommissioning(qrData, …)`.
  * 5. Listen for native `MATTER_COMMISSIONING_EVENT` payloads; on success, sync
- *    homes/nodes, refresh Matter local mappings, and navigate to Home.
+ *    homes/nodes, refresh Matter local mappings, and continue to the device
+ *    setup step. Android: `/(matter)/DeviceSetup` (name + identify + room).
+ *    iOS: Apple's sheet asked for the name, so it is saved and the room step opens.
  *
  * State (phase, messages, errors) lives in this hook. Fabric/NOC/event parsing
  * logic lives in `matterCommissioningHelpers.ts` and `commissioningEvents.ts`.
  *
  * **Phases** (`MatterCommissioningPhase`): `loading` → optional `needs_conversion` →
- * `converting` / `preparing` → `commissioning` → navigate home on success, or `error`
+ * `converting` / `preparing` → `commissioning` → device setup on success, or `error`
  * (user should go back and scan again—no in-screen retry).
  * @example
  * Commissioning screen: consent, progress, and error UI
@@ -124,7 +153,7 @@ export type { UseCommissioningParams, UseCommissioningResult } from "@src/types/
  * ```ts
  * // DeviceEventEmitter emits MATTER_COMMISSIONING_EVENT with eventType:
  * // MATTER_EVENT_COMMISSIONING_COMPLETE | CONFIRMATION_RESPONSE | ERROR
- * // → toast, syncStore(), dismissTo("/(group)/Home") on success
+ * // → toast, syncStore(), then the name step (Android) or the room step (iOS)
  * ```
  */
 export function useCommissioning({
@@ -145,6 +174,14 @@ export function useCommissioning({
   const [matterUnsupported, setMatterUnsupported] = useState(false);
 
   const preparedFabricRef = useRef<ESPCDFGroup | null>(null);
+  /** Adapter teardown from `startCommissioning`; removes its native listener. */
+  const commissioningCleanupRef = useRef<(() => void) | null>(null);
+  /** Per run: has the SDK reported its cloud confirm finished, and who is waiting on it. */
+  const cloudConfirmSettledRef = useRef(false);
+  const cloudConfirmWaitersRef = useRef<(() => void)[]>([]);
+  const unmountedRef = useRef(false);
+  /** Set once this add succeeded; until then leaving the screen frees the native session. */
+  const commissioningDoneRef = useRef(false);
 
   const storeRef = useRef(store);
   const userRef = useRef(espCDFUser);
@@ -170,6 +207,11 @@ export function useCommissioning({
 
   const deploymentUnsupportedMessage = useMemo(
     () => getMatterUnsupportedMessage(t),
+    [t],
+  );
+
+  const sharedHomeNotAllowedMessage = useMemo(
+    () => getMatterSharedHomeNotAllowedMessage(t),
     [t],
   );
 
@@ -254,11 +296,29 @@ export function useCommissioning({
 
       setPhase(MATTER_COMMISSIONING_PHASE_COMMISSIONING);
 
-      await fabric.startCommissioning(qrData, (progress) => {
-        if (progress.description) {
-          setStatusMessage(progress.description);
-        }
-      });
+      // The SDK hands off to native from here and returns the adapter's teardown,
+      // which owns a native event listener — hold it for the unmount cleanup.
+      cloudConfirmSettledRef.current = false;
+      cloudConfirmWaitersRef.current = [];
+      const teardown = await fabric.startCommissioning(
+        qrData,
+        (progress) => {
+          if (progress.description) {
+            setStatusMessage(progress.description);
+          }
+          if (isCommissioningProgressSettled(progress.status)) {
+            cloudConfirmSettledRef.current = true;
+            cloudConfirmWaitersRef.current.splice(0).forEach((wake) => wake());
+          }
+        },
+      );
+      // The screen may already be gone by the time the SDK hands the session over.
+      if (unmountedRef.current) {
+        teardown();
+        releaseNativeCommissioning();
+        return;
+      }
+      commissioningCleanupRef.current = teardown;
     },
     [commissioningErrors, espCDFUser, fail, qrData, t],
   );
@@ -294,6 +354,14 @@ export function useCommissioning({
       return;
     }
 
+    // Shared (secondary) members can control but not commission: on Neo the
+    // backend would mint the device NOC, leaving the device administered by
+    // the secondary's controller instead of the home owner's.
+    if (!isMatterCommissioningAllowedForHome(home)) {
+      fail(sharedHomeNotAllowedMessage);
+      return;
+    }
+
     const bootstrap = isFabricReady(
       home,
       fabricConversionConsentRequired,
@@ -318,6 +386,7 @@ export function useCommissioning({
     fail,
     getActiveHomeOrFail,
     runFabricCommissioning,
+    sharedHomeNotAllowedMessage,
   ]);
 
   /**
@@ -385,16 +454,88 @@ export function useCommissioning({
         t("device.matter.commissioning.failedTitle"),
         failureMessage,
       );
+      releaseNativeCommissioning();
       fail(failureMessage);
     },
     [fail, t],
   );
 
+  /** Resolves once the SDK reports its cloud confirm done, or after a bounded wait. */
+  const waitForCloudConfirm = useCallback(async () => {
+    if (cloudConfirmSettledRef.current) return;
+    await withTimeout(
+      new Promise<void>((resolve) => cloudConfirmWaitersRef.current.push(resolve)),
+      MATTER_CLOUD_CONFIRM_WAIT_TIMEOUT_MS,
+      MATTER_CLOUD_CONFIRM_WAIT_TIMEOUT_ERROR,
+    ).catch((error: unknown) => {
+      console.warn(
+        "[useCommissioning] cloud confirm not reported in time; syncing anyway:",
+        error instanceof Error ? error.message : error,
+      );
+    });
+  }, []);
+
   /**
-   * `MATTER_EVENT_COMMISSIONING_COMPLETE`: validate payload, success toast, {@link syncStore}, Home.
+   * iOS: saves the name typed in Apple's sheet with the name screen's rules,
+   * then opens the room step. A name that can't be kept opens the name screen.
+   * @param nodeId - Cloud id of the added node
+   * @param deviceName - Name from the commissioning event
+   */
+  const saveSheetNameThenPickRoom = useCallback(
+    async (nodeId: string, deviceName: string) => {
+      const node = findProvisionedNodeById(
+        storeRef.current?.nodeStore?.nodesList,
+        nodeId,
+      );
+      if (!node) {
+        // Sync raced the navigation; room assignment needs the node.
+        routerRef.current.dismissTo("/(group)/Home");
+        return;
+      }
+
+      const sheetName = sheetDeviceName(deviceName);
+      const namesByDevice = Object.fromEntries(
+        (node.devices ?? []).map((device) => [
+          device.name,
+          initialSetupName(device, node, sheetName),
+        ]),
+      );
+      const plan = planSetupNames(node, namesByDevice);
+      if (plan.problemKey !== undefined) {
+        toastRef.current.showError(t(plan.problemKey));
+        routerRef.current.replace({
+          pathname: "/(matter)/DeviceSetup",
+          params: { nodeId, deviceName },
+        } as never);
+        return;
+      }
+
+      // Bounded so a slow device can't hold the loader; the save goes on and retries by itself.
+      const allSaved = await withTimeout(
+        saveSetupNames(node, plan.renames),
+        DEVICE_WRITE_TIMEOUT_MS,
+        new Error("Name save still running"),
+      ).catch(() => true);
+      if (!allSaved) {
+        toastRef.current.showError(t("device.matter.setup.nameSaveFailed"));
+      }
+
+      // Nothing to go back to under it, so its Back goes Home.
+      routerRef.current.replace({
+        pathname: "/(provision)/SelectDeviceRoom",
+        params: { nodeId, backToHome: "1" },
+      } as never);
+    },
+    [t],
+  );
+
+  /**
+   * `MATTER_EVENT_COMMISSIONING_COMPLETE`: validate payload, success toast, {@link syncStore},
+   * then the name step (Android) or the room step (iOS).
    *
    * iOS may nest fields under `requestBody`; use {@link getMatterCommissioningPayload}.
-   * Still navigates home if post-commission sync throws (logged).
+   * Still navigates on if post-commission sync throws (logged); without a cloud
+   * node id there is nothing to set up, so it falls back to Home.
    * @example
    * ```ts
    * if (commissioningPayloadIndicatesFailure(payload)) {
@@ -416,6 +557,7 @@ export function useCommissioning({
         handleCommissioningFailure(extractCommissioningErrorMessage(payload));
         return;
       }
+      commissioningDoneRef.current = true;
 
       const deviceName = extractCommissioningDeviceName(
         payload,
@@ -427,31 +569,75 @@ export function useCommissioning({
         t("device.matter.commissioning.success", { deviceName }),
       );
 
+      // The Neo CLOUD id — rmNodeId is the RainMaker-cluster identity, blank
+      // for mirror hybrids. It keys both the setup screen and the TZ push.
+      let cloudNodeId =
+        (typeof payload.neoNodeId === "string" && payload.neoNodeId
+          ? payload.neoNodeId
+          : undefined) ??
+        (typeof payload.rainmakerNodeId === "string" && payload.rainmakerNodeId
+          ? payload.rainmakerNodeId
+          : undefined);
+
+      // iOS: native reports done before the SDK's cloud confirm and config PUT land; a sync now sees a device-less node.
+      if (Platform.OS === "ios") {
+        await waitForCloudConfirm();
+      }
+
+      // Bound it: a stalled sync would strand the user on the commissioning loader.
       try {
-        await syncStore(
-          storeRef.current,
-          syncHomeWithNodesRef.current,
-          async () => {},
+        await withTimeout(
+          syncStore(
+            storeRef.current,
+            syncHomeWithNodesRef.current,
+            async () => {},
+          ),
+          MATTER_POST_COMMISSION_SYNC_TIMEOUT_MS,
+          MATTER_POST_COMMISSION_SYNC_TIMEOUT_ERROR,
         );
-        routerRef.current.dismissTo("/(group)/Home");
       } catch (error) {
         console.error(
           "[useCommissioning] post-commission refresh failed:",
           error,
         );
-        routerRef.current.dismissTo("/(group)/Home");
+      }
+
+      // Classic pure Matter: the confirm response carries no cloud node id,
+      // so both payload keys arrive blank even though the cloud minted one at
+      // confirm time. The sync above pulled that node — recover its id via
+      // the Matter node id the event does carry, so the name and room steps
+      // and the post-commissioning setup still run.
+      if (!cloudNodeId) {
+        cloudNodeId = findCloudNodeIdByMatterNodeId(
+          storeRef.current,
+          payload.matterNodeId,
+        );
       }
       startMatterLocalDiscovery(storeRef.current);
 
-      // Matter commissioning skips the provisioning-time timezone stage, so push
-      // it best-effort in the background (hybrid-only; never blocks navigation).
-      const rainmakerNodeId =
-        typeof payload.rainmakerNodeId === "string"
-          ? payload.rainmakerNodeId
-          : undefined;
-      void applyMatterCommissionedNodeTimezone(userRef.current, rainmakerNodeId);
+      if (!cloudNodeId) {
+        routerRef.current.dismissTo("/(group)/Home");
+      } else if (MATTER_NAME_STEP_SHOWN) {
+        // Android: name + identify + room step, as Google's sheet asks for no
+        // name; the screen falls back to Home if the node isn't synced yet.
+        routerRef.current.replace({
+          pathname: "/(matter)/DeviceSetup",
+          params: { nodeId: cloudNodeId, deviceName },
+        } as never);
+      } else {
+        // iOS: Apple's sheet already asked for the name.
+        void saveSheetNameThenPickRoom(cloudNodeId, deviceName);
+      }
+
+      // Cloud-side setup the provisioning path would have done; the helper
+      // owns which steps those are.
+      applyPostCommissioningNodeSetup(
+        userRef.current,
+        cloudNodeId,
+        payload.matterNodeId,
+      );
     },
-    [handleCommissioningFailure, t],
+    [handleCommissioningFailure, saveSheetNameThenPickRoom, t, waitForCloudConfirm],
   );
 
   /**
@@ -504,12 +690,7 @@ export function useCommissioning({
     ],
   );
 
-  /**
-   * Subscribes to native commissioning events, then starts the commissioning pipeline.
-   *
-   * Listener is registered before {@link startCommissioningForActiveHome} so HeadlessJS
-   * completion events are not missed while fabric prep runs.
-   */
+  /** Native commissioning events; declared before the start so none are missed. */
   useEffect(() => {
     const eventEmitter =
       Platform.OS === "android" && ESPMatterModule
@@ -526,17 +707,36 @@ export function useCommissioning({
           onMatterCommissioningEvent,
         );
 
-    void startCommissioningForActiveHome().catch((error: unknown) => {
-      fail(toErrorMessage(error));
+    return () => {
+      listener.remove();
+    };
+  }, [onMatterCommissioningEvent]);
+
+  const startCommissioningRef = useRef(startCommissioningForActiveHome);
+  const toErrorMessageRef = useRef(toErrorMessage);
+  useEffect(() => {
+    startCommissioningRef.current = startCommissioningForActiveHome;
+    toErrorMessageRef.current = toErrorMessage;
+  }, [startCommissioningForActiveHome, toErrorMessage]);
+
+  /** One SDK session per mount: a dependency change must never start a second one. */
+  useEffect(() => {
+    unmountedRef.current = false;
+    commissioningDoneRef.current = false;
+    void startCommissioningRef.current().catch((error: unknown) => {
+      releaseNativeCommissioning();
+      fail(toErrorMessageRef.current(error));
     });
 
-    return () => listener.remove();
-  }, [
-    fail,
-    onMatterCommissioningEvent,
-    startCommissioningForActiveHome,
-    toErrorMessage,
-  ]);
+    return () => {
+      unmountedRef.current = true;
+      commissioningCleanupRef.current?.();
+      commissioningCleanupRef.current = null;
+      if (!commissioningDoneRef.current) {
+        releaseNativeCommissioning();
+      }
+    };
+  }, [fail]);
 
   return {
     phase,

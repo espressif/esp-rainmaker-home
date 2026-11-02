@@ -24,30 +24,62 @@ class DeviceSerial:
         self._resource = resource
         self.device_name = device_name
 
-    def lines(self):
-        """Return all captured serial lines (full on-disk log; falls back to the bounded live buffer)."""
+    def _log_text(self):
+        """The full on-disk serial log, or None when it cannot be read."""
         path = getattr(self._resource, "serial_log_path", None)
         if path:
             try:
                 with open(path, "r", errors="replace") as fh:
-                    return fh.read().splitlines()
+                    return fh.read()
             except Exception:
                 pass
+        return None
+
+    def lines(self):
+        """Return all captured serial lines (full on-disk log; falls back to the bounded live buffer)."""
+        text = self._log_text()
+        if text is not None:
+            return text.splitlines()
         try:
             return list(self._rm.serial_logger.get_live_lines(self._resource))
         except Exception:
             return []
 
     def marker(self):
-        """Return an index into the live buffer to scope later waits to new output."""
-        return len(self.lines())
+        """Return an index into the log scoping later waits to new output; a last line still missing its newline (the console '>> ' prompt) stays in scope, because the next log line is appended onto it."""
+        text = self._log_text()
+        if text is None:
+            return len(self.lines())
+        count = len(text.splitlines())
+        return count - 1 if count and not text.endswith(("\n", "\r")) else count
 
     def set_param(self, param, value):
-        """Inject a param write on the device (also reported to cloud)."""
+        """Inject a param write on the device (also reported to cloud).
+
+        Fails at once when the firmware has no `set-param` command, instead of a
+        later check failing because the device never changed.
+        """
         cmd = f"set-param {self.device_name} {param} {_fmt(value)}"
         logger.info("Serial: %s", cmd)
+        since = self.marker()
         self._rm.serial_logger.send_command(self._resource, cmd)
         time.sleep(2)
+        # Classic and Neo firmware both confirm with "Successfully set <device>.<param> to ...";
+        # Neo prints nothing at all when the command is not built in.
+        confirm = f"Successfully set {self.device_name}.{param}"
+        deadline = time.time() + 3
+        reply = [line.strip() for line in self.lines()[since:] if line.strip()]
+        while not any(confirm in line for line in reply) and time.time() < deadline:
+            time.sleep(0.5)
+            reply = [line.strip() for line in self.lines()[since:] if line.strip()]
+        # Shown in the CI log so a command the board ignores is visible; secrets left out.
+        shown = [line[:160] for line in reply[-6:] if not re.search(r"(?i)pass|pwd|ssid|secret|token", line)]
+        logger.info("Device reply to '%s': %s", cmd, " | ".join(shown) or "(nothing)")
+        if not any(confirm in line for line in reply):
+            raise AssertionError(
+                f"Device did not confirm '{cmd}'; its firmware may lack the set-param console "
+                "command (Neo builds need CONFIG_ESP_RMAKER_NEO_CONSOLE_PARAM_CMDS_ENABLE=y)"
+            )
         return self
 
     def wait_for_param(self, param, value, timeout=30, since=0, tol=2):
@@ -71,6 +103,16 @@ class DeviceSerial:
                     return True
             time.sleep(1)
         logger.warning("Serial did not confirm: Received value = %s%s", _fmt(value), suffix)
+        return False
+
+    def wait_for_name_write(self, name, since=0, timeout=20):
+        """True when the device logs a received cloud/local write of Name=<name> after log index `since`."""
+        needle = f'"Name":"{name}"'
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            if any("Received params" in line and needle in line for line in self.lines()[since:]):
+                return True
+            time.sleep(1)
         return False
 
     def reported_params(self):

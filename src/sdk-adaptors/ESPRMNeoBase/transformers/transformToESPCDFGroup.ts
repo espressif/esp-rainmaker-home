@@ -85,6 +85,7 @@ import {
     SUCESS,
 } from "@shared/utils/constants";
 import { parseGroupParamBroadcastEnvelope } from "@shared/utils/groupParamBroadcastEnvelope";
+import { isPureMatterNode } from "@shared/utils/matterNodeType";
 
 /**
  * Maps an RMNeo SDK group to {@link ESPCDFGroup} with CDF operations.
@@ -478,15 +479,18 @@ export function transformToESPCDFGroup(
                 ? espcdfGroup.nodeDetails
                 : await buildCdfNodesFromGroup(group);
 
-            return nodes.flatMap((node) =>
-                (node.devices ?? [])
-                    .filter((device) => (device.params?.length ?? 0) > 0)
-                    .map((device) => ({
-                        node,
-                        device,
-                        isMaxScheduleReached: false,
-                    })),
-            );
+            // A pure-Matter node has no cloud stack to run a schedule on.
+            return nodes
+                .filter((node) => !isPureMatterNode(node))
+                .flatMap((node) =>
+                    (node.devices ?? [])
+                        .filter((device) => (device.params?.length ?? 0) > 0)
+                        .map((device) => ({
+                            node,
+                            device,
+                            isMaxScheduleReached: false,
+                        })),
+                );
         },
         /**
          * Sets group params. A plain payload passes through; a broadcast envelope

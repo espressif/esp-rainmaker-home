@@ -9,6 +9,8 @@ import logging
 import pytest
 from pytest_bdd import scenarios, when, then, parsers
 
+from utils.device_names import unique_device_name
+
 logger = logging.getLogger(__name__)
 pytestmark = [pytest.mark.regression, pytest.mark.provisioning, pytest.mark.matter, pytest.mark.timeout(900)]
 
@@ -37,8 +39,9 @@ def enter_matter_pairing_code(helper, matter_device):
 
 
 @when("user completes the ecosystem commissioning")
-def complete_ecosystem_commissioning(helper):
-    helper.matter_commissioning.complete_commissioning()
+def complete_ecosystem_commissioning(helper, matter_light_name):
+    # iOS names the light in Apple's sheet; Android names it in the app afterwards.
+    helper.matter_commissioning.complete_commissioning(name=unique_device_name(matter_light_name))
 
 
 @then("the matter device should be commissioned successfully")
@@ -52,6 +55,24 @@ def matter_device_local(helper):
     helper.home.go_home()
     assert helper.home.is_local_control_badge_visible(timeout=90), \
         "Matter device not shown as locally reachable (Available on WLAN) on the home screen"
+
+
+@when("user names the matter light")
+def name_matter_light(helper, matter_light_name):
+    """Android names the light on the app's setup screen. iOS already named it in Apple's
+    sheet, so the app must go straight to Add to a room with no name screen of its own."""
+    # iOS adds the device to the app's own Matter network only after Apple's
+    # sheet closes (about 20 s measured); Android is done before Google's closes.
+    if helper.matter_device_setup.platform == "ios":
+        if helper.add_to_room.check_screen_displayed(timeout=90):
+            return
+        assert not helper.matter_device_setup.check_screen_displayed(timeout=2, quiet=True), \
+            "iOS showed the app's own name screen after Apple's sheet; it should go straight to Add to a room"
+        raise AssertionError("Add to a room did not open within 90 s of Apple's sheet closing")
+    assert helper.name_device.check_screen_displayed(timeout=90), \
+        "Matter device setup (Name your device) did not open within 90 s"
+    helper.name_device.rename_device(matter_light_name)
+    helper.matter_device_setup.tap_continue()
 
 
 @then("the matter device should be visible on home screen")
@@ -99,10 +120,18 @@ def verify_matter_serial(matter_device, param, value):
         raise AssertionError(f"Unsupported matter serial param: {param}")
 
 
+# A colour light opens on its Colour tab; CCT is on the White tab only.
+TAB_FOR_PARAM = {"CCT": "White", "Hue": "Colour", "Saturation": "Colour"}
+
+
 @when(parsers.parse('user sets matter "{param}" to "{value}" from the matter control screen'))
 def matter_set_param(helper, matter_device, matter_light_name, param, value):
     helper.home.go_home()
     helper.home.open_device(matter_light_name)
+    tab = TAB_FOR_PARAM.get(param)
+    # Lights without White/Colour tabs show every slider on one screen.
+    if tab and helper.control.is_id_visible(f"button_light_{tab.lower()}", 3):
+        helper.control.open_tab(tab)
     matter_device.mark_serial()
     helper.control.set_slider(param, value)
 

@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useEffect, useRef, useState } from "react";
+import React from "react";
 import {
   View,
   Text,
@@ -27,6 +27,7 @@ import { observer } from "mobx-react-lite";
 import { useTranslation } from "react-i18next";
 import { useToast } from "@shared/hooks/useToast";
 import { useCDF } from "@shared/hooks/useCDF";
+import { useOnOffToggle } from "@shared/hooks/useOnOffToggle";
 // Utils
 import {
   extractDeviceType,
@@ -37,23 +38,21 @@ import {
 import { parseBridgedChildParentNodeId } from "@shared/utils/matterLocalReachability";
 import { resolveDeviceCardPowerParam } from "@shared/utils/deviceParams";
 import { webStopClickPropagationProps } from "@shared/utils/webStopClickPropagation";
-import {
-  getDeviceCardSensorReadings,
-} from "@shared/utils/deviceCardSensor";
+import { getDeviceCardSensorReadings } from "@shared/utils/deviceCardSensor";
 import { coerceParamValueToBoolean } from "@shared/utils/paramUtils";
 import { resolveNodeUnavailableMessage } from "@shared/utils/connectivity";
+import { getDeviceDisplayName } from "@shared/utils/deviceDisplayName";
+import { messageKeyForFailedWrite } from "@shared/utils/deviceWriteErrorMessage";
 
 // Constants
 import {
   DEVICE_REACHABILITY_SOURCE_BRIDGE,
   DEVICE_REACHABILITY_SOURCE_CONTROLLER,
   DEVICE_REACHABILITY_SOURCE_LOCAL,
+  DEVICE_WRITE_TIMEOUT_MS,
   POWER_PARAM_UNSUPPORTED_DEVICE_TYPES,
-  ESPRM_NAME_PARAM_TYPE,
-  ERROR_CODES,
-  MATTER_METADATA_KEY,
-  MATTER_METADATA_DEVICE_NAME_KEY,
-  PARAM_INCOMING_UPDATE_DEBOUNCE_MS,
+  POWER_TOGGLE_INCOMING_HOLD_MS,
+  POWER_TOGGLE_LATE_ECHO_MS,
 } from "@shared/utils/constants";
 
 // Styles
@@ -65,11 +64,7 @@ import { tokens } from "@shared/theme/tokens";
 import { RadioTower, Share2, Wifi, WifiOff } from "lucide-react-native";
 
 import { testProps, stateTestProps } from "@shared/utils/testProps";
-import {
-  ESPCDFDevice,
-  ESPCDFDeviceParam,
-  ESPCDFNode,
-} from "@store";
+import { ESPCDFDevice, ESPCDFNode } from "@store";
 // Types
 interface DeviceCardProps {
   /** Node containing the device */
@@ -80,10 +75,6 @@ interface DeviceCardProps {
   compact?: boolean;
   /** QA automation identifier */
   qaId?: string;
-}
-
-interface ParamTypeMap {
-  [key: string]: ESPCDFDeviceParam;
 }
 
 /**
@@ -105,7 +96,6 @@ const DeviceCard: React.FC<DeviceCardProps> = ({
 }) => {
   const toast = useToast();
   const { t } = useTranslation();
-  const [paramTypeMap, setParamTypeMap] = useState<ParamTypeMap>({});
   const { store } = useCDF();
   const { width } = useWindowDimensions();
 
@@ -115,12 +105,35 @@ const DeviceCard: React.FC<DeviceCardProps> = ({
 
   const cardPowerParam = resolveDeviceCardPowerParam(storeDevice);
   const isPowerParamExisit = Boolean(cardPowerParam);
-  const [isPowerOn, setIsPowerOn] = useState(() =>
-    coerceParamValueToBoolean(cardPowerParam?.value),
-  );
-  const powerUpdateDelayTimeoutRef = useRef<ReturnType<
-    typeof setTimeout
-  > | null>(null);
+
+  /**
+   * The power param as the store holds it right now. Timers and command
+   * replies run between renders, and a refresh can swap in new param objects.
+   */
+  const readLivePowerParam = () => {
+    const liveNode = store.nodeStore.nodesByIDMap[node.id] ?? node;
+    return resolveDeviceCardPowerParam(
+      liveNode.devices?.find((d) => d.name === device.name) ?? device,
+    );
+  };
+
+  // Same on/off rules as the device screen's power button (ParamControlWrap).
+  const power = useOnOffToggle({
+    storeValue: coerceParamValueToBoolean(cardPowerParam?.value),
+    readStoreValue: () =>
+      coerceParamValueToBoolean(readLivePowerParam()?.value),
+    write: async (next) => {
+      await readLivePowerParam()?.setValue(next);
+    },
+    onWriteFailed: (error) => {
+      toast.showError(t(messageKeyForFailedWrite(error)));
+    },
+    holdMs: POWER_TOGGLE_INCOMING_HOLD_MS,
+    lateEchoMs: POWER_TOGGLE_LATE_ECHO_MS,
+    writeTimeoutMs: DEVICE_WRITE_TIMEOUT_MS,
+  });
+  const isPowerOn = power.isOn;
+
   const registeredTransports =
     store.subscriptionStore.registeredTransports[node.id];
   const bridgeParentNodeId = parseBridgedChildParentNodeId(storeNode.id);
@@ -147,49 +160,6 @@ const DeviceCard: React.FC<DeviceCardProps> = ({
   }
 
   /**
-   * Builds paramTypeMap for non-power card fields (name).
-   */
-  useEffect(() => {
-    if (storeDevice) {
-      const nextParamTypeMap = storeDevice.params?.reduce((acc, param) => {
-        acc[param.type || ""] = param;
-        return acc;
-      }, {} as ParamTypeMap);
-
-      setParamTypeMap(nextParamTypeMap || {});
-    }
-  }, [storeDevice]);
-
-  /**
-   * Debounces adopting store/MQTT `param.value` into local Switch state so an
-   * in-flight update does not clobber an optimistic power toggle (same pattern
-   * as ParamControlWrap slider incoming sync).
-   */
-  useEffect(() => {
-    if (!cardPowerParam) {
-      return;
-    }
-
-    if (powerUpdateDelayTimeoutRef.current === null) {
-      setIsPowerOn(coerceParamValueToBoolean(cardPowerParam.value));
-    }
-
-    if (powerUpdateDelayTimeoutRef.current !== null) {
-      clearTimeout(powerUpdateDelayTimeoutRef.current);
-    }
-    powerUpdateDelayTimeoutRef.current = setTimeout(() => {
-      setIsPowerOn(coerceParamValueToBoolean(cardPowerParam.value));
-      powerUpdateDelayTimeoutRef.current = null;
-    }, PARAM_INCOMING_UPDATE_DEBOUNCE_MS);
-
-    return () => {
-      if (powerUpdateDelayTimeoutRef.current !== null) {
-        clearTimeout(powerUpdateDelayTimeoutRef.current);
-      }
-    };
-  }, [cardPowerParam, cardPowerParam?.value, isPowerOn]);
-
-  /**
    * Opens Control or Settings for this device based on devices.config routing.
    * System-only types (e.g. Matter Controller) skip Control and land on Settings.
    */
@@ -205,65 +175,23 @@ const DeviceCard: React.FC<DeviceCardProps> = ({
   };
 
   /**
-   * Optimistically updates local power UI, then persists via `param.setValue`.
-   * Arms the incoming-update debounce first so the sync effect does not
-   * immediately re-apply a stale store value after a quiet period.
-   * @param value - Target power state
+   * Flips the switch at once and sends it. Each tap flips from the latest tap,
+   * not from the state the Switch last drew (fast taps land before a redraw).
+   * Taps made while a command is on its way fold into the latest, so the
+   * device ends on the last tap. A command that fails or gets no answer in
+   * time puts the switch back and shows why. When the store never hears back
+   * (a Matter echo can be missing), the switch keeps the tapped state.
    */
-  const handleDevicePowerControl = (value: boolean) => {
+  const handleDevicePowerControl = () => {
     if (!cardPowerParam) {
       return;
     }
-
-    if (powerUpdateDelayTimeoutRef.current !== null) {
-      clearTimeout(powerUpdateDelayTimeoutRef.current);
-    }
-    powerUpdateDelayTimeoutRef.current = setTimeout(() => {
-      setIsPowerOn(coerceParamValueToBoolean(cardPowerParam.value));
-      powerUpdateDelayTimeoutRef.current = null;
-    }, PARAM_INCOMING_UPDATE_DEBOUNCE_MS);
-
-    setIsPowerOn(value);
-    cardPowerParam.setValue(value).catch((err) => {
-      setIsPowerOn(coerceParamValueToBoolean(cardPowerParam.value));
-      toast.showError(t(ERROR_CODES[err.code as keyof typeof ERROR_CODES]));
-    });
+    power.toggle();
   };
 
-  const isEndpointSplitDevice = /^ep_[0-9a-f]+$/i.test(device.name ?? "");
-
-  /**
-   * Matter metadata device name (fallback only — name param / displayName win for sync).
-   */
-  const getMatterMetadataDeviceName = (cdfNode: ESPCDFNode) => {
-    const metadata = cdfNode.metadata;
-    if (metadata && metadata[MATTER_METADATA_KEY]) {
-      const deviceName =
-        metadata[MATTER_METADATA_KEY][MATTER_METADATA_DEVICE_NAME_KEY];
-      if (deviceName) {
-        return deviceName;
-      }
-    }
-    return "";
-  };
-
-  /**
-   * Home card title: live name param and synced `displayName` beat stale Matter metadata
-   * so a rename on another phone is visible after subscription/param sync.
-   */
-  const resolveCardTitle = () => {
-    if (isEndpointSplitDevice && device.displayName) {
-      return device.displayName;
-    }
-    const nameParamValue = paramTypeMap[ESPRM_NAME_PARAM_TYPE]?.value;
-    if (typeof nameParamValue === "string" && nameParamValue.trim().length > 0) {
-      return nameParamValue;
-    }
-    if (device.displayName) {
-      return device.displayName;
-    }
-    return getMatterMetadataDeviceName(storeNode) || "";
-  };
+  // Read from the live store device on every render: the `device` prop is a
+  // copy made when the list was built, so its name never changes.
+  const cardTitle = getDeviceDisplayName(storeDevice, storeNode);
 
   // Render compact card
   if (compact) {
@@ -286,7 +214,7 @@ const DeviceCard: React.FC<DeviceCardProps> = ({
             { marginBottom: 5, paddingRight: 0, textAlign: "center" },
           ]}
         >
-          {resolveCardTitle()}
+          {cardTitle}
         </Text>
 
         {isPowerParamExisit && (
@@ -441,7 +369,7 @@ const DeviceCard: React.FC<DeviceCardProps> = ({
           style={globalStyles.controlGroupCardName}
           numberOfLines={1}
         >
-          {resolveCardTitle()}
+          {cardTitle}
         </Text>
         <View style={styles.offlineStatusRow}>
           {offlineLabel != null ? (

@@ -2,8 +2,10 @@ Feature: Matter device commissioning
   Commission a Matter light into the RainMaker app over BLE via the platform pairing UI
   (Google Play services half-sheet on Android, Apple's MatterSupport sheet on iOS),
   confirm it is commissioned and shown, and control it from
-  both the home card and the device control screen. The esp-matter demo light
-  registers as "Light"; the RMNEO+Matter light registers as "Matter Device".
+  both the home card and the device control screen. Every scenario names the
+  light "E2E Matter Light" and skips the room: on Android the app asks for the
+  name after Google's sheet, on iOS it is typed in Apple's sheet and the app goes
+  straight to the room step.
 
   Background:
     Given the app is launched
@@ -17,6 +19,12 @@ Feature: Matter device commissioning
     When user adds a device via "scan qr"
     And user completes the ecosystem commissioning
     Then the matter device should be commissioned successfully
+    When user names the matter light
+    Then user should be on add to room screen
+    When user skips adding the device to a room
+    Then user should be on guide screen
+    When user taps "continue"
+    Then user should land on the home screen
     And the matter device should be visible on home screen
     When user prepares the matter device power "on"
     And user toggles the matter device power "off" from the home screen
@@ -34,6 +42,12 @@ Feature: Matter device commissioning
     When user adds a device via "scan qr"
     And user completes the ecosystem commissioning
     Then the matter device should be commissioned successfully
+    When user names the matter light
+    Then user should be on add to room screen
+    When user skips adding the device to a room
+    Then user should be on guide screen
+    When user taps "continue"
+    Then user should land on the home screen
     And the matter device should be visible on home screen
     And the matter device should be online on the home screen
     When user prepares the matter device power "on"
@@ -53,4 +67,10 @@ Feature: Matter device commissioning
     And user enters the matter pairing code
     And user completes the ecosystem commissioning
     Then the matter device should be commissioned successfully
+    When user names the matter light
+    Then user should be on add to room screen
+    When user skips adding the device to a room
+    Then user should be on guide screen
+    When user taps "continue"
+    Then user should land on the home screen
     And the matter device should be visible on home screen

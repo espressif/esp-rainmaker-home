@@ -9,12 +9,15 @@ package com.app.matter
 import android.content.Context
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.util.Log
 import chip.devicecontroller.ChipDeviceController
+import chip.devicecontroller.ChipStructs
 import chip.devicecontroller.GetConnectedDeviceCallbackJni.GetConnectedDeviceCallback
 import chip.devicecontroller.InvokeCallback
 import chip.devicecontroller.ReportCallback
 import chip.devicecontroller.ResubscriptionAttemptCallback
+import chip.devicecontroller.SafeChipCalls
 import chip.devicecontroller.SubscriptionEstablishedCallback
 import chip.devicecontroller.WriteAttributesCallback
 import chip.devicecontroller.model.AttributeWriteRequest
@@ -32,7 +35,11 @@ import com.facebook.react.bridge.ReadableMap
 import com.facebook.react.bridge.WritableMap
 import com.facebook.react.modules.core.DeviceEventManagerModule
 import java.math.BigInteger
+import java.util.Optional
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
 
 /**
@@ -63,8 +70,28 @@ class ESPMatterControl(private val reactContext: ReactApplicationContext) {
         private const val TAG = "ESPMatterControl"
         private const val DEFAULT_TIMEOUT_MS = 15000
         private const val EVENT_ATTRIBUTE_REPORT = "ESPMatter:attributeReport"
+        /** Tells JS whether a subscription link is up, so it knows when reports are live. */
+        private const val EVENT_SUBSCRIPTION_STATE = "ESPMatter:subscriptionState"
+        private const val SUBSCRIPTION_STATE_ESTABLISHED = "established"
+        private const val SUBSCRIPTION_STATE_RESUBSCRIBING = "resubscribing"
+        private const val SUBSCRIPTION_STATE_ERROR = "error"
+        /** Sent while reports keep coming, so JS can tell a quiet link from a dead one. */
+        private const val SUBSCRIPTION_STATE_ALIVE = "alive"
+        private const val ALIVE_EMIT_INTERVAL_MS = 10_000L
         private const val DEFAULT_MIN_INTERVAL_SEC = 1
         private const val DEFAULT_MAX_INTERVAL_SEC = 30
+        /** Wait before closing a link, so the CHIP code that called us has finished. */
+        private const val LINK_CLOSE_DELAY_MS = 250L
+
+        /**
+         * Closes links on its own thread. CHIP frees a link the moment it is closed, so closing
+         * it from inside one of that link's callbacks frees it while CHIP is still using it.
+         * One thread for the whole app, shared by every module instance (JS reloads included),
+         * so no thread is left behind and queued closes still run.
+         */
+        private val linkCloser = Executors.newSingleThreadScheduledExecutor { task ->
+            Thread(task, "MatterLinkCloser").apply { isDaemon = true }
+        }
     }
 
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -72,11 +99,33 @@ class ESPMatterControl(private val reactContext: ReactApplicationContext) {
     /** Cached connected-device pointers, keyed by uint64 matter node id. */
     private val devicePtrs = ConcurrentHashMap<Long, Long>()
 
+    /** Controller the cached pointers were minted against; a new one voids them all. */
+    @Volatile
+    private var devicePtrsOwner: ChipClient? = null
+
     private data class SubscriptionEntry(
         val handle: String,
         val matterNodeId: Long,
-        @Volatile var subscriptionId: Long = 0L
+        /** Controller the link was opened on; a link dies with its controller. */
+        val owner: ChipClient,
+        @Volatile var subscriptionId: Long = 0L,
+        /** Set once the link is closed; a link still opening is closed as soon as it opens. */
+        @Volatile var closed: Boolean = false,
+        /** When "alive" was last sent for this link. */
+        @Volatile var lastAliveEmitMs: Long = 0L,
+        /** How many of this link's CHIP callbacks are running right now. */
+        val callbacksRunning: AtomicInteger = AtomicInteger(0)
     )
+
+    /** Runs one of the link's CHIP callbacks; a close waits until none is running. */
+    private inline fun <T> SubscriptionEntry.inCallback(body: () -> T): T {
+        callbacksRunning.incrementAndGet()
+        try {
+            return body()
+        } finally {
+            callbacksRunning.decrementAndGet()
+        }
+    }
 
     private val subscriptions = ConcurrentHashMap<String, SubscriptionEntry>()
     private val subscriptionHandleSeq = AtomicLong(0L)
@@ -94,10 +143,13 @@ class ESPMatterControl(private val reactContext: ReactApplicationContext) {
     fun shutdown(promise: Promise) {
         try {
             for (entry in subscriptions.values) {
-                shutdownSubscriptionEntry(entry)
+                entry.closed = true
             }
             subscriptions.clear()
             devicePtrs.clear()
+            // Every link, including any that no entry tracks any more.
+            runCatching { ensureChipClient().chipDeviceController }.getOrNull()
+                ?.shutdownSubscriptions()
             promise.resolve(successResult())
         } catch (e: Exception) {
             promise.reject("SHUTDOWN_FAILED", e.message, e)
@@ -170,12 +222,13 @@ class ESPMatterControl(private val reactContext: ReactApplicationContext) {
                         ex: Exception
                     ) {
                         Log.w(TAG, "$readTag failed: ${ex.message}")
+                        invalidateIfSessionLost(nodeId, ex)
                         promise.reject("READ_FAILED", ex.message, ex)
                     }
                 }
                 try {
-                    controller.readAttributePath(
-                        callback, devicePtr, listOf(path), DEFAULT_TIMEOUT_MS
+                    SafeChipCalls.readAttributePath(
+                        controller, callback, devicePtr, listOf(path), DEFAULT_TIMEOUT_MS
                     )
                 } catch (e: Exception) {
                     promise.reject("READ_FAILED", e.message, e)
@@ -224,11 +277,12 @@ class ESPMatterControl(private val reactContext: ReactApplicationContext) {
                     }
                     override fun onError(attributePath: ChipAttributePath?, ex: Exception?) {
                         Log.w(TAG, "write failed: ${ex?.message}")
+                        invalidateIfSessionLost(nodeId, ex)
                         promise.reject("WRITE_FAILED", ex?.message ?: "write failed", ex)
                     }
                 }
                 try {
-                    controller.write(callback, devicePtr, listOf(request), 0, 0)
+                    SafeChipCalls.write(controller, callback, devicePtr, listOf(request), 0, 0)
                 } catch (e: Exception) {
                     promise.reject("WRITE_FAILED", e.message, e)
                 }
@@ -295,12 +349,14 @@ class ESPMatterControl(private val reactContext: ReactApplicationContext) {
                     }
                     override fun onError(ex: Exception?) {
                         Log.w(TAG, "invoke failed: ${ex?.message}")
+                        invalidateIfSessionLost(nodeId, ex)
                         onFailure("INVOKE_FAILED", ex?.message ?: "invoke failed", ex)
                     }
                 }
                 try {
-                    controller.invoke(callback, devicePtr, element, 0, DEFAULT_TIMEOUT_MS)
+                    SafeChipCalls.invoke(controller, callback, devicePtr, element, 0, DEFAULT_TIMEOUT_MS)
                 } catch (e: Exception) {
+                    invalidateIfSessionLost(nodeId, e)
                     onFailure("INVOKE_FAILED", e.message ?: "invoke threw", e)
                 }
             },
@@ -322,8 +378,9 @@ class ESPMatterControl(private val reactContext: ReactApplicationContext) {
         val nodeId = parseMatterNodeId(matterNodeIdStr) ?: run {
             promise.reject("INVALID_ARG", "Invalid matterNodeId"); return
         }
-        val controller = runCatching { ensureChipClient().chipDeviceController }
+        val chipClient = runCatching { ensureChipClient() }
             .getOrElse { promise.reject("NO_FABRIC", it.message, it); return }
+        val controller = chipClient.chipDeviceController
 
         // Build subscription paths. JS may omit `attributeId` to request a
         // *cluster-wildcard* subscription — needed for FW that rejects
@@ -349,7 +406,7 @@ class ESPMatterControl(private val reactContext: ReactApplicationContext) {
         }
 
         val handle = "sub-${subscriptionHandleSeq.incrementAndGet()}"
-        val entry = SubscriptionEntry(handle, nodeId)
+        val entry = SubscriptionEntry(handle, nodeId, chipClient)
         subscriptions[handle] = entry
 
         val minInt = if (minIntervalSec > 0) minIntervalSec else DEFAULT_MIN_INTERVAL_SEC
@@ -357,15 +414,32 @@ class ESPMatterControl(private val reactContext: ReactApplicationContext) {
 
         getConnectedDevicePointer(nodeId,
             onSuccess = { devicePtr ->
-                val subEstablished = SubscriptionEstablishedCallback { subId ->
+                val subEstablished = SubscriptionEstablishedCallback { subId -> entry.inCallback {
                     entry.subscriptionId = subId
-                    Log.d(TAG, "Subscription $handle established: matterId=$subId")
-                }
-                val resub = ResubscriptionAttemptCallback { cause, nextMs ->
+                    if (entry.closed) {
+                        // Closed while it was still opening. Close it once this callback is over.
+                        Log.d(TAG, "Subscription $handle opened after it was closed; closing it")
+                        shutdownSubscriptionById(entry)
+                    } else {
+                        Log.d(TAG, "Subscription $handle established: matterId=$subId")
+                        emitSubscriptionState(matterNodeIdStr, handle, SUBSCRIPTION_STATE_ESTABLISHED)
+                    }
+                } }
+                val resub = ResubscriptionAttemptCallback { cause, nextMs -> entry.inCallback {
+                    // A closed link stays quiet, so a newer link to the device is the only voice.
+                    if (entry.closed) return@inCallback
                     Log.d(TAG, "Subscription $handle re-attempt: cause=$cause, next=${nextMs}ms")
-                }
+                    emitSubscriptionState(matterNodeIdStr, handle, SUBSCRIPTION_STATE_RESUBSCRIBING)
+                } }
                 val report = object : ReportCallback {
-                    override fun onReport(nodeState: NodeState?) {
+                    override fun onReport(nodeState: NodeState?) { entry.inCallback {
+                        if (entry.closed) return
+                        // Any report, even an empty keep-alive, shows the link works.
+                        val now = SystemClock.elapsedRealtime()
+                        if (now - entry.lastAliveEmitMs >= ALIVE_EMIT_INTERVAL_MS) {
+                            entry.lastAliveEmitMs = now
+                            emitSubscriptionState(matterNodeIdStr, handle, SUBSCRIPTION_STATE_ALIVE)
+                        }
                         if (nodeState == null) return
                         // Walk every endpoint/cluster/attribute the device
                         // reported. This must NOT iterate the requested
@@ -391,18 +465,33 @@ class ESPMatterControl(private val reactContext: ReactApplicationContext) {
                                 }
                             }
                         }
-                    }
+                    } }
                     override fun onError(
                         attributePath: ChipAttributePath?,
                         eventPath: ChipEventPath?,
                         ex: Exception
-                    ) {
+                    ) { entry.inCallback {
                         Log.w(TAG, "Subscription $handle report error: ${ex.message}")
-                    }
+                        // A closed or old-controller link must not drop the current device pointer.
+                        if (!entry.closed && entry.owner === devicePtrsOwner) {
+                            invalidateIfSessionLost(nodeId, ex)
+                        }
+                        // No path means the whole link failed, not one attribute.
+                        if (!entry.closed && attributePath == null && eventPath == null) {
+                            emitSubscriptionState(matterNodeIdStr, handle, SUBSCRIPTION_STATE_ERROR)
+                        }
+                    } }
+                    override fun onDone() { entry.inCallback {
+                        // The link ended without the app closing it.
+                        if (!entry.closed) {
+                            emitSubscriptionState(matterNodeIdStr, handle, SUBSCRIPTION_STATE_ERROR)
+                        }
+                    } }
                 }
 
                 try {
-                    controller.subscribeToPath(
+                    val failedAtOnce = SafeChipCalls.subscribeToPath(
+                        controller,
                         subEstablished,
                         resub,
                         report,
@@ -415,8 +504,14 @@ class ESPMatterControl(private val reactContext: ReactApplicationContext) {
                         false,
                         0
                     )
-                    val res = Arguments.createMap().apply { putString("subscriptionId", handle) }
-                    promise.resolve(res)
+                    if (failedAtOnce != null) {
+                        // The subscription never started, so do not hand JS a handle for it.
+                        subscriptions.remove(handle)
+                        promise.reject("SUBSCRIBE_FAILED", failedAtOnce.message, failedAtOnce)
+                    } else {
+                        val res = Arguments.createMap().apply { putString("subscriptionId", handle) }
+                        promise.resolve(res)
+                    }
                 } catch (e: Exception) {
                     subscriptions.remove(handle)
                     promise.reject("SUBSCRIBE_FAILED", e.message, e)
@@ -442,32 +537,45 @@ class ESPMatterControl(private val reactContext: ReactApplicationContext) {
         }
     }
 
+    /**
+     * Closes this one link. A device can hold several links at once
+     * (keepSubscriptions = true), so closing by device would also cut a newer
+     * link to it. A link that has not opened yet is closed when it opens.
+     */
     private fun shutdownSubscriptionEntry(entry: SubscriptionEntry) {
-        val controller = runCatching { ensureChipClient().chipDeviceController }.getOrNull()
-            ?: return
-        try {
-            // CHIP exposes overloads at multiple specificities; the
-            // (fabricIndex, peerNodeId) form tears down every active
-            // subscription for that node, matching our 1-handle-per-node usage.
-            val fabricIndex = runCatching {
-                ChipDeviceController::class.java
-                    .getMethod("getFabricIndex")
-                    .invoke(controller) as? Int ?: 0
-            }.getOrDefault(0)
-
-            try {
-                ChipDeviceController::class.java.getMethod(
-                    "shutdownSubscriptions",
-                    Int::class.javaPrimitiveType,
-                    Long::class.javaPrimitiveType
-                ).invoke(controller, fabricIndex, entry.matterNodeId)
-            } catch (e: NoSuchMethodException) {
-                // Fall back to the no-arg overload if per-peer is unavailable.
-                controller.shutdownSubscriptions()
-            }
-        } catch (e: Exception) {
-            Log.w(TAG, "shutdownSubscriptions failed: ${e.message}")
+        entry.closed = true
+        if (entry.subscriptionId != 0L) {
+            shutdownSubscriptionById(entry)
         }
+    }
+
+    /**
+     * Closes the link later on [linkCloser], never inside one of its own CHIP callbacks
+     * (CHIP would keep using the freed link: SIGSEGV in ExchangeContext::HandleMessage).
+     * The delay is what makes this safe: CHIP runs unlocked around each callback, which the
+     * running-callback count below cannot see; the count only covers our callback bodies.
+     * Uses only the link's own controller and never builds one on this thread.
+     */
+    private fun shutdownSubscriptionById(entry: SubscriptionEntry) {
+        linkCloser.schedule(Runnable {
+            if (entry.callbacksRunning.get() > 0) {
+                shutdownSubscriptionById(entry)
+                return@Runnable
+            }
+            // Close on the link's own controller even after it was replaced: nothing
+            // shuts old controllers down, so their links would run (and resubscribe) forever.
+            // That controller was built when the link opened, so none is built here.
+            val controller = entry.owner.chipDeviceController
+            try {
+                controller.shutdownSubscriptions(
+                    controller.fabricIndex,
+                    entry.matterNodeId,
+                    entry.subscriptionId
+                )
+            } catch (e: Exception) {
+                Log.w(TAG, "shutdownSubscriptions failed: ${e.message}")
+            }
+        }, LINK_CLOSE_DELAY_MS, TimeUnit.MILLISECONDS)
     }
 
     // -----------------------------------------------------------------------
@@ -501,14 +609,33 @@ class ESPMatterControl(private val reactContext: ReactApplicationContext) {
         }
     }
 
+    private fun emitSubscriptionState(matterNodeIdStr: String, handle: String, state: String) {
+        val event: WritableMap = Arguments.createMap().apply {
+            putString("matterNodeId", matterNodeIdStr)
+            putString("subscriptionId", handle)
+            putString("state", state)
+        }
+        // Same as reports: CHIP calls back on its worker thread.
+        mainHandler.post {
+            try {
+                reactContext
+                    .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
+                    .emit(EVENT_SUBSCRIPTION_STATE, event)
+            } catch (e: Exception) {
+                Log.w(TAG, "emit subscriptionState failed: ${e.message}")
+            }
+        }
+    }
+
     private fun getConnectedDevicePointer(
         nodeId: Long,
         onSuccess: (Long) -> Unit,
         onFailure: (Exception) -> Unit
     ) {
-        devicePtrs[nodeId]?.let { onSuccess(it); return }
+        // Resolve first: ensureChipClient() clears the cache on a controller swap.
         val controller = runCatching { ensureChipClient().chipDeviceController }
             .getOrElse { onFailure(it as? Exception ?: Exception(it.message)); return }
+        devicePtrs[nodeId]?.let { onSuccess(it); return }
         try {
             controller.getConnectedDevicePointer(
                 nodeId,
@@ -527,17 +654,151 @@ class ESPMatterControl(private val reactContext: ReactApplicationContext) {
         }
     }
 
+    /**
+     * Replaces a CAT subject in the device's EP0 ACL with the fabric's current
+     * CAT value (post-rotation repair) — works for both the operate and the
+     * admin CAT. CAT rotation keeps the 4-hex identifier and bumps the 4-hex
+     * version, so existing subjects are matched by identifier
+     * (`subject ushr 16`) and rewritten when the version differs.
+     *
+     * When no subject with the CAT's identifier exists and the CAT is an
+     * OPERATE one (identifier 0x0600–0x08FF), a fresh Operate entry is
+     * appended — self-heal for a failed commissioning-time ACL write, same
+     * shape as [ChipClient]'s post-commissioning block. Admin CATs are never
+     * appended: a device without an admin-CAT subject predates CAT-keyed admin
+     * entries (node-id keyed) and there is nothing safe to add.
+     */
+    fun updateCatAclSubject(
+        matterNodeIdStr: String,
+        groupCatId: String,
+        promise: Promise
+    ) {
+        val nodeId = parseMatterNodeId(matterNodeIdStr) ?: run {
+            promise.reject("INVALID_ARG", "Invalid matterNodeId"); return
+        }
+        if (groupCatId.isBlank()) {
+            promise.reject("INVALID_ARG", "groupCatId is required"); return
+        }
+        val chipClient = runCatching { ensureChipClient() }
+            .getOrElse { promise.reject("NO_FABRIC", it.message, it); return }
+
+        val newSubject = Utils.getCatId(groupCatId)
+        if (newSubject == 0L) {
+            promise.reject("INVALID_ARG", "groupCatId is not valid hex"); return
+        }
+        // Backend allocates operate CAT identifiers in 0x0600–0x08FF.
+        val catIdentifier = (newSubject ushr 16) and 0xFFFFL
+        val isOperateCat = catIdentifier in 0x0600L..0x08FFL
+
+        val aclHelper = AccessControlClusterHelper(chipClient)
+        aclHelper.readAclAttributeAsync(nodeId, AppConstants.ENDPOINT_0)
+            .whenComplete { aclAttr, readError ->
+                if (readError != null) {
+                    promise.reject("ACL_READ_FAILED", readError.message, readError)
+                    return@whenComplete
+                }
+                if (aclAttr == null) {
+                    // readAclAttribute swallows connection failures into null —
+                    // surface it so the JS sweep retries this device later.
+                    promise.reject("DEVICE_UNREACHABLE", "ACL read returned no data")
+                    return@whenComplete
+                }
+
+                val entries =
+                    ArrayList<ChipStructs.AccessControlClusterAccessControlEntryStruct>()
+                var adminAuthMode = 0
+                var adminFabricIndex = 0
+                var changed = false
+                var catSubjectSeen = false
+
+                for (entry in aclAttr) {
+                    entries.add(entry)
+                    if (entry.privilege == AppConstants.PRIVILEGE_ADMIN) {
+                        adminAuthMode = entry.authMode
+                        adminFabricIndex = entry.fabricIndex
+                    }
+                    val subjects = entry.subjects ?: continue
+                    for (i in subjects.indices) {
+                        val subject = subjects[i] ?: continue
+                        if ((subject ushr 16) == (newSubject ushr 16)) {
+                            catSubjectSeen = true
+                            if (subject != newSubject) {
+                                subjects[i] = newSubject
+                                changed = true
+                            }
+                        }
+                    }
+                }
+
+                if (!catSubjectSeen) {
+                    if (!isOperateCat) {
+                        // Nothing to rotate on this device (legacy node-id-keyed
+                        // admin entry) — report success so the sweep completes.
+                        promise.resolve(successResult())
+                        return@whenComplete
+                    }
+                    val subjects = ArrayList<Long>()
+                    subjects.add(newSubject)
+                    entries.add(
+                        ChipStructs.AccessControlClusterAccessControlEntryStruct(
+                            AppConstants.PRIVILEGE_OPERATE,
+                            adminAuthMode,
+                            subjects,
+                            null,
+                            Optional.empty(),
+                            adminFabricIndex
+                        )
+                    )
+                    changed = true
+                }
+
+                if (!changed) {
+                    promise.resolve(successResult())
+                    return@whenComplete
+                }
+
+                aclHelper.writeAclAttributeAsync(nodeId, AppConstants.ENDPOINT_0, entries)
+                    .whenComplete { _, writeError ->
+                        if (writeError != null) {
+                            promise.reject("ACL_WRITE_FAILED", writeError.message, writeError)
+                        } else {
+                            promise.resolve(successResult())
+                        }
+                    }
+            }
+    }
+
     /** Reuse the active commissioning ChipClient or lazily reconstruct from FabricInfo. */
     private fun ensureChipClient(): ChipClient {
-        val existing = FabricSessionManager.getCurrentChipClient()
-        if (existing != null) return existing
+        val client = FabricSessionManager.getCurrentChipClient()
+            ?: FabricSessionManager.resolveChipClient(
+                reactContext.applicationContext as Context
+            )
+            ?: throw IllegalStateException("No active fabric for Matter control")
 
-        val resolved = FabricSessionManager.resolveChipClient(
-            reactContext.applicationContext as Context
-        )
-        if (resolved != null) return resolved
+        // A rebuilt controller voids every pointer minted against the old one; invoking on a dangling pointer crashes in the JNI finalizer.
+        if (devicePtrsOwner !== client) {
+            if (devicePtrsOwner != null && devicePtrs.isNotEmpty()) {
+                Log.i(TAG, "ChipClient replaced — dropping ${devicePtrs.size} stale device pointer(s)")
+            }
+            devicePtrs.clear()
+            devicePtrsOwner = client
+        }
+        return client
+    }
 
-        throw IllegalStateException("No active fabric for Matter control")
+    /**
+     * Drops a cached pointer whose secure session is gone so the next call re-establishes CASE.
+     * @param nodeId Matter node whose pointer is suspect
+     * @param ex Failure reported by the operation
+     */
+    private fun invalidateIfSessionLost(nodeId: Long, ex: Throwable?) {
+        val message = ex?.message ?: return
+        val sessionGone = message.contains("Missing secure session", ignoreCase = true) ||
+            message.contains("0x00000077", ignoreCase = true)
+        if (sessionGone && devicePtrs.remove(nodeId) != null) {
+            Log.i(TAG, "dropped stale device pointer for node $nodeId after session loss")
+        }
     }
 
     private fun parseMatterNodeId(s: String?): Long? {

@@ -16,6 +16,7 @@ import {
   MATTER_LOCAL_DISCOVERY_EVENT,
   MATTER_LOCAL_DISCOVERY_LOST_EVENT,
   MATTER_LOCAL_TRANSPORT_KEY,
+  MATTER_METADATA_NODE_ID_KEY,
   DISCOVERY_UPDATE_EVENT,
   DISCOVERY_LOST_EVENT,
   MDNS_SERVICE_TYPE_MATTER_OPERATIONAL,
@@ -25,18 +26,31 @@ import { syncMatterDiscoveryTargetNodeIds } from "@native-adaptors/implementatio
 import {
   syncMatterNodeIdMappings,
   setMatterNodeReachability,
+  onMatterLinkLive,
   type MatterEndpointSummary,
 } from "@native-adaptors/implementations/ESPMatterSubscriptionAdapter";
 import { bootstrapMatterFabricForOperationalDiscovery } from "@features/matter/utils/matterCommissioningHelpers";
 import { retrySubscribeForNodeId } from "@shared/utils/matterSubscribeRetry";
 import {
-  describeChipOperationalLookup,
-  formatMatterNodeIdForChipLog,
+  registerMatterNameRetryNodeLookup,
+  retryMatterNameNow,
+} from "@shared/utils/matterNameRetry";
+import {
   MATTER_DISCOVERY_VERIFY_LOG,
   normalizeMatterNodeIdHex,
 } from "@shared/utils/matterNodeIdHex";
 import { readMatterNodeIdFromCdfNode } from "@shared/utils/matterDeviceStateEvents";
 import { registerMatterDiscoveryOnNodesAddedKick } from "@shared/utils/matterDiscoveryGroupCallbacks";
+import {
+  readHybridSetupFromDevice,
+  reportMatterReachability,
+} from "@shared/utils/matterLocalNetworkHooks";
+import { onSessionEnd } from "@shared/utils/userSession";
+import {
+  getMatterMetadata,
+  setMatterMetadata,
+} from "@shared/utils/matterLocalStorage";
+import { readAttributesForNodeId } from "@shared/utils/matterAttributeRead";
 import {
   DeviceEventEmitter,
   NativeEventEmitter,
@@ -89,6 +103,18 @@ function collectMatterHomeNodes(
     byId.set(node.id, node);
   }
   for (const node of store.getNodesForCurrentHome()) {
+    // The store's instance is the fresher one, but a hybrid's arrives without
+    // the Matter id its group copy carries, so overwriting outright drops it
+    // from discovery. Carry the id over instead of choosing between them.
+    const fromGroup = byId.get(node.id);
+    if (fromGroup && readMatterNodeIdFromCdfNode(node) == null) {
+      const carried = readMatterNodeIdFromCdfNode(fromGroup);
+      if (carried) {
+        const target = ((node as { metadata?: Record<string, unknown> })
+          .metadata ??= {});
+        target[MATTER_METADATA_NODE_ID_KEY] = carried;
+      }
+    }
     byId.set(node.id, node);
   }
   return Array.from(byId.values());
@@ -110,8 +136,7 @@ function toMatterLocalTransportConfig(
   payload: MatterDiscoveryEventPayload,
 ): ESPCDFTransportConfig | null {
   const transportMeta = payload.transportDetails?.metadata as
-    | Record<string, unknown>
-    | undefined;
+    Record<string, unknown> | undefined;
   const host =
     payload.host ??
     (typeof transportMeta?.host === "string" ? transportMeta.host : undefined);
@@ -148,7 +173,10 @@ function toMatterLocalTransportConfig(
   };
 }
 
-function arraysEqualOrdered(a: readonly string[], b: readonly string[]): boolean {
+function arraysEqualOrdered(
+  a: readonly string[],
+  b: readonly string[],
+): boolean {
   if (a.length !== b.length) return false;
   for (let i = 0; i < a.length; i += 1) {
     if (a[i] !== b[i]) return false;
@@ -161,15 +189,18 @@ function arraysEqualOrdered(a: readonly string[], b: readonly string[]): boolean
 interface MatterLocalDiscoveryController {
   /** Idempotent: ensures fabric session + discovery subscriptions are ready. */
   start(): void;
-  /**
-   * Tears down event subscriptions and clears native + JS state.
-   *
-   * Currently unused by the app (no logout hook drives it yet) but exposed
-   * so a future logout/home-switch handler can dispose cleanly without
-   * leaking handlers across user sessions.
-   */
+  /** Removes all listeners and clears state. Runs on logout and SDK switch. */
   stop(): Promise<void>;
 }
+
+/**
+ * On classic Matter both the SDK and the native listener deliver each event.
+ * The same event again within this time is skipped.
+ */
+const REPEAT_EVENT_WINDOW_MS = 1000;
+
+/** Longest stop() waits for setup still running, so a stuck native call never blocks logout. */
+const SETUP_WAIT_LIMIT_MS = 3000;
 
 /**
  * Encapsulates all matter-local-discovery state in a single controller
@@ -183,11 +214,24 @@ function createMatterLocalDiscoveryController(
 ): MatterLocalDiscoveryController {
   let matterNodeToNodeIdMap = new Map<string, string>();
   let matterDiscoverySubscribed = false;
+  /** The user the discovery events were subscribed with; stop() unsubscribes it. */
+  let subscribedUser: NonNullable<ESPCDF["userStore"]["user"]> | null = null;
+  /** Set by stop(); setup still running gives up instead of finishing. */
+  let stopped = false;
+  /** Setup still running; stop() waits for it so it never overlaps the next one. */
+  let setupInFlight: Promise<void> | null = null;
   /**
    * Direct native DiscoveryUpdate/Lost listeners (belt-and-suspenders for the
    * SDK discovery subscribe, which sometimes never starts its adapter).
    */
   let nativeDiscoveryListeners: EmitterSubscription[] | null = null;
+  /** Undo for the hooks that retry device names the device missed. */
+  let nameRetryHooks: (() => void)[] | null = null;
+  /** Last event handled for each Matter node, to skip repeats. */
+  const lastEventByMatterNodeId = new Map<
+    string,
+    { event: string; at: number }
+  >();
   let lastSyncedHomeId: string | null = null;
   let lastSyncedTargets: string[] = [];
   let homeNodeSetReaction: IReactionDisposer | null = null;
@@ -218,6 +262,10 @@ function createMatterLocalDiscoveryController(
    * and never re-clears during transient empty home node lists (cloud sync
    * can briefly drop nodeDetails before re-populating).
    */
+  // Native cannot build a ChipClient before the fabric is in its session, so a
+  // target pushed too early burns a whole probe cycle (8s) on a guaranteed miss.
+  let nativeFabricReady = false;
+
   function syncMatterDiscoveryTargets(homeId: string, targets: string[]): void {
     if (
       targets.length === 0 &&
@@ -237,6 +285,13 @@ function createMatterLocalDiscoveryController(
       return;
     }
 
+    // Hold the push (without recording it) until the fabric is hydrated: the
+    // first real push then looks "newly added" to native, which probes it
+    // immediately instead of waiting out the poll interval.
+    if (!nativeFabricReady) {
+      return;
+    }
+
     lastSyncedHomeId = homeId;
     lastSyncedTargets = targets;
     syncMatterDiscoveryTargetNodeIds(targets);
@@ -250,6 +305,7 @@ function createMatterLocalDiscoveryController(
    * the signature gate makes the repeated call cheap.
    */
   function rebuildMatterNodeIdMap(): void {
+    if (stopped) return;
     const home = store.getCurrentHome() as ESPCDFGroup | null;
 
     if (!home?.isMatter) {
@@ -307,6 +363,18 @@ function createMatterLocalDiscoveryController(
       });
     }
 
+    // A cloud refresh can momentarily rebuild a Matter node without its Matter
+    // id, emptying this list for one pass. Dropping the map then would re-mark
+    // every node "newly added" on the next pass and wipe the subscription
+    // adapter's translations, so hold the last known good map instead — the same
+    // rule `syncMatterDiscoveryTargets` already applies to the native targets.
+    if (nextMap.size === 0 && matterNodeToNodeIdMap.size > 0) {
+      console.warn(
+        `${MATTER_DISCOVERY_VERIFY_LOG} skip clearing matter node map: home ${home.id} node list transiently empty (keeping ${matterNodeToNodeIdMap.size} node(s))`,
+      );
+      return;
+    }
+
     // Signature short-circuit: when the operational discovery map (native
     // browse targets) hasn't changed, skip re-sync. Must use nextMap — bridge
     // parent/child nodes are excluded from subscriptionPairs but still need
@@ -339,17 +407,7 @@ function createMatterLocalDiscoveryController(
     }
     matterNodeToNodeIdMap = nextMap;
 
-    for (const pair of subscriptionPairs) {
-      console.log(
-        `${MATTER_DISCOVERY_VERIFY_LOG} CDF node ${pair.nodeId} → matterNodeId=${pair.matterNodeId} (${formatMatterNodeIdForChipLog(pair.matterNodeId)}) | ${describeChipOperationalLookup(pair.matterNodeId)}`,
-      );
-    }
-
     const targets = Array.from(nextMap.keys());
-    console.log(
-      `${MATTER_DISCOVERY_VERIFY_LOG} sync ${targets.length} target(s) to native:`,
-      targets.map((id) => formatMatterNodeIdForChipLog(id)),
-    );
     syncMatterDiscoveryTargets(home.id, targets);
 
     // Mirror the same rm↔matter pairs into the subscription adapter so
@@ -361,11 +419,6 @@ function createMatterLocalDiscoveryController(
     // Light-only fallback that triggers Status=0x80 + CHIP auto-resubscribe
     // loops on non-Light devices.
     syncMatterNodeIdMappings(subscriptionPairs);
-    console.log(
-      `${MATTER_DISCOVERY_VERIFY_LOG} sync ${subscriptionPairs.length} rm↔matter pair(s) to ESPMatterSubscriptionAdapter (with endpoints for ${
-        subscriptionPairs.filter((p) => p.matterEndpoints !== undefined).length
-      } node(s))`,
-    );
 
     replayPendingDiscoveries();
 
@@ -377,15 +430,11 @@ function createMatterLocalDiscoveryController(
     // dedupes via `subscribingNodes`/`subscribedNodes`.
     if (newlyAddedCdfNodeIds.length > 0) {
       const espCDFUser = store.userStore.user;
-      console.log(
-        `${MATTER_DISCOVERY_VERIFY_LOG} kick subscribe for ${newlyAddedCdfNodeIds.length} newly-added matter node(s):`,
-        newlyAddedCdfNodeIds,
-      );
       for (const cdfNodeId of newlyAddedCdfNodeIds) {
         // Pass the raw ESPRMNode lifted off the CDF mirror so the matter
         // user-adaptor's retry helper can subscribe even though the node
         // wasn't part of the cold-start `subscribeToAllNodes` snapshot.
-        // Without this fallback the helper short-circuits on
+        // Without this node the helper short-circuits on
         // `lastSubscribeSdkNodes.find(...) === undefined` and the freshly
         // commissioned node never has its subscription kicked off.
         const cdfNode = store.nodeStore.getNodeById(cdfNodeId);
@@ -422,14 +471,27 @@ function createMatterLocalDiscoveryController(
       const transport = toMatterLocalTransportConfig(cached);
       pendingByMatterNodeId.delete(matterNodeId);
       if (!transport) continue;
-      console.log(
-        `${MATTER_DISCOVERY_VERIFY_LOG} replay cached discovery: matterNodeId=${matterNodeId} → nodeId=${cdfNodeId}`,
-      );
       applyMatterLocalTransport(cdfNodeId, transport, "add");
     }
   }
 
   // ─── Discovery handlers ────────────────────────────────────────────────
+
+  /**
+   * Whether this same event for the node was handled a moment ago.
+   * @param matterNodeId - Normalized 16-hex Matter node id.
+   * @param event - What happened, e.g. `add|10.0.0.5|5540` or `remove`.
+   */
+  function wasJustHandled(matterNodeId: string, event: string): boolean {
+    const now = Date.now();
+    const last = lastEventByMatterNodeId.get(matterNodeId);
+    lastEventByMatterNodeId.set(matterNodeId, { event, at: now });
+    return (
+      last !== undefined &&
+      last.event === event &&
+      now - last.at < REPEAT_EVENT_WINDOW_MS
+    );
+  }
 
   function resolveNodeIdFromPayload(
     payload: MatterDiscoveryEventPayload,
@@ -443,6 +505,42 @@ function createMatterLocalDiscoveryController(
   }
 
   /**
+   * Recovers a reachable hybrid's Matter control leg from the device, and
+   * caches the topology so later launches rig it without any reads.
+   *
+   * Only a hybrid commissioned on a different phone gets this far: the SDK
+   * declines a node that is already rigged, is pure Matter, or is unknown,
+   * and a stored topology short-circuits it here. That last guard matters on
+   * the phone that DID commission — discovery can beat the group sync that
+   * attaches from storage, and these reads would otherwise compete with the
+   * commissioning flow's own traffic to the same node.
+   */
+  async function hydrateHybridLocalControl(
+    matterNodeId: string,
+    nodeId: string,
+  ): Promise<void> {
+    try {
+      if (await getMatterMetadata(nodeId)) {
+        return;
+      }
+      const hydrated = await readHybridSetupFromDevice(
+        store.userStore.user,
+        matterNodeId,
+      );
+      // Logout clears storage; a late read must not write it back.
+      if (!hydrated || stopped) {
+        return;
+      }
+      await setMatterMetadata(hydrated.nodeId, hydrated.metadata);
+    } catch (error) {
+      console.warn(
+        `${MATTER_DISCOVERY_VERIFY_LOG} hybrid topology hydrate failed for matterNodeId=${matterNodeId}:`,
+        error,
+      );
+    }
+  }
+
+  /**
    * Applies Matter local transport to a CDF node.
    * On `add`, also kicks the matter retry helper so the post-login race
    * (subscribe-all ran before this transport was attached) recovers.
@@ -453,8 +551,7 @@ function createMatterLocalDiscoveryController(
     operation: "add" | "remove",
   ): void {
     const transportMeta = transportDetails.metadata as
-      | { matterNodeId?: string }
-      | undefined;
+      { matterNodeId?: string } | undefined;
     const matterNodeId =
       typeof transportMeta?.matterNodeId === "string"
         ? normalizeMatterNodeIdHex(transportMeta.matterNodeId)
@@ -462,6 +559,42 @@ function createMatterLocalDiscoveryController(
 
     if (matterNodeId) {
       setMatterNodeReachability(matterNodeId, operation === "add");
+      // Tell the SDK the node is on the LAN, so control goes over Wi-Fi.
+      // Only Neo Matter listens; for other SDKs this resolves false.
+      // Seed the store from the device once the LAN path exists, else the card
+      // renders defaults (power off) until Control is opened and reads live.
+      // Must follow the SDK update: the read self-skips without matter_local.
+      void reportMatterReachability(
+        store.userStore.user,
+        matterNodeId,
+        (transportDetails.metadata ?? {}) as Record<string, unknown>,
+        operation,
+      )
+        .catch((error: unknown) => {
+          console.warn(
+            `${MATTER_DISCOVERY_VERIFY_LOG} reachability update failed for matterNodeId=${matterNodeId}:`,
+            error,
+          );
+          return false;
+        })
+        .then((toldSdk) => {
+          if (operation !== "add" || stopped) return;
+          // A hybrid without a saved setup reads one off the device, else its
+          // controls keep going to the cloud. Not awaited: it can be slow.
+          if (toldSdk) {
+            void hydrateHybridLocalControl(matterNodeId, nodeId);
+          }
+          const espCDFUser = store.userStore.user;
+          if (!espCDFUser) return;
+          void readAttributesForNodeId(espCDFUser, nodeId).catch(
+            (error: unknown) => {
+              console.warn(
+                `${MATTER_DISCOVERY_VERIFY_LOG} seed read failed for nodeId=${nodeId}:`,
+                error,
+              );
+            },
+          );
+        });
     }
 
     handleNodeTransportUpdate(store, nodeId, transportDetails, operation);
@@ -476,18 +609,16 @@ function createMatterLocalDiscoveryController(
       return;
     }
 
-    console.log(
-      `${MATTER_DISCOVERY_VERIFY_LOG} transport add: nodeId=${nodeId} type=${transportDetails.type}`,
-      transportDetails.metadata,
-    );
+    // A name the device missed while unreachable can reach it now.
+    void retryMatterNameNow(nodeId);
+
     // Recover from the post-login race: the base SDK kicks off
     // `subscribeToAllNodes` ~5s after `syncHomeWithNodes`, but the matter
     // local probe can take longer to attach the `matter_local` transport.
     // When that happens, the matter channel reports
     // `No available subscription channels for node …` and never retries.
-    // Now that a channel is available, re-subscribe just this node — the
-    // matter channel is idempotent, so this is a no-op when the initial
-    // subscribe already succeeded.
+    // Now that the node is reachable, re-subscribe it so the manager
+    // re-evaluates which channel serves it and moves it onto matter.
     void retrySubscribeForNodeId(store.userStore.user, nodeId).catch(
       (error: unknown) => {
         console.warn(
@@ -499,6 +630,7 @@ function createMatterLocalDiscoveryController(
   }
 
   function onMatterDiscovered(event: unknown): void {
+    if (stopped) return;
     rebuildMatterNodeIdMap();
 
     const payload = (
@@ -531,10 +663,29 @@ function createMatterLocalDiscoveryController(
       return;
     }
 
+    const transportMeta = transportDetails.metadata as {
+      host?: string;
+      port?: number;
+      matterNodeId?: string;
+    };
+    const discoveredMatterNodeId = transportMeta.matterNodeId
+      ? normalizeMatterNodeIdHex(transportMeta.matterNodeId)
+      : undefined;
+    if (
+      discoveredMatterNodeId &&
+      wasJustHandled(
+        discoveredMatterNodeId,
+        `add|${transportMeta.host}|${transportMeta.port}`,
+      )
+    ) {
+      return;
+    }
+
     applyMatterLocalTransport(nodeId, transportDetails, "add");
   }
 
   function onMatterDiscoveryLost(event: unknown): void {
+    if (stopped) return;
     rebuildMatterNodeIdMap();
 
     const payload = (
@@ -543,11 +694,7 @@ function createMatterLocalDiscoveryController(
     if (!payload) return;
 
     const pendingKey = payloadMatterNodeIdKey(payload);
-    if (pendingKey && pendingByMatterNodeId.delete(pendingKey)) {
-      console.log(
-        `${MATTER_DISCOVERY_VERIFY_LOG} drop pending discovery on lost event: matterNodeId=${pendingKey}`,
-      );
-    }
+    if (pendingKey) pendingByMatterNodeId.delete(pendingKey);
 
     const nodeId = resolveNodeIdFromPayload(payload);
     if (!nodeId) {
@@ -559,7 +706,21 @@ function createMatterLocalDiscoveryController(
 
     const lostMatterNodeId = payloadMatterNodeIdKey(payload);
     if (lostMatterNodeId) {
+      if (wasJustHandled(lostMatterNodeId, "remove")) {
+        return;
+      }
       setMatterNodeReachability(lostMatterNodeId, false);
+      void reportMatterReachability(
+        store.userStore.user,
+        lostMatterNodeId,
+        {},
+        "remove",
+      ).catch((error: unknown) => {
+        console.warn(
+          `${MATTER_DISCOVERY_VERIFY_LOG} reachability update failed for matterNodeId=${lostMatterNodeId}:`,
+          error,
+        );
+      });
     }
 
     applyMatterLocalTransport(
@@ -569,10 +730,6 @@ function createMatterLocalDiscoveryController(
         metadata: {},
       },
       "remove",
-    );
-    console.log(
-      `${MATTER_DISCOVERY_VERIFY_LOG} transport remove: nodeId=${nodeId} type=${MATTER_LOCAL_TRANSPORT_KEY}`,
-      payload,
     );
   }
 
@@ -609,7 +766,31 @@ function createMatterLocalDiscoveryController(
 
   // ─── Lifecycle ─────────────────────────────────────────────────────────
 
+  /** Unsubscribes the discovery events; a failure is logged, not thrown. */
+  async function unsubscribeDiscoveryEvents(
+    espCDFUser: NonNullable<ESPCDF["userStore"]["user"]>,
+  ): Promise<void> {
+    try {
+      await espCDFUser.unsubscribeFromEvent(
+        MATTER_LOCAL_DISCOVERY_EVENT,
+        onMatterDiscovered,
+      );
+      await espCDFUser.unsubscribeFromEvent(
+        MATTER_LOCAL_DISCOVERY_LOST_EVENT,
+        onMatterDiscoveryLost,
+      );
+    } catch (error: unknown) {
+      console.warn(
+        `${MATTER_DISCOVERY_VERIFY_LOG} matter discovery unsubscribe failed:`,
+        error,
+      );
+    }
+    matterDiscoverySubscribed = false;
+    subscribedUser = null;
+  }
+
   async function ensureMatterDiscoveryReady(): Promise<void> {
+    if (stopped) return;
     rebuildMatterNodeIdMap();
     const home = store.getCurrentHome() as ESPCDFGroup | null;
     if (!home?.isMatter) return;
@@ -636,10 +817,6 @@ function createMatterLocalDiscoveryController(
           | { startDiscovery?: (params: Record<string, string>) => void }
           | undefined;
         if (espDiscoveryModule?.startDiscovery) {
-          console.log(
-            `${MATTER_DISCOVERY_VERIFY_LOG} iOS direct matter browse → ESPDiscoveryModule.startDiscovery:`,
-            { serviceType: MDNS_SERVICE_TYPE_MATTER_OPERATIONAL, domain: MDNS_DOMAIN_LOCAL },
-          );
           espDiscoveryModule.startDiscovery({
             serviceType: MDNS_SERVICE_TYPE_MATTER_OPERATIONAL,
             domain: MDNS_DOMAIN_LOCAL,
@@ -657,6 +834,12 @@ function createMatterLocalDiscoveryController(
           onMatterDiscoveryLost,
         );
         matterDiscoverySubscribed = true;
+        subscribedUser = espCDFUser;
+        // stop() ran meanwhile and had nothing to undo yet.
+        if (stopped) {
+          await unsubscribeDiscoveryEvents(espCDFUser);
+          return;
+        }
       } catch (error: unknown) {
         // Leave matterDiscoverySubscribed false so the next start() retries.
         console.warn(
@@ -666,6 +849,8 @@ function createMatterLocalDiscoveryController(
       }
     }
 
+    if (stopped) return;
+
     // Fabric bootstrap (CASE session) runs after browse; slow on iOS and must not gate `_matter._tcp` start.
     try {
       await bootstrapMatterFabricForOperationalDiscovery(store);
@@ -673,6 +858,17 @@ function createMatterLocalDiscoveryController(
       console.warn(
         `${MATTER_DISCOVERY_VERIFY_LOG} fabric bootstrap failed:`,
         error,
+      );
+    }
+    if (stopped) return;
+
+    // Fabric is in the native session now, so targets can be pushed for real.
+    nativeFabricReady = true;
+    const bootstrappedHome = store.getCurrentHome() as ESPCDFGroup | null;
+    if (bootstrappedHome?.isMatter) {
+      syncMatterDiscoveryTargets(
+        bootstrappedHome.id,
+        Array.from(matterNodeToNodeIdMap.keys()),
       );
     }
 
@@ -715,23 +911,63 @@ function createMatterLocalDiscoveryController(
 
   return {
     start(): void {
-      void ensureMatterDiscoveryReady();
+      // Retries of missed device names find nodes here and run when a
+      // device's Matter link comes up.
+      if (!nameRetryHooks) {
+        nameRetryHooks = [
+          registerMatterNameRetryNodeLookup((nodeId) =>
+            store.nodeStore.getNodeById(nodeId),
+          ),
+          onMatterLinkLive((subscribedId) => {
+            // Classic subscribes under the node id, Neo under the Matter id.
+            const nodeId = store.nodeStore.getNodeById(subscribedId)
+              ? subscribedId
+              : matterNodeToNodeIdMap.get(
+                  normalizeMatterNodeIdHex(subscribedId) ??
+                    subscribedId.toLowerCase(),
+                );
+            if (nodeId) {
+              void retryMatterNameNow(nodeId);
+            }
+          }),
+        ];
+      }
+      const setup = ensureMatterDiscoveryReady().finally(() => {
+        if (setupInFlight === setup) setupInFlight = null;
+      });
+      setupInFlight = setup;
     },
     async stop(): Promise<void> {
-      const espCDFUser = store.userStore.user;
-      if (espCDFUser && matterDiscoverySubscribed) {
-        await espCDFUser.unsubscribeFromEvent(
-          MATTER_LOCAL_DISCOVERY_EVENT,
-          onMatterDiscovered,
-        );
-        await espCDFUser.unsubscribeFromEvent(
-          MATTER_LOCAL_DISCOVERY_LOST_EVENT,
-          onMatterDiscoveryLost,
-        );
-      }
+      stopped = true;
+      // Listeners go first so no event lands while the unsubscribe awaits.
       if (nativeDiscoveryListeners) {
         nativeDiscoveryListeners.forEach((sub) => sub.remove());
         nativeDiscoveryListeners = null;
+      }
+      // iOS: stop the `_matter._tcp` browse this file started; the local
+      // control stop no longer stops it for us.
+      if (Platform.OS === "ios") {
+        const espDiscoveryModule = NativeModules.ESPDiscoveryModule as
+          | { stopDiscoveryForType?: (serviceType: string) => void }
+          | undefined;
+        espDiscoveryModule?.stopDiscoveryForType?.(
+          MDNS_SERVICE_TYPE_MATTER_OPERATIONAL,
+        );
+      }
+      nameRetryHooks?.forEach((undo) => undo());
+      nameRetryHooks = null;
+      if (setupInFlight) {
+        let waitLimit: ReturnType<typeof setTimeout> | undefined;
+        await Promise.race([
+          setupInFlight.catch(() => undefined),
+          new Promise<void>((resolve) => {
+            waitLimit = setTimeout(resolve, SETUP_WAIT_LIMIT_MS);
+          }),
+        ]);
+        clearTimeout(waitLimit);
+      }
+      if (subscribedUser) {
+        await unsubscribeDiscoveryEvents(subscribedUser);
       }
       if (homeNodeSetReaction) {
         homeNodeSetReaction();
@@ -740,6 +976,7 @@ function createMatterLocalDiscoveryController(
       matterDiscoverySubscribed = false;
       matterNodeToNodeIdMap = new Map();
       pendingByMatterNodeId.clear();
+      lastEventByMatterNodeId.clear();
       lastSyncedHomeId = null;
       lastSyncedTargets = [];
       lastRebuildSignature = null;
@@ -751,7 +988,37 @@ function createMatterLocalDiscoveryController(
 
 // ─── Public entry ───────────────────────────────────────────────────────────
 
-let controllerSingleton: MatterLocalDiscoveryController | null = null;
+let controllerSingleton: {
+  store: ESPCDF;
+  user: ESPCDF["userStore"]["user"];
+  controller: MatterLocalDiscoveryController;
+} | null = null;
+
+/** Old controllers while they stop, in order; a new one waits for them. */
+let previousControllerStopping: Promise<void> | null = null;
+
+/**
+ * Stops discovery and forgets the controller, so the next start makes a new
+ * one for the current store. Runs on logout and on SDK switch.
+ * @returns Promise settled once the old controller has stopped.
+ */
+const stopMatterLocalDiscovery = (): Promise<void> => {
+  const current = controllerSingleton;
+  controllerSingleton = null;
+  if (!current) {
+    return previousControllerStopping ?? Promise.resolve();
+  }
+  const stopping = (previousControllerStopping ?? Promise.resolve())
+    .then(() => current.controller.stop())
+    .catch((error: unknown) => {
+      console.warn(`${MATTER_DISCOVERY_VERIFY_LOG} discovery stop failed:`, error);
+    })
+    .finally(() => {
+      if (previousControllerStopping === stopping) previousControllerStopping = null;
+    });
+  previousControllerStopping = stopping;
+  return stopping;
+};
 
 /**
  * Starts SDK-managed Matter local discovery and keeps CDF node transports in sync.
@@ -760,16 +1027,39 @@ let controllerSingleton: MatterLocalDiscoveryController | null = null;
  * CDF user, rebuild the node-id map on each call (refresh / home switch), and
  * route discovered/lost payloads through the transport store.
  *
- * Idempotent across calls — re-invocations re-run `ensureMatterDiscoveryReady`
- * but reuse the same controller instance + event subscriptions.
+ * Safe to call repeatedly: one controller per session. After logout or an
+ * SDK switch the next call makes a new one.
  * @param store - The CDF store instance that manages application state.
  */
 const startMatterLocalDiscovery = (store: ESPCDF): void => {
-  if (!controllerSingleton) {
-    controllerSingleton = createMatterLocalDiscoveryController(store);
+  // Never let a controller made for another store or user run for this one.
+  if (
+    controllerSingleton &&
+    (controllerSingleton.store !== store ||
+      controllerSingleton.user !== store.userStore.user)
+  ) {
+    void stopMatterLocalDiscovery();
   }
-  controllerSingleton.start();
+  if (!controllerSingleton) {
+    controllerSingleton = {
+      store,
+      user: store.userStore.user,
+      controller: createMatterLocalDiscoveryController(store),
+    };
+  }
+  const { controller } = controllerSingleton;
+  if (previousControllerStopping) {
+    // The old one clears shared native state as it stops; start after it.
+    void previousControllerStopping.then(() => {
+      // Another stop may have dropped this controller in the meantime.
+      if (controllerSingleton?.controller === controller) controller.start();
+    });
+    return;
+  }
+  controller.start();
 };
+
+onSessionEnd(stopMatterLocalDiscovery);
 
 registerMatterDiscoveryOnNodesAddedKick(() => {
   if (ESPCDF.instance) {

@@ -8,14 +8,14 @@ import { useCallback, useMemo } from "react";
 import type { ESPCDFNode, ESPCDFDevice } from "@store";
 import { deepClone } from "@shared/utils/common";
 import { getEventInfoFromEvents } from "@features/automation/utils/automationManagement";
-import {
-  sortByConnectivity,
-  isAutomationMatterIneligibleNode,
-} from "@shared/utils/eventDeviceSelection";
+import { sortByConnectivity } from "@shared/utils/eventDeviceSelection";
+import { filterExcludedParamTypes } from "@shared/utils/paramUtils";
+import { isAutomationMatterIneligibleNode } from "@features/automation/utils/automationDeviceEligibility";
 import { useCDF } from "@shared/hooks/useCDF";
 import { useAutomation } from "@context/automation.context";
 import { useDeviceSelectionBase } from "@features/automation/hooks/useDeviceSelectionBase";
 import type { DeviceSelectionData } from "@src/types/global";
+import { getDeviceDisplayName } from "@shared/utils/deviceDisplayName";
 
 // --- Result types (structured outcomes for UI to interpret) ---
 
@@ -69,12 +69,16 @@ export function useEventDeviceSelection(
     const allDevices: DeviceSelectionData[] = [];
 
     automationNodes.forEach((node) => {
-      // Matter-backed nodes can't drive cloud automations. Check runs on the
-      // original — the deepClone below strips the matterNodeId getter.
+      // Pure-Matter nodes have no cloud stack to drive an automation.
       if (isAutomationMatterIneligibleNode(node)) return;
       const nodeDevices = node?.devices ?? [];
       nodeDevices
-        .filter((device) => device.params && device.params.length > 0)
+        // Count what the param screen will actually show, not raw params — a
+        // device whose only params are excluded would open to an empty list.
+        .filter(
+          (device) =>
+            (filterExcludedParamTypes(device.params)?.length ?? 0) > 0,
+        )
         .forEach((device) => {
           const isSelected =
             !!currentEventInfo &&
@@ -115,7 +119,7 @@ export function useEventDeviceSelection(
       setSelectedEventDevice({
         nodeId: device.node.id,
         deviceName: device.device.name,
-        displayName: device.device.displayName ?? "",
+        displayName: getDeviceDisplayName(device.device, device.node),
       });
 
       return {

@@ -13,6 +13,7 @@ import { useTranslation } from "react-i18next";
 import type { ESPCDFGroupSharingRequest } from "@store";
 import { ESPCDFGroupSharingStatus } from "@store";
 import type { SharingItem } from "@src/types/global";
+import { bootstrapMatterFabricsForGroups } from "@features/matter/utils/matterCommissioningHelpers";
 
 type ActionLoadingEntry = {
   acceptLoading?: boolean;
@@ -110,11 +111,24 @@ export const useNotificationCenter = () => {
     try {
       if (accept) {
         await item.accept();
-        // syncHomeWithNodes covers every home, so the accepted group's nodes
-        // land in the store and get subscribed with no special-casing here.
-        await syncHomeWithNodes({ force: true });
+        toast.showSuccess(t("user.notifications.sharingRequestAccepted"));
+        // Lists the accepted home. Its nodes load, and get live updates, when
+        // the user opens it (loadHomeNodes). A failed refresh only logs.
+        await syncHomeWithNodes({ force: true }).catch((refreshError) =>
+          console.warn("[NotificationCenter] home refresh after accept failed:", refreshError),
+        );
+        // Shared Matter homes additionally need fabric credentials (user NOC)
+        // on this phone. Fire-and-forget: never blocks or fails the accept.
+        if (store) {
+          void bootstrapMatterFabricsForGroups(
+            store,
+            item.groupIds ?? [],
+            "share accepted",
+          );
+        }
       } else {
         await item.decline();
+        toast.showSuccess(t("user.notifications.sharingRequestDeclined"));
       }
       setSharingList((prev) =>
         prev.map((item) =>
@@ -124,11 +138,6 @@ export const useNotificationCenter = () => {
         )
       );
       await loadSharingRequests();
-      toast.showSuccess(
-        accept
-          ? t("user.notifications.sharingRequestAccepted")
-          : t("user.notifications.sharingRequestDeclined")
-      );
     } catch (error) {
       // A failed accept may still consume the request server-side (e.g. a room
       // invite for a user who already has home access is rejected only at

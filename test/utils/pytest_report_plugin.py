@@ -713,6 +713,14 @@ class PytestReportPlugin:
             pass
         return ""
 
+    def _deployment_label(self) -> str:
+        """'Neo' or 'Classic' for the email subject and banner; '' when the deployment is unknown."""
+        name = self._deployment_name()
+        if not name:
+            return ""
+        from utils.registered_user_resolver import deployment_type
+        return "Neo" if deployment_type(name) == "rmneo" else "Classic"
+
     def _active_sdk(self) -> str:
         """Active SDK flavor: ACTIVE_SDK env override, else the repo-root .env ACTIVE_SDK. Cached per run."""
         if self._active_sdk_value is not None:
@@ -921,6 +929,9 @@ class PytestReportPlugin:
         marker_display = self._marker_display()
         if marker_display:
             subject = f"{marker_display.title()} {subject}"
+        deployment_label = self._deployment_label()
+        if deployment_label:
+            subject = f"{deployment_label} {subject}"
         app_version = self._app_version()
         if app_version:
             subject = f"{subject} - v{app_version}"
@@ -937,6 +948,7 @@ class PytestReportPlugin:
             attach_report=attach_report,
             attach_screenshot=attach_screenshot,
             app_version=app_version,
+            deployment_label=deployment_label,
             git_info=git_ref_info(),
         )
         

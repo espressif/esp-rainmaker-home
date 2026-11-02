@@ -906,6 +906,8 @@ export interface DeviceNameProps {
   isSaving: boolean;
   isConnected: boolean;
   disabled: boolean;
+  /** Cap enforced when the rename lands on Matter NodeLabel; unset means no cap. */
+  maxNameLength?: number;
 }
 
 export interface OTAProps {

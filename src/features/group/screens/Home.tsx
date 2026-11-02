@@ -17,6 +17,7 @@ import { useHomeScreen } from "@features/group/hooks";
 import { useExitAppConfirmation } from "@shared/hooks/useExitAppConfirmation";
 import { getFeatures } from "@/config/features.config";
 import { ALL_DEVICES_TAB_ID, HOME_REDIRECT_ADD_DEVICE } from "@features/group/utils/constants";
+import { pickHomeEmptyListState } from "@features/group/utils/homeListState";
 
 // Components
 import {
@@ -36,6 +37,7 @@ import {
   RoomControlSwitch,
   AddYourFirstDeviceBanner,
   HomeDeviceSkeletonList,
+  HomeLoadFailedNotice,
 } from "@features/group/components";
 import { testProps } from "@shared/utils/testProps";
 
@@ -51,6 +53,7 @@ const HomeScreen = () => {
   const { t } = useTranslation();
   const {
     isLoading,
+    homeLoadFailed,
     isNavigatingToAddDevice,
     refreshing,
     selectedRoom,
@@ -95,11 +98,13 @@ const HomeScreen = () => {
 
   const listDevices = isRoomSelected ? filteredRoomDevices : roomDevices;
 
-  /** Device/room card skeletons while initializing and the list is still empty. */
-  const showDeviceSkeleton =
-    isLoading &&
-    listDevices.length === 0 &&
-    !showGroupControlOnHome;
+  /** Skeletons, retry notice, empty CTA, or nothing in place of the list. */
+  const emptyListState = pickHomeEmptyListState({
+    isLoading,
+    homeLoadFailed,
+    deviceCount: listDevices.length,
+    showsGroupControls: showGroupControlOnHome,
+  });
 
   const listHeader = (
     <View style={{ width: "100%" }}>
@@ -107,7 +112,7 @@ const HomeScreen = () => {
         activeGroup={selectedHome}
         onDropdownPress={handleDropdownPress}
         image={require("@assets/images/home.png")}
-        isHomeNameLoading={isLoading && !selectedHome?.name}
+        isHomeNameLoading={(isLoading || homeLoadFailed) && !selectedHome?.name}
       />
       <Tabs
         tabs={roomTabs}
@@ -136,11 +141,6 @@ const HomeScreen = () => {
     </View>
   );
 
-  const showEmptyCta =
-    !isLoading &&
-    listDevices.length === 0 &&
-    !showGroupControlOnHome;
-
   /** Block add-device until home init finishes and a home is selected. */
   const isAddDeviceDisabled =
     isLoading || isNavigatingToAddDevice || !selectedHome;
@@ -148,16 +148,22 @@ const HomeScreen = () => {
   /** Header spinner while home init or add-device navigation is in flight. */
   const showHeaderSpinner = isLoading || isNavigatingToAddDevice;
 
-  /** Skeleton device rows, empty CTA, or null — always inside the FlatList. */
-  const listEmpty = showDeviceSkeleton ? (
-    <HomeDeviceSkeletonList />
-  ) : showEmptyCta ? (
-    <AddYourFirstDeviceBanner
-      redirectOperations={redirectOperations}
-      isNavigating={isNavigatingToAddDevice}
-      qaId="banner_add_first_device"
-    />
-  ) : null;
+  /** Skeleton rows, retry notice, empty CTA, or null — always inside the FlatList. */
+  const listEmpty =
+    emptyListState === "loading" ? (
+      <HomeDeviceSkeletonList />
+    ) : emptyListState === "loadFailed" ? (
+      <View>
+        <HomeLoadFailedNotice onRetry={onRefresh} retrying={refreshing} />
+        <HomeDeviceSkeletonList />
+      </View>
+    ) : emptyListState === "addFirstDevice" ? (
+      <AddYourFirstDeviceBanner
+        redirectOperations={redirectOperations}
+        isNavigating={isNavigatingToAddDevice}
+        qaId="banner_add_first_device"
+      />
+    ) : null;
 
   return (
     <>

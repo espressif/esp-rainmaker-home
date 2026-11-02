@@ -28,6 +28,7 @@ import {
   PARAM_CONTROL_THROTTLE_MS,
   PARAM_INCOMING_UPDATE_DEBOUNCE_MS,
 } from "@shared/utils/constants";
+import { buildParamControlMeta } from "@shared/utils/paramUtils";
 
 /**
  * ParamWrap
@@ -81,25 +82,22 @@ const ParamWrap = observer(
      * ParamControlWrap / DeviceCard).
      */
     useEffect(() => {
+      // Only a user change on this control arms the hold
+      // (armIncomingUpdateDebounce); while it runs, the pending timer adopts
+      // the settled store value. Any other incoming value is applied at once.
       if (paramUpdateDelayTimeoutRef.current === null) {
         state.value = param.value;
       }
+      // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional hook deps
+    }, [param.value, state, state.value]);
 
-      if (paramUpdateDelayTimeoutRef.current !== null) {
-        clearTimeout(paramUpdateDelayTimeoutRef.current);
-      }
-      paramUpdateDelayTimeoutRef.current = setTimeout(() => {
-        state.value = param.value;
-        paramUpdateDelayTimeoutRef.current = null;
-      }, PARAM_INCOMING_UPDATE_DEBOUNCE_MS);
-
+    useEffect(() => {
       return () => {
         if (paramUpdateDelayTimeoutRef.current !== null) {
           clearTimeout(paramUpdateDelayTimeoutRef.current);
         }
       };
-      // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional hook deps
-    }, [param.value, state, state.value]);
+    }, []);
 
     /**
      * Arms the incoming-update quiet period so a stale `param.value` is not
@@ -196,10 +194,7 @@ const ParamWrap = observer(
             value: state.value,
             onValueChange: handleValueChange,
             disabled: disabled,
-            meta: {
-              ...getParamBounds(param),
-              dataType: param.dataType,
-            },
+            meta: buildParamControlMeta(param),
             compact: compact,
           },
         );

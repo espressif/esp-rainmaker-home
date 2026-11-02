@@ -11,6 +11,9 @@ import com.amazonaws.util.StringUtils
 import com.facebook.react.bridge.*
 import com.facebook.react.modules.core.DeviceEventManagerModule
 import java.util.UUID
+import java.util.concurrent.LinkedBlockingQueue
+import java.util.concurrent.ThreadPoolExecutor
+import java.util.concurrent.TimeUnit
 
 /**
  * React Native bridge module for AWS IoT MQTT using temporary session credentials.
@@ -32,6 +35,25 @@ class ESPMQTTModule(private val reactContext: ReactApplicationContext) :
         Log.e(tag, "[MQTT] $msg", e)
     }
 
+    /** Guards the fields below: React calls, AWS callbacks and timers run on different threads. */
+    private val lock = Any()
+    private val mainHandler = Handler(Looper.getMainLooper())
+
+    /**
+     * A few shared threads for closing clients, whose disconnect can block on a dead
+     * socket: one stuck close never holds up the others. Idle threads end after 30 s.
+     */
+    private val closeExecutor = ThreadPoolExecutor(
+        CLOSE_THREADS,
+        CLOSE_THREADS,
+        30L,
+        TimeUnit.SECONDS,
+        LinkedBlockingQueue()
+    ) { task ->
+        Thread(task, "ESPMQTT-close").apply { isDaemon = true }
+    }.apply { allowCoreThreadTimeOut(true) }
+
+    /** The client in use. Callbacks from a client that was replaced or closed are ignored. */
     private var mqttManager: AWSIotMqttManager? = null
 
     /** Lifecycle of the MQTT client from the module's perspective. */
@@ -43,15 +65,44 @@ class ESPMQTTModule(private val reactContext: ReactApplicationContext) :
 
     private var state = State.DISCONNECTED
 
-    /**
-     * When true, status callbacks from intentional teardown (`disconnect` /
-     * `releaseAndReconnect`) are not emitted to JS — only unexpected drops
-     * and successful connects should notify the app.
-     */
-    private var suppressConnectionStatusEvents = false
+    /** The connect() call still waiting for its outcome, if any. */
+    private var pendingConnect: ConnectAttempt? = null
 
     /** Last `connected` value emitted on `mqttConnectionStatus` (dedupe). */
     private var lastEmittedConnected: Boolean? = null
+
+    /**
+     * One connect() call plus any callers that joined it. Its promises are answered
+     * exactly once, by the first outcome: connected, failed, timed out or cancelled.
+     */
+    private class ConnectAttempt(firstCaller: Promise) {
+        private val callers = mutableListOf(firstCaller)
+        private var answered = false
+
+        /** Gives up on the attempt if it has not answered by then. */
+        var timeout: Runnable? = null
+
+        /** Adds a caller; false when the attempt has already answered. */
+        @Synchronized
+        fun join(promise: Promise): Boolean {
+            if (answered) return false
+            callers.add(promise)
+            return true
+        }
+
+        /** Returns the callers the first time only; later calls get none. */
+        @Synchronized
+        private fun takeCallers(): List<Promise> {
+            if (answered) return emptyList()
+            answered = true
+            return callers.toList().also { callers.clear() }
+        }
+
+        fun succeed() = takeCallers().forEach { it.resolve(null) }
+
+        fun fail(code: String, message: String, cause: Throwable?) =
+            takeCallers().forEach { it.reject(code, message, cause) }
+    }
 
     /** Module name exposed to React Native (`NativeModules.ESPMQTTModule`). */
     override fun getName(): String = "ESPMQTTModule"
@@ -78,18 +129,26 @@ class ESPMQTTModule(private val reactContext: ReactApplicationContext) :
      * Expected keys: `accessKeyId`, `secretAccessKey`, `sessionToken`, `endpoint`;
      * optional `clientId` (defaults to a random `android-` prefix);
      * optional `region` (e.g. `us-east-1`) if the endpoint host does not follow `*.iot.<region>.*`.
-     * Resolves immediately if already connecting or connected; otherwise resolves on first
-     * successful connection or rejects on invalid args / connection failure.
+     * Resolves at once if already connected; if a connect is already running, waits for that one.
+     * Otherwise answers exactly once: resolves when connected, rejects when the attempt fails,
+     * gives no answer within [CONNECT_TIMEOUT_MS], or is cancelled by [disconnect].
      *
      * @param config Credential and endpoint map from JavaScript.
-     * @param promise Resolved with null on success, or rejected with `invalid_args` / `connection_failed`.
+     * @param promise Resolved with null on success, or rejected with `invalid_args` /
+     * `connection_failed` / `connection_timeout` / `disconnected`.
      */
     @ReactMethod
     fun connect(config: ReadableMap, promise: Promise) {
 
-        if (state == State.CONNECTING || state == State.CONNECTED) {
-            promise.resolve(null)
-            return
+        synchronized(lock) {
+            if (state == State.CONNECTED) {
+                promise.resolve(null)
+                return
+            }
+            if (pendingConnect?.join(promise) == true) {
+                log("Connect already in progress; waiting for it")
+                return
+            }
         }
 
         val accessKeyId = config.getString("accessKeyId")
@@ -142,7 +201,14 @@ class ESPMQTTModule(private val reactContext: ReactApplicationContext) :
         val clientId = config.getString("clientId")?.takeIf { it.isNotEmpty() }
             ?: "android-" + UUID.randomUUID()
 
-        state = State.CONNECTING
+        val attempt = ConnectAttempt(promise)
+        synchronized(lock) {
+            pendingConnect = attempt
+            state = State.CONNECTING
+        }
+        val timeout = Runnable { onConnectTimedOut(attempt) }
+        attempt.timeout = timeout
+        mainHandler.postDelayed(timeout, CONNECT_TIMEOUT_MS)
 
         releaseAndReconnect {
             startConnect(
@@ -152,12 +218,25 @@ class ESPMQTTModule(private val reactContext: ReactApplicationContext) :
                 secretAccessKey,
                 sessionToken,
                 regionId,
-                promise
+                attempt
             )
         }
     }
 
     companion object {
+        /**
+         * Longest a connect() may take before it is given up and rejected. A working
+         * connect takes 1-3 s; without this cap a connect the AWS SDK never answers
+         * would leave the JS promise waiting forever.
+         */
+        private const val CONNECT_TIMEOUT_MS = 15_000L
+
+        /** Threads for closing old clients; see closeExecutor. */
+        private const val CLOSE_THREADS = 4
+
+        /** A close slower than this is logged: its disconnect was stuck on a dead socket. */
+        private const val SLOW_CLOSE_MS = 5_000L
+
         /** Region segment from IoT Core-style hostnames (no hardcoded region list). */
         private fun parseRegionIdFromIotHost(host: String): String? {
             val parts = host.split('.')
@@ -173,47 +252,100 @@ class ESPMQTTModule(private val reactContext: ReactApplicationContext) :
     }
 
     /**
-     * Disconnects any existing client, clears state after a short delay, then runs [onDone].
+     * Closes any existing client, waits a short moment, then runs [onDone].
      * Used before starting a new connection so the previous manager is fully torn down.
      */
     private fun releaseAndReconnect(onDone: () -> Unit) {
-        val existing = mqttManager
+        val existing = synchronized(lock) {
+            val current = mqttManager
+            mqttManager = null
+            lastEmittedConnected = false
+            current
+        }
 
         if (existing == null) {
             onDone()
             return
         }
 
-        suppressConnectionStatusEvents = true
-        try {
-            existing.disconnect()
-        } catch (e: Exception) {
-            logE("Disconnect error", e)
+        closeClient(existing)
+        mainHandler.postDelayed({ onDone() }, 1000)
+    }
+
+    /**
+     * Closes [manager] off the React thread, because its disconnect can block on a dead
+     * socket. It is already detached, so its own status callbacks are ignored.
+     */
+    private fun closeClient(manager: AWSIotMqttManager) {
+        closeExecutor.execute {
+            val startedAt = System.currentTimeMillis()
+            try {
+                manager.disconnect()
+            } catch (e: Exception) {
+                logE("Disconnect error", e)
+            }
+            val tookMs = System.currentTimeMillis() - startedAt
+            if (tookMs > SLOW_CLOSE_MS) logE("Closing an old client took $tookMs ms")
         }
+    }
 
-        Handler(Looper.getMainLooper()).postDelayed({
+    /** True when [manager] is the client in use, not one that was replaced or closed. */
+    private fun isCurrentClient(manager: AWSIotMqttManager): Boolean =
+        synchronized(lock) { mqttManager === manager }
 
-            mqttManager = null
+    /** Answers [attempt] with success and stops its timer. */
+    private fun answerConnected(attempt: ConnectAttempt) {
+        synchronized(lock) {
+            if (pendingConnect === attempt) pendingConnect = null
+        }
+        attempt.timeout?.let { mainHandler.removeCallbacks(it) }
+        attempt.succeed()
+    }
+
+    /** Answers [attempt] with a failure and stops its timer. A no-op once it has answered. */
+    private fun answerFailed(
+        attempt: ConnectAttempt,
+        code: String,
+        message: String,
+        cause: Throwable?
+    ) {
+        synchronized(lock) {
+            if (pendingConnect === attempt) pendingConnect = null
+        }
+        attempt.timeout?.let { mainHandler.removeCallbacks(it) }
+        attempt.fail(code, message, cause)
+    }
+
+    /** Gives up on [attempt] when the AWS SDK never reported an outcome for it. */
+    private fun onConnectTimedOut(attempt: ConnectAttempt) {
+        val stuckClient = synchronized(lock) {
+            if (pendingConnect !== attempt) return
+            pendingConnect = null
             state = State.DISCONNECTED
-            lastEmittedConnected = false
-            suppressConnectionStatusEvents = false
-
-            onDone()
-        }, 1000)
+            val current = mqttManager
+            mqttManager = null
+            current
+        }
+        logE("Connect gave no answer within ${CONNECT_TIMEOUT_MS / 1000} s; giving up on it")
+        stuckClient?.let { closeClient(it) }
+        attempt.fail(
+            "connection_timeout",
+            "MQTT connect gave no answer within ${CONNECT_TIMEOUT_MS / 1000} s",
+            null
+        )
     }
 
     /**
      * Emits `mqttConnectionStatus` to JS when [connected] differs from the
-     * last emitted value and intentional teardown is not in progress.
+     * last emitted value.
      */
     private fun emitConnectionStatus(connected: Boolean) {
-        if (suppressConnectionStatusEvents) {
-            return
+        synchronized(lock) {
+            if (lastEmittedConnected == connected) {
+                return
+            }
+            lastEmittedConnected = connected
         }
-        if (lastEmittedConnected == connected) {
-            return
-        }
-        lastEmittedConnected = connected
         val payload = Arguments.createMap()
         payload.putBoolean("connected", connected)
         emitEvent("mqttConnectionStatus", payload)
@@ -222,8 +354,8 @@ class ESPMQTTModule(private val reactContext: ReactApplicationContext) :
     /**
      * Creates [AWSIotMqttManager] via the region-aware factory (required for custom Neo
      * hosts that do not embed `*.iot.<region>.*`), connects with static session credentials,
-     * and drives [promise] from the AWS status callback (resolve on first Connected; reject
-     * on invalid args / fatal error with throwable).
+     * and answers [attempt] from the AWS status callback: Connected resolves it, a
+     * ConnectionLost before Connected (how the SDK reports a failed connect) rejects it.
      *
      * @param endpoint MQTT broker host (no scheme / `/mqtt` suffix).
      * @param clientId AWS IoT MQTT client id.
@@ -231,7 +363,7 @@ class ESPMQTTModule(private val reactContext: ReactApplicationContext) :
      * @param secretKey Temporary secret access key.
      * @param sessionToken Temporary session token.
      * @param regionId AWS region id (e.g. `us-east-1`) used for SigV4 on custom domains.
-     * @param promise Resolved with null on success, or rejected with `connection_failed`.
+     * @param attempt The connect() call this answers.
      */
     private fun startConnect(
         endpoint: String,
@@ -240,8 +372,15 @@ class ESPMQTTModule(private val reactContext: ReactApplicationContext) :
         secretKey: String,
         sessionToken: String,
         regionId: String,
-        promise: Promise
+        attempt: ConnectAttempt
     ) {
+        synchronized(lock) {
+            if (pendingConnect !== attempt) {
+                log("Connect was cancelled before it started")
+                return
+            }
+        }
+
         val manager: AWSIotMqttManager
         try {
             // Custom domains (e.g. mqtt.neo.rainmaker.espressif.com) have no region in the
@@ -254,8 +393,10 @@ class ESPMQTTModule(private val reactContext: ReactApplicationContext) :
             )
         } catch (e: Exception) {
             logE("Failed to create AWSIotMqttManager for endpoint=$endpoint region=$regionId", e)
-            state = State.DISCONNECTED
-            promise.reject("connection_failed", e)
+            synchronized(lock) {
+                if (pendingConnect === attempt) state = State.DISCONNECTED
+            }
+            answerFailed(attempt, "connection_failed", e.message ?: "MQTT client setup failed", e)
             return
         }
 
@@ -264,20 +405,23 @@ class ESPMQTTModule(private val reactContext: ReactApplicationContext) :
         // (`refresh()` is a no-op), so once that token expires the SDK's
         // internal auto-reconnect loop can never actually succeed - it just
         // cycles Reconnecting/ConnectionLost forever with the same stale
-        // creds. Worse, those status transitions write to the shared `state`
-        // field below, racing with an explicit `connect()` call made from JS
-        // with *fresh* credentials (see `ensureRmneoMqttConnected` on the JS
-        // side): if that call lands while this loop's status happens to be
-        // `Reconnecting`, the `state == CONNECTING` guard above short-circuits
-        // it, silently discarding the new credentials. Reconnection is
-        // instead driven entirely from JS, which re-fetches valid credentials
+        // creds, and a JS `connect()` with *fresh* credentials arriving
+        // during that loop would only join it. Reconnection is instead
+        // driven entirely from JS, which re-fetches valid credentials
         // before calling `connect()` again.
+        // With auto-reconnect off the SDK reports a failed connect as
+        // ConnectionLost (never a separate error status), so that is what
+        // rejects the connect() promise in onStatusChanged.
         manager.setAutoReconnect(false)
         manager.keepAlive = 40
 
-        mqttManager = manager
-
-        var isPromiseHandled = false
+        synchronized(lock) {
+            if (pendingConnect !== attempt) {
+                log("Connect was cancelled before it started")
+                return
+            }
+            mqttManager = manager
+        }
 
         val credentialsProvider = object : AWSCredentialsProvider {
             override fun getCredentials(): AWSCredentials {
@@ -287,76 +431,120 @@ class ESPMQTTModule(private val reactContext: ReactApplicationContext) :
             override fun refresh() {}
         }
 
-        suppressConnectionStatusEvents = false
+        try {
+            manager.connect(credentialsProvider) { status, throwable ->
+                onStatusChanged(manager, attempt, status, throwable)
+            }
+        } catch (e: Exception) {
+            logE("connect() threw", e)
+            synchronized(lock) {
+                if (mqttManager === manager) state = State.DISCONNECTED
+            }
+            answerFailed(attempt, "connection_failed", e.message ?: "MQTT connect failed", e)
+        }
+    }
 
-        manager.connect(credentialsProvider) { status, throwable ->
+    /**
+     * Handles one AWS status callback for [manager]. Callbacks from a client that
+     * was replaced or closed are ignored; a replaced client that still connects late
+     * is closed again so it does not linger.
+     */
+    private fun onStatusChanged(
+        manager: AWSIotMqttManager,
+        attempt: ConnectAttempt,
+        status: AWSIotMqttClientStatusCallback.AWSIotMqttClientStatus,
+        throwable: Throwable?
+    ) {
+        when (status) {
 
-            when (status) {
-
-                AWSIotMqttClientStatusCallback.AWSIotMqttClientStatus.Connected -> {
-                    state = State.CONNECTED
-                    log("Connected")
-                    emitConnectionStatus(true)
-
-                    if (!isPromiseHandled) {
-                        isPromiseHandled = true
-                        promise.resolve(null)
+            AWSIotMqttClientStatusCallback.AWSIotMqttClientStatus.Connected -> {
+                // Same locked step as CONNECTED, so the connect timeout cannot fire in between.
+                val isCurrent = synchronized(lock) {
+                    val current = mqttManager === manager
+                    if (current) {
+                        state = State.CONNECTED
+                        if (pendingConnect === attempt) pendingConnect = null
                     }
+                    current
                 }
-
-                AWSIotMqttClientStatusCallback.AWSIotMqttClientStatus.Connecting -> {
-                    state = State.CONNECTING
+                if (!isCurrent) {
+                    log("A replaced client connected late; closing it")
+                    closeClient(manager)
+                    return
                 }
+                log("Connected")
+                answerConnected(attempt)
+                emitConnectionStatus(true)
+            }
 
-                AWSIotMqttClientStatusCallback.AWSIotMqttClientStatus.Reconnecting -> {
-                    state = State.CONNECTING
+            AWSIotMqttClientStatusCallback.AWSIotMqttClientStatus.Connecting,
+            AWSIotMqttClientStatusCallback.AWSIotMqttClientStatus.Reconnecting -> {
+                synchronized(lock) {
+                    if (mqttManager === manager) state = State.CONNECTING
                 }
+            }
 
-                AWSIotMqttClientStatusCallback.AWSIotMqttClientStatus.ConnectionLost -> {
-                    state = State.DISCONNECTED
-                    log("Disconnected")
-                    if (throwable != null) logE("Connection lost", throwable)
-                    emitConnectionStatus(false)
-                }
-
-                else -> {
-                    logE("Unknown status: $status", throwable)
-
-                    if (!isPromiseHandled && throwable != null) {
-                        isPromiseHandled = true
+            AWSIotMqttClientStatusCallback.AWSIotMqttClientStatus.ConnectionLost -> {
+                val isCurrent = synchronized(lock) {
+                    val current = mqttManager === manager
+                    if (current) {
                         state = State.DISCONNECTED
-                        promise.reject("connection_failed", throwable)
+                        if (pendingConnect === attempt) pendingConnect = null
                     }
+                    current
                 }
+                if (!isCurrent) {
+                    return
+                }
+                log("Disconnected")
+                if (throwable != null) logE("Connection lost", throwable)
+                emitConnectionStatus(false)
+                // Lost before it was ever up = this connect failed. After Connected
+                // the attempt has already answered, so this does nothing.
+                answerFailed(
+                    attempt,
+                    "connection_failed",
+                    throwable?.message ?: "MQTT connection closed before it was up",
+                    throwable
+                )
+            }
+
+            else -> {
+                if (isCurrentClient(manager)) logE("Unknown status: $status", throwable)
             }
         }
     }
 
     /**
-     * Disconnects the MQTT client and clears local state.
+     * Disconnects the MQTT client and clears local state. A connect() still waiting
+     * is rejected with `disconnected`, so its caller never waits forever.
      *
-     * @param promise Resolved with null on success, or rejected with `error` if disconnect throws.
+     * @param promise Resolved with null.
      */
     @ReactMethod
     fun disconnect(promise: Promise) {
-
-        try {
-            suppressConnectionStatusEvents = true
-            mqttManager?.disconnect()
+        val (manager, attempt) = synchronized(lock) {
+            val current = mqttManager to pendingConnect
             mqttManager = null
+            pendingConnect = null
             state = State.DISCONNECTED
             lastEmittedConnected = false
-
-            log("Disconnected")
-
-            promise.resolve(null)
-        } catch (e: Exception) {
-            logE("disconnect() failed", e)
-            promise.reject("error", e.message)
-        } finally {
-            suppressConnectionStatusEvents = false
+            current
         }
+
+        if (attempt != null) {
+            attempt.timeout?.let { mainHandler.removeCallbacks(it) }
+            attempt.fail("disconnected", "MQTT disconnect() was called before the connection was up", null)
+        }
+        manager?.let { closeClient(it) }
+
+        log("Disconnected")
+        promise.resolve(null)
     }
+
+    /** The client, only while it is connected. */
+    private fun connectedClient(): AWSIotMqttManager? =
+        synchronized(lock) { mqttManager.takeIf { state == State.CONNECTED } }
 
     /**
      * Returns whether the module considers the client connected ([State.CONNECTED]).
@@ -365,7 +553,7 @@ class ESPMQTTModule(private val reactContext: ReactApplicationContext) :
      */
     @ReactMethod
     fun isConnected(promise: Promise) {
-        promise.resolve(state == State.CONNECTED)
+        promise.resolve(connectedClient() != null)
     }
 
     /**
@@ -377,9 +565,9 @@ class ESPMQTTModule(private val reactContext: ReactApplicationContext) :
      */
     @ReactMethod
     fun publish(topic: String, payload: String, promise: Promise) {
-        val manager = mqttManager
+        val manager = connectedClient()
 
-        if (state != State.CONNECTED || manager == null) {
+        if (manager == null) {
             promise.reject("not_connected", "MQTT not connected")
             return
         }
@@ -412,9 +600,9 @@ class ESPMQTTModule(private val reactContext: ReactApplicationContext) :
      */
     @ReactMethod
     fun subscribe(topic: String, promise: Promise) {
-        val manager = mqttManager
+        val manager = connectedClient()
 
-        if (state != State.CONNECTED || manager == null) {
+        if (manager == null) {
             promise.reject("not_connected", "MQTT not connected")
             return
         }
@@ -460,9 +648,9 @@ class ESPMQTTModule(private val reactContext: ReactApplicationContext) :
      */
     @ReactMethod
     fun unsubscribe(topic: String, promise: Promise) {
-        val manager = mqttManager
+        val manager = connectedClient()
 
-        if (state != State.CONNECTED || manager == null) {
+        if (manager == null) {
             promise.reject("not_connected", "MQTT not connected")
             return
         }
@@ -483,8 +671,13 @@ class ESPMQTTModule(private val reactContext: ReactApplicationContext) :
      * @param data Payload map.
      */
     private fun emitEvent(name: String, data: WritableMap) {
-        reactContext
-            .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
-            .emit(name, data)
+        // Called from AWS SDK threads; a JS reload in between must not crash the app.
+        try {
+            reactContext
+                .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
+                .emit(name, data)
+        } catch (e: Exception) {
+            logE("Could not send $name to JS", e)
+        }
     }
 }

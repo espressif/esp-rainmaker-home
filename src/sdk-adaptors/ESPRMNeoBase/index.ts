@@ -21,6 +21,7 @@ import {
     ESPRMNeoAuth,
     ESPRMNeoBaseConfig,
     ESPTransportMode,
+    type ESPRMNeoUser,
 } from "@espressif/rainmaker-neo-base-sdk";
 import { ESPCDFUser } from "@store";
 import { transformToESPCDFUser } from "./transformers/transformToESPCDFUser";
@@ -52,6 +53,8 @@ import {
     formatVerificationCodeSentDescription,
 } from "./utils/constants";
 import { Logger } from "./utils/logger";
+import { setCloudUpdateFilter } from "./utils/helpers/cloudUpdateFilter";
+import { clearParamDeliveries } from "./utils/helpers/paramDeliveryHelpers";
 import { SUCESS } from "@shared/utils/constants";
 import { ESPRMNeoBaseAdaptorIdentifier } from "@config/sdk.identifiers";
 
@@ -73,28 +76,49 @@ export class ESPRMNeoBaseSDKAdaptor implements ESPSDKAdaptor {
     _authInstance!: ESPRMNeoAuth;
 
     /**
-     * Stores the SDK config and eagerly initializes the underlying RMNeoBase SDK.
+     * Builds the CDF user from an SDK user.
+     *
+     * A seam, not a convenience: subclasses that add capabilities to groups or
+     * nodes (e.g. the Neo Matter adaptor) override this so every auth path
+     * returns their enriched user, instead of reimplementing login and its
+     * error mapping.
+     * @param user - SDK user, or null when not signed in.
+     * @param initialUserId - User id read from the id token.
+     * @returns CDF user.
+     */
+    protected transformUser(
+        user: ESPRMNeoUser | null,
+        initialUserId?: string,
+    ): ESPCDFUser {
+        return transformToESPCDFUser(user, initialUserId);
+    }
+
+    /**
+     * Stores the SDK config. Configuring the SDK is the bootstrap's job.
      * @param config - RMNeoBase SDK configuration (endpoints, transport, credentials).
      */
     constructor(config: ESPRMNeoBaseConfig) {
         this.config = config;
-        this.initializeSDK(this.config);
     }
 
     /**
      * Configures the RMNeoBase SDK and caches its auth instance.
      *
-     * Sets transport preference to local first, then MQTT, applies `config`, and
-     * resolves the shared auth instance used by every other method.
-     * @param config - RMNeoBase SDK configuration to apply.
+     * Sets transport preference to local first, then MQTT, applies `this.config`,
+     * and resolves the shared auth instance used by every other method. Called by
+     * the bootstrap on the adaptor it makes active, never from the constructor.
      * @returns CDF response indicating successful initialization.
      */
-    async initializeSDK(config: ESPRMNeoBaseConfig): Promise<ESPSDKAdaptorAPIResponse> {
+    async initializeSDK(): Promise<ESPSDKAdaptorAPIResponse> {
         ESPRMNeoBase.setTransportOrder([
             ESPTransportMode.local,
             ESPTransportMode.mqtt,
         ]);
-        ESPRMNeoBase.configure(config);
+        ESPRMNeoBase.configure(this.config);
+        // Plain Neo has no Matter link, so no cloud update is dropped.
+        setCloudUpdateFilter(undefined);
+        // Forget live-channel deliveries noted before this start.
+        clearParamDeliveries();
         this._authInstance = ESPRMNeoBase.getAuthInstance();
         return {
             status: SUCESS,
@@ -134,13 +158,13 @@ export class ESPRMNeoBaseSDKAdaptor implements ESPSDKAdaptor {
     async login(input: ESPSDKAdaptorAPIRequest<ESPCDFLoginRequestPayload>): Promise<ESPSDKAdaptorAPIDataResponse<ESPCDFUser>> {
         const { username, password } = input.request as { username: string, password: string };
         try {
-            const esprmngUser = await this._authInstance.login(username, password);
-            if (!esprmngUser) {
+            const esprmneoUser = await this._authInstance.login(username, password);
+            if (!esprmneoUser) {
                 throw new Error(ESPRMNEO_AUTH_ERR_LOGIN_NO_USER);
             }
-            const cdfUser = transformToESPCDFUser(
-                esprmngUser,
-                await getRmneoUserIdFromIdToken(esprmngUser),
+            const cdfUser = this.transformUser(
+                esprmneoUser,
+                await getRmneoUserIdFromIdToken(esprmneoUser),
             );
             return {
                 status: SUCESS,
@@ -162,13 +186,13 @@ export class ESPRMNeoBaseSDKAdaptor implements ESPSDKAdaptor {
      */
     async getCurrentLoggedInUser(): Promise<ESPSDKAdaptorAPIDataResponse<ESPCDFUser>> {
         try {
-            const esprmngUser = await this._authInstance.getLoggedInUser();
-            if (!esprmngUser) {
+            const esprmneoUser = await this._authInstance.getLoggedInUser();
+            if (!esprmneoUser) {
                 throw new Error(ESPRMNEO_AUTH_ERR_NO_LOGGED_IN_USER);
             }
-            const cdfUser = transformToESPCDFUser(
-                esprmngUser,
-                await getRmneoUserIdFromIdToken(esprmngUser),
+            const cdfUser = this.transformUser(
+                esprmneoUser,
+                await getRmneoUserIdFromIdToken(esprmneoUser),
             );
             return {
                 status: SUCESS,

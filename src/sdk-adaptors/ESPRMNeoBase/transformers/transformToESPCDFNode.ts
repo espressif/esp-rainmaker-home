@@ -18,7 +18,11 @@ import {
   ESPRMNeoService,
   clearNcfgVersionMarker,
 } from "@espressif/rainmaker-neo-base-sdk";
-import { makeCdfNodeParamsObservable } from "@sdk-adaptors/shared/utils/common";
+import {
+  keepLastKnownParamValues,
+  makeCdfNodeParamsObservable,
+  syncCdfNodeDisplayNames,
+} from "@sdk-adaptors/shared/utils/common";
 import { tryFactoryResetBeforeDelete } from "@sdk-adaptors/shared/utils/factoryReset";
 import { projectRegisteredTransportsOntoRawNode } from "@sdk-adaptors/shared/utils/projectRegisteredTransports";
 import { ESPRMNeoBaseAdaptorIdentifier } from "@config/sdk.identifiers";
@@ -199,6 +203,12 @@ export function transformToESPCDFNode(node: ESPRMNeoNode): ESPCDFNode {
     _raw: node,
   });
 
+  keepLastKnownParamValues(
+    cdfNode.devices ?? [],
+    ESPCDF.instance?.nodeStore?.getNodeById?.(nodeId)?.devices,
+  );
+  // Names need the whole node (its device count and own name).
+  syncCdfNodeDisplayNames(cdfNode);
   cdfNode.onPropertyChange(createPropertyChangeSyncCallback(node, cdfNode));
   makeCdfNodeParamsObservable(cdfNode);
 

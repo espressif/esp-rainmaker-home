@@ -7,6 +7,8 @@
 import { ESPCDFStorageAdapterInterface } from "@store";
 import asyncStorageAdapter from "@native-adaptors/implementations/ESPAsyncStorage";
 import {
+  ESPRMNeo_BASE_SDK_ID,
+  ESPRMNeoMatter_BASE_SDK_ID,
   normalizeSdkIdentifier,
   type SDKIdentifier,
 } from "./sdk.identifiers";
@@ -73,13 +75,32 @@ class RuntimeConfigManager {
    *
    * Unrecognized SDK ids are dropped so the env default applies.
    */
+  /**
+   * Rehydrates a persisted SDK id, upgrading the plain RMNeo base to the Matter
+   * adaptor.
+   *
+   * Deployments scanned before the config-scan mapper emitted the Matter id are
+   * still on disk carrying the base one, which resolves `matterCommissioning:
+   * false` — so "continue with saved" would silently keep Matter disabled with
+   * no way to fix it but forgetting the deployment. The Matter adaptor is the
+   * same stack plus the fabric verbs, so the upgrade only adds capability.
+   * @param stored - Raw id read from storage.
+   * @returns Canonical id, or `null` when unrecognized.
+   */
+  private _rehydrateSdkId(stored: string | null): SDKIdentifier | null {
+    const normalized = normalizeSdkIdentifier(stored);
+    return normalized === ESPRMNeo_BASE_SDK_ID
+      ? ESPRMNeoMatter_BASE_SDK_ID
+      : normalized;
+  }
+
   async loadFromStorage(): Promise<void> {
     try {
       const sdk = await this._storageAdapter.getItem(RUNTIME_CONFIG_STORAGE_KEYS.SDK);
       const raw = await this._storageAdapter.getItem(RUNTIME_CONFIG_STORAGE_KEYS.CONFIG);
 
       if (sdk) {
-        const normalized = normalizeSdkIdentifier(sdk);
+        const normalized = this._rehydrateSdkId(sdk);
         if (normalized) {
           this._sdk = normalized;
         } else {
@@ -105,7 +126,7 @@ class RuntimeConfigManager {
       const privateRaw = await this._storageAdapter.getItem(
         RUNTIME_CONFIG_STORAGE_KEYS.PRIVATE_CONFIG
       );
-      const normalizedPrivateSdk = normalizeSdkIdentifier(privateSdk);
+      const normalizedPrivateSdk = this._rehydrateSdkId(privateSdk);
       if (normalizedPrivateSdk && privateRaw) {
         this._privateDeployment = {
           sdk: normalizedPrivateSdk,

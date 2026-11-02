@@ -10,16 +10,58 @@ import React
 private let kMqttMessageEvent = "mqttMessageReceived"
 private let kMqttConnectionStatusEvent = "mqttConnectionStatus"
 private let kIotDataManagerKey = "com.espressif.ESPMQTTModule.IoT"
+/// Longest a connect() may take before it is given up and rejected.
+private let kConnectTimeoutSeconds: Double = 15
+
+/// One connect() call plus any callers that joined it. Answered exactly once, by
+/// the first outcome: connected, failed, timed out or cancelled. Used on `queue` only.
+private final class ConnectAttempt {
+  private var callers: [(resolve: RCTPromiseResolveBlock, reject: RCTPromiseRejectBlock)]
+  private var answered = false
+
+  init(resolve: @escaping RCTPromiseResolveBlock, reject: @escaping RCTPromiseRejectBlock) {
+    callers = [(resolve: resolve, reject: reject)]
+  }
+
+  /// Adds a caller; false once the attempt has answered.
+  func join(resolve: @escaping RCTPromiseResolveBlock, reject: @escaping RCTPromiseRejectBlock) -> Bool {
+    if answered { return false }
+    callers.append((resolve: resolve, reject: reject))
+    return true
+  }
+
+  func succeed() {
+    for caller in takeCallers() {
+      DispatchQueue.main.async { caller.resolve(nil) }
+    }
+  }
+
+  func fail(code: String, message: String) {
+    for caller in takeCallers() {
+      DispatchQueue.main.async { caller.reject(code, message, nil) }
+    }
+  }
+
+  /// Returns the callers the first time only; later calls get none.
+  private func takeCallers() -> [(resolve: RCTPromiseResolveBlock, reject: RCTPromiseRejectBlock)] {
+    if answered { return [] }
+    answered = true
+    let waiting = callers
+    callers = []
+    return waiting
+  }
+}
 
 @objc(ESPMQTTModule)
 class ESPMQTTModule: RCTEventEmitter {
 
   private let queue = DispatchQueue(label: "com.espressif.ESPMQTTModule", qos: .userInitiated)
-  private var connectPromiseHandled = false
+  /// The connect() call still waiting for its outcome, if any.
+  private var pendingConnect: ConnectAttempt?
+  /// Bumped for every new client; status callbacks from an older (replaced or closed) one are ignored.
+  private var clientGeneration = 0
   /// `AWSIoTDataManager(forKey:)` is non-optional in Swift; track registration locally (matches disconnect/remove lifecycle).
   private var hasActiveIoTRegistration = false
-  /// Suppresses status events during intentional teardown (`disconnect` / `teardownIoTClient`).
-  private var suppressConnectionStatusEvents = false
   /// Last `connected` value emitted on `mqttConnectionStatus` (dedupe).
   private var lastEmittedConnected: Bool?
 
@@ -31,11 +73,8 @@ class ESPMQTTModule: RCTEventEmitter {
     [kMqttMessageEvent, kMqttConnectionStatusEvent]
   }
 
-  /// Emits `mqttConnectionStatus` when [connected] changes and teardown is not intentional.
+  /// Emits `mqttConnectionStatus` when [connected] changes.
   private func emitConnectionStatus(connected: Bool) {
-    if suppressConnectionStatusEvents {
-      return
-    }
     if lastEmittedConnected == connected {
       return
     }
@@ -96,22 +135,48 @@ class ESPMQTTModule: RCTEventEmitter {
     (regionId as NSString).aws_regionTypeValue()
   }
 
+  /// Disconnects and removes the client, so the SDK stops its own retries. Its later
+  /// status callbacks are ignored. Runs on `queue`.
+  private func closeClient() {
+    clientGeneration += 1
+    guard hasActiveIoTRegistration else { return }
+    AWSIoTDataManager(forKey: kIotDataManagerKey).disconnect()
+    AWSIoTDataManager.remove(forKey: kIotDataManagerKey)
+    hasActiveIoTRegistration = false
+    lastEmittedConnected = false
+  }
+
+  /// Closes any existing client, waits a short moment, then runs [completion] on `queue`.
   private func teardownIoTClient(completion: @escaping () -> Void) {
     let hadClient = hasActiveIoTRegistration
+    closeClient()
     if hadClient {
-      suppressConnectionStatusEvents = true
-      AWSIoTDataManager(forKey: kIotDataManagerKey).disconnect()
-      AWSIoTDataManager.remove(forKey: kIotDataManagerKey)
-      hasActiveIoTRegistration = false
-      lastEmittedConnected = false
-    }
-    if hadClient {
-      DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
-        self?.suppressConnectionStatusEvents = false
+      queue.asyncAfter(deadline: .now() + 1.0) {
         completion()
       }
     } else {
       completion()
+    }
+  }
+
+  /// Handles one AWS status callback (on `queue`) for the client of [generation].
+  private func handleStatus(_ status: AWSIoTMQTTStatus, generation: Int, attempt: ConnectAttempt) {
+    guard generation == clientGeneration, hasActiveIoTRegistration else { return }
+    switch status {
+    case .connected:
+      if pendingConnect === attempt { pendingConnect = nil }
+      emitConnectionStatus(connected: true)
+      attempt.succeed()
+    case .disconnected, .connectionError, .connectionRefused, .protocolError:
+      emitConnectionStatus(connected: false)
+      // Lost before it was ever up = this connect failed. Closing the client stops
+      // the SDK retrying with these credentials. After Connected the SDK reconnects itself.
+      guard pendingConnect === attempt else { return }
+      pendingConnect = nil
+      closeClient()
+      attempt.fail(code: "connection_failed", message: "MQTT connection failed (status \(status.rawValue))")
+    default:
+      break
     }
   }
 
@@ -121,12 +186,14 @@ class ESPMQTTModule: RCTEventEmitter {
     resolve: @escaping RCTPromiseResolveBlock,
     reject: @escaping RCTPromiseRejectBlock
   ) {
-    if hasActiveIoTRegistration {
-      let status = AWSIoTDataManager(forKey: kIotDataManagerKey).getConnectionStatus()
-      if status == .connecting || status == .connected {
-        DispatchQueue.main.async { resolve(nil) }
-        return
-      }
+    if hasActiveIoTRegistration,
+       AWSIoTDataManager(forKey: kIotDataManagerKey).getConnectionStatus() == .connected {
+      DispatchQueue.main.async { resolve(nil) }
+      return
+    }
+    // A second caller waits for the connect already running instead of starting another.
+    if let running = pendingConnect, running.join(resolve: resolve, reject: reject) {
+      return
     }
 
     guard let accessKeyId = config["accessKeyId"] as? String, !accessKeyId.isEmpty,
@@ -211,58 +278,44 @@ class ESPMQTTModule: RCTEventEmitter {
       lastWillAndTestament: AWSIoTMQTTLastWillAndTestament()
     )
 
-    connectPromiseHandled = false
+    let attempt = ConnectAttempt(resolve: resolve, reject: reject)
+    pendingConnect = attempt
+    queue.asyncAfter(deadline: .now() + kConnectTimeoutSeconds) { [weak self] in
+      guard let self, self.pendingConnect === attempt else { return }
+      self.pendingConnect = nil
+      self.closeClient()
+      attempt.fail(code: "connection_timeout", message: "MQTT connect gave no answer within 15 s")
+    }
 
-    teardownIoTClient {
+    teardownIoTClient { [weak self] in
+      // Cancelled by disconnect() or timed out during the teardown wait.
+      guard let self, self.pendingConnect === attempt else { return }
+
       AWSIoTDataManager.register(
         with: serviceConfiguration,
         with: mqttConfig,
         forKey: kIotDataManagerKey
       )
       self.hasActiveIoTRegistration = true
+      self.clientGeneration += 1
+      let generation = self.clientGeneration
 
       let iotManager = AWSIoTDataManager(forKey: kIotDataManagerKey)
-
-      self.suppressConnectionStatusEvents = false
 
       let started = iotManager.connectUsingWebSocket(
         withClientId: clientId,
         cleanSession: true
       ) { [weak self] status in
         guard let self else { return }
-        switch status {
-        case .connected:
-          self.emitConnectionStatus(connected: true)
-          if !self.connectPromiseHandled {
-            self.connectPromiseHandled = true
-            DispatchQueue.main.async { resolve(nil) }
-          }
-        case .disconnected:
-          self.emitConnectionStatus(connected: false)
-        case .connectionError, .connectionRefused, .protocolError:
-          self.emitConnectionStatus(connected: false)
-          if !self.connectPromiseHandled {
-            self.connectPromiseHandled = true
-            self.hasActiveIoTRegistration = false
-            AWSIoTDataManager.remove(forKey: kIotDataManagerKey)
-            DispatchQueue.main.async {
-              reject("connection_failed", "MQTT connection failed (status \(status.rawValue))", nil)
-            }
-          }
-        default:
-          break
+        self.queue.async { [weak self] in
+          self?.handleStatus(status, generation: generation, attempt: attempt)
         }
       }
 
-      if !started {
-        if !self.connectPromiseHandled {
-          self.connectPromiseHandled = true
-          self.hasActiveIoTRegistration = false
-          AWSIoTDataManager.remove(forKey: kIotDataManagerKey)
-          DispatchQueue.main.async {
-            reject("connection_failed", "connectUsingWebSocket returned false", nil)
-          }
-        }
+      if !started, self.pendingConnect === attempt {
+        self.pendingConnect = nil
+        self.closeClient()
+        attempt.fail(code: "connection_failed", message: "connectUsingWebSocket returned false")
       }
     }
   }
@@ -286,15 +339,11 @@ class ESPMQTTModule: RCTEventEmitter {
   ) {
     queue.async { [weak self] in
       guard let self else { return }
-      if self.hasActiveIoTRegistration {
-        self.suppressConnectionStatusEvents = true
-        AWSIoTDataManager(forKey: kIotDataManagerKey).disconnect()
-        AWSIoTDataManager.remove(forKey: kIotDataManagerKey)
-        self.hasActiveIoTRegistration = false
-        self.lastEmittedConnected = false
-        self.suppressConnectionStatusEvents = false
-      }
-      self.connectPromiseHandled = false
+      // A connect still waiting is answered, so its caller never waits forever.
+      let attempt = self.pendingConnect
+      self.pendingConnect = nil
+      self.closeClient()
+      attempt?.fail(code: "disconnected", message: "MQTT disconnect() was called before the connection was up")
       DispatchQueue.main.async { resolve(nil) }
     }
   }

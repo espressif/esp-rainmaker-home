@@ -35,6 +35,7 @@ import java.security.Signature
 import java.security.cert.CertificateFactory
 import java.security.cert.X509Certificate
 import java.util.Optional
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.TimeoutException
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
@@ -154,10 +155,14 @@ class ChipClient @JvmOverloads constructor(
     var ipkEpochKey: ByteArray? = null
     lateinit var nocKey: ByteArray
     var requestId: String? = null
+    var csrNonce: String? = null
     var lastCommissionedDeviceName: String? = null
     var lastCommissionedNodeId: Long? = null
     var matterNodeId: String? = null
     var rmNodeId: String? = null
+
+    /** Neo node id from the NOC task result; rides the confirm intent. */
+    var neoNodeId: String? = null
     var challenge: String? = null
     var tempDeviceId: Long? = null
     var success: String? = null
@@ -196,7 +201,7 @@ class ChipClient @JvmOverloads constructor(
             chipDeviceController.setNOCChainIssuer(EspNOCChainIssuer())
             Log.d(TAG, "ESP NOC Chain Issuer set successfully")
 
-            // Extend the commissioning fail-safe to handle slow cloud-signed NOC flows.
+            // Extend the commissioning fail-safe to handle slow remote-signed NOC flows.
             // The default ~30s expires during RainMaker Next-Gen /verify NOC (~29s),
             // causing session eviction and commissioning failure (0x32).
             // Setting a DeviceAttestationDelegate re-arms the fail-safe before
@@ -310,6 +315,29 @@ class ChipClient @JvmOverloads constructor(
         }
     }
 
+    /**
+     * The 32-byte CSR nonce for CSRRequest, or null to let CHIP generate a random one.
+     * RMNeo binds the device CSR to its /initiate challenge and rejects /verify with
+     * "CSRNonce does not match the challenge from initiate"; RainMaker does not bind it.
+     */
+    private fun csrNonceBytesOrNull(): ByteArray? {
+        val hex = csrNonce
+        if (hex.isNullOrEmpty()) {
+            return null
+        }
+
+        // Fail here rather than commission with a random nonce: RMNeo's /verify would reject the
+        // result anyway, leaving the device half-joined with an armed fail-safe.
+        val bytes = try {
+            decodeHex(hex)
+        } catch (e: Exception) {
+            throw IllegalArgumentException("csrNonce is not valid hex: ${e.message}")
+        }
+        require(bytes.size == 32) { "csrNonce must decode to 32 bytes, got ${bytes.size}" }
+
+        return bytes
+    }
+
     /** Commission Matter device into ESP RainMaker fabric. */
     suspend fun awaitCommissionDevice(
         deviceId: Long,
@@ -323,7 +351,18 @@ class ChipClient @JvmOverloads constructor(
         try {
             chipDeviceController.setCompletionListener(buildCommissioningCompletionListener(continuation))
 
-            chipDeviceController.commissionDevice(deviceId, networkCredentials)
+            val nonceBytes = csrNonceBytesOrNull()
+            if (nonceBytes != null) {
+                chipDeviceController.commissionDevice(
+                    deviceId,
+                    CommissionParameters.Builder()
+                        .setCsrNonce(nonceBytes)
+                        .setNetworkCredentials(networkCredentials)
+                        .build(),
+                )
+            } else {
+                chipDeviceController.commissionDevice(deviceId, networkCredentials)
+            }
 
         } catch (e: Exception) {
             Log.e(TAG, "Failed to commission device: ${e.message}", e)
@@ -374,13 +413,25 @@ class ChipClient @JvmOverloads constructor(
         try {
             chipDeviceController.setCompletionListener(buildCommissioningCompletionListener(continuation))
 
-            chipDeviceController.pairDevice(
-                bleGatt,
-                connId,
-                deviceId,
-                setupPinCode,
-                networkCredentials
-            )
+            val nonceBytes = csrNonceBytesOrNull()
+            if (nonceBytes != null) {
+                chipDeviceController.pairDevice(
+                    bleGatt,
+                    connId,
+                    deviceId,
+                    setupPinCode,
+                    nonceBytes,
+                    networkCredentials
+                )
+            } else {
+                chipDeviceController.pairDevice(
+                    bleGatt,
+                    connId,
+                    deviceId,
+                    setupPinCode,
+                    networkCredentials
+                )
+            }
         } catch (e: Exception) {
             Log.e(TAG, "Failed to pair device over BLE: ${e.message}", e)
             continuation.resumeWithException(e)
@@ -446,7 +497,7 @@ class ChipClient @JvmOverloads constructor(
                                 val body = JsonObject()
                                 val endpointsJson = JsonObject()
                                 /**
-                                 * Build cloud Matter metadata in the canonical nested shape used by
+                                 * Build the Matter metadata in the canonical nested shape used by
                                  * reference apps and the Matter SDK:
                                  *
                                  * {
@@ -601,7 +652,7 @@ class ChipClient @JvmOverloads constructor(
 
                                         // Basic Information (0x28) on EP0: capture SoftwareVersion (0x9,
                                         // numeric build id) + SoftwareVersionString (0xA, display) so
-                                        // pure-Matter nodes (no cloud config) can surface a version. The
+                                        // pure-Matter nodes (no node config) can surface a version. The
                                         // values ride along in metadataJson -> body.metadata.Matter and
                                         // are persisted by the confirm-commission task, same as
                                         // deviceName / rmNodeId. A missing/unsupported attribute must not
@@ -735,58 +786,7 @@ class ChipClient @JvmOverloads constructor(
                                     editor.apply()
                                 }
 
-                                if (groupCatIdOperate.isNotEmpty()) {
-
-                                    val aclClusterHelper =
-                                        AccessControlClusterHelper(this@ChipClient)
-
-                                    val aclAttr: MutableList<ChipStructs.AccessControlClusterAccessControlEntryStruct>? =
-                                        aclClusterHelper.readAclAttributeAsync(
-                                            nodeId,
-                                            AppConstants.ENDPOINT_0
-                                        ).get()
-
-                                    val entries: ArrayList<ChipStructs.AccessControlClusterAccessControlEntryStruct> =
-                                        ArrayList<ChipStructs.AccessControlClusterAccessControlEntryStruct>()
-
-                                    var fabricIndex = 0
-                                    var authMode = 0
-                                    val it = aclAttr?.listIterator()
-                                    if (it != null) {
-                                        for (entry in it) {
-                                            entries.add(entry)
-                                            if (entry.privilege == AppConstants.PRIVILEGE_ADMIN) {
-                                                fabricIndex = entry.fabricIndex
-                                                authMode = entry.authMode
-                                            }
-                                        }
-                                    }
-
-                                    val subjects: ArrayList<Long> = ArrayList<Long>()
-                                    subjects.add(Utils.getCatId(groupCatIdOperate))
-
-                                    val entry =
-                                        ChipStructs.AccessControlClusterAccessControlEntryStruct(
-                                            AppConstants.PRIVILEGE_OPERATE,
-                                            authMode,
-                                            subjects,
-                                            null,
-                                            Optional.empty(),
-                                            fabricIndex
-                                        )
-
-                                    entries.add(entry)
-
-                                    aclClusterHelper.writeAclAttributeAsync(
-                                        nodeId,
-                                        AppConstants.ENDPOINT_0,
-                                        entries
-                                    ).get()
-
-                                } else {
-                                    Log.w(TAG, "No group CAT ID provided skipping ACL setup")
-                                }
-
+                                // Confirm first: it is what the caller waits on; the ACL below is enrichment.
                                 lastCommissionedDeviceName = deviceName
                                 lastCommissionedNodeId = nodeId
 
@@ -797,6 +797,61 @@ class ChipClient @JvmOverloads constructor(
                                         TAG,
                                         "Failed to fetch metadata, cannot confirm commission"
                                     )
+                                }
+
+                                if (groupCatIdOperate.isNotEmpty()) {
+                                    // Best-effort: the confirm already fired above, so an ACL failure costs only group sharing.
+                                    try {
+                                        val aclClusterHelper =
+                                            AccessControlClusterHelper(this@ChipClient)
+
+                                        val aclAttr: MutableList<ChipStructs.AccessControlClusterAccessControlEntryStruct>? =
+                                            aclClusterHelper.readAclAttributeAsync(
+                                                nodeId,
+                                                AppConstants.ENDPOINT_0
+                                            ).get(AppConstants.MATTER_ACL_SETUP_TIMEOUT_MS, TimeUnit.MILLISECONDS)
+
+                                        val entries: ArrayList<ChipStructs.AccessControlClusterAccessControlEntryStruct> =
+                                            ArrayList<ChipStructs.AccessControlClusterAccessControlEntryStruct>()
+
+                                        var fabricIndex = 0
+                                        var authMode = 0
+                                        val it = aclAttr?.listIterator()
+                                        if (it != null) {
+                                            for (entry in it) {
+                                                entries.add(entry)
+                                                if (entry.privilege == AppConstants.PRIVILEGE_ADMIN) {
+                                                    fabricIndex = entry.fabricIndex
+                                                    authMode = entry.authMode
+                                                }
+                                            }
+                                        }
+
+                                        val subjects: ArrayList<Long> = ArrayList<Long>()
+                                        subjects.add(Utils.getCatId(groupCatIdOperate))
+
+                                        val entry =
+                                            ChipStructs.AccessControlClusterAccessControlEntryStruct(
+                                                AppConstants.PRIVILEGE_OPERATE,
+                                                authMode,
+                                                subjects,
+                                                null,
+                                                Optional.empty(),
+                                                fabricIndex
+                                            )
+
+                                        entries.add(entry)
+
+                                        aclClusterHelper.writeAclAttributeAsync(
+                                            nodeId,
+                                            AppConstants.ENDPOINT_0,
+                                            entries
+                                        ).get(AppConstants.MATTER_ACL_SETUP_TIMEOUT_MS, TimeUnit.MILLISECONDS)
+                                    } catch (e: Exception) {
+                                        Log.w(TAG, "ACL setup failed, continuing to confirm: ${e.message}", e)
+                                    }
+                                } else {
+                                    Log.w(TAG, "No group CAT ID provided skipping ACL setup")
                                 }
                             } catch (e: Exception) {
                                 Log.e(TAG, "Error in post-commissioning steps: ${e.message}", e)
@@ -880,11 +935,6 @@ class ChipClient @JvmOverloads constructor(
             val currentRequestId = requestId ?: deviceId.toString()
             val fabric = FabricSessionManager.getCurrentFabric()
 
-            Log.d(
-                TAG,
-                "[NONCE-TRACE] triggerNOCTaskWithAttestation: requestId=$currentRequestId, nocsrElements(first40)=${nocsrElements.take(40)}, len=${nocsrElements.length}"
-            )
-
             val intent = Intent(context, MatterHeadlessTaskService::class.java).apply {
                 putExtra(AppConstants.EXTRA_TASK_NAME, AppConstants.TASK_ISSUE_NOC)
                 putExtra(AppConstants.EXTRA_NODE_ID, deviceId.toString())
@@ -942,7 +992,7 @@ class ChipClient @JvmOverloads constructor(
     private fun triggerHeadlessConfirmCommissionTask(metadata: JSONObject) {
         try {
             val currentRequestId = requestId ?: currentDeviceId.toString()
-            // Use the operational Matter node id (hex, e.g. 21A2A7FDD35FABF2) the cloud/sync key
+            // Use the operational Matter node id (hex, e.g. 0000000000000A01) the sync key
             // nodes by - not currentDeviceId, which is the temporary commissioning id. The headless
             // confirm task keys persisted Matter metadata by this; a temp id would mismatch on read.
             val nodeId = matterNodeId ?: rmNodeId ?: currentDeviceId?.toString() ?: ""
@@ -957,6 +1007,7 @@ class ChipClient @JvmOverloads constructor(
                 putExtra(AppConstants.KEY_GROUP_ID_CAMEL, groupId)
                 putExtra(AppConstants.KEY_REQUEST_ID_CAMEL, currentRequestId)
                 putExtra(AppConstants.KEY_METADATA, metadata.toString())
+                putExtra(AppConstants.KEY_NEO_NODE_ID, neoNodeId ?: "")
                 putExtra(AppConstants.KEY_CHALLENGE_CAMEL, challengeValue)
                 putExtra(AppConstants.KEY_CHALLENGE_RESPONSE_CAMEL, challengeResponseValue)
                 putExtra(AppConstants.KEY_SIGV4_ACCESS_KEY, fabric?.sigv4AccessKey ?: "")
@@ -964,6 +1015,7 @@ class ChipClient @JvmOverloads constructor(
                 putExtra(AppConstants.KEY_SIGV4_SESSION_TOKEN, fabric?.sigv4SessionToken ?: "")
                 putExtra(AppConstants.KEY_SIGV4_EXPIRATION, fabric?.sigv4Expiration ?: "")
             }
+
             context.startService(intent)
         } catch (e: Exception) {
             Log.e(TAG, "Failed to trigger Confirm Commission task: ${e.message}", e)
@@ -1189,7 +1241,8 @@ class ChipClient @JvmOverloads constructor(
             }
 
             try {
-                chipDeviceController.readAttributePath(
+                SafeChipCalls.readAttributePath(
+                    chipDeviceController,
                     object : ReportCallback {
                         override fun onReport(nodeState: NodeState?) {
                             if (nodeState == null) {
@@ -1241,7 +1294,8 @@ class ChipClient @JvmOverloads constructor(
 
         return suspendCoroutine { continuation ->
             try {
-                chipDeviceController.readAttributePath(
+                SafeChipCalls.readAttributePath(
+                    chipDeviceController,
                     object : ReportCallback {
                         override fun onReport(nodeState: NodeState?) {
                             try {
@@ -1347,7 +1401,8 @@ class ChipClient @JvmOverloads constructor(
                     }
                 }
 
-                chipDeviceController.write(
+                SafeChipCalls.write(
+                    chipDeviceController,
                     callback,
                     devicePtr,
                     listOf(writeRequest),
@@ -1388,7 +1443,8 @@ class ChipClient @JvmOverloads constructor(
                     }
                 }
 
-                chipDeviceController.invoke(
+                SafeChipCalls.invoke(
+                    chipDeviceController,
                     callback,
                     devicePtr,
                     invokeElement,
@@ -1409,13 +1465,31 @@ class ChipClient @JvmOverloads constructor(
             val chain = keyStore.getCertificateChain(fabricId)
 
             if (chain == null || chain.isEmpty()) {
-
+                // CHIP's OperationalKeyConfig clones the root cert, so a null root
+                // throws inside the constructor. Say so plainly: the caller sees
+                // only an NPE from OperationalKeyConfig.<init> otherwise.
+                val aliases = runCatching { keyStore.aliases().toList() }.getOrDefault(emptyList())
+                Log.e(
+                    TAG,
+                    "[MatterCommission] NO CERT CHAIN for fabricId=$fabricId —" +
+                        " storePrecommissionInfo has not run for this fabric." +
+                        " keystore aliases=$aliases." +
+                        " Constructing with null certs WILL throw NPE.",
+                )
                 return OperationalKeyConfig(
                     EspKeypairDelegate(),
                     null,
                     null,
                     null,
                     ipkEpochKey
+                )
+            }
+
+            if (chain.size < 2) {
+                Log.e(
+                    TAG,
+                    "[MatterCommission] cert chain too short (size=${chain.size}, need 2:" +
+                        " [0]=user NoC, [1]=root CA) for fabricId=$fabricId",
                 )
             }
 
@@ -1432,7 +1506,7 @@ class ChipClient @JvmOverloads constructor(
             )
 
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to create operational key config: ${e.message}", e)
+            Log.e(TAG, "[MatterCommission] Failed to create operational key config: ${e.message}", e)
 
             return OperationalKeyConfig(
                 EspKeypairDelegate(),
@@ -1631,35 +1705,6 @@ class ChipClient @JvmOverloads constructor(
     }
 
     /**
-     * Descriptor Cluster Methods
-     */
-    suspend fun readDescriptorClusterPartsListAttribute(
-        devicePtr: Long,
-        endpoint: Int
-    ): List<Any>? {
-        return suspendCoroutine { continuation ->
-            getDescriptorClusterForDevice(devicePtr, endpoint)
-                .readPartsListAttribute(
-                    object : ChipClusters.DescriptorCluster.PartsListAttributeCallback {
-                        override fun onSuccess(values: MutableList<Int>?) {
-                            continuation.resume(values)
-                        }
-
-                        override fun onError(ex: Exception) {
-                            continuation.resumeWithException(ex)
-                        }
-                    })
-        }
-    }
-
-    private fun getDescriptorClusterForDevice(
-        devicePtr: Long,
-        endpoint: Int
-    ): ChipClusters.DescriptorCluster {
-        return ChipClusters.DescriptorCluster(devicePtr, endpoint)
-    }
-
-    /**
      * Enhanced Attribute Operations
      */
     suspend fun readAttributes(
@@ -1706,7 +1751,8 @@ class ChipClient @JvmOverloads constructor(
                         Log.d(TAG, "Report callback onDone")
                     }
                 }
-            chipDeviceController.readAttributePath(
+            SafeChipCalls.readAttributePath(
+                chipDeviceController,
                 callback, devicePtr, attributePaths, DEFAULT_TIMEOUT.toInt()
             )
         }
@@ -1748,7 +1794,8 @@ class ChipClient @JvmOverloads constructor(
                     }
                 }
 
-            chipDeviceController.write(
+            SafeChipCalls.write(
+                chipDeviceController,
                 callback,
                 devicePtr,
                 requests,
@@ -1779,7 +1826,8 @@ class ChipClient @JvmOverloads constructor(
                         continuation.resume(successCode)
                     }
                 }
-            chipDeviceController.invoke(
+            SafeChipCalls.invoke(
+                chipDeviceController,
                 invokeCallback, devicePtr, invokeElement, timedRequestTimeoutMs, imTimeoutMs
             )
         }

@@ -18,7 +18,7 @@ import type {
   ESPMatterInitConfig,
   ESPMatterSubscribeAttribute,
   ESPMatterSubscribeResult,
-} from "@espressif/rainmaker-matter-sdk";
+} from "../contracts/matter";
 import {
   MATTER_DATA_VALUE_TYPE_ARRAY,
   MATTER_DATA_VALUE_TYPE_BOOLEAN,
@@ -86,16 +86,43 @@ const { ESPMatterModule } = NativeModules as {
       maxIntervalSec: number,
     ) => Promise<{ subscriptionId: string }>;
     matterControlUnsubscribe?: (handle: string) => Promise<ESPMatterControlResult>;
+    matterUpdateCatAclSubject?: (
+      matterNodeId: string,
+      groupCatId: string,
+    ) => Promise<ESPMatterControlResult>;
   };
 };
 
+/** DeviceEventEmitter event name for native Matter attribute reports (same on both platforms). */
 const ATTRIBUTE_REPORT_EVENT = "ESPMatter:attributeReport";
+
+/** Native event telling whether a subscription link is up (Android). */
+const SUBSCRIPTION_STATE_EVENT = "ESPMatter:subscriptionState";
+/** States that mean the link is up: just set up, or still delivering reports. */
+const SUBSCRIPTION_LIVE_STATES: ReadonlySet<string> = new Set([
+  "established",
+  "alive",
+]);
+/** Most link states kept while a subscribe has not returned its handle yet. */
+const EARLY_STATE_LIMIT = 8;
+
+/** Link-state listeners of open subscriptions; told "down" on shutdown. */
+const openLinkStateListeners = new Set<(live: boolean) => void>();
+
+/** Payload shape of a {@link SUBSCRIPTION_STATE_EVENT} device event. */
+interface NativeSubscriptionState {
+  matterNodeId: string;
+  /** Handle of the link, as `matterControlSubscribe` returns it. */
+  subscriptionId: string;
+  state: string;
+}
 
 const SUBSCRIBE_DEFAULTS = {
   minIntervalSec: 1,
   maxIntervalSec: 30,
 };
 
+/** Payload shape of an {@link ATTRIBUTE_REPORT_EVENT} device event. */
 interface NativeAttributeReport {
   matterNodeId: string;
   endpoint: number;
@@ -206,6 +233,10 @@ type ESPMatterControlAdapterWithTlv = ESPMatterControlAdapterInterface & {
   encodeCommandFieldsToTlvHex(
     commandFields: Record<string, unknown> | null,
   ): Promise<string>;
+  updateCatAclSubject(
+    matterNodeId: string,
+    groupCatId: string,
+  ): Promise<ESPMatterControlResult>;
 };
 
 const ESPMatterControlAdapter: ESPMatterControlAdapterWithTlv = {
@@ -214,13 +245,15 @@ const ESPMatterControlAdapter: ESPMatterControlAdapterWithTlv = {
     if (!native.matterControlInit) {
       return { success: true };
     }
-    // Probe: native CHIP controller (re)init. Repeated init resets operational
-    // discovery / CASE sessions, so this pinpoints churn that stalls WLAN.
-    console.log("[MatterProbe][control] init native controller");
     return native.matterControlInit(config as unknown as Record<string, unknown>);
   },
 
   async shutdown(): Promise<ESPMatterControlResult> {
+    // Native closes every link without reporting each one, so say it here.
+    for (const onLinkStateChange of openLinkStateListeners) {
+      onLinkStateChange(false);
+    }
+    openLinkStateListeners.clear();
     const native = ensureNative();
     if (!native.matterControlShutdown) {
       return { success: true };
@@ -270,6 +303,30 @@ const ESPMatterControlAdapter: ESPMatterControlAdapterWithTlv = {
     return result;
   },
 
+  /**
+   * Replaces a CAT subject (operate or admin) in a device's EP0 ACL after a
+   * CAT rotation; appends a fresh Operate entry when an operate CAT has no
+   * subject at all (self-heal). Typed natively — the ACL entry struct
+   * round-trips through the platform CHIP cluster helpers, not the generic
+   * data-value codec.
+   * @param matterNodeId - Target device's Matter node id (hex).
+   * @param groupCatId - The fabric's CURRENT CAT value (8-hex id+version).
+   * @returns Success, or an error result when the native method is missing/fails.
+   */
+  async updateCatAclSubject(
+    matterNodeId: string,
+    groupCatId: string,
+  ): Promise<ESPMatterControlResult> {
+    const native = ensureNative();
+    if (!native.matterUpdateCatAclSubject) {
+      return {
+        success: false,
+        error: "matterUpdateCatAclSubject not implemented natively",
+      };
+    }
+    return native.matterUpdateCatAclSubject(matterNodeId, groupCatId);
+  },
+
   async invoke(
     matterNodeId: string,
     endpoint: number,
@@ -296,6 +353,7 @@ const ESPMatterControlAdapter: ESPMatterControlAdapterWithTlv = {
     matterNodeId: string,
     attributes: ESPMatterSubscribeAttribute[],
     callback: (report: ESPMatterAttributeReport) => void,
+    onLinkStateChange?: (live: boolean) => void,
   ): Promise<ESPMatterSubscribeResult> {
     const native = ensureNative();
     if (!native.matterControlSubscribe) {
@@ -316,13 +374,29 @@ const ESPMatterControlAdapter: ESPMatterControlAdapterWithTlv = {
     );
 
     let nativeHandle: string | null = null;
+    let handleKnown = false;
+    // A state can arrive before the handle does, so keep the latest per link.
+    const earlyStates = new Map<string, boolean>();
+    let stateListener: EmitterSubscription | null = onLinkStateChange
+      ? DeviceEventEmitter.addListener(
+          SUBSCRIPTION_STATE_EVENT,
+          (event: NativeSubscriptionState) => {
+            if (event?.matterNodeId !== matterNodeId) return;
+            const live = SUBSCRIPTION_LIVE_STATES.has(event.state);
+            if (!handleKnown) {
+              if (
+                earlyStates.size < EARLY_STATE_LIMIT ||
+                earlyStates.has(event.subscriptionId)
+              ) {
+                earlyStates.set(event.subscriptionId, live);
+              }
+            } else if (event.subscriptionId === nativeHandle) {
+              onLinkStateChange(live);
+            }
+          },
+        )
+      : null;
 
-    // Probe: exact native subscribe attempt + outcome, keyed by matterNodeId.
-    console.log("[MatterProbe][control] subscribe →", {
-      matterNodeId,
-      pathCount: attributes?.length ?? 0,
-      paths: attributes,
-    });
     try {
       const result = await native.matterControlSubscribe(
         matterNodeId,
@@ -331,17 +405,26 @@ const ESPMatterControlAdapter: ESPMatterControlAdapterWithTlv = {
         SUBSCRIBE_DEFAULTS.maxIntervalSec,
       );
       nativeHandle = result?.subscriptionId ?? null;
-      console.log("[MatterProbe][control] subscribe ok", {
-        matterNodeId,
-        subscriptionId: nativeHandle,
-      });
+      handleKnown = true;
+      const earlyState = nativeHandle
+        ? earlyStates.get(nativeHandle)
+        : undefined;
+      earlyStates.clear();
+      if (!nativeHandle) {
+        // No handle to match events against, so stop listening for them.
+        stateListener?.remove();
+        stateListener = null;
+      } else if (onLinkStateChange) {
+        openLinkStateListeners.add(onLinkStateChange);
+        if (earlyState !== undefined) {
+          onLinkStateChange(earlyState);
+        }
+      }
     } catch (error) {
-      console.warn("[MatterProbe][control] subscribe error", {
-        matterNodeId,
-        error: error instanceof Error ? error.message : String(error),
-      });
       listener.remove();
       listener = null;
+      stateListener?.remove();
+      stateListener = null;
       return {
         success: false,
         error: error instanceof Error ? error.message : "matterControlSubscribe failed",
@@ -352,6 +435,11 @@ const ESPMatterControlAdapter: ESPMatterControlAdapterWithTlv = {
       if (listener) {
         listener.remove();
         listener = null;
+      }
+      stateListener?.remove();
+      stateListener = null;
+      if (onLinkStateChange) {
+        openLinkStateListeners.delete(onLinkStateChange);
       }
       if (nativeHandle && native.matterControlUnsubscribe) {
         native.matterControlUnsubscribe(nativeHandle).catch((error: unknown) => {
@@ -368,7 +456,7 @@ const ESPMatterControlAdapter: ESPMatterControlAdapterWithTlv = {
   },
 
   /**
-   * Encodes Matter invoke command fields to RMNG MQTT wire form (`0x<tlv-hex>`).
+   * Encodes Matter invoke command fields to RMNeo MQTT wire form (`0x<tlv-hex>`).
    * Pass `null` for fieldless commands (empty anonymous Structure TLV).
    */
   async encodeCommandFieldsToTlvHex(

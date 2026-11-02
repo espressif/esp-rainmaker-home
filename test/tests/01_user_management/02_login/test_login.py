@@ -32,7 +32,7 @@ def tap_button(helper, button_name):
 @when("user enter password and toggle visibility")
 def toggle_password_visibility(helper):
     helper.login.send_keys("password_input", "testpassword")
-    helper.login.click("password_toggle")
+    helper.login.toggle_password_visibility()
 
 @then("user should land on forgot password screen")
 def land_on_forgot_password(helper):

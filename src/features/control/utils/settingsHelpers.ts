@@ -8,14 +8,11 @@ import { List, RefreshCw } from "lucide-react-native";
 import type { TFunction } from "i18next";
 import { getFeatures } from "@config/features.config";
 import {
-  ESPRM_NAME_PARAM_TYPE,
-  MATTER_METADATA_DEVICE_NAME_KEY,
-  MATTER_METADATA_KEY,
   RMAKER_USER_AUTH_UPDATE_RESULT_SKIPPED_NO_REFRESH_TOKEN,
   RMAKER_USER_AUTH_UPDATE_RESULT_UPDATED,
   SUCESS,
 } from "@shared/utils/constants";
-import { getSubDeviceInitialDisplayName } from "@shared/utils/device";
+import { saveDeviceName } from "@shared/utils/deviceNaming";
 import { getMatterControllerConfig } from "@shared/utils/matterController";
 import { getNodeRmakerUserAuthConfig } from "@shared/utils/userAuthServiceHelper";
 import type { RmakerUserAuthUpdateResult } from "@shared/utils/userAuthServiceHelper";
@@ -34,7 +31,6 @@ import type { SettingsQuickActionItem } from "@features/control/components";
 import { getPrimaryHomogeneousDeviceType } from "@features/group/utils/controlGroupHelpers";
 import {
   ESPCDFDevice,
-  ESPCDFDeviceParam,
   ESPCDFNode,
 } from "@store";
 
@@ -89,38 +85,6 @@ export const resolveSettingsDevice = (
     return undefined;
   }
   return node.devices.find((entry) => entry.name === deviceParam);
-};
-
-/**
- * Finds the writable/display name param on a sub-device.
- * @param device - CDF sub-device
- * @returns Name param or undefined
- */
-export const getDeviceNameParam = (
-  device: ESPCDFDevice | undefined,
-): ESPCDFDeviceParam | undefined =>
-  device?.params?.find(
-    (param) =>
-      param.type === ESPRM_NAME_PARAM_TYPE &&
-      param.properties?.includes("write"),
-  ) as
-    | ESPCDFDeviceParam
-    | undefined;
-
-/**
- * Computes the display label for the settings name field.
- * @param device - CDF sub-device
- * @param node - Parent CDF node
- * @returns Human-readable device name
- */
-export const getSettingsDisplayName = (
-  device: ESPCDFDevice | undefined,
-  node: ESPCDFNode | undefined,
-): string => {
-  if (!device || !node) {
-    return "";
-  }
-  return getSubDeviceInitialDisplayName(device, node);
 };
 
 /**
@@ -219,12 +183,12 @@ export const isNodeDeleteSuccess = (status: unknown): boolean =>
   status === SUCESS || String(status ?? "").toLowerCase() === SUCESS;
 
 /**
- * Persists an edited device display name via the writable name param or
- * Matter metadata. A writable `esp.param.name` wins whenever the device
- * exposes one; Matter devices without that param fall back to the
- * `updateMetadata` rename.
+ * Persists an edited device display name and maps the result to a toast state.
+ *
+ * Choosing the channel is {@link saveDeviceName}'s job; this only translates its
+ * neutral result into the outcomes the settings screen renders.
  * @param node - Parent CDF node
- * @param device - Target sub-device (optional for Matter metadata-only path)
+ * @param device - Target sub-device
  * @param name - Trimmed display name to save
  * @returns Outcome so the hook can show the right toast
  */
@@ -233,43 +197,13 @@ export const saveDeviceDisplayName = async (
   device: ESPCDFDevice | undefined,
   name: string,
 ): Promise<SaveDeviceDisplayNameOutcome> => {
-  try {
-    const nameParam = getDeviceNameParam(device);
-
-    if (nameParam) {
-      await nameParam.setValue(name);
-      if (device) {
-        device.displayName = name;
-      }
-      return SAVE_DEVICE_NAME_STATUS_SUCCESS;
-    }
-
-    const isMatterDevice = Boolean(
-      node.metadata && node.metadata[MATTER_METADATA_KEY],
-    );
-
-    if (isMatterDevice) {
-      const currentMetadata = node.metadata || {};
-      const matterMetadata = currentMetadata[MATTER_METADATA_KEY] || {};
-      const updatedMetadata = {
-        ...currentMetadata,
-        [MATTER_METADATA_KEY]: {
-          ...matterMetadata,
-          [MATTER_METADATA_DEVICE_NAME_KEY]: name,
-        },
-      };
-
-      await node.updateMetadata(updatedMetadata);
-      if (device) {
-        device.displayName = name;
-      }
-      return SAVE_DEVICE_NAME_STATUS_SUCCESS;
-    }
-
-    return SAVE_DEVICE_NAME_STATUS_NO_PARAM;
-  } catch {
-    return SAVE_DEVICE_NAME_STATUS_FAILED;
+  const result = await saveDeviceName(node, device, name);
+  if (result === "saved") {
+    return SAVE_DEVICE_NAME_STATUS_SUCCESS;
   }
+  return result === "no-channel"
+    ? SAVE_DEVICE_NAME_STATUS_NO_PARAM
+    : SAVE_DEVICE_NAME_STATUS_FAILED;
 };
 
 export interface BuildSettingsQuickActionsInput {

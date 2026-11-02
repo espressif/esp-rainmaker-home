@@ -12,6 +12,7 @@ import { getFeatures } from "@config/features.config";
 import {
   ESPRMMatter_BASE_SDK_ID,
   ESPRMNeo_BASE_SDK_ID,
+  ESPRMNeoMatter_BASE_SDK_ID,
 } from "@config/sdk.identifiers";
 import classicWordmark from "@assets/images/rainmaker-classic-wordmark.png";
 import neoWordmark from "@assets/images/rainmaker-neo-wordmark.png";
@@ -36,7 +37,7 @@ export type CurrentDeploymentKind =
  *
  * Built-in RainMaker Classic / RainMaker Neo are detected by matching both the SDK id and the
  * base URL against the region's committed defaults — a QR-scanned config
- * can technically reuse an SDK id (RMNG / RM), so URL is what distinguishes
+ * can technically reuse an SDK id (RMNeo / RM), so URL is what distinguishes
  * "picked the tile" from "scanned a custom instance running the same stack".
  * Returns `null` before any selection is persisted (Landing hasn't been
  * passed yet), so callers can hide the banner.
@@ -51,7 +52,7 @@ export function getCurrentDeploymentKind(): CurrentDeploymentKind | null {
     return DEPLOYMENT_KIND.RMCLASSIC;
   }
   if (
-    sdk === ESPRMNeo_BASE_SDK_ID &&
+    (sdk === ESPRMNeo_BASE_SDK_ID || sdk === ESPRMNeoMatter_BASE_SDK_ID) &&
     baseUrl === region.rmneoSdk?.baseUrl
   ) {
     return DEPLOYMENT_KIND.RMNEO;

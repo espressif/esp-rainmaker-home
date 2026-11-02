@@ -5,3 +5,4 @@
  */
 
 export { guideScreenStyleSheet } from "./guideScreenStyleSheet";
+export { deviceOperationsStyles } from "./deviceOperationsStyles";

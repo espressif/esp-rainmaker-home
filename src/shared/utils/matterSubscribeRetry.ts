@@ -30,6 +30,7 @@ import { ESPCDFUser } from "@store";
  * to the node list it received during that initial pass. Pass the raw
  * ESPRMNode (typed `unknown` here to avoid a hard SDK dependency in the
  * shared layer) so the retry closure can subscribe without a re-fetch.
+ * It also replaces a stale copy of a node the cloud removed and re-added.
  */
 export interface MatterSubscribeRetryOptions {
   rawNode?: unknown;
@@ -94,8 +95,8 @@ export function registerSubscribeRetryForUser(
  * the user adaptor never ran `subscribeToNodeUpdates`).
  * @param user - The CDF user whose subscription should be retried.
  * @param nodeId - The CDF node id to retry.
- * @param options - Optional payload (e.g. `rawNode`) used when the node was
- *   not part of the original subscribe-all snapshot.
+ * @param options - Optional payload; a given `rawNode` replaces the
+ *   adaptor's copy of the node.
  */
 export async function retrySubscribeForNodeId(
   user: ESPCDFUser | null | undefined,

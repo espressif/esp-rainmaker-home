@@ -12,8 +12,7 @@ import { useTranslation } from "react-i18next";
 import { observer } from "mobx-react-lite";
 import { useDeviceSelection } from "@features/provision/hooks";
 import type { ScheduleDeviceSelectionData } from "@src/types/global";
-import { useCDF } from "@shared/hooks/useCDF";
-import { isRmneoStackSdkId } from "@config/sdk.identifiers";
+import { getFeatures } from "@config/features.config";
 
 // Components
 import { DeviceSelectionList, Header, ScreenWrapper } from "@shared/components";
@@ -39,10 +38,7 @@ import { DEVICE_SELECTION_LIST_VARIANT_SCHEDULE } from "@shared/utils/constants"
  */
 export const ScheduleDeviceSelectionScreen = observer(() => {
   const { t } = useTranslation();
-  const { store } = useCDF();
-  const allowOfflineForSchedule = isRmneoStackSdkId(
-    store.getActiveAdaptorIdentifier(),
-  );
+  const allowOfflineForSchedule = getFeatures().offlineDeviceSchedules;
   const {
     devices,
     selectedDevices,

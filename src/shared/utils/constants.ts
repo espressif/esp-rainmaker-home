@@ -12,7 +12,7 @@ import {
   MATTER_DEVICE_TYPE_OCCUPANCY_SENSOR,
   MATTER_DEVICE_TYPE_RVC,
   MATTER_DEVICE_TYPE_TEMPERATURE_SENSOR,
-} from "@config/matter.constants";
+} from "@config/matter.identifiers";
 
 /**
  * `extractDeviceType` values with no meaningful power param for card UI: DeviceCard uses node
@@ -256,6 +256,8 @@ export const DATA_TYPE_OBJECT = "object";
 
 // SUPPORTED PARAMS TYPES
 export const ESPRM_NAME_PARAM_TYPE = "esp.param.name";
+/** Matter Identify passthrough (cluster 0x3 IdentifyTime): >0 starts, 0 stops. */
+export const ESPRM_IDENTIFY_PARAM_TYPE = "esp.param.identify";
 export const ESPRM_POWER_PARAM_TYPE = "esp.param.power";
 export const ESPRM_BRIGHTNESS_PARAM_TYPE = "esp.param.brightness";
 export const ESPRM_CCT_PARAM_TYPE = "esp.param.cct";
@@ -280,6 +282,27 @@ export const ESPRM_BASE_URL_PARAM_TYPE = "esp.param.base-url";
 export const ESPRM_CHANNEL_PARAM_TYPE = "esp.param.channel";
 export const ESPRM_LOCAL_CONTROL_TYPE_PARAM_TYPE = "esp.param.local_control_type";
 export const ESPRM_LOCAL_CONTROL_POP_PARAM_TYPE = "esp.param.local_control_pop";
+
+/* The Matter device vocabulary (mapping 1.1): standard param types derived
+ * configs report for pure Matter nodes - the same types native RainMaker
+ * firmware may use, so registering them here serves both worlds. */
+/** Numeric sensor readings (read-only; humidity/illuminance report floats). */
+export const ESPRM_HUMIDITY_PARAM_TYPE = "esp.param.humidity";
+export const ESPRM_ILLUMINANCE_PARAM_TYPE = "esp.param.illuminance";
+export const ESPRM_PRESSURE_PARAM_TYPE = "esp.param.pressure";
+export const ESPRM_FLOW_PARAM_TYPE = "esp.param.flow";
+/** Boolean detector states (read-only). */
+export const ESPRM_OCCUPANCY_PARAM_TYPE = "esp.param.occupancy";
+export const ESPRM_CONTACT_PARAM_TYPE = "esp.param.contact";
+export const ESPRM_RAIN_DETECTED_PARAM_TYPE = "esp.param.rain-detected";
+export const ESPRM_LEAK_DETECTED_PARAM_TYPE = "esp.param.leak-detected";
+export const ESPRM_FREEZE_DETECTED_PARAM_TYPE = "esp.param.freeze-detected";
+/** Mode-string states (read-only; `valid_strs` names the vocabulary). */
+export const ESPRM_SMOKE_STATE_PARAM_TYPE = "esp.param.smoke-state";
+export const ESPRM_CO_STATE_PARAM_TYPE = "esp.param.co-state";
+export const ESPRM_AIR_QUALITY_PARAM_TYPE = "esp.param.air-quality";
+export const ESPRM_RVC_STATE_PARAM_TYPE = "esp.param.rvc-state";
+export const ESPRM_OPERATIONAL_STATE_PARAM_TYPE = "esp.param.operational-state";
 
 /** Param `name` values shown as live readings on the home device card. */
 export const DEVICE_CARD_SENSOR_PARAM_NAME_BATTERY = "Battery";
@@ -308,6 +331,23 @@ export const PARAM_CONTROL_THROTTLE_MS = 400;
 
 /** Delay before adopting incoming MQTT/store `param.value` into local UI after user writes. */
 export const PARAM_INCOMING_UPDATE_DEBOUNCE_MS = 3000;
+/**
+ * Hold applied to incoming power updates on the home/room cards after the user
+ * toggles from the app — long enough to swallow the echo of that write, short
+ * because a toggle is the only operation there. Updates that arrive with no
+ * local toggle in flight are applied immediately.
+ */
+export const POWER_TOGGLE_INCOMING_HOLD_MS = 1000;
+
+/**
+ * After that hold, store values that differ from the switch must stay put for
+ * the hold time before they show, for up to this long. Swallows the late
+ * cloud echoes of earlier taps (1.5–2.2 s behind on Neo).
+ */
+export const POWER_TOGGLE_LATE_ECHO_MS = 3000;
+
+/** A device write with no answer after this long counts as failed. */
+export const DEVICE_WRITE_TIMEOUT_MS = 10000;
 
 /**
  * Leading-edge window for duplicate `router.push` to the same destination.
@@ -445,7 +485,7 @@ export const MDNS_TXT_CAP_CH_RESP = "ch_resp";
 
 // RMAKER_LOCAL_CTRL PROTOCOL ENDPOINTS
 //
-// Mirrors `RMakerLocalCtrlEndpoint` in @espressif/rmneo-base-sdk. Duplicated
+// Mirrors `RMakerLocalCtrlEndpoint` in @espressif/rainmaker-neo-base-sdk. Duplicated
 // here because the product layer (features/shared) may not import `@espressif/*`
 // packages — see the `no-espressif-outside-sdk-layer` rule in
 // .dependency-cruiser.cjs. SDK-layer code should prefer the SDK's own constants.
@@ -619,10 +659,6 @@ export const ERROR_CODES = {
   GEO_COORDINATES_INVALID: "error.geo.coordinates_invalid",
 } as const;
 
-/** i18next key under `automation.errors` in locales (RMNG adaptor; feature layer translates with `t()`). */
-export const AUTOMATION_RMNG_ENABLE_DISABLE_UNSUPPORTED_I18N_KEY =
-  "automation.errors.rmngEnableDisableNotSupported";
-
 // Chat Constants
 export const MAX_MESSAGES_IN_MEMORY = 500;
 
@@ -658,11 +694,19 @@ export const NODE_TYPE = {
   RAINMAKER_MATTER: "rainmaker_matter",
 };
 
+/**
+ * `data_model` on a node config that lives only on the Matter fabric. Written
+ * only by the Matter SDK's pure-Matter config write, which the cloud rejects
+ * for every other node type, so a hybrid can never carry it.
+ */
+export const MATTER_ONLY_DATA_MODEL = "matter";
+
 // Matter related constants
 export const DEFAULT_MATTER_DEVICE_NAME = "Matter Device";
 export const MAX_MATTER_DEVICE_NAME_LENGTH = 32;
 export const MATTER_METADATA_KEY = "Matter";
 export const MATTER_METADATA_DEVICE_NAME_KEY = "deviceName";
+export const MATTER_METADATA_NODE_ID_KEY = "matter_node_id";
 export const MATTER_METADATA_DEVICE_TYPE_KEY = "deviceType";
 export const MATTER_METADATA_ACCEPTED_COMMANDS_KEY = "accepted_commands";
 export const MATTER_METADATA_ENDPOINTS_KEY = "endpoints";
@@ -715,16 +759,30 @@ export const MATTER_EVENT_COMMISSIONING_CONFIRMATION_REQUEST =
 export const MATTER_EVENT_COMMISSIONING_CONFIRMATION_RESPONSE =
   "COMMISSIONING_CONFIRMATION_RESPONSE";
 export const MATTER_EVENT_COMMISSIONING_ERROR = "COMMISSIONING_ERROR";
-export const MATTER_EVENT_RMNG_ATTESTATION_CHALLENGE =
-  "RMNG_ATTESTATION_CHALLENGE";
-export const MATTER_EVENT_RMNG_MATTER_ATTESTATION_DATA =
-  "RMNG_MATTER_ATTESTATION_DATA";
+export const MATTER_EVENT_RMNEO_ATTESTATION_CHALLENGE =
+  "RMNEO_ATTESTATION_CHALLENGE";
+export const MATTER_EVENT_RMNEO_MATTER_ATTESTATION_DATA =
+  "RMNEO_MATTER_ATTESTATION_DATA";
 
 /** Android GPS commissioning service intermediate complete (not terminal). */
 export const MATTER_COMMISSIONING_SOURCE_GPS = "GPS_SERVICE";
 
 /** Android HeadlessJS confirm task terminal complete. */
 export const MATTER_COMMISSIONING_SOURCE_HEADLESS_JS = "HEADLESS_JS";
+
+/** Cap on the post-commission cloud sync; the node is already commissioned by then. */
+export const MATTER_POST_COMMISSION_SYNC_TIMEOUT_MS = 15000;
+
+/** Rejection message raised when {@link MATTER_POST_COMMISSION_SYNC_TIMEOUT_MS} wins. */
+export const MATTER_POST_COMMISSION_SYNC_TIMEOUT_ERROR =
+  "MATTER_POST_COMMISSION_SYNC_TIMEOUT";
+
+/** iOS: cap on waiting for the SDK to finish its cloud confirm before the first sync. */
+export const MATTER_CLOUD_CONFIRM_WAIT_TIMEOUT_MS = 15000;
+
+/** Rejection message raised when {@link MATTER_CLOUD_CONFIRM_WAIT_TIMEOUT_MS} wins. */
+export const MATTER_CLOUD_CONFIRM_WAIT_TIMEOUT_ERROR =
+  "MATTER_CLOUD_CONFIRM_WAIT_TIMEOUT";
 
 /**
  * AppRegistry names in `registerHeadless.ts` — must match
@@ -746,6 +804,7 @@ export const HEADLESS_TASK_CONFIRM_COMMISSION = "CONFIRM_COMMISSION";
 // Commissioning Status Values
 export const STATUS_PENDING = "pending";
 export const STATUS_SUCCESS = "success";
+export const STATUS_FAILED = "failed";
 
 // Metadata Keys
 export const METADATA_KEY_CHALLENGE = "challenge";
@@ -759,11 +818,19 @@ export const METADATA_KEY_IS_RAINMAKER = "isRainmaker";
 export const METADATA_KEY_RAINMAKER_NODE_ID = "rainmaker_node_id";
 export const METADATA_KEY_MATTER_NODE_ID = "matterNodeId";
 
+/**
+ * RMNeo capability tag for pure Matter nodes: sent on `/confirm` so the cloud
+ * tags the node `["matter"]` (without `rmng`) instead of relying on its
+ * node_id == matter_node_id heuristic.
+ */
+export const MATTER_CAPABILITY = "matter";
+
 // HeadlessJS Error Messages
 export const HEADLESS_ERROR_MISSING_TASK_DATA = "Missing required task data";
 export const HEADLESS_ERROR_USER_NOT_AUTHENTICATED = "User not authenticated. Cannot issue NOC.";
 export const HEADLESS_ERROR_UNKNOWN = "Unknown error";
 export const HEADLESS_ERROR_NATIVE_MODULE_UNAVAILABLE = "Native module method not available";
+export const HEADLESS_ERROR_SDK_CANNOT_ADD_MATTER = "Active SDK cannot add Matter devices";
 export const HEADLESS_COMMISSIONING_DESCRIPTION = "Matter node commissioning in progress";
 
 // Matter Commissioning Status constants
@@ -1207,7 +1274,7 @@ export const AUTOMATION_CONDITION_SYMBOL_GREATER_THAN_OR_EQUAL = ">=";
 /** Display symbol for less-than-or-equal condition on the automation card When tag. */
 export const AUTOMATION_CONDITION_SYMBOL_LESS_THAN_OR_EQUAL = "<=";
 
-/** RMNG+Matter compressed endpoint topology keys (`endpoint.c.s.<cluster>.c|a.<id>`). */
+/** RMNeo+Matter compressed endpoint topology keys (`endpoint.c.s.<cluster>.c|a.<id>`). */
 export const MATTER_TOPOLOGY_KEY_C = "c";
 export const MATTER_TOPOLOGY_KEY_S = "s";
 export const MATTER_TOPOLOGY_KEY_A = "a";

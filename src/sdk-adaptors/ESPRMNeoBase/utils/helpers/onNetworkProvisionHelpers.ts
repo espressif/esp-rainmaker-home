@@ -44,14 +44,18 @@ import {
  * step, carried over LAN HTTP instead of a provisioning transport.
  *
  * Steps:
- *   1. `localControlAdapter.connect(...)` establishes the protocomm session.
+ *   1. Cloud `initiateUserNodeMapping` issues a request id + challenge.
+ *   2. `localControlAdapter.connect(...)` establishes the protocomm session.
  *      Unlike the classic adaptor this targets `rmaker_local_ctrl/session`
  *      (passed as session options), since RMNeo firmware serves the shared
  *      instance's own protocomm endpoints. SEC1 (with or without PoP) and SEC2
  *      (SRP6a, username `wifiprov`) are supported; security 0 is not.
- *   2. Cloud `initiateUserNodeMapping` issues a request id + challenge.
  *   3. `sendData(nodeId, "ch_resp", …)` sends the encrypted challenge over the
- *      established session and returns the device's signed response.
+ *      established session and returns the device's signed response. A failed
+ *      send gets a new session and is sent once more.
+ *   The challenge comes first so the session is not left idle during the cloud
+ *   call; the board can drop an idle socket, and iOS cannot recover a send on it
+ *   (same order and resend as the RainMaker iOS app).
  *   4. Cloud `verifyUserNodeMapping` confirms the mapping.
  *   5. Best-effort `TypeCmdDisableChalResp` so the device retires the endpoint.
  *   6. Poll cloud for the node, apply timezone, attach to the group store.
@@ -173,40 +177,12 @@ export async function addOnNetworkDeviceProvision(
     security: device.secVersion,
   });
 
-  // ─── Step 1 — Establish the protocomm session with the device ───────────
+  // ─── Step 1 — Ask cloud to issue a challenge ───────────────────────────
   onProgress?.({
     status: ESPCDFProvisionResponseStatus.ON_PROGRESS,
     description: ESPCDFOnNetworkProgressMessages.INITIATING_NODE_ASSOCIATION,
   });
-  console.log(
-    `${LOG_PREFIX} Step 1: connect(${deviceName} @ ${baseUrl}, sec=${device.secVersion}) on ${RMAKER_SESSION_OPTIONS.sessionPath}`,
-  );
-  try {
-    // Pass `""` (never null/undefined) for a missing POP: Android's
-    // `Security1(pop).processStep0Response(...)` dereferences
-    // `proofOfPossession.length` without a null guard, and iOS treats a nil POP
-    // as "ask the delegate", which would hang with no delegate set. An empty
-    // string routes through the library's `length > 0` check and matches the
-    // firmware's `no_pop` path.
-    await ESPLocalControlAdapter.connect(
-      deviceName,
-      baseUrl,
-      device.secVersion,
-      pop ?? "",
-      device.secVersion === 2 ? SEC2_USERNAME : undefined,
-      RMAKER_SESSION_OPTIONS,
-    );
-    console.log(`${LOG_PREFIX} Step 1 OK (session established)`);
-  } catch (e) {
-    console.error(
-      `${LOG_PREFIX} Step 1 FAILED (connect/session):`,
-      e instanceof Error ? e.message : e,
-    );
-    throw e;
-  }
-
-  // ─── Step 2 — Ask cloud to issue a challenge ───────────────────────────
-  console.log(`${LOG_PREFIX} Step 2: initiateUserNodeMapping(${groupId})`);
+  console.log(`${LOG_PREFIX} Step 1: initiateUserNodeMapping(${groupId})`);
   let challenge: string | undefined;
   let requestId: string | undefined;
   try {
@@ -217,12 +193,12 @@ export async function addOnNetworkDeviceProvision(
     challenge = mappingResponse?.challenge;
     requestId = mappingResponse?.request_id;
     console.log(
-      `${LOG_PREFIX} Step 2 OK:`,
+      `${LOG_PREFIX} Step 1 OK:`,
       JSON.stringify({ hasChallenge: !!challenge, hasRequestId: !!requestId }),
     );
   } catch (e) {
     console.error(
-      `${LOG_PREFIX} Step 2 FAILED (cloud initiateUserNodeMapping):`,
+      `${LOG_PREFIX} Step 1 FAILED (cloud initiateUserNodeMapping):`,
       e instanceof Error ? e.message : e,
     );
     throw e;
@@ -231,32 +207,76 @@ export async function addOnNetworkDeviceProvision(
     throw new Error("Cloud did not return a challenge / request id");
   }
 
+  // ─── Step 2 — Establish the protocomm session with the device ───────────
+  /** Opens a new session; also used to send the challenge again (Step 3). */
+  const openSession = async (): Promise<void> => {
+    console.log(
+      `${LOG_PREFIX} Step 2: connect(${deviceName} @ ${baseUrl}, sec=${device.secVersion}) on ${RMAKER_SESSION_OPTIONS.sessionPath}`,
+    );
+    try {
+      // Pass `""` (never null/undefined) for a missing POP: Android's
+      // `Security1(pop).processStep0Response(...)` dereferences
+      // `proofOfPossession.length` without a null guard, and iOS treats a nil POP
+      // as "ask the delegate", which would hang with no delegate set. An empty
+      // string routes through the library's `length > 0` check and matches the
+      // firmware's `no_pop` path.
+      await ESPLocalControlAdapter.connect(
+        deviceName,
+        baseUrl,
+        device.secVersion,
+        pop ?? "",
+        device.secVersion === 2 ? SEC2_USERNAME : undefined,
+        RMAKER_SESSION_OPTIONS,
+      );
+      console.log(`${LOG_PREFIX} Step 2 OK (session established)`);
+    } catch (e) {
+      console.error(
+        `${LOG_PREFIX} Step 2 FAILED (connect/session):`,
+        e instanceof Error ? e.message : e,
+      );
+      throw e;
+    }
+  };
+  await openSession();
+
   // ─── Step 3 — Encrypted send to the device's ch_resp endpoint ───────────
   onProgress?.({
     status: ESPCDFProvisionResponseStatus.ON_PROGRESS,
     description: ESPCDFOnNetworkProgressMessages.SENDING_CHALLENGE_TO_DEVICE,
   });
   const challengePayload = createChallengeRequest(challenge);
+  const sendChallenge = () =>
+    ESPLocalControlAdapter.sendData(
+      deviceName,
+      normalizedEndpoint,
+      uint8ArrayToBase64(challengePayload),
+    );
   console.log(
     `${LOG_PREFIX} Step 3: sendData to "${normalizedEndpoint}" (${challengePayload.length} bytes pre-encryption)`,
   );
   let responseBase64: string;
   try {
-    responseBase64 = await ESPLocalControlAdapter.sendData(
-      deviceName,
-      normalizedEndpoint,
-      uint8ArrayToBase64(challengePayload),
+    responseBase64 = await sendChallenge();
+  } catch (firstError) {
+    // The board dropped the session's socket: open a new session and send once more.
+    console.warn(
+      `${LOG_PREFIX} Step 3 send failed, opening a new session and sending again:`,
+      firstError instanceof Error ? firstError.message : firstError,
     );
-    console.log(
-      `${LOG_PREFIX} Step 3 OK (response ${responseBase64.length} chars base64)`,
-    );
-  } catch (e) {
-    console.error(
-      `${LOG_PREFIX} Step 3 FAILED (sendData):`,
-      e instanceof Error ? e.message : e,
-    );
-    throw e;
+    try {
+      await openSession();
+      responseBase64 = await sendChallenge();
+    } catch (e) {
+      console.error(
+        `${LOG_PREFIX} Step 3 FAILED (sendData):`,
+        e instanceof Error ? e.message : e,
+      );
+      throw e;
+    }
   }
+  console.log(
+    `${LOG_PREFIX} Step 3 OK (response ${responseBase64.length} chars base64)`,
+  );
 
   const parsed = parseDeviceResponse(base64ToUint8Array(responseBase64));
   console.log(

@@ -64,11 +64,19 @@ const Settings = observer(() => {
     settingsQuickActions,
     otaFeatureEnabled,
     handleSaveDeviceName,
+    isLeaveDialogOpen,
+    saveNameAndLeave,
+    discardNameAndLeave,
+    stayOnSettings,
     handleCheckForUpdates,
     handleStartUpdate,
     handleRemoveDevice,
     confirmRemoveDevice,
     handleGuidePress,
+    maxNameLength,
+    showIdentify,
+    isIdentifying,
+    identify,
   } = useSettings();
 
   if (!node) {
@@ -132,6 +140,7 @@ const Settings = observer(() => {
               isSaving={isSavingName}
               isConnected={isConnected}
               disabled={settingsDisabled}
+              maxNameLength={maxNameLength}
             />
           )}
 
@@ -183,7 +192,13 @@ const Settings = observer(() => {
             </ContentWrapper>
           )}
 
-          <DeviceOperations node={node} disabled={settingsDisabled} />
+          <DeviceOperations
+            node={node}
+            disabled={settingsDisabled}
+            showIdentify={showIdentify}
+            isIdentifying={isIdentifying}
+            onIdentify={identify}
+          />
 
           {otaFeatureEnabled && (
             <OTA
@@ -231,6 +246,18 @@ const Settings = observer(() => {
         confirmColor={tokens.colors.red}
         isLoading={isRemovingDevice}
         qaId="remove_device"
+      />
+
+      <ConfirmationDialog
+        open={isLeaveDialogOpen}
+        title={t("layout.shared.unsavedChangesTitle")}
+        description={t("device.settings.unsavedDeviceNameDescription")}
+        confirmText={t("layout.shared.save")}
+        cancelText={t("layout.shared.discardChanges")}
+        onConfirm={() => void saveNameAndLeave()}
+        onCancel={discardNameAndLeave}
+        onDismiss={stayOnSettings}
+        qaId="unsaved_device_name"
       />
     </>
   );

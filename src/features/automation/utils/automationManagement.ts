@@ -5,6 +5,11 @@
  */
 
 import type { ESPCDFAutomation } from "@store";
+import {
+  getDeviceDisplayName,
+  type NameSourceDevice,
+  type NameSourceNode,
+} from "@shared/utils/deviceDisplayName";
 
 /** Shape for device-parameter event used in create automation UI */
 export interface CreateAutomationEventInfo {
@@ -117,8 +122,8 @@ export function isCreateAutomationValid(
 }
 
 /** Minimal node shape for building action cards (avoids CDF dependency in util) */
-export interface NodeForActionCard {
-  devices?: { name: string; displayName?: string; type?: string }[];
+export interface NodeForActionCard extends NameSourceNode {
+  devices?: (NameSourceDevice & { name: string; type?: string })[];
 }
 
 /**
@@ -144,7 +149,9 @@ export function getActionCardsFromActions(
         device: device
           ? { type: device.type ?? "switch", name: deviceName }
           : { type: "switch", name: deviceName },
-        displayDeviceName: device?.displayName ?? deviceName,
+        displayDeviceName: device
+          ? getDeviceDisplayName(device, node)
+          : deviceName,
         actions: (deviceParams ?? {}) as Record<string, unknown>,
       });
     });

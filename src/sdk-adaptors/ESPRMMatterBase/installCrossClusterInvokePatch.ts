@@ -8,7 +8,7 @@ import {
     ESPRMMatterBase,
     ESPRMMatterDeviceParam,
 } from "@espressif/rainmaker-matter-sdk";
-import { isCrossClusterInvokeMarker } from "./utils/common";
+import { isCrossClusterInvokeMarker } from "@shared/utils/matterClusterResolvers";
 
 let crossClusterPatchInstalled = false;
 

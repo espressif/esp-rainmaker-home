@@ -30,9 +30,9 @@ import {
 } from "@features/group/utils/controlGroupHelpers";
 import {
   ESPRM_POWER_PARAM_TYPE,
-  ERROR_CODES,
-  PARAM_INCOMING_UPDATE_DEBOUNCE_MS,
+  POWER_TOGGLE_INCOMING_HOLD_MS,
 } from "@shared/utils/constants";
+import { messageKeyForFailedWrite } from "@shared/utils/deviceWriteErrorMessage";
 import { globalStyles } from "@shared/theme/globalStyleSheet";
 import { switchFrameProps } from "@shared/theme/switchFrameProps";
 import { tokens } from "@shared/theme/tokens";
@@ -117,18 +117,28 @@ const ControlGroupCard = observer(
     const powerUpdateDelayTimeoutRef = useRef<ReturnType<
       typeof setTimeout
     > | null>(null);
+    /** Incoming updates are held until this time after an app-side toggle. */
+    const localToggleHoldUntilRef = useRef(0);
 
     /**
-     * Debounces adopting store/MQTT member power into the card Switch so
-     * broadcast lag does not snap the optimistic toggle (DeviceCard pattern).
+     * Adopts member power into the card Switch. Applied immediately unless the
+     * user just toggled from this card, in which case adoption is held briefly
+     * so the broadcast's echoes do not snap the optimistic state (DeviceCard
+     * policy).
      */
     useEffect(() => {
       if (!hasPower) {
         return;
       }
 
-      if (powerUpdateDelayTimeoutRef.current === null) {
+      const holdActive = Date.now() < localToggleHoldUntilRef.current;
+      if (!holdActive) {
+        if (powerUpdateDelayTimeoutRef.current !== null) {
+          clearTimeout(powerUpdateDelayTimeoutRef.current);
+          powerUpdateDelayTimeoutRef.current = null;
+        }
         setPowerAllOn(storePowerAllOn);
+        return;
       }
 
       if (powerUpdateDelayTimeoutRef.current !== null) {
@@ -137,7 +147,7 @@ const ControlGroupCard = observer(
       powerUpdateDelayTimeoutRef.current = setTimeout(() => {
         setPowerAllOn(storePowerAllOn);
         powerUpdateDelayTimeoutRef.current = null;
-      }, PARAM_INCOMING_UPDATE_DEBOUNCE_MS);
+      }, POWER_TOGGLE_INCOMING_HOLD_MS);
 
       return () => {
         if (powerUpdateDelayTimeoutRef.current !== null) {
@@ -183,6 +193,7 @@ const ControlGroupCard = observer(
         .filter((row): row is NonNullable<typeof row> => row != null);
       if (broadcastTargets.length === 0) return;
 
+      localToggleHoldUntilRef.current = Date.now() + POWER_TOGGLE_INCOMING_HOLD_MS;
       if (powerUpdateDelayTimeoutRef.current !== null) {
         clearTimeout(powerUpdateDelayTimeoutRef.current);
       }
@@ -197,7 +208,7 @@ const ControlGroupCard = observer(
           });
         setPowerAllOn(settled);
         powerUpdateDelayTimeoutRef.current = null;
-      }, PARAM_INCOMING_UPDATE_DEBOUNCE_MS);
+      }, POWER_TOGGLE_INCOMING_HOLD_MS);
 
       setPowerAllOn(value);
       broadcastGroupParam(group, broadcastTargets, value, {
@@ -211,10 +222,7 @@ const ControlGroupCard = observer(
               return Boolean(p?.value);
             });
           setPowerAllOn(settled);
-          const code = (err as { code?: string })?.code;
-          const key =
-            code && ERROR_CODES[code as keyof typeof ERROR_CODES];
-          toast.showError(key ? t(key) : t("group.errors.fallback"));
+          toast.showError(t(messageKeyForFailedWrite(err)));
         },
       });
     };

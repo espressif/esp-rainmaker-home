@@ -39,6 +39,10 @@ CHROME_FIRST_RUN_DISMISSALS = (
 CHROME_SIGNIN_PROMO_MARKERS = ("Sign in to Chrome", "Turn on sync", "Use Chrome without an account")
 CHROME_SIGNIN_PROMO_DECLINES = ("Skip", "No thanks", "Cancel")
 
+GOOGLE_PLAY_SERVICES = "com.google.android.gms"
+GOOGLE_ACCOUNT_NAME = f"{GOOGLE_PLAY_SERVICES}:id/account_name"
+GOOGLE_CONSENT_AGREE = f"{GOOGLE_PLAY_SERVICES}:id/agree_and_share_button"
+
 AUTH_PAGE_MARKERS = (
     "Choose an account",
     "Sign in with",
@@ -127,15 +131,15 @@ class OauthLogin(BasePage):
             time.sleep(0.5)
         raise RuntimeError("Did not return to login screen after cancelling oauth")
 
-    def perform_auth(self, provider, email, password, totp_secret=None, timeout=120):
-        """Complete the provider's web login and wait until the app regains the foreground."""
-        logger.info("Performing %s web authentication for %s", provider, email)
+    def perform_auth(self, provider, email, password, totp_secret=None, device_account=None, timeout=120):
+        """Complete the provider's login and wait until the app regains the foreground; `device_account` is the phone's own Google account picked in the native Android sign-in sheet."""
+        logger.info("Performing %s authentication for %s", provider, device_account or email)
         if provider.lower() == "apple":
             return self._perform_apple_auth(email, password, timeout)
-        return self._perform_google_auth(email, password, totp_secret, timeout)
+        return self._perform_google_auth(email, password, totp_secret, timeout, device_account=device_account)
 
-    def _perform_google_auth(self, email, password, totp_secret, timeout):
-        """Google web login: account chooser / email / password (dismissing any re-appearing Credential-Manager passkey sheet), then TOTP 2FA or the risk-based device prompt, until the app regains the foreground."""
+    def _perform_google_auth(self, email, password, totp_secret, timeout, device_account=None):
+        """Google login: the native Play-services account picker (Android) or the web chooser / email / password (dismissing any re-appearing Credential-Manager passkey sheet), then consent, TOTP 2FA or the risk-based device prompt, until the app regains the foreground."""
         deadline = time.time() + timeout
         email_done = password_done = totp_done = totp_started = False
         while time.time() < deadline:
@@ -145,6 +149,11 @@ class OauthLogin(BasePage):
                     continue
                 logger.info("Auth surface closed; oauth redirect handed back to the app")
                 return self
+            if not email_done and self._pick_google_device_account(device_account or email):
+                email_done = password_done = True
+                continue
+            if self._agree_google_native_consent():
+                continue
             # Chrome first-run and the Credential-Manager passkey sheet only precede the completed password; skip once past.
             if not password_done and self._dismiss_chrome_first_run():
                 continue
@@ -187,9 +196,54 @@ class OauthLogin(BasePage):
                         email_done = True
                         time.sleep(3)
                         continue
+            if self.platform == "ios" and self._tap_any(("Scroll down",), quiet=True):
+                logger.info("Google consent page: scrolled toward its Continue button")
+                time.sleep(1)
+                continue
             self._tap_any(("Continue", "I agree", "Allow", "Next"), quiet=True)
             time.sleep(1)
         return self._finish_auth("google", timeout)
+
+    def _in_google_native_sheet(self):
+        """Android native Google sign-in: the Play-services sheet owns the screen."""
+        if self.platform != "android":
+            return False
+        try:
+            return self.driver.current_package == GOOGLE_PLAY_SERVICES
+        except Exception:
+            return False
+
+    def _agree_google_native_consent(self):
+        """Android native Google sign-in: accept the first-time 'Allow Google to sign you in' consent via Agree and share."""
+        if not self._in_google_native_sheet() or not self.is_visible("id", GOOGLE_CONSENT_AGREE, timeout=1):
+            return False
+        logger.info("Google sign-in consent shown; tapping Agree and share")
+        self.click("id", GOOGLE_CONSENT_AGREE, timeout=3)
+        time.sleep(2)
+        return True
+
+    def _pick_google_device_account(self, account):
+        """Android native Google sign-in: tap `account` in the Play-services account picker; True once tapped, False when the picker is not showing."""
+        if not self._in_google_native_sheet():
+            return False
+        rows = self.find_all("id", GOOGLE_ACCOUNT_NAME)
+        if not rows:
+            return False
+        listed = []
+        for row in rows:
+            try:
+                name = (row.text or "").strip()
+            except Exception:
+                continue
+            listed.append(name)
+            if name.lower() == (account or "").lower():
+                logger.info("Native Google account picker shown; selecting %s", name)
+                row.click()
+                time.sleep(2)
+                return True
+        raise RuntimeError(
+            f"Google account picker does not list {account!r} (phone accounts: {listed}); set "
+            "GOOGLE_OAUTH_DEVICE_ACCOUNT_ANDROID in ~/.esp_test_secrets.env to an account signed in on the phone")
 
     def _perform_apple_auth(self, email, password, timeout):
         """Apple web login. iOS: the native Sign in with Apple sheet. Android: the apple.com web form — email / password / SMS 2FA / 'Trust this browser?' / share-email consent — until the app regains the foreground."""
@@ -253,6 +307,8 @@ class OauthLogin(BasePage):
     def _finish_auth(self, provider, timeout):
         """Shared deadline epilogue: a redirect landing right at the deadline is success; still-in-surface is a timeout."""
         self._assert_no_redirect_chooser()
+        if self.platform == "ios" and provider == "apple" and self._ios_apple_native_in_progress():
+            raise RuntimeError(f"Sign in with Apple is still on screen after {timeout}s")
         if not self._in_auth_surface():
             logger.info("OAuth redirect landed right at the deadline; continuing")
             return self
@@ -331,61 +387,79 @@ class OauthLogin(BasePage):
         finally:
             self._ios_scope("auto")
 
+    SIWA_CONTINUE_LABELS = ("Sign In", "Continue with Password")
+
     def _ios_native_apple_sign_in(self, password):
-        """Drive the native Sign in with Apple sheet to password entry; True once the password is submitted."""
-        for host in self._ios_sheet_hosts() + ("auto",):
+        """Drive the native Sign in with Apple flow, which lives in the SpringBoard/AuthKitUIService scope (never the app's): tap the sheet's continue button, then type the Apple Account password into the system password page and submit; True once submitted."""
+        for host in self._ios_sheet_hosts():
             try:
                 self._ios_scope(host)
                 fields = self.driver.find_elements("class name", "XCUIElementTypeSecureTextField")
-                if not fields:
-                    continue
-                field = fields[0]
-                logger.info("Entering Apple Account password in the native prompt (host %s)", host)
-                # iOS SecureTextField.setValue can no-op if unfocused; verify the value took and retry.
-                entered = False
-                for attempt in range(3):
-                    field.click()
-                    time.sleep(0.5)
-                    field.clear()
-                    field.send_keys(password)
-                    time.sleep(0.5)
-                    typed = (field.get_attribute("value") or "").strip()
-                    logger.info("Apple password field holds %s chars (expected %s)", len(typed), len(password))
-                    if typed and len(typed) == len(password):
-                        entered = True
-                        break
-                    logger.warning("Apple password field holds %s/%s chars after attempt %s; retrying", len(typed), len(password), attempt + 1)
-                if not entered:
-                    logger.warning("Apple password did not register in the field; will retry on next loop")
+                if fields:
+                    return self._ios_submit_apple_password(fields[0], password, host)
+                button = self._ios_siwa_continue_button()
+                if button is not None:
+                    logger.info("Native Sign in with Apple sheet: tapping %r (host %s)", button.get_attribute("label"), host)
+                    button.click()
+                    time.sleep(3)
                     return False
-                # Tapping an enabled Sign In IS the submission — return True immediately (the page lingers ~1 min; re-checking corrupts the flow).
-                deadline = time.time() + 10
-                while time.time() < deadline:
-                    btns = self.driver.find_elements(
-                        "-ios predicate string",
-                        'type == "XCUIElementTypeButton" AND (label CONTAINS[c] "sign in" OR label CONTAINS[c] "continue")')
-                    enabled = [b for b in btns if b.get_attribute("enabled") == "true"]
-                    if enabled:
-                        enabled[0].click()
-                        logger.info("Tapped Sign In on the Apple password page; submission handed off")
-                        return True
-                    time.sleep(0.5)
-                field.send_keys("\n")
-                logger.info("Sign In not enabled in 10s; submitted via return key")
-                return True
-            finally:
-                self._ios_scope("auto")
-        bundle, source = self._ios_native_apple_sheet()
-        if bundle and "SIWA_CONTINUE_BUTTON" in source:
-            logger.info("Native Sign in with Apple sheet: tapping SIWA_CONTINUE_BUTTON")
-            try:
-                self._ios_scope(bundle)
-                self.click("accessibility_id", "SIWA_CONTINUE_BUTTON", timeout=3)
-                time.sleep(3)
             except Exception as error:
-                logger.warning("SIWA continue tap failed: %s", error)
+                logger.info("Native Sign in with Apple step on host %s did not complete: %s", host, error)
             finally:
                 self._ios_scope("auto")
+        return False
+
+    def _ios_siwa_continue_button(self):
+        """The enabled continue control of the Sign in with Apple sheet (SIWA_CONTINUE_BUTTON, or its first-time 'Continue with Password')."""
+        for el in self.driver.find_elements("accessibility id", "SIWA_CONTINUE_BUTTON"):
+            if el.get_attribute("enabled") == "true":
+                return el
+        labels = ", ".join(f'"{label}"' for label in self.SIWA_CONTINUE_LABELS)
+        for el in self.driver.find_elements("-ios predicate string", f'type == "XCUIElementTypeButton" AND label IN {{{labels}}}'):
+            if el.get_attribute("enabled") == "true":
+                return el
+        return None
+
+    def _ios_submit_apple_password(self, field, password, host):
+        """Type the Apple Account password into the system password page, verify every character landed, then submit with Return (a key event survives the iOS 27 first-touch loss); Sign In is tapped only if the page is still up and enabled."""
+        logger.info("Entering Apple Account password in the system password page (host %s)", host)
+        for attempt in range(3):
+            field.click()
+            time.sleep(0.6)
+            field.clear()
+            field.send_keys(password)
+            time.sleep(0.5)
+            typed = field.get_attribute("value") or ""
+            if len(typed) == len(password):
+                break
+            logger.warning("Apple password field holds %s/%s chars after attempt %s; retyping", len(typed), len(password), attempt + 1)
+        else:
+            logger.warning("Apple password did not register in the field; will retry on next loop")
+            return False
+        field.send_keys("\n")
+        logger.info("Submitted the Apple password via the keyboard Return key")
+        if self._ios_apple_password_page_gone(timeout=20):
+            return True
+        logger.info("Apple password page still up after Return; settling the keyboard and tapping Sign In")
+        prompt = self.driver.find_elements("-ios predicate string", 'label BEGINSWITH "Enter the password"')
+        if prompt:
+            prompt[0].click()
+            time.sleep(1)
+        enabled = [b for b in self.driver.find_elements(
+            "-ios predicate string", 'type == "XCUIElementTypeButton" AND label == "Sign In"')
+            if b.get_attribute("enabled") == "true"]
+        if enabled:
+            enabled[0].click()
+            logger.info("Tapped Sign In on the Apple password page")
+        return True
+
+    def _ios_apple_password_page_gone(self, timeout=20):
+        """True once the system Apple password page (its secure field) leaves the current scope."""
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            if not self.driver.find_elements("class name", "XCUIElementTypeSecureTextField"):
+                return True
+            time.sleep(1)
         return False
 
     def _ios_dismiss_local_network_dialog(self):
@@ -438,7 +512,7 @@ class OauthLogin(BasePage):
                 package = self.driver.current_package or ""
             except Exception:
                 return False
-            return "chrome" in package or "browser" in package
+            return "chrome" in package or "browser" in package or package == GOOGLE_PLAY_SERVICES
         if self._find_text_field() is not None or self._find_password_field() is not None:
             return True
         return self._text_visible(AUTH_PAGE_MARKERS + ("Cancel",), timeout=1) and not \

@@ -15,6 +15,7 @@ import {
   Redirect,
 } from "expo-router";
 import { Logo } from "@shared/components";
+import { endUserSession } from "@shared/utils/userSession";
 import {
   executePostLoginPipeline,
   navigateToHomeAfterAuth,
@@ -74,6 +75,7 @@ const Index = () => {
         router.replace(getPreAuthRoute() as never);
       }
     } catch {
+      await endUserSession();
       await user?.logout();
       router.replace(getPreAuthRoute() as never);
     }

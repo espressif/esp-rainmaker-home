@@ -84,6 +84,10 @@ export const updateDeviceNameStyles = StyleSheet.create({
     marginLeft: tokens.spacing._10,
     marginRight: tokens.spacing._10,
   },
+  /** Trailing per-device action (identify), paired with the pencil. */
+  nameRowAction: {
+    marginRight: tokens.spacing._10,
+  },
   continueButton: {
     width: "100%",
     minHeight: 48,

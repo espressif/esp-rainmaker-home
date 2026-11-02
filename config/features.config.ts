@@ -17,10 +17,11 @@ import { PLATFORM_WEB } from '@shared/utils/constants';
  *   provisioning, deviceManagement
  *
  * SDK-gated (RMNeo = false):
- *   scenes, transferGroupSharing, ota, automationRetrigger, accountDeletion
+ *   scenes, transferGroupSharing, ota, automationRetrigger, accountDeletion,
+ *   aiAgent, thirdPartyAuth, voiceAssistants
  *
  * Both SDKs supported (env-only control):
- *   automations, aiAgent, thirdPartyAuth, voiceAssistants, softAPProvisioning
+ *   automations, softAPProvisioning
  *
  * SDK-gated (RMNeo / rainmaker-neo-base-sdk only):
  *   controlGroups — device control groups (homogeneous subgroups); not on rainmaker-base-sdk or rainmaker-matter-sdk
@@ -28,6 +29,18 @@ import { PLATFORM_WEB } from '@shared/utils/constants';
  *   browse/manage rooms (listing, rename, delete-if-empty) and rename the home
  *   (backend grants `group:update` + subgroup permissions to secondary access;
  *   classic RM keeps group/room management primary-only)
+ *
+ * Stack behaviour (SDK map only — no region/binary env switch):
+ *   nicknameEditing — the profile nickname can be edited (`updateName`); off on RMNeo
+ *   hybridMatterAutomation — RainMaker + Matter hybrids may take part in
+ *   automations, only pure Matter is excluded (RMNeo); classic excludes every
+ *   Matter-backed node
+ *   offlineDeviceSchedules — offline devices stay selectable as schedule targets (RMNeo)
+ *   onNetworkDiscoveryViaLocalControl — on-network provisioning finds devices on the
+ *   shared local-control mDNS service and probes their security (RMNeo);
+ *   classic uses the dedicated challenge-response service
+ *   timezoneLiveVerify — a node timezone write is confirmed by reading the Time
+ *   param back over MQTT (RMNeo); classic treats an accepted write as done
  */
 export type FeatureKey =
   | 'scenes'
@@ -49,7 +62,12 @@ export type FeatureKey =
   | 'softApProvisioning'
   | 'matterCommissioning'
   | 'backendSelector'
-  | 'accountDeletion';
+  | 'accountDeletion'
+  | 'nicknameEditing'
+  | 'hybridMatterAutomation'
+  | 'offlineDeviceSchedules'
+  | 'onNetworkDiscoveryViaLocalControl'
+  | 'timezoneLiveVerify';
 
 /**
  * Maps each FeatureKey to its corresponding key in the features block
@@ -79,6 +97,12 @@ const ENV_KEY_MAP: Record<FeatureKey, string> = {
   backendSelector:        'enableBackendSelector',
   // SDK-capability only: Neo has no account-deletion API; RM / Matter support it.
   accountDeletion:        'enableAccountDeletion',
+  // SDK-capability only: stack behaviour, no region/binary env switch.
+  nicknameEditing:        'enableNicknameEditing',
+  hybridMatterAutomation: 'enableHybridMatterAutomation',
+  offlineDeviceSchedules: 'enableOfflineDeviceSchedules',
+  onNetworkDiscoveryViaLocalControl: 'enableOnNetworkDiscoveryViaLocalControl',
+  timezoneLiveVerify:     'enableTimezoneLiveVerify',
 };
 
 /**
@@ -179,6 +203,11 @@ export function getFeatures(): Record<FeatureKey, boolean> {
     matterCommissioning:    resolve('matterCommissioning'),
     backendSelector:        resolve('backendSelector'),
     accountDeletion:        resolve('accountDeletion'),
+    nicknameEditing:        resolve('nicknameEditing'),
+    hybridMatterAutomation: resolve('hybridMatterAutomation'),
+    offlineDeviceSchedules: resolve('offlineDeviceSchedules'),
+    onNetworkDiscoveryViaLocalControl: resolve('onNetworkDiscoveryViaLocalControl'),
+    timezoneLiveVerify:     resolve('timezoneLiveVerify'),
   };
 }
 

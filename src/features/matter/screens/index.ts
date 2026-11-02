@@ -7,3 +7,4 @@
 export { CommissioningScreen } from "./Commissioning";
 export type { CommissioningScreenProps } from "./Commissioning";
 export { ManualCommissioningScreen } from "./ManualCommissioning";
+export { MatterDeviceSetupScreen } from "./DeviceSetup";

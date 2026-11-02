@@ -11,6 +11,7 @@ import { DeviceAction } from "@shared/components";
 import type { DeviceSelectionData } from "@src/types/global";
 import type { CreateAutomationEventInfo } from "@features/automation/utils/automationManagement";
 import {testProps} from "@shared/utils/testProps";
+import { getDeviceDisplayName } from "@shared/utils/deviceDisplayName";
 
 export interface EventDeviceSelectionDeviceItemProps {
   device: DeviceSelectionData;
@@ -53,7 +54,7 @@ export const EventDeviceSelectionDeviceItem: React.FC<
       <DeviceAction
         qaId="event_device_selection_item"
         device={device.device.type ?? ""}
-        displayDeviceName={device.device.displayName ?? ""}
+        displayDeviceName={getDeviceDisplayName(device.device, device.node)}
         actions={{}}
         onPress={() => !isDisabled && onPress()}
         eventConditions={eventConditions}

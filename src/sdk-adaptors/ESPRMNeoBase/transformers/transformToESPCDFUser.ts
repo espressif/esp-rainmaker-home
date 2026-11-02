@@ -29,19 +29,20 @@ import {
 } from "@espressif/rainmaker-neo-base-sdk";
 import { ESPRMNeoBaseAdaptorIdentifier } from "@config/sdk.identifiers";
 import { STATUS_SUCCESS } from "@shared/utils/constants";
-import { transformToESPCDFGroup } from "./transformToESPCDFGroup";
 import {
-  createHome as rmngCreateHome,
-  setCurrentHome as rmngSetCurrentHome,
-  syncHomeWithNodes as rmngSyncHomeWithNodes,
+  createHome as rmneoCreateHome,
+  setCurrentHome as rmneoSetCurrentHome,
+  syncHomeWithNodes as rmneoSyncHomeWithNodes,
 } from "../groupSync";
 import { transformToESPCDFGroupSharingRequest } from "./transformToESPCDFGroupSharingRequest";
 import { createCDFProvisioningDevice } from "./transformToESPCDFProvisioningDevice";
 import {
-  logRmneoGroupsRaw,
-} from "../utils/helpers/debugLogHelpers";
-import { transformRmneoSdkGroupsToCdf } from "../utils/helpers/groupHelpers";
+  transformRmneoSdkGroupsToCdf,
+  defaultGroupTransform,
+  type ESPRMNeoGroupTransform,
+} from "../utils/helpers/groupHelpers";
 import { startRmneoLocalDiscoverySubscription } from "../utils/helpers/localDiscoveryHelpers";
+import { waitForMqttCredentialRefresh } from "../utils/helpers/mqttCredentialRefresh";
 import {
   clearRmneoMqttConnection,
   startRmneoMqttConnection,
@@ -95,21 +96,24 @@ import {
  *
  * Starts MQTT once for the session, hydrates `userInfo` asynchronously, and
  * exposes CDF operations that delegate to Neo SDK / adaptor helpers.
- * @param esprmngUser - Live RMNeo user, or `null` (throws).
+ * @param esprmneoUser - Live RMNeo user, or `null` (throws).
  * @param initialUserId - User id read from the id token, so the CDF knows the
  *   user (and can key its disk snapshot) before the profile call answers.
+ * @param transformGroup - Builds each CDF group; the Neo Matter adaptor passes
+ *   its own.
  * @returns CDF user ready for store / UI consumption.
  */
 export function transformToESPCDFUser(
-  esprmngUser: ESPRMNeoUser | null,
+  esprmneoUser: ESPRMNeoUser | null,
   initialUserId = "",
+  transformGroup: ESPRMNeoGroupTransform = defaultGroupTransform,
 ): ESPCDFUser {
-  if (!esprmngUser) {
+  if (!esprmneoUser) {
     throw new Error(ESPRMNEO_USER_ERR_REQUIRED);
   }
 
   // Start MQTT once; Matter transform reuses the same promise via startRmneoMqttConnection.
-  const mqttConnectionPromise = startRmneoMqttConnection(esprmngUser);
+  const mqttConnectionPromise = startRmneoMqttConnection(esprmneoUser);
 
   const initialUserInfo: ESPCDFUserInfo = {
     id: initialUserId,
@@ -126,7 +130,7 @@ export function transformToESPCDFUser(
      * @returns Success-wrapped CDF user profile.
      */
     async getUserInfo(): Promise<ESPCDFAPIDataResponse<ESPCDFUserInfo>> {
-      const userInfo = await mapRmneoUserInfoToCdf(esprmngUser);
+      const userInfo = await mapRmneoUserInfoToCdf(esprmneoUser);
       return {
         status: STATUS_SUCCESS,
         description: ESPRMNEO_USER_DESC_INFO_FETCHED,
@@ -149,8 +153,7 @@ export function transformToESPCDFUser(
      * @returns Stored custom-data map, or `{}` when user id cannot be resolved.
      */
     async getCustomData(): Promise<Record<string, unknown>> {
-      const userId =
-        await resolveRmneoUserIdForCustomDataStorage(esprmngUser);
+      const userId = await resolveRmneoUserIdForCustomDataStorage(esprmneoUser);
       if (!userId) {
         Logger.warn(ESPRMNEO_USER_LOG_CUSTOM_DATA_NO_USER_ID);
         return {};
@@ -165,8 +168,7 @@ export function transformToESPCDFUser(
     async setCustomData(
       customData: ESPCDFUserCustomDataRequest,
     ): Promise<void> {
-      const userId =
-        await resolveRmneoUserIdForCustomDataStorage(esprmngUser);
+      const userId = await resolveRmneoUserIdForCustomDataStorage(esprmneoUser);
       if (!userId) {
         throw new Error(ESPRMNEO_USER_ERR_CUSTOM_DATA_NO_USER_ID);
       }
@@ -250,9 +252,9 @@ export function transformToESPCDFUser(
     async getReceivedGroupSharingRequests(): Promise<
       ESPCDFPaginatedAPIResponse<ESPCDFGroupSharingRequest[]>
     > {
-      const list = await esprmngUser.listSharingRequests();
+      const list = await esprmneoUser.listSharingRequests();
       const data = list.map((req) =>
-        transformToESPCDFGroupSharingRequest(req, esprmngUser),
+        transformToESPCDFGroupSharingRequest(req, esprmneoUser),
       );
       return {
         status: STATUS_SUCCESS,
@@ -277,9 +279,9 @@ export function transformToESPCDFUser(
       ]);
 
       try {
-        await esprmngUser.logout();
+        await esprmneoUser.logout();
       } finally {
-        clearRmneoMqttConnection(esprmngUser);
+        clearRmneoMqttConnection(esprmneoUser);
         // Session reset: clear all cached ncfg_ver markers so the next
         // login does not inherit stale refresh baselines.
         await clearAllNcfgVersionMarkers().catch(() => {});
@@ -306,15 +308,11 @@ export function transformToESPCDFUser(
      * @returns CDF group for the new SDK group.
      */
     async createGroup(data: ESPCDFCreateGroupRequest): Promise<ESPCDFGroup> {
-      const group = await esprmngUser.createGroup(data.name);
+      const group = await esprmneoUser.createGroup(data.name);
       // New home -> new group id outside the current IoT policy. Re-vend now so
       // the first device provisioned here is subscribable on the first attempt.
-      await refreshRmneoMqttCredentials(esprmngUser, "home.create");
-      return transformToESPCDFGroup(
-        group,
-        esprmngUser,
-        ESPRMNeoBaseAdaptorIdentifier,
-      );
+      await refreshRmneoMqttCredentials(esprmneoUser, "home.create");
+      return transformGroup(group, esprmneoUser);
     },
 
     /**
@@ -338,7 +336,7 @@ export function transformToESPCDFUser(
       devicePrefix: string,
       transport: string,
     ): Promise<ESPCDFProvisioningDevice[]> {
-      const devices = await esprmngUser.searchESPDevices(
+      const devices = await esprmneoUser.searchESPDevices(
         devicePrefix,
         // SDK transport enum is wider than CDF's string; cast at the boundary.
         transport as Parameters<ESPRMNeoUser["searchESPDevices"]>[1],
@@ -364,7 +362,7 @@ export function transformToESPCDFUser(
       softAPPassword?: string,
       username?: string,
     ): Promise<ESPCDFProvisioningDevice> {
-      const descriptor = await esprmngUser.createESPDevice(
+      const descriptor = await esprmneoUser.createESPDevice(
         name,
         // SDK transport enum is wider than CDF's string; cast at the boundary.
         transport as Parameters<ESPRMNeoUser["createESPDevice"]>[1],
@@ -404,7 +402,7 @@ export function transformToESPCDFUser(
         discoveryCleanup = null;
         discoveryCleanup = await startRmneoLocalDiscoverySubscription(
           callback,
-          esprmngUser,
+          esprmneoUser,
         );
         return;
       }
@@ -441,9 +439,12 @@ export function transformToESPCDFUser(
      * @returns Paginated CDF groups (no server-side pagination yet).
      */
     async getGroups(): Promise<ESPCDFPaginatedAPIResponse<ESPCDFGroup[]>> {
-      const groups = await esprmngUser.getGroups();
-      logRmneoGroupsRaw("getGroups", { sdkGroups: groups });
-      const cdfGroups = transformRmneoSdkGroupsToCdf(esprmngUser, groups);
+      const groups = await esprmneoUser.getGroups();
+      const cdfGroups = transformRmneoSdkGroupsToCdf(
+        esprmneoUser,
+        groups,
+        transformGroup,
+      );
       return {
         data: cdfGroups,
         pagination: {
@@ -459,7 +460,7 @@ export function transformToESPCDFUser(
      * @returns CDF node for the first successful group hit.
      */
     async getNodeDetails(nodeId: string): Promise<ESPCDFNode> {
-      return getRmneoCdfNodeById(esprmngUser, nodeId);
+      return getRmneoCdfNodeById(esprmneoUser, nodeId);
     },
 
     /**
@@ -468,7 +469,7 @@ export function transformToESPCDFUser(
      * @returns Access token string.
      */
     async getAccessToken(): Promise<string> {
-      return esprmngUser.getAccessToken();
+      return esprmneoUser.getAccessToken();
     },
 
     /**
@@ -478,11 +479,12 @@ export function transformToESPCDFUser(
      * @returns Result of `syncHomeWithNodes`.
      */
     async syncHomeWithNodes(user, callbacks) {
-      return rmngSyncHomeWithNodes(
+      return rmneoSyncHomeWithNodes(
         user as ESPCDFUser,
         callbacks,
-        esprmngUser,
+        esprmneoUser,
         mqttConnectionPromise,
+        transformGroup,
       );
     },
 
@@ -494,7 +496,7 @@ export function transformToESPCDFUser(
      * @returns Result of `setCurrentHome`.
      */
     async setCurrentHome(user, callbacks, home) {
-      return rmngSetCurrentHome(user as ESPCDFUser, callbacks, home);
+      return rmneoSetCurrentHome(user as ESPCDFUser, callbacks, home);
     },
 
     /**
@@ -504,12 +506,8 @@ export function transformToESPCDFUser(
      * @returns CDF home group.
      */
     async createHome(params, callbacks) {
-      const newHome = await rmngCreateHome(esprmngUser, params);
-      const cdfHome = transformToESPCDFGroup(
-        newHome,
-        esprmngUser,
-        ESPRMNeoBaseAdaptorIdentifier,
-      );
+      const newHome = await rmneoCreateHome(esprmneoUser, params);
+      const cdfHome = transformGroup(newHome, esprmneoUser);
       callbacks.addGroup(cdfHome);
       return cdfHome;
     },
@@ -547,7 +545,7 @@ export function transformToESPCDFUser(
       _platform: string,
       deviceToken: string,
     ): Promise<ESPCDFAPIDataResponse<unknown>> {
-      return registerRmneoPushEndpoint(esprmngUser, deviceToken);
+      return registerRmneoPushEndpoint(esprmneoUser, deviceToken);
     },
 
     /**
@@ -558,7 +556,7 @@ export function transformToESPCDFUser(
     async unregisterForNotification(
       _deviceToken: string,
     ): Promise<ESPCDFAPIResponse> {
-      return unregisterRmneoPushEndpoint(esprmngUser);
+      return unregisterRmneoPushEndpoint(esprmneoUser);
     },
 
     /**
@@ -578,6 +576,8 @@ export function transformToESPCDFUser(
     async subscribeToNodeUpdates(
       params: ESPCDFSubscribeToNodeUpdatesRequestParams,
     ): Promise<void> {
+      // New credentials first, e.g. right after a share was accepted.
+      await waitForMqttCredentialRefresh();
       await subscribeRmneoUserToNodeUpdates(params, nodeSubscriptionState);
     },
 
@@ -592,12 +592,12 @@ export function transformToESPCDFUser(
   const cdfUser = new ESPCDFUser({
     userInfo: initialUserInfo,
     operations: operations,
-    _raw: esprmngUser,
+    _raw: esprmneoUser,
     identifier: ESPRMNeoBaseAdaptorIdentifier,
   });
 
   // Hydrate CDF userInfo early from GET /v1/users.
-  mapRmneoUserInfoToCdf(esprmngUser)
+  mapRmneoUserInfoToCdf(esprmneoUser)
     .then((userInfo) => {
       cdfUser.userInfo = { ...userInfo, id: userInfo.id || initialUserInfo.id };
     })
