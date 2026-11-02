@@ -12,6 +12,7 @@ import type { ESPCDFAutomation } from "@store";
 import { tokens } from "@shared/theme/tokens";
 import { useCDF } from "@shared/hooks/useCDF";
 import { testProps } from "@shared/utils/testProps";
+import { getDeviceDisplayName as getShownDeviceName } from "@shared/utils/deviceDisplayName";
 import {
   getAutomationActionDescription,
   getAutomationEventSummary,
@@ -53,7 +54,7 @@ const AutomationWhenSetSummary: React.FC<AutomationWhenSetSummaryProps> = ({
           (entry) => entry.name === deviceName,
         );
 
-        return device?.displayName || deviceName;
+        return device ? getShownDeviceName(device, node) || deviceName : deviceName;
       } catch (error) {
         console.error(
           "[AutomationWhenSetSummary] Error getting device display name:",

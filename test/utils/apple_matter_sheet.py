@@ -50,6 +50,7 @@ ERROR_MARKERS = ("Unable to Add", "Not Found", "Accessory Not Found", "Couldn't 
 SHEET_MARKERS = (("Accessory", "This may take a few minutes")
                  + CONSENT_MARKERS + CONSENT_BUTTONS + ERROR_MARKERS)
 
+CONSENT_TAP_LIMIT = 3
 POST_CONSENT_LABELS = ("Continue", "Done", "Allow", "Next")
 ADVANCE_LABELS = CONSENT_BUTTONS + POST_CONSENT_LABELS
 CYRILLIC_TO_LATIN_LOOKALIKES = str.maketrans(
@@ -63,6 +64,22 @@ CYRILLIC_TO_LATIN_LOOKALIKES = str.maketrans(
 DECISION_DIALOGS = (
     ("Uncertified Accessory", "Add Anyway"),
 )
+
+# Apple's naming step. The app skips its own name screen on iOS, so the test names the
+# device here. Unlike the rest of the sheet, its buttons ("Clear text", "Continue") are
+# reachable through the alert API.
+NAME_MARKERS = ("Accessory Name",)
+# iOS 27 drops keys from a fast multi-key send; one key at a time with this pause keeps them all.
+NAME_KEY_PAUSE_S = 0.25
+NAME_TYPE_ATTEMPTS = 3
+# OCR reads look-alike characters as each other: the iOS run suffix "I233601" came back
+# "1233601". The name check folds them together (after casefold, so I is already i).
+NAME_OCR_LOOKALIKES = str.maketrans("1l|0", "iiio")
+
+
+def _name_key(text):
+    """`text` as the name check compares it: no spaces, casefolded, OCR look-alikes folded."""
+    return "".join(text.split()).casefold().translate(NAME_OCR_LOOKALIKES)
 
 
 class AppleMatterSheet:
@@ -122,6 +139,12 @@ class AppleMatterSheet:
         ab.pointer_action.pause(0.1)
         ab.pointer_action.pointer_up()
         ab.perform()
+
+    @staticmethod
+    def _settled(previous, current, tolerance=3):
+        """The OCR box has not moved since the previous read, i.e. the sheet has finished sliding up."""
+        return previous is not None and abs(previous[0] - current[0]) <= tolerance \
+            and abs(previous[1] - current[1]) <= tolerance
 
     def _match(self, lines, phrases):
         """First match by phrase priority, not by screen order.
@@ -196,20 +219,55 @@ class AppleMatterSheet:
         time.sleep(1)
         return True
 
-    def complete_commissioning(self, timeout=240, poll=3, appear_timeout=90):
+    def _press_sheet_button(self, label):
+        """Press a sheet button by its label through the alert API; False when it is not up."""
+        try:
+            buttons = self.driver.execute_script("mobile: alert", {"action": "getButtons"}) or []
+            if label not in buttons:
+                return False
+            self.driver.execute_script("mobile: alert", {"action": "accept", "buttonLabel": label})
+            return True
+        except Exception as error:
+            logger.warning("Could not press Apple sheet button %r: %s", label, error)
+            return False
+
+    def enter_name(self, name):
+        """Replace the suggested accessory name with `name`, check it by OCR, then continue."""
+        wanted = _name_key(name)
+        for attempt in range(1, NAME_TYPE_ATTEMPTS + 1):
+            if not self._press_sheet_button("Clear text"):
+                raise RuntimeError("Apple's naming step has no 'Clear text' button")
+            for key in name:
+                self.driver.execute_script("mobile: keys", {"keys": [key]})
+                time.sleep(NAME_KEY_PAUSE_S)
+            shown = [text for text, _ in self.read_lines("name")]
+            if any(_name_key(text) == wanted for text in shown):
+                logger.info("Apple naming step shows %r", name)
+                if not (self._press_sheet_button("Continue") or self.tap_text(("Continue",), timeout=5)):
+                    raise RuntimeError("Could not press Continue on Apple's naming step")
+                return True
+            logger.warning("Apple naming step shows %r, not %r (try %s/%s)",
+                           shown, name, attempt, NAME_TYPE_ATTEMPTS)
+        raise AssertionError(f"Could not type {name!r} into Apple's naming step")
+
+    def complete_commissioning(self, timeout=240, poll=3, appear_timeout=90, name=None):
         """Wait for Apple's sheet, drive consent -> progress, and return once it closes.
 
         Absence of the sheet counts as completion only *after* it has been seen. Called
         straight after the QR scan it is simply not up yet, and treating that first empty
         poll as success returns a never-commissioned device to the caller.
 
+        `name`, when given, is typed into Apple's naming step instead of keeping its suggestion.
+
         Raises on an Apple-reported failure, quoting the OCR text, because the sheet gives us
         no error element to assert against.
         """
         deadline = time.time() + timeout
         appear_deadline = time.time() + appear_timeout
-        appeared = consented = False
+        appeared = consented = named = False
         answered = {}
+        consent_taps = 0
+        consent_seen_at = None
         while time.time() < deadline:
             lines = self.read_lines("flow")
 
@@ -220,6 +278,8 @@ class AppleMatterSheet:
 
             if not self._match(lines, SHEET_MARKERS):
                 if appeared:
+                    if name and not named:
+                        logger.warning("Apple Matter sheet closed without its naming step; %r not typed", name)
                     logger.info("Apple Matter sheet closed; commissioning handed back to the app")
                     return True
                 if time.time() > appear_deadline:
@@ -234,21 +294,34 @@ class AppleMatterSheet:
                 appeared = True
                 logger.info("Apple Matter sheet appeared")
 
-            if not consented and self._match(lines, CONSENT_MARKERS):
-                hit = self._match(lines, CONSENT_BUTTONS)
-                if hit:
-                    text, (x, y), _ = hit
-                    logger.info("Accepting Apple pairing consent via %r at (%s, %s)", text, x, y)
-                    self._tap_point(x, y)
-                    consented = True
-                    time.sleep(poll)
-                    continue
-
             if self._answer_decision_dialog(lines, answered):
                 time.sleep(poll)
                 continue
 
+            retap_blocked = consent_taps and self._match(lines, PROGRESS_MARKERS)
+            if consent_taps < CONSENT_TAP_LIMIT and not retap_blocked and self._match(lines, CONSENT_MARKERS):
+                hit = self._match(lines, CONSENT_BUTTONS)
+                if hit:
+                    text, (x, y), _ = hit
+                    if not self._settled(consent_seen_at, (x, y)):
+                        consent_seen_at = (x, y)
+                        time.sleep(1)
+                        continue
+                    consent_taps += 1
+                    logger.info("Accepting Apple pairing consent via %r at (%s, %s) (tap %s/%s)",
+                                text, x, y, consent_taps, CONSENT_TAP_LIMIT)
+                    self._tap_point(x, y)
+                    consented = True
+                    consent_seen_at = None
+                    time.sleep(poll)
+                    continue
+
             if self._match(lines, PROGRESS_MARKERS):
+                time.sleep(poll)
+                continue
+
+            if name and not named and self._match(lines, NAME_MARKERS):
+                named = self.enter_name(name)
                 time.sleep(poll)
                 continue
 

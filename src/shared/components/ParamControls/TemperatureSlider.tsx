@@ -18,15 +18,21 @@ import { tokens } from "@shared/theme/tokens";
 import { ParamControlChildProps, snapSliderValue } from "./lib/types";
 import { paramControlStyles as styles } from "./lib/styles";
 import { useDragBubble } from "./lib/useDragBubble";
+import { resolveParamUnitSymbol } from "@shared/utils/paramUnits";
+
+/** Used when the param declares no unit, so existing setpoints are unchanged. */
+const TEMPERATURE_FALLBACK_UNIT_SYMBOL = "°C";
 
 /**
  * TemperatureSlider
  *
  * A slider component for controlling temperature settings.
  * Features a gradient background representing temperature levels from cold to hot
- * and displays the current value in Celsius.
+ * and displays the current value in the unit the param declares (Celsius when
+ * it declares none).
  * @param param - The device parameter to control
  * @param disabled - Whether the control is disabled
+ * @param meta - Bounds (`min`, `max`, `step`) and the declared `unit` token.
  * @returns Climate temperature slider respecting `meta` min/max/step
  */
 const TemperatureSlider = observer(
@@ -40,6 +46,8 @@ const TemperatureSlider = observer(
   }: ParamControlChildProps) => {
     // 1. Computed Values
     const { min = 10, max = 35, step = 0.5 } = meta;
+    const unitSymbol =
+      resolveParamUnitSymbol(meta?.unit) || TEMPERATURE_FALLBACK_UNIT_SYMBOL;
 
     const n = Number(value);
     const displayValue = Number.isFinite(n)
@@ -90,7 +98,7 @@ const TemperatureSlider = observer(
             >
               {label}
             </Text>
-            <Text style={styles.compactValue}>{displayValue}°C</Text>
+            <Text style={styles.compactValue}>{`${displayValue}${unitSymbol}`}</Text>
           </View>
         ) : (
           <>
@@ -101,8 +109,8 @@ const TemperatureSlider = observer(
             </Text>
 
             <View style={styles.rangeRow}>
-              <Text style={styles.value}>{min}°C</Text>
-              <Text style={styles.value}>{max}°C</Text>
+              <Text style={styles.value}>{`${min}${unitSymbol}`}</Text>
+              <Text style={styles.value}>{`${max}${unitSymbol}`}</Text>
             </View>
           </>
         )}
@@ -119,7 +127,7 @@ const TemperatureSlider = observer(
               ]}
             >
               <View style={styles.bubble}>
-                <Text style={styles.bubbleText}>{displayValue}°C</Text>
+                <Text style={styles.bubbleText}>{`${displayValue}${unitSymbol}`}</Text>
               </View>
               <View style={styles.bubbleArrow} />
             </View>
@@ -205,9 +213,7 @@ const TemperatureSlider = observer(
                   opacity: isDragging ? 0 : 1,
                 },
               ]}
-            >
-              {displayValue}°C
-            </Text>
+            >{`${displayValue}${unitSymbol}`}</Text>
           </View>
         )}
       </View>

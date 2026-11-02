@@ -10,6 +10,7 @@ import {
   QR_PROVISION_CONNECT_TIMEOUT_ERROR,
   QR_PROVISION_CONNECT_TIMEOUT_MS,
 } from "@shared/utils/constants";
+import { withTimeout } from "@shared/utils/asyncTimeout";
 
 export type BleScanErrorType =
   | "permission"
@@ -29,33 +30,6 @@ export const getScanErrorType = (
   errorCode?: string,
 ): BleScanErrorType => {
   return getBleScanErrorType(errorMessage, errorCode);
-};
-
-/**
- * Races a promise against a timeout and clears the timer when either settles.
- * @param promise - Async operation to wait on
- * @param timeoutMs - Maximum wait time in milliseconds
- * @param timeoutError - Error message used when the timeout wins
- * @returns The settled promise result when it completes in time
- */
-export const withTimeout = <T>(
-  promise: Promise<T>,
-  timeoutMs: number,
-  timeoutError: string,
-): Promise<T> => {
-  let timeoutId: ReturnType<typeof setTimeout> | undefined;
-
-  const timeoutPromise = new Promise<T>((_, reject) => {
-    timeoutId = setTimeout(() => {
-      reject(new Error(timeoutError));
-    }, timeoutMs);
-  });
-
-  return Promise.race([promise, timeoutPromise]).finally(() => {
-    if (timeoutId !== undefined) {
-      clearTimeout(timeoutId);
-    }
-  });
 };
 
 /**

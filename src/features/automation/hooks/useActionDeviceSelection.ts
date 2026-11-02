@@ -8,14 +8,15 @@ import { useCallback, useMemo } from "react";
 import type { ESPCDFNode, ESPCDFDevice } from "@store";
 import { deepClone } from "@shared/utils/common";
 import { getEventInfoFromEvents } from "@features/automation/utils/automationManagement";
-import {
-  sortByConnectivity,
-  isAutomationMatterIneligibleNode,
-} from "@shared/utils/eventDeviceSelection";
+import { sortByConnectivity } from "@shared/utils/eventDeviceSelection";
+import { filterExcludedParamTypes } from "@shared/utils/paramUtils";
+import { ESPRM_PARAM_WRITE_PROPERTY } from "@shared/utils/constants";
+import { isAutomationMatterIneligibleNode } from "@features/automation/utils/automationDeviceEligibility";
 import { useCDF } from "@shared/hooks/useCDF";
 import { useAutomation } from "@context/automation.context";
 import { useDeviceSelectionBase } from "@features/automation/hooks/useDeviceSelectionBase";
 import type { DeviceSelectionData } from "@src/types/global";
+import { getDeviceDisplayName } from "@shared/utils/deviceDisplayName";
 
 export type SelectActionDeviceResult =
   | { success: true; navigateParams: { pathname: string; params: object } }
@@ -32,6 +33,8 @@ export interface UseActionDeviceSelectionResult {
   eventInfo: ReturnType<typeof getEventInfoFromEvents> | null;
   /** Event device from store for display name */
   eventDevice: ESPCDFDevice | null;
+  /** Name the event device shows, read live so a rename shows here too */
+  eventDeviceDisplayName: string;
   /** Devices currently selected for action */
   selectedDevices: DeviceSelectionData[];
   /** Devices not selected */
@@ -77,12 +80,17 @@ export function useActionDeviceSelection(
     const allDevices: DeviceSelectionData[] = [];
 
     currentHomeNodes.forEach((node) => {
-      // Matter-backed nodes can't drive cloud automations. Check runs on the
-      // original — the deepClone below strips the matterNodeId getter.
+      // Pure-Matter nodes have no cloud stack to drive an automation.
       if (isAutomationMatterIneligibleNode(node)) return;
       const nodeDevices = node?.devices ?? [];
       nodeDevices
-        .filter((device) => device.params && device.params.length > 0)
+        // Match the action param screen, which keeps only writable non-excluded
+        // params — gating on raw params listed devices that opened empty.
+        .filter((device) =>
+          (filterExcludedParamTypes(device.params) ?? []).some((param) =>
+            param.properties?.includes(ESPRM_PARAM_WRITE_PROPERTY),
+          ),
+        )
         .forEach((device) => {
           allDevices.push({
             node: deepClone(node) as ESPCDFNode,
@@ -106,6 +114,13 @@ export function useActionDeviceSelection(
     return node.devices.find((d) => d.name === eventInfo.deviceName) ?? null;
   }, [eventInfo, state.nodeId, store.nodeStore.nodesByIDMap]);
 
+  const eventDeviceDisplayName = eventDevice
+    ? getDeviceDisplayName(
+        eventDevice,
+        store.nodeStore.nodesByIDMap?.[state.nodeId ?? ""],
+      )
+    : eventInfo?.deviceName ?? "";
+
   const { selectedDevices, nonSelectedDevices, isDeviceDisabled } =
     useDeviceSelectionBase(devices, checkDeviceDisabled);
 
@@ -114,7 +129,7 @@ export function useActionDeviceSelection(
       setSelectedDevice({
         nodeId: device.node.id,
         deviceName: device.device.name,
-        displayName: device.device.displayName ?? "",
+        displayName: getDeviceDisplayName(device.device, device.node),
       });
       return {
         success: true,
@@ -160,6 +175,7 @@ export function useActionDeviceSelection(
     devices,
     eventInfo,
     eventDevice,
+    eventDeviceDisplayName,
     selectedDevices,
     nonSelectedDevices,
     selectDevice,

@@ -82,10 +82,10 @@ export function useHomeManagement(
         const needsNodes = !home.nodeDetails?.length && (home.nodeIds?.length ?? 0) > 0;
         if (needsNodes && !requestedHomeIds.current.has(home.id)) {
           requestedHomeIds.current.add(home.id);
-          void loadHomeNodes(home);
+          void loadHomeNodes(home, store);
         }
       }
-    }, [homes])
+    }, [homes, store])
   );
 
   const refresh = useCallback(async (): Promise<RefreshHomesResult> => {

@@ -5,11 +5,31 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useNavigation, usePreventRemove } from "@react-navigation/native";
+import {
+  useNavigation,
+  usePreventRemove,
+  type NavigationAction,
+} from "@react-navigation/native";
 import { router, useLocalSearchParams, useRouter } from "expo-router";
 import { useTranslation } from "react-i18next";
 import { getFeatures } from "@config/features.config";
 import { useCDF } from "@shared/hooks/useCDF";
+import { hasActiveControlPath } from "@shared/utils/device";
+import {
+  canRenameWithoutNameParam,
+  DEVICE_NAME_PROBLEM_MESSAGE_KEYS,
+  findDeviceNameProblem,
+  getDeviceNameMaxLength,
+} from "@shared/utils/deviceNaming";
+import {
+  getDeviceDisplayName,
+  getDeviceNameParam,
+} from "@shared/utils/deviceDisplayName";
+import {
+  canIdentifyDevice,
+  identifyDevice,
+} from "@shared/utils/deviceIdentify";
+import { useIdentifyAction } from "@shared/hooks/useIdentifyAction";
 import { useToast } from "@shared/hooks/useToast";
 import {
   getMatterControllerConfig,
@@ -26,9 +46,7 @@ import type { SettingsQuickActionItem } from "@features/control/components";
 import {
   SETTINGS_DEFAULT_SECTIONS,
   buildSettingsQuickActions,
-  getDeviceNameParam,
   getNodeReadmeUrl,
-  getSettingsDisplayName,
   isNodeDeleteSuccess,
   isSettingsDisabled,
   resolveRmakerAuthUpdateToastKind,
@@ -67,11 +85,27 @@ export interface UseSettingsReturn {
   settingsQuickActions: SettingsQuickActionItem[];
   otaFeatureEnabled: boolean;
   handleSaveDeviceName: () => Promise<boolean>;
+  /** Whether the "save the edited name before leaving?" question is showing. */
+  isLeaveDialogOpen: boolean;
+  /** Leave question, Save: saves like Done, then leaves only if it saved. */
+  saveNameAndLeave: () => Promise<void>;
+  /** Leave question, Discard: leaves without saving the edited name. */
+  discardNameAndLeave: () => void;
+  /** Leave question dismissed: stays on the screen with the edit kept. */
+  stayOnSettings: () => void;
   handleCheckForUpdates: () => Promise<void>;
   handleStartUpdate: () => Promise<void>;
   handleRemoveDevice: () => void;
   confirmRemoveDevice: () => Promise<void>;
   handleGuidePress: () => void;
+  /** Character cap for the name field, or undefined when the channel imposes none. */
+  maxNameLength: number | undefined;
+  /** Whether asking this device to show itself would reach it. */
+  showIdentify: boolean;
+  /** Whether the device is visibly identifying itself. */
+  isIdentifying: boolean;
+  /** Asks the device to identify itself. */
+  identify: () => Promise<void>;
 }
 
 /**
@@ -92,15 +126,10 @@ export const useSettings = (): UseSettingsReturn => {
 
   const nodesByIDMap = store?.nodeStore?.nodesByIDMap;
 
-  const node = useMemo(
-    () => resolveSettingsNode(nodesByIDMap, id),
-    [id, nodesByIDMap],
-  );
-
-  const device = useMemo(
-    () => resolveSettingsDevice(node, deviceParam),
-    [node, deviceParam],
-  );
+  // Looked up during render: a refreshed node replaces the old one under the
+  // same map, so a memo on the map would keep showing the old node.
+  const node = resolveSettingsNode(nodesByIDMap, id);
+  const device = resolveSettingsDevice(node, deviceParam);
 
   const deviceWasFoundRef = useRef(false);
   if (device) {
@@ -113,12 +142,15 @@ export const useSettings = (): UseSettingsReturn => {
     }
   }, [deviceParam, device, routerNav]);
 
-  const displayName = useMemo(
-    () => getSettingsDisplayName(device, node),
-    [device, node],
-  );
+  // Read during render (Settings is an observer) so a rename shows at once.
+  const displayName = device && node ? getDeviceDisplayName(device, node) : "";
 
-  const isConnected = node?.connectivityStatus?.isConnected ?? false;
+  // Cloud connectivity alone is not enough: some nodes are LAN-only and report
+  // `isConnected: false` forever, so ask for any live control path instead.
+  const registeredTransports = node
+    ? store?.subscriptionStore?.registeredTransports?.[node.id]
+    : undefined;
+  const isConnected = hasActiveControlPath(node, registeredTransports);
   const isPrimary = node?.isPrimaryUser ?? false;
   const settingsDisabled = isSettingsDisabled(isPrimary, isConnected);
 
@@ -140,9 +172,12 @@ export const useSettings = (): UseSettingsReturn => {
     ...SETTINGS_DEFAULT_SECTIONS,
   ]);
 
+  // Some nodes have no cloud name param but can still be renamed over their own channel.
+  const canRename =
+    Boolean(getDeviceNameParam(device)) || canRenameWithoutNameParam(node);
+
   useEffect(() => {
-    const nameParam = getDeviceNameParam(device);
-    if (nameParam) {
+    if (canRename) {
       if (!isEditingName) {
         setDeviceName(displayName);
       }
@@ -151,7 +186,11 @@ export const useSettings = (): UseSettingsReturn => {
         prev.filter((section) => section !== SETTINGS_SECTION_NAME),
       );
     }
-  }, [device, displayName, isEditingName]);
+  }, [canRename, displayName, isEditingName]);
+
+  // Undefined when no channel caps the name. Read during render: the cap can
+  // appear when the device is found on the local network.
+  const maxNameLength = getDeviceNameMaxLength(node);
 
   /**
    * Updates the draft device name and locks out store-driven overwrites while editing.
@@ -162,8 +201,14 @@ export const useSettings = (): UseSettingsReturn => {
     setDeviceName(name);
   }, []);
 
+  // Only an edit the user made counts: the draft is empty until it is first
+  // filled in, and a device with no name field has nothing to lose.
   const isDeviceNameDirty =
-    !settingsDisabled && deviceName.trim() !== displayName.trim();
+    !settingsDisabled &&
+    Boolean(device) &&
+    canRename &&
+    isEditingName &&
+    deviceName.trim() !== displayName.trim();
 
   const readmeUrl = useMemo(() => getNodeReadmeUrl(node), [node]);
 
@@ -207,7 +252,7 @@ export const useSettings = (): UseSettingsReturn => {
   }, [isUpdatingAuthToken, node, t, toast]);
 
   /**
-   * Persists an edited device name via Matter metadata or the name param.
+   * Persists an edited device name over whichever channel the node supports.
    * Skips the network call when the draft matches the current display name.
    * @returns True when leave navigation may proceed (saved or unchanged)
    */
@@ -216,19 +261,24 @@ export const useSettings = (): UseSettingsReturn => {
       return false;
     }
 
-    const trimmed = deviceName.trim();
-    if (!trimmed) {
-      toast.showError(t("device.validation.deviceNameCannotBeEmpty"));
-      return false;
-    }
-
     if (!node) {
       return false;
     }
 
-    if (trimmed === displayName.trim()) {
+    const trimmed = deviceName.trim();
+    if (trimmed && trimmed === displayName.trim()) {
       setIsEditingName(false);
       return true;
+    }
+
+    // Nothing is written for a name that breaks a rule, on any channel.
+    const problem = findDeviceNameProblem(
+      trimmed,
+      getDeviceNameMaxLength(node),
+    );
+    if (problem) {
+      toast.showError(t(DEVICE_NAME_PROBLEM_MESSAGE_KEYS[problem]));
+      return false;
     }
 
     setIsEditingName(true);
@@ -258,18 +308,49 @@ export const useSettings = (): UseSettingsReturn => {
     toast,
   ]);
 
-  const saveDeviceNameRef = useRef(handleSaveDeviceName);
-  saveDeviceNameRef.current = handleSaveDeviceName;
+  /** The leave the user started while the edited name was unsaved. */
+  const [blockedLeave, setBlockedLeave] = useState<NavigationAction | null>(
+    null,
+  );
+  /** A leave the user allowed; set one render before it runs, see below. */
+  const [allowedLeave, setAllowedLeave] = useState<NavigationAction | null>(
+    null,
+  );
 
-  // Flush a dirty rename before leaving (header back, hardware back, swipe).
-  usePreventRemove(isDeviceNameDirty && !isSavingName, ({ data }) => {
-    void (async () => {
-      const ok = await saveDeviceNameRef.current();
-      if (ok) {
-        navigation.dispatch(data.action);
-      }
-    })();
-  });
+  // Ask before an unsaved name edit is lost (header back, hardware back,
+  // swipe). Leaving never saves by itself: only Done, or Save in the question.
+  usePreventRemove(
+    isDeviceNameDirty && !isSavingName && !isRemovingDevice && !allowedLeave,
+    ({ data }) => {
+      setBlockedLeave(data.action);
+    },
+  );
+
+  // Runs after the guard above is released, so the leave is not stopped again.
+  useEffect(() => {
+    if (allowedLeave) {
+      navigation.dispatch(allowedLeave);
+    }
+  }, [allowedLeave, navigation]);
+
+  const saveNameAndLeave = useCallback(async () => {
+    const leave = blockedLeave;
+    // Close first: an error toast would be hidden under the dialog.
+    setBlockedLeave(null);
+    if (leave && (await handleSaveDeviceName())) {
+      setAllowedLeave(leave);
+    }
+  }, [blockedLeave, handleSaveDeviceName]);
+
+  const discardNameAndLeave = useCallback(() => {
+    const leave = blockedLeave;
+    setBlockedLeave(null);
+    if (leave) {
+      setAllowedLeave(leave);
+    }
+  }, [blockedLeave]);
+
+  const stayOnSettings = useCallback(() => setBlockedLeave(null), []);
 
   /**
    * Queries the node for an available firmware update.
@@ -385,6 +466,13 @@ export const useSettings = (): UseSettingsReturn => {
     }
   }, [isUpdatingDeviceList, matterControllerConfig, node, t, toast]);
 
+  /** Whether asking this device to show itself would reach it. */
+  const showIdentify = useMemo(() => canIdentifyDevice(device), [device]);
+
+  const performIdentify = useCallback(() => identifyDevice(device), [device]);
+
+  const { isIdentifying, identify } = useIdentifyAction(performIdentify);
+
   const settingsQuickActions = useMemo(
     () =>
       buildSettingsQuickActions({
@@ -433,10 +521,18 @@ export const useSettings = (): UseSettingsReturn => {
     settingsQuickActions,
     otaFeatureEnabled,
     handleSaveDeviceName,
+    isLeaveDialogOpen: blockedLeave !== null,
+    saveNameAndLeave,
+    discardNameAndLeave,
+    stayOnSettings,
     handleCheckForUpdates,
     handleStartUpdate,
     handleRemoveDevice,
     confirmRemoveDevice,
     handleGuidePress,
+    maxNameLength,
+    showIdentify,
+    isIdentifying,
+    identify,
   };
 };

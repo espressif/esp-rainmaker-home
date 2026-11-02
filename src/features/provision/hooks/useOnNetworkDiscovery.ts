@@ -13,7 +13,7 @@ import { useCDF } from "@shared/hooks/useCDF";
 import { useToast } from "@shared/hooks/useToast";
 import { EspLocalDiscoveryAdapter } from "@native-adaptors/implementations/ESPDiscoveryAdapter";
 import type { ESPCDFOnNetworkDevice } from "@store";
-import { getResolvedActiveSdk, isRmneoStackSdkId } from "@config/sdk.config";
+import { getFeatures } from "@config/features.config";
 import { buildOnNetworkProvisioningDevice } from "@features/provision/utils/onNetworkProvisioningDevice";
 import { probeOnNetworkSecurity } from "@features/provision/utils/onNetworkVersionProbe";
 import {
@@ -55,13 +55,14 @@ interface OnNetworkDiscoveryProfile {
 }
 
 /**
- * Resolves the discovery profile for the active SDK stack.
+ * Resolves the discovery profile for the active SDK stack from its
+ * `onNetworkDiscoveryViaLocalControl` capability.
  *
  * Read once per scan rather than memoized in state: the active stack only
  * changes via Config Scan, which restarts the flow well before this screen.
  */
 function resolveDiscoveryProfile(): OnNetworkDiscoveryProfile {
-  return isRmneoStackSdkId(getResolvedActiveSdk())
+  return getFeatures().onNetworkDiscoveryViaLocalControl
     ? {
         serviceType: MDNS_SERVICE_TYPE_ESP_RMAKER_LOCAL_CTRL,
         probeVersionEndpoint: true,

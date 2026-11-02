@@ -235,14 +235,37 @@ function payloadToString(payload: string | Buffer): string {
   return payload.toString("utf8");
 }
 
+/** True from a sign-out until the next signed-in session starts MQTT. */
+let connectsRefused = false;
+
+/**
+ * Called when a signed-in session starts MQTT: connects are accepted again.
+ */
+export function allowMqttConnects(): void {
+  connectsRefused = false;
+}
+
+/**
+ * Called at sign-out: ends the client and refuses connects until the next
+ * session starts, so a connect still waiting on the network cannot come up
+ * for the signed-out user.
+ */
+export async function refuseMqttConnects(): Promise<void> {
+  connectsRefused = true;
+  await ESPMQTTAdapter.disconnect().catch(() => {});
+}
+
 /**
  * Web MQTT adaptor — thin bridge over `@modules/mqtt` AWS IoT WSS client.
  * Keeps the same JS-side subscription fan-out / exclusive queue / hooks as native.
  */
 export const ESPMQTTAdapter: ESPMQTTInterface = {
   connect: async (config: ESPMQTTConfig) => {
+    if (connectsRefused) {
+      throw new Error("MQTT connect refused: signed out");
+    }
     ensureBridgeListener();
-    return webMqttManager.connect({
+    const result = await webMqttManager.connect({
       endpoint: config.endpoint,
       clientId: config.clientId,
       accessKey: config.accessKey,
@@ -250,6 +273,12 @@ export const ESPMQTTAdapter: ESPMQTTInterface = {
       sessionToken: config.sessionToken,
       region: config.region,
     });
+    if (connectsRefused) {
+      // Signed out while it was connecting: close what it opened.
+      await Promise.resolve(webMqttManager.disconnect()).catch(() => {});
+      throw new Error("MQTT connect finished after sign-out; closed");
+    }
+    return result;
   },
   disconnect: async () => {
     topicHandlers.clear();

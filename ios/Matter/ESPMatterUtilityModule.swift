@@ -87,7 +87,7 @@ class ESPMatterUtilityModule: NSObject {
     let rootCa = params["rootCa"] as? String
     let ipk = params["ipk"] as? String
     let groupCatIdOperate = params["groupCatIdOperate"] as? String
-    let groupCatIdAdmin = params["groupCatIdAdmin"] as? String
+    let groupCatIdAdmin = params[ESPMatterConstants.groupCatIdAdminCamel] as? String
     let userCatId = params["userCatId"] as? String
     
     do {
@@ -120,7 +120,7 @@ class ESPMatterUtilityModule: NSObject {
         precommissionData["groupCatIdOperate"] = groupCatIdOperate
       }
       if let groupCatIdAdmin = groupCatIdAdmin {
-        precommissionData["groupCatIdAdmin"] = groupCatIdAdmin
+        precommissionData[ESPMatterConstants.groupCatIdAdminCamel] = groupCatIdAdmin
       }
       if let userCatId = userCatId {
         precommissionData["userCatId"] = userCatId

@@ -32,6 +32,7 @@ sys.path.append(str(IMPORT_PATH))
 from utils.grid_manager import AppiumGridManager
 from utils.page_helpers.base import PageHelperManager
 from utils.debug_helper import DebugHelper
+from utils.device_names import bind_run, unique_device_name
 from utils.device_detector import MobileDeviceDetector
 from utils.api_user_helper import ApiUserHelper
 from utils.registered_user_resolver import (
@@ -192,6 +193,7 @@ def oauth_user_resolver():
             "email": os.environ.get(f"{prefix}_OAUTH_EMAIL{base}"),
             "password": os.environ.get(f"{prefix}_OAUTH_PASSWORD{base}"),
             "totp_secret": os.environ.get(f"{prefix}_OAUTH_TOTP_SECRET{base}"),
+            "device_account": os.environ.get(f"{prefix}_OAUTH_DEVICE_ACCOUNT{suffix}"),
         }
         if not account["email"] or not account["password"]:
             raise KeyError(
@@ -404,17 +406,44 @@ def _poll_node_online(cloud, node_id, timeout=60):
 
 
 def _name_e2e_node(cloud, node_id, fw_name, target_name):
-    """Rename the reused node to target_name and seed timezone (best-effort)."""
+    """Write the node's Name (doubling as a delivery probe) and seed timezone; returns 'ok', 'offline' (cloud answered Node is offline), 'unsupported' (the cloud cannot write node params, as on RainMaker Neo) or 'error'."""
     if cloud is None or not node_id:
-        return
+        return "error"
     try:
-        by_id = {n["node_id"]: n for n in cloud.nodes()}
-        if by_id.get(node_id, {}).get("name") != target_name:
-            cloud.set_name(node_id, fw_name, target_name)
-        if not by_id.get(node_id, {}).get("tz"):
+        response = cloud.set_name(node_id, fw_name, target_name)
+        if "Node is offline" in str(response):
+            return "offline"
+        node = next((n for n in cloud.nodes() if n.get("node_id") == node_id), {})
+        if not node.get("tz"):
             cloud.set_tz(node_id)
+        return "ok"
+    except NotImplementedError:
+        return "unsupported"
     except Exception as error:
-        logger.warning("Cloud naming/timezone setup failed (%s); will fall back to in-app rename", error)
+        logger.warning("Cloud Name write / timezone setup failed: %s", error)
+        return "error"
+
+
+def _e2e_node_live(cloud, device_serial, node_id, fw_name, target_name, timeout=60, attempts=3):
+    """(live, reason): the cloud reports the node online, accepts the Name write, and the chip's UART shows it arrived (online alone where the cloud cannot write node params); retried because opening the serial port reboots the chip and a write sent before it reconnects is lost."""
+    import time as _time
+    reason = ""
+    for _ in range(attempts):
+        if not _poll_node_online(cloud, node_id, timeout=timeout):
+            return False, f"cloud did not report node {node_id} online within {timeout}s"
+        since = device_serial.marker()
+        status = _name_e2e_node(cloud, node_id, fw_name, target_name)
+        if status == "unsupported":
+            return True, ""
+        if status == "ok" and device_serial.wait_for_name_write(target_name, since=since, timeout=15):
+            return True, ""
+        reason = {"offline": "cloud answered Node is offline",
+                  "error": "the cloud Name write failed"}.get(status, "the chip never received the cloud Name write")
+        _time.sleep(5)
+    return False, f"node {node_id}: {reason} ({attempts} attempts)"
+
+
+_E2E_FIRST_ACQUIRE_WAIT_S = 120
 
 
 def _provision_reserved_chip(cloud, helper, hardware_session, resource_manager, request,
@@ -460,7 +489,8 @@ def _provision_reserved_chip(cloud, helper, hardware_session, resource_manager, 
     helper.scan_ble.select_device(info.get("name"))
     if helper.pop.check_screen_displayed(timeout=5):
         helper.pop.enter_pop(info.get("pop", ""))
-    helper.connect_wifi.check_screen_displayed(timeout=5)
+    assert helper.connect_wifi.check_screen_displayed(timeout=10), \
+        "E2E provisioning: Connect Wi-Fi screen not shown after the PoP step"
     helper.connect_wifi.open_join_other_network_modal()
     helper.connect_wifi.enter_join_network_credentials(ssid, password)
     helper.connect_wifi.connect_join_network()
@@ -494,24 +524,27 @@ def _provision_reserved_chip(cloud, helper, hardware_session, resource_manager, 
 def reserve_online_device(request, helper, hardware_session, resource_manager, hardware_config,
                           pytestconfig, registered_user_resolver, registered_user_password_resolver,
                           provision_config_resolver, e2e_device_hold, device_name):
-    """Reserve an E2E chip BY TYPE once and reuse the session-held chip across every e2e scenario (never re-provisioned or stolen mid-run)."""
+    """Reserve an E2E chip BY TYPE once and reuse the session-held chip across every e2e scenario under this run's unique device name; a node that is not live (cloud offline, Name write refused or never reaching the chip) is re-provisioned on the held chip."""
     from utils.device_serial import DeviceSerial
     from hardware import BuildMetadata, record_hardware_report
     from hardware.exceptions import HardwareUnavailableException
 
     chip_type = str(hardware_config.raw.get("e2e_chip_type", "esp32c3")).lower()
     fw_name = str(hardware_config.raw.get("e2e_fw_name", "Light"))
+    device_name = unique_device_name(device_name)
     cloud = _cloud_for_user(pytestconfig, registered_user_resolver, registered_user_password_resolver)
 
     chosen = e2e_device_hold.get("resource")
     chosen_node = e2e_device_hold.get("node_id")
+    provisioned_now = False
     if chosen is None:
         online_ids = _online_node_ids(cloud, chip_type)
         e2e_log.info("E2E reserve-by-type '%s'; online %s node(s): %s", chip_type, chip_type, online_ids or "none")
         held = []
-        for _ in range(4):
+        for probed in range(4):
             try:
-                resource = resource_manager.acquire(chip_type, timeout=8, test_name=hardware_session.get("test_name"))
+                resource = resource_manager.acquire(chip_type, timeout=8 if probed else _E2E_FIRST_ACQUIRE_WAIT_S,
+                                                    test_name=hardware_session.get("test_name"))
             except HardwareUnavailableException:
                 break
             hardware_session.setdefault("resources", []).append(resource)
@@ -528,15 +561,10 @@ def reserve_online_device(request, helper, hardware_session, resource_manager, h
             resource_manager.serial_logger.stop(resource)
             held.append((resource, node_id))
 
-        if chosen is not None:
-            e2e_log.info("Reusing online E2E chip %s (node %s) on %s", chosen.mac_address, chosen_node, chosen.port)
-        else:
+        reusing = chosen is not None
+        if not reusing:
             assert held, f"No available {chip_type} chip to serve the E2E device"
             chosen, chosen_node = held.pop(0)
-            _provision_reserved_chip(cloud, helper, hardware_session, resource_manager, request,
-                                     provision_config_resolver, device_name, chosen, chip_type)
-            if not chosen_node:
-                chosen_node = _read_node_id_from_serial(resource_manager, chosen, timeout=15)
 
         for resource, _ in held:
             resource_manager.serial_logger.stop(resource)
@@ -544,13 +572,33 @@ def reserve_online_device(request, helper, hardware_session, resource_manager, h
             if resource in hardware_session.get("resources", []):
                 hardware_session["resources"].remove(resource)
 
+        if reusing:
+            e2e_log.info("Reusing online E2E chip %s (node %s) on %s", chosen.mac_address, chosen_node, chosen.port)
+        else:
+            _provision_reserved_chip(cloud, helper, hardware_session, resource_manager, request,
+                                     provision_config_resolver, device_name, chosen, chip_type)
+            provisioned_now = True
+            if not chosen_node:
+                chosen_node = _read_node_id_from_serial(resource_manager, chosen, timeout=15)
+
         e2e_device_hold["resource"] = chosen
         e2e_device_hold["node_id"] = chosen_node
     else:
         e2e_log.info("Reusing session-held E2E chip %s (node %s) on %s", chosen.mac_address, chosen_node, chosen.port)
 
-    _poll_node_online(cloud, chosen_node, timeout=60)
-    _name_e2e_node(cloud, chosen_node, fw_name, device_name)
+    device_serial = DeviceSerial(resource_manager, chosen, fw_name)
+    if cloud is not None:
+        live, reason = _e2e_node_live(cloud, device_serial, chosen_node, fw_name, device_name,
+                                      timeout=120 if provisioned_now else 60)
+        if not live and not provisioned_now:
+            e2e_log.warning("E2E node on %s is not live (%s); re-provisioning the held chip", chosen.mac_address, reason)
+            _provision_reserved_chip(cloud, helper, hardware_session, resource_manager, request,
+                                     provision_config_resolver, device_name, chosen, chip_type)
+            chosen_node = _read_node_id_from_serial(resource_manager, chosen, timeout=15) or chosen_node
+            e2e_device_hold["node_id"] = chosen_node
+            live, reason = _e2e_node_live(cloud, device_serial, chosen_node, fw_name, device_name, timeout=120)
+        if not live:
+            pytest.fail(f"E2E device {chosen.mac_address} is not live: {reason}")
 
     # Per-scenario bindings; the chip is held by e2e_device_hold (session), not released between scenarios.
     hardware_session["resource"] = chosen
@@ -559,7 +607,7 @@ def reserve_online_device(request, helper, hardware_session, resource_manager, h
     chosen.build_metadata = metadata
     hardware_session["build_metadata"] = metadata
     record_hardware_report(request, chosen, metadata)
-    hardware_session["device_serial"] = DeviceSerial(resource_manager, chosen, fw_name)
+    hardware_session["device_serial"] = device_serial
     if getattr(chosen, "serial_log_path", None):
         request.node._chip_serial_log_path = str(chosen.serial_log_path)
 
@@ -575,7 +623,7 @@ def reserve_online_device(request, helper, hardware_session, resource_manager, h
     hardware_session["fw_name"] = fw_name
     param_name = (sel_node.get("params") or {}).get(fw_name, {}).get("Name")
     aliases = []
-    for candidate in (param_name, sel_node.get("name"), "Light"):
+    for candidate in (param_name, sel_node.get("name")):
         if candidate and candidate != device_name and candidate not in aliases:
             aliases.append(candidate)
     helper.home.ensure_device_name(device_name, aliases)
@@ -1022,15 +1070,61 @@ def _reboot_android_device(adb_path: str, udid: Optional[str], model: str, timeo
             result = subprocess.run(adb_cmd + ["shell", "getprop", "sys.boot_completed"],
                                     capture_output=True, text=True, timeout=10)
             if result.returncode == 0 and result.stdout.strip() == "1":
+                logger.info(f"{model} finished booting")
+                _wait_for_android_system_settled(adb_cmd, model)
                 subprocess.run(adb_cmd + ["shell", "input", "keyevent", "82"],
                                capture_output=True, text=True, timeout=10)
-                logger.info(f"{model} finished booting")
                 return True
         except Exception:
             pass
         time.sleep(5)
 
     logger.warning(f"{model} did not report boot completed within {timeout}s; continuing anyway")
+    return False
+
+
+_ANDROID_SYSTEM_SETTLE_S = 150
+
+
+def _android_system_uptime(adb_cmd: list) -> Optional[int]:
+    """Seconds the Android system_server process has been running, or None while it is down or restarting."""
+    try:
+        result = subprocess.run(adb_cmd + ["shell", "ps", "-o", "ETIME=", "-p", "$(pidof system_server)"],
+                                capture_output=True, text=True, timeout=10)
+        days, _, clock = result.stdout.strip().rpartition("-")
+        seconds = 0
+        for part in clock.split(":"):
+            seconds = seconds * 60 + int(part)
+        return seconds + int(days or 0) * 86400
+    except Exception:
+        return None
+
+
+def _android_reachable(adb_cmd: list) -> bool:
+    """Whether adb sees the phone as an online device (system_server restarts leave adbd up)."""
+    try:
+        return subprocess.run(adb_cmd + ["get-state"], capture_output=True, text=True,
+                              timeout=10).stdout.strip() == "device"
+    except Exception:
+        return False
+
+
+def _wait_for_android_system_settled(adb_cmd: list, model: str, stable_for: int = _ANDROID_SYSTEM_SETTLE_S,
+                                     timeout: int = 720) -> bool:
+    """Wait until system_server has stayed up for `stable_for` seconds: on some boots the phone's telephony process hangs and the system watchdog restarts system_server ~100 s after boot (sometimes twice), killing the uiautomator2 session that is up at the time. Returns at once when adb cannot reach the phone at all."""
+    deadline = time.time() + timeout
+    uptime = None
+    while time.time() < deadline:
+        uptime = _android_system_uptime(adb_cmd)
+        if uptime is not None and uptime >= stable_for:
+            logger.info("%s system_server up for %ss; Android system settled", model, uptime)
+            return True
+        if uptime is None and not _android_reachable(adb_cmd):
+            logger.warning("%s is not reachable over adb; not waiting for system_server to settle", model)
+            return False
+        time.sleep(5)
+    logger.warning("%s system_server did not stay up for %ss within %ss (last uptime %s); continuing anyway",
+                   model, stable_for, timeout, uptime)
     return False
 
 
@@ -1322,11 +1416,20 @@ _UIA2_CRASH_SIGNATURES = (
     "cannot be proxied to UiAutomator2",
 )
 _uia2_whitelisted_udids = set()
+_ANDROID_SYSTEM_RESTART_SIGNATURES = (
+    "Cannot start the 'io.appium.settings' application",
+    "instrumentation process cannot be initialized",
+)
 
 
 def _is_uia2_crash(error) -> bool:
     text = str(error)
     return any(sig in text for sig in _UIA2_CRASH_SIGNATURES)
+
+
+def _is_android_system_restarting(error) -> bool:
+    text = str(error)
+    return any(sig in text for sig in _ANDROID_SYSTEM_RESTART_SIGNATURES)
 
 
 def _adb_prefix(udid):
@@ -1578,7 +1681,12 @@ def driver(request, appium_grid, app_installer):
         try:
             driver_instance = webdriver.Remote(server_url, options=options)
         except Exception as create_error:
-            if platform == "android" and _is_uia2_crash(create_error):
+            if platform == "android" and _is_android_system_restarting(create_error):
+                logger.warning("RETRY driver: Android system restarting on %s (%s); waiting for it to settle and retrying once",
+                               model, create_error)
+                _wait_for_android_system_settled(_adb_prefix(capabilities.get("udid")), model)
+                driver_instance = webdriver.Remote(server_url, options=options)
+            elif platform == "android" and _is_uia2_crash(create_error):
                 logger.warning("RETRY driver: uiautomator2 instrumentation wedged (%s); rebooting %s and retrying once",
                                create_error, model)
                 _unwedge_android_uiautomator2(capabilities.get("udid"), model)
@@ -1680,7 +1788,15 @@ def helper(driver, per_test_debug_dir, request):
         pytest.skip("No driver available")
     page_helper = PageHelperManager(driver)
     page_helper._test_artifact_dir = per_test_debug_dir
+    bind_run(driver._test_info.get("platform"), _report_run_id(request.config),
+             unique=deployment_type(request.config.getoption("--deployment")) != "rmneo")
     return page_helper
+
+
+def _report_run_id(config):
+    """The report plugin's run id (HHMMSS_DDMMYYYY_<model>_<pid>), or None when reporting is off."""
+    plugin = config.pluginmanager.get_plugin("pytest_report_plugin")
+    return getattr(plugin, "run_id", None)
 
 # Autouse fixtures for automatic screen recording
 @pytest.fixture(autouse=True)

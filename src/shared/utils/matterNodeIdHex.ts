@@ -26,30 +26,13 @@ function normalizeMatterNodeIdHex(
 }
 
 /**
- * Uppercase 16-char form — matches CHIP `DIS` log lines (`E5BFC886AA167F03`).
- * @param normalizedHex - Output of {@link normalizeMatterNodeIdHex}.
- * @returns CHIP-style uppercase node id.
+ * Whether a raw id is already a full Matter operational node id: exactly 16 hex
+ * digits, the form the cloud keys pure Matter nodes by.
+ * @param value - Candidate id
+ * @returns True for a 16-digit hex string (either case)
  */
-function formatMatterNodeIdForChipLog(normalizedHex: string): string {
-  return normalizedHex.toUpperCase();
+function isMatterOperationalNodeIdHex(value: string | undefined): boolean {
+  return typeof value === "string" && /^[0-9a-fA-F]{16}$/.test(value);
 }
 
-/**
- * Describes what CHIP operational mDNS will match for a node id (compressed fabric comes
- * from controller NOC in Android Keystore, not from RainMaker `fabric_id` string).
- * @param normalizedHex - Normalized Matter node id.
- * @returns Human-readable hint for logcat correlation.
- */
-function describeChipOperationalLookup(normalizedHex: string): string {
-  const nodeUpper = formatMatterNodeIdForChipLog(normalizedHex);
-  return (
-    `CHIP nodeId=${nodeUpper}; mDNS instance=<CompressedFabric16Hex>-${nodeUpper}._matter._tcp. ` +
-    `Compare logcat DIS lines: Resolving *:${nodeUpper} or Lookup *-${nodeUpper}`
-  );
-}
-
-export {
-  normalizeMatterNodeIdHex,
-  formatMatterNodeIdForChipLog,
-  describeChipOperationalLookup,
-};
+export { isMatterOperationalNodeIdHex, normalizeMatterNodeIdHex };

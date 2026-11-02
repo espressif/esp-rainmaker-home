@@ -12,7 +12,7 @@ import { ESPCDFNodeUpdateEvent, NodeUpdateDataInput, ESP_CDF_NODE_SUBSCRIPTION_E
 export const RAINMAKER_EVENT_TO_CDF_NODE_SUBSCRIPTION_EVENTS: Record<string, string> = {
   "rmaker.event.node_params_changed":
     ESP_CDF_NODE_SUBSCRIPTION_EVENTS.NODE_PARAMS_CHANGED,
-  /** RMNG MQTT subscription channel (`transformShadowToNodeUpdate`). */
+  /** RMNeo MQTT subscription channel (`transformShadowToNodeUpdate`). */
   "rmng.event.node_params_changed":
     ESP_CDF_NODE_SUBSCRIPTION_EVENTS.NODE_PARAMS_CHANGED,
   /** RMNeo SDK `transformShadowToNodeUpdate` event type. */

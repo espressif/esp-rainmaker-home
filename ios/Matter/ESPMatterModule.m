@@ -22,6 +22,10 @@ RCT_EXTERN_METHOD(startEcosystemCommissioning:(NSString *)onboardingPayload
                   resolver:(RCTPromiseResolveBlock)resolve
                   rejecter:(RCTPromiseRejectBlock)reject)
 
+// Ends the current commissioning session, if any (safe when none is running)
+RCT_EXTERN_METHOD(cancelCommissioning:(RCTPromiseResolveBlock)resolve
+                  rejecter:(RCTPromiseRejectBlock)reject)
+
 // Post Message Method (Unified Message Router)
 RCT_EXTERN_METHOD(postMessage:(NSDictionary *)payload
                   resolver:(RCTPromiseResolveBlock)resolve
@@ -68,6 +72,11 @@ RCT_EXTERN_METHOD(matterControlInvoke:(NSString *)matterNodeId
                   clusterId:(nonnull NSNumber *)clusterId
                   commandId:(nonnull NSNumber *)commandId
                   commandFields:(NSDictionary *)commandFields
+                  resolver:(RCTPromiseResolveBlock)resolve
+                  rejecter:(RCTPromiseRejectBlock)reject)
+
+RCT_EXTERN_METHOD(matterUpdateCatAclSubject:(NSString *)matterNodeId
+                  groupCatId:(NSString *)groupCatId
                   resolver:(RCTPromiseResolveBlock)resolve
                   rejecter:(RCTPromiseRejectBlock)reject)
 

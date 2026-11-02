@@ -24,6 +24,7 @@ export { default as SaturationSlider } from "./SaturationSlider";
 export { default as VolumeSlider } from "./VolumeSlider";
 export { default as TemperatureSlider } from "./TemperatureSlider";
 export { default as SpeedSlider } from "./SpeedSlider";
+export { default as IndexedLevelSlider } from "./IndexedLevelSlider";
 
 // Selector Controls
 export { default as DropdownSelector } from "./DropdownSelector";

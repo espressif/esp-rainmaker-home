@@ -65,7 +65,12 @@ def _ble_provision_once(helper, capture_device_prov_info, provision_config_resol
     assert helper.name_device.check_screen_displayed(timeout=20), "Name screen not shown"
     helper.name_device.rename_device(device_name)
     helper.name_device.click("continue_button", timeout=10)
-    assert helper.add_to_room.check_screen_displayed(timeout=45), "Add-to-room screen not shown"
+    if not helper.add_to_room.check_screen_displayed(timeout=45):
+        # iOS "Join Wi-Fi Network" prompt can swallow the Continue tap; the
+        # check above clears the prompt, so tap Continue once more.
+        if helper.name_device.check_screen_displayed(timeout=3, quiet=True):
+            helper.name_device.click("continue_button", timeout=10)
+        assert helper.add_to_room.check_screen_displayed(timeout=20), "Add-to-room screen not shown"
     helper.add_to_room.skip()
     if helper.guide.check_screen_displayed(timeout=10):
         helper.guide.tap_continue()

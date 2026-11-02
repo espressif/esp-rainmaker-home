@@ -12,6 +12,7 @@ import { testProps } from "@shared/utils/testProps";
 import { useTranslation } from "react-i18next";
 import type { ESPCDFDevice, ESPCDFNode } from "@store";
 import { DeviceAction } from "@shared/components";
+import { getDeviceDisplayName } from "@shared/utils/deviceDisplayName";
 
 type SceneDeviceItemProps = {
   node: ESPCDFNode;
@@ -43,7 +44,7 @@ type SceneDeviceItemProps = {
  * @param qaId - Optional QA identifier for testing
  */
 export default function SceneDeviceItem({
-  node: _node,
+  node,
   device,
   isSelected,
   isDisabled,
@@ -68,7 +69,7 @@ export default function SceneDeviceItem({
       <DeviceAction
         qaId="device_action_item"
         device={device.type ?? ""}
-        displayDeviceName={device.displayName ?? ""}
+        displayDeviceName={getDeviceDisplayName(device, node)}
         actions={isSelected ? actions : {}}
         onPress={() => !isDisabled && onPress()}
         rightSlot={

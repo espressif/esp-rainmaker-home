@@ -1,0 +1,29 @@
+{
+  "title": {
+    "by": "id",
+    "value": "title",
+    "text": "Name your device"
+  },
+  "screen": {
+    "by": "id",
+    "value": "view_matter_device_setup"
+  },
+  "device_name_input": {
+    "by": "id",
+    "value": "input_device_name"
+  },
+  "continue_button": {
+    "by": "id",
+    "value": "button_continue_matter_device_setup",
+    "text": "Continue"
+  },
+  "skip_button": {
+    "by": "id",
+    "value": "button_skip_matter_device_setup",
+    "text": "Skip"
+  },
+  "identify_button": {
+    "by": "id",
+    "value": "button_identify_matter_device"
+  }
+}

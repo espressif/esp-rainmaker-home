@@ -10,6 +10,7 @@ import HueSlider from "@shared/components/ParamControls/HueSlider";
 import SaturationSlider from "@shared/components/ParamControls/SaturationSlider";
 import ToggleSwitch from "@shared/components/ParamControls/ToggleSwitch";
 import Slider from "@shared/components/ParamControls/Slider";
+import IndexedLevelSlider from "@shared/components/ParamControls/IndexedLevelSlider";
 import HueCircle from "@shared/components/ParamControls/HueCircle";
 import PushButton from "@shared/components/ParamControls/PushButton";
 import DropdownSelector from "@shared/components/ParamControls/DropdownSelector";
@@ -29,7 +30,7 @@ import {
   MATTER_SERVER_PARAM_TYPE_POWER_SOURCE,
   MATTER_SERVER_PARAM_TYPE_RVC_CLEAN_MODE,
   MATTER_SERVER_PARAM_TYPE_RVC_RUN_MODE,
-} from "@config/matter.constants";
+} from "@config/matter.identifiers";
 import {
   DATA_TYPE_ALL,
   DATA_TYPE_BOOL,
@@ -41,8 +42,23 @@ import {
   ESPRM_HUE_PARAM_TYPE,
   ESPRM_POWER_PARAM_TYPE,
   ESPRM_SATURATION_PARAM_TYPE,
+  ESPRM_SPEED_PARAM_TYPE,
   ESPRM_TEMPERATURE_PARAM_TYPE,
   ESPRM_LIGHT_MODE_PARAM_TYPE,
+  ESPRM_HUMIDITY_PARAM_TYPE,
+  ESPRM_ILLUMINANCE_PARAM_TYPE,
+  ESPRM_PRESSURE_PARAM_TYPE,
+  ESPRM_FLOW_PARAM_TYPE,
+  ESPRM_OCCUPANCY_PARAM_TYPE,
+  ESPRM_CONTACT_PARAM_TYPE,
+  ESPRM_RAIN_DETECTED_PARAM_TYPE,
+  ESPRM_LEAK_DETECTED_PARAM_TYPE,
+  ESPRM_FREEZE_DETECTED_PARAM_TYPE,
+  ESPRM_SMOKE_STATE_PARAM_TYPE,
+  ESPRM_CO_STATE_PARAM_TYPE,
+  ESPRM_AIR_QUALITY_PARAM_TYPE,
+  ESPRM_RVC_STATE_PARAM_TYPE,
+  ESPRM_OPERATIONAL_STATE_PARAM_TYPE,
   ESPRM_UI_DROPDOWN_PARAM_TYPE,
   ESPRM_UI_STATUS_PARAM_TYPE,
   ESPRM_UI_CONTROL_BOARD_PARAM_TYPE,
@@ -84,6 +100,7 @@ export const PARAM_CONTROLS = [
     ],
     control: ToggleSwitch,
     dataTypes: DATA_TYPE_BOOL,
+    paramType: ESPRM_POWER_PARAM_TYPE,
     hide: true,
   },
   {
@@ -92,6 +109,48 @@ export const PARAM_CONTROLS = [
     control: Slider,
     dataTypes: [DATA_TYPE_INT, DATA_TYPE_FLOAT],
     requirements: "bounds (min, max)",
+  },
+  {
+    name: "Speed",
+    // Discrete fan/AC speed steps (mapping 1.1: FanControl PercentSetting as
+    // levels 0..N); the ui slider hint re-routes here through the type-based
+    // override, so the user picks whole levels rather than free percentages.
+    types: [ESPRM_SPEED_PARAM_TYPE],
+    control: IndexedLevelSlider,
+    dataTypes: DATA_TYPE_INT,
+    requirements: "bounds (min, max) and optional labels map",
+  },
+  {
+    name: "Sensor Reading",
+    // Read-only numeric telemetry from the Matter sensor vocabulary; these
+    // params carry no ui_type, so the param type routes them.
+    types: [
+      ESPRM_HUMIDITY_PARAM_TYPE,
+      ESPRM_ILLUMINANCE_PARAM_TYPE,
+      ESPRM_PRESSURE_PARAM_TYPE,
+      ESPRM_FLOW_PARAM_TYPE,
+    ],
+    control: StatusReadout,
+    dataTypes: [DATA_TYPE_INT, DATA_TYPE_FLOAT],
+  },
+  {
+    name: "Sensor State",
+    // Read-only detector booleans and mode-string states (valid_strs carries
+    // the vocabulary for the string ones).
+    types: [
+      ESPRM_OCCUPANCY_PARAM_TYPE,
+      ESPRM_CONTACT_PARAM_TYPE,
+      ESPRM_RAIN_DETECTED_PARAM_TYPE,
+      ESPRM_LEAK_DETECTED_PARAM_TYPE,
+      ESPRM_FREEZE_DETECTED_PARAM_TYPE,
+      ESPRM_SMOKE_STATE_PARAM_TYPE,
+      ESPRM_CO_STATE_PARAM_TYPE,
+      ESPRM_AIR_QUALITY_PARAM_TYPE,
+      ESPRM_RVC_STATE_PARAM_TYPE,
+      ESPRM_OPERATIONAL_STATE_PARAM_TYPE,
+    ],
+    control: StatusReadout,
+    dataTypes: [DATA_TYPE_BOOL, DATA_TYPE_INT, DATA_TYPE_STRING],
   },
   {
     name: "Brightness",
@@ -126,6 +185,13 @@ export const PARAM_CONTROLS = [
     control: SaturationSlider,
     dataTypes: DATA_TYPE_INT,
     paramType: ESPRM_SATURATION_PARAM_TYPE,
+    // No single field identifies it: cluster shared with Hue/CCT, uiType with Brightness.
+    matchAll: [
+      {
+        type: MATTER_SERVER_PARAM_TYPE_COLOR_CONTROL,
+        uiType: ESPRM_UI_SLIDER_PARAM_TYPE,
+      },
+    ],
     derivedMeta: [{ hue: ESPRM_HUE_PARAM_TYPE }],
   },
   {

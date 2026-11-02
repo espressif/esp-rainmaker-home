@@ -41,6 +41,12 @@ interface ConfirmationDialogProps {
   onConfirm: () => void;
   /** Callback when cancelled */
   onCancel?: () => void;
+  /**
+   * Called when the dialog is closed without pressing a button (Android
+   * back). Defaults to `onCancel`; set it when the cancel button does more
+   * than close the dialog.
+   */
+  onDismiss?: () => void;
   /** Color of confirm button */
   confirmColor?: string;
   /** Show loading spinner */
@@ -61,6 +67,7 @@ const ConfirmationDialog: React.FC<ConfirmationDialogProps> = ({
   cancelText = "Cancel",
   onConfirm,
   onCancel,
+  onDismiss,
   confirmColor = tokens.colors.primary,
   isLoading = false,
   qaId,
@@ -78,6 +85,15 @@ const ConfirmationDialog: React.FC<ConfirmationDialogProps> = ({
     onConfirm();
   };
 
+  const handleDismiss = () => {
+    if (!onDismiss) {
+      handleCancel();
+      return;
+    }
+    setInternalOpen(false);
+    onDismiss();
+  };
+
   return (
     <>
       {trigger && (
@@ -88,7 +104,7 @@ const ConfirmationDialog: React.FC<ConfirmationDialogProps> = ({
         visible={isVisible}
         transparent={true}
         animationType="fade"
-        onRequestClose={handleCancel}
+        onRequestClose={handleDismiss}
       >
         <View style={globalStyles.modalOverlay}>
           <View style={globalStyles.modalContent}>

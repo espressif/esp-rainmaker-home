@@ -14,6 +14,7 @@ from typing import List, Optional
 
 import requests
 
+from utils.device_names import is_variant_of
 from utils.registered_user_resolver import deployment_family
 
 logger = logging.getLogger(__name__)
@@ -133,8 +134,13 @@ class RainMakerCloud:
             })
         return out
 
-    def set_param(self, node_id: str, payload: dict) -> None:
-        self._request("PUT", "/user/nodes/params", json_body=[{"node_id": node_id, "payload": payload}])
+    def set_param(self, node_id: str, payload: dict) -> Optional[list]:
+        """PUT node params; returns the per-node result list (a 207 carries 'Node is offline' when the node is unreachable)."""
+        r = self._request("PUT", "/user/nodes/params", json_body=[{"node_id": node_id, "payload": payload}])
+        try:
+            return r.json()
+        except ValueError:
+            return None
 
     def remove_node(self, node_id: str) -> None:
         self._request("PUT", "/user/nodes/mapping", json_body={"node_id": node_id, "operation": "remove"})
@@ -162,11 +168,11 @@ class RainMakerCloud:
         return removed
 
     def remove_nodes_except(self, keep_names) -> int:
-        """Unmap every node whose name is NOT in keep_names — clears stale/unnamed Matter nodes (name=None from a config-500) that remove_nodes_named misses, while keeping reuse-online devices (E2E Light / Network Light)."""
+        """Unmap every node whose name is NOT in keep_names (or a run-unique variant of one) — clears stale/unnamed Matter nodes (name=None from a config-500) that remove_nodes_named misses, while keeping reuse-online devices (E2E Light / Network Light)."""
         keep = set(keep_names)
         removed = 0
         for node in self.nodes():
-            if (node.get("name") or "") not in keep:
+            if not any(is_variant_of(node.get("name") or "", name) for name in keep):
                 try:
                     self.remove_node(node["node_id"])
                     removed += 1
@@ -174,8 +180,8 @@ class RainMakerCloud:
                     logger.warning("Could not remove node %s: %s", node["node_id"], error)
         return removed
 
-    def set_name(self, node_id: str, device_key: str, name: str) -> None:
-        self.set_param(node_id, {device_key: {"Name": name}})
+    def set_name(self, node_id: str, device_key: str, name: str) -> Optional[list]:
+        return self.set_param(node_id, {device_key: {"Name": name}})
 
     def set_tz(self, node_id: str, tz: str = "Asia/Kolkata") -> None:
         self.set_param(node_id, {"Time": {"TZ": tz}})
@@ -618,7 +624,7 @@ class RmneoCloud:
         keep = set(keep_names)
         removed = 0
         for node in self.nodes():
-            if (node.get("name") or "") not in keep:
+            if not any(is_variant_of(node.get("name") or "", name) for name in keep):
                 try:
                     self.remove_node(node["node_id"], node.get("group_id"))
                     removed += 1

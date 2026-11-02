@@ -54,7 +54,8 @@ def cancel_third_party_login(helper):
 def complete_authentication(helper, provider, oauth_user_resolver):
     account = oauth_user_resolver(provider, helper.driver._test_info.get("platform"))
     helper.oauth_login.perform_auth(provider, account["email"], account["password"],
-                                    totp_secret=account.get("totp_secret"))
+                                    totp_secret=account.get("totp_secret"),
+                                    device_account=account.get("device_account"))
     assert helper.oauth_login.wait_for_login_completion(), "Home screen not displayed after oauth login"
 
 @when("user logs out of the app")

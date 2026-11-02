@@ -38,7 +38,7 @@ export const ActionDeviceSelectionScreen = observer(() => {
   const {
     devices,
     eventInfo,
-    eventDevice,
+    eventDeviceDisplayName,
     selectedDevices,
     nonSelectedDevices,
     selectDevice,
@@ -86,9 +86,6 @@ export const ActionDeviceSelectionScreen = observer(() => {
     selectedDevices.length === 0
       ? t("automation.actionDeviceSelection.selectDevices")
       : t("automation.actionDeviceSelection.selectMore");
-
-  const eventDeviceDisplayName =
-    eventDevice?.displayName ?? eventInfo?.deviceName ?? "";
 
   return (
     <>

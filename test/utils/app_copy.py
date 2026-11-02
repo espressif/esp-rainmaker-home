@@ -56,6 +56,10 @@ SERVER_COPY = {
         "rm": "Verification code is incorrect",
         "rmneo": "Invalid verification code",
     },
+    "signup incorrect verification code": {
+        "rm": "Verification code is incorrect",
+        "rmneo": "Invalid code or RainMaker account already exists. Try signin or reset password.",
+    },
     "incorrect current password": {
         "rm": "The password you entered is incorrect",
         "rmneo": "Password change failed",

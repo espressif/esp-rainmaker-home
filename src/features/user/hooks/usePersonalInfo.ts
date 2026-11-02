@@ -7,7 +7,7 @@
 import { useState, useEffect } from "react";
 
 // Config
-import { getResolvedActiveSdk, isRmneoStackSdkId } from "@config/sdk.config";
+import { getFeatures } from "@config/features.config";
 
 // Hooks
 import { useCDF } from "@shared/hooks/useCDF";
@@ -16,7 +16,7 @@ import { useToast } from "@shared/hooks/useToast";
 
 /**
  * Manages personal info state and related actions.
- * Neo: read-only email / phone / user id (only when present). Other SDKs: editable nickname + user id.
+ * With `nicknameEditing`: editable nickname + user id. Without it (Neo): read-only email / phone / user id (only when present).
  * @returns Profile values, init/edit loading flags, and nickname edit handlers.
  */
 export const usePersonalInfo = () => {
@@ -24,7 +24,7 @@ export const usePersonalInfo = () => {
   const { store } = useCDF();
   const toast = useToast();
 
-  const canEditNickname = !isRmneoStackSdkId(getResolvedActiveSdk());
+  const canEditNickname = getFeatures().nicknameEditing;
 
   const [userName, setUserName] = useState("");
   const [nickName, setNickName] = useState("");

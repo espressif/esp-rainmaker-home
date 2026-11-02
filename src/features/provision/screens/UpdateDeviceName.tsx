@@ -30,6 +30,7 @@ const UpdateDeviceNameScreen = () => {
   const {
     getDeviceName,
     setDeviceName,
+    maxNameLength,
     isLoading,
     provisionedNode,
     deviceList,
@@ -118,6 +119,7 @@ const UpdateDeviceNameScreen = () => {
               provisionedNodeId={provisionedNode?.id}
               getDeviceName={getDeviceName}
               setDeviceName={setDeviceName}
+              maxNameLength={maxNameLength}
             />
           </View>
         </ScrollView>

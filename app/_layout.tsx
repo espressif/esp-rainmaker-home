@@ -7,8 +7,8 @@
 // Bootstrap
 import "@src/bootstrap";
 
-import { useState, useEffect, useCallback, useMemo } from "react";
-import { View, ActivityIndicator } from "react-native";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { View, ActivityIndicator, Text } from "react-native";
 
 import { Stack, usePathname, RelativePathString } from "expo-router";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
@@ -34,7 +34,7 @@ import { ESPAppRestartAdapter } from "@native-adaptors/implementations/ESPAppRes
 import { useTranslation } from "react-i18next";
 
 // components
-import { FooterTabs, ToastContainer } from "@shared/components";
+import { Button, FooterTabs, ToastContainer } from "@shared/components";
 
 // icons
 import { Home, Calendar, User, History, Zap } from "lucide-react-native";
@@ -172,18 +172,71 @@ const InnerLayout = () => {
  * `generation` covers the in-place path: `reinitializeSdk` bumps it so the
  * provider tree remounts and `StoreProvider` re-reads the new `ESPCDF`
  * instance into its ref.
+ *
+ * If the SDK fails to start, shows an error with Retry instead of a spinner
+ * that never ends.
  */
 const AppInitGate = ({ generation }: { generation: number }) => {
+  const { t } = useTranslation();
   const [ready, setReady] = useState(false);
+  const [startFailed, setStartFailed] = useState(false);
+
+  const startApp = useCallback(() => {
+    initializeApp()
+      .then(() => setReady(true))
+      .catch((error: unknown) => {
+        console.error("[AppInitGate] app start failed:", error);
+        setStartFailed(true);
+      });
+  }, []);
+
+  // Reset first: a failed start leaves adaptors half set up.
+  const isRetrying = useRef(false);
+  const retryStart = useCallback(() => {
+    if (isRetrying.current) return; // ignore a second tap while retrying
+    isRetrying.current = true;
+    setStartFailed(false);
+    cdfBootstrap
+      .reset()
+      .then(startApp)
+      .catch((error: unknown) => {
+        console.error("[AppInitGate] app restart failed:", error);
+        setStartFailed(true);
+      })
+      .finally(() => {
+        isRetrying.current = false;
+      });
+  }, [startApp]);
 
   useEffect(() => {
-    initializeApp().then(() => setReady(true));
-  }, []);
+    startApp();
+  }, [startApp]);
 
   if (!ready) {
     return (
       <View style={globalStyles.appLoadingContainer}>
-        <ActivityIndicator size="large" color={tokens.colors.primary} />
+        {startFailed ? (
+          <View
+            style={{
+              alignItems: "center",
+              gap: tokens.spacing._15,
+              padding: tokens.spacing._20,
+            }}
+          >
+            <Text
+              style={{
+                color: tokens.colors.text_primary,
+                fontSize: tokens.fontSize.md,
+                textAlign: "center",
+              }}
+            >
+              {t("error.fallBack")}
+            </Text>
+            <Button label={t("common.retry")} onPress={retryStart} />
+          </View>
+        ) : (
+          <ActivityIndicator size="large" color={tokens.colors.primary} />
+        )}
       </View>
     );
   }

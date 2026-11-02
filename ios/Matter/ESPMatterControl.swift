@@ -111,6 +111,107 @@ extension ESPMatterModule {
     }
   }
 
+  /// Replaces a CAT subject in the device's EP0 ACL with the fabric's current CAT
+  /// value, repairing an entry after a rotation. Works for both the operate and the
+  /// admin CAT.
+  ///
+  /// Entries are matched by CAT identifier (`subject >> 16`), which a rotation keeps
+  /// while bumping the version. When no entry carries the identifier and the CAT is
+  /// an Operate one (identifier 0x0600–0x08FF), a fresh Operate entry is appended to
+  /// self-heal a failed commissioning-time write, mirroring
+  /// `writeOperateCatAclIfNeeded`. Admin CATs are never appended.
+  ///
+  /// - Parameters:
+  ///   - matterNodeId: Matter operational node id of the device whose ACL is repaired.
+  ///   - groupCatId: The fabric's current CAT value as hex, with or without a `0x` prefix.
+  ///   - resolve: Called once the ACL write succeeds.
+  ///   - reject: Called when the controller is uninitialised, the node id or CAT is
+  ///     not valid, or the ACL read/write fails.
+  @objc func matterUpdateCatAclSubject(_ matterNodeId: String,
+                                       groupCatId: String,
+                                       resolver resolve: @escaping RCTPromiseResolveBlock,
+                                       rejecter reject: @escaping RCTPromiseRejectBlock) {
+    guard let node = ESPMatterModule.parseMatterNodeId(matterNodeId),
+          let controller = currentMatterController else {
+      reject("NO_CONTROLLER", "Matter controller is not initialised", nil); return
+    }
+    guard let newSubject = ESPMatterAclOps.subject(fromCatIdHex: groupCatId) else {
+      reject("INVALID_ARG", "groupCatId is not valid hex", nil); return
+    }
+    let isOperateCat = ESPMatterAclOps.isOperateCatSubject(newSubject)
+
+    let device = MTRBaseDevice(nodeID: node, controller: controller)
+    ESPMatterAclOps.readEntries(device: device, queue: matterQueue) { [weak self] result in
+      guard let self = self else { return }
+      switch result {
+      case .failure(let error):
+        reject("ACL_READ_FAILED", error.localizedDescription, error)
+      case .success(let entries):
+        self.repairCatSubject(newSubject,
+                              isOperateCat: isOperateCat,
+                              in: entries,
+                              device: device,
+                              resolver: resolve,
+                              rejecter: reject)
+      }
+    }
+  }
+
+  /// Applies the CAT repair to an entry list already read from the device and
+  /// writes it back when anything changed.
+  ///
+  /// - Parameters:
+  ///   - newSubject: The fabric's current CAT subject.
+  ///   - isOperateCat: Whether `newSubject` is an operate CAT, which may be appended
+  ///     when missing; admin CATs are only ever replaced.
+  ///   - entries: This fabric's ACL entries as read from the device.
+  ///   - device: The device whose ACL is being repaired.
+  ///   - resolve: Called when the ACL is current, whether or not a write was needed.
+  ///   - reject: Called when the ACL write fails.
+  private func repairCatSubject(_ newSubject: UInt64,
+                                isOperateCat: Bool,
+                                in entries: [[String: Any]],
+                                device: MTRBaseDevice,
+                                resolver resolve: @escaping RCTPromiseResolveBlock,
+                                rejecter reject: @escaping RCTPromiseRejectBlock) {
+    let matches = ESPMatterAclOps.findSubjects(sharingIdentifierWith: newSubject, in: entries)
+    var updated = entries
+    var changed = false
+
+    for match in matches where match.value != newSubject {
+      updated = ESPMatterAclOps.replacingSubject(at: match, with: newSubject, in: updated)
+      changed = true
+    }
+
+    if matches.isEmpty {
+      guard isOperateCat else {
+        // Nothing to rotate on this device (legacy node-id-keyed admin entry)
+        // — report success so the sweep completes.
+        resolve(["success": true])
+        return
+      }
+      // No operate-CAT subject found: self-heal the commissioning-time ACL write.
+      let context = ESPMatterAclOps.extractAdminEntryContext(from: entries) ?? .fallback
+      updated.append(ESPMatterAclOps.makeOperateEntry(subject: newSubject,
+                                                      authMode: context.authMode,
+                                                      fabricIndex: context.fabricIndex))
+      changed = true
+    }
+
+    guard changed else {
+      resolve(["success": true])
+      return
+    }
+
+    ESPMatterAclOps.writeEntries(updated, device: device, queue: matterQueue) { error in
+      if let error = error {
+        reject("ACL_WRITE_FAILED", error.localizedDescription, error)
+        return
+      }
+      resolve(["success": true])
+    }
+  }
+
   @objc func matterControlInvoke(_ matterNodeId: String,
                                  endpoint: NSNumber,
                                  clusterId: NSNumber,

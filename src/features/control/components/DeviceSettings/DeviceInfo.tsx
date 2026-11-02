@@ -27,10 +27,10 @@ import { DeviceInfoProps } from "@src/types/global";
 
 // Utils
 import {
-  readMatterNodeIdFromCdfNode,
-  readMatterSoftwareVersionFromCdfNode,
-} from "@shared/utils/matterDeviceStateEvents";
-import { ESPMatterControlAdapter } from "@native-adaptors/implementations/ESPMatterControlAdapter";
+  getStoredFirmwareVersion,
+  needsLiveFirmwareRead,
+  readLiveFirmwareVersion,
+} from "@shared/utils/deviceFirmware";
 
 /**
  * DeviceInfo Component
@@ -43,51 +43,21 @@ const DeviceInfo: React.FC<DeviceInfoProps> = ({ node, nodeConfig, disabled }) =
   const { t } = useTranslation();
   const toast = useToast();
 
-  // Only pure-Matter nodes lack a cloud firmwareVersion; they read it from the
-  // Matter Basic Information cluster (0x28). Regular/hybrid nodes use the cloud value.
-  const cloudFirmwareVersion = nodeConfig?.info?.firmwareVersion;
-  const matterNodeId = node ? readMatterNodeIdFromCdfNode(node) : undefined;
-  const isPureMatterNode = !!matterNodeId && !cloudFirmwareVersion;
-
-  // Prefer the version persisted at commissioning; if nothing is stored (node
-  // commissioned elsewhere / app reinstall) the effect below reads it live.
-  const persistedMatterVersion =
-    isPureMatterNode && node
-      ? readMatterSoftwareVersionFromCdfNode(node)
-      : undefined;
-  const [fetchedMatterVersion, setFetchedMatterVersion] = useState<
-    string | undefined
-  >(undefined);
+  // Most nodes carry the version in their cloud config; the rest need a live read.
+  const storedVersion = getStoredFirmwareVersion(node, nodeConfig);
+  const needsRead = needsLiveFirmwareRead(node, nodeConfig);
+  const [liveVersion, setLiveVersion] = useState<string | undefined>(undefined);
 
   useEffect(() => {
-    if (!isPureMatterNode || persistedMatterVersion || !matterNodeId) return;
+    // `liveVersion` also gates it: node identity churns under MobX, and without
+    // that guard every re-render would re-read a version we already have.
+    if (!needsRead || liveVersion) return;
     let cancelled = false;
     void (async () => {
       try {
-        // SoftwareVersionString (0xA) for display; SoftwareVersion (0x9) numeric fallback.
-        const asString = await ESPMatterControlAdapter.read(
-          matterNodeId,
-          0,
-          0x28,
-          0x0a,
-        );
-        if (
-          !cancelled &&
-          asString?.success &&
-          typeof asString.value === "string" &&
-          asString.value.trim()
-        ) {
-          setFetchedMatterVersion(asString.value.trim());
-          return;
-        }
-        const asNumber = await ESPMatterControlAdapter.read(
-          matterNodeId,
-          0,
-          0x28,
-          0x09,
-        );
-        if (!cancelled && asNumber?.success && asNumber.value != null) {
-          setFetchedMatterVersion(String(asNumber.value));
+        const version = await readLiveFirmwareVersion(node);
+        if (!cancelled && version) {
+          setLiveVersion(version);
         }
       } catch {
         // leave the "--" fallback in place
@@ -96,11 +66,9 @@ const DeviceInfo: React.FC<DeviceInfoProps> = ({ node, nodeConfig, disabled }) =
     return () => {
       cancelled = true;
     };
-  }, [isPureMatterNode, matterNodeId, persistedMatterVersion]);
+  }, [needsRead, liveVersion, node]);
 
   if (!node) return null;
-
-  const matterVersion = persistedMatterVersion ?? fetchedMatterVersion;
 
   const handleCopyNodeId = async () => {
     try {
@@ -139,7 +107,7 @@ const DeviceInfo: React.FC<DeviceInfoProps> = ({ node, nodeConfig, disabled }) =
         {/* Firmware Version */}
         <InfoRow
           label={t("device.settings.deviceInfoVersionLabel")}
-          value={cloudFirmwareVersion || matterVersion || "--"}
+          value={storedVersion || liveVersion || "--"}
         />
 
         {/* Timezone Row - Conditionally rendered based on device support */}

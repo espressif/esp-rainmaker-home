@@ -21,13 +21,13 @@ public extension Data {
 
 struct RainMakerCluster {
   static let clusterId: UInt32 = 320601088 // 0x131bfc00
-  
+
   struct Attributes {
     static let rainmakerNodeId: UInt32 = 1
     static let challenge: UInt32 = 2
     static let matterNodeId: UInt32 = 3
   }
-  
+
   struct Commands {
     static let sendNodeId: UInt32 = 1
   }
@@ -48,30 +48,60 @@ class ESPMatterModule: RCTEventEmitter {
   // MARK: - Properties
   private let csrQueue = DispatchQueue(label: ESPMatterConstants.csrQueueLabel, qos: .userInitiated)
   let matterQueue = DispatchQueue(label: ESPMatterConstants.matterQueueLabel, qos: .userInitiated)
-  
+
   // Matter Event Identifier
   private let matterEventIdentifier: String = ESPMatterConstants.matterEventIdentifier
-  
+
   // Store commissioning state
   private var currentFabricInfo: [String: Any]?
   private var currentCommissioningCompletion: RCTPromiseResolveBlock?
   private var currentCommissioningReject: RCTPromiseRejectBlock?
-  
+
   // Matter controller and commissioning state
   var currentMatterController: MTRDeviceController?
+  private var activeControllerFabricId: String?
   private var currentDeviceId: UInt64?
   private var currentMatterNodeId: UInt64?
   private var currentRequestId: String?
   private var currentNOCCompletion: ((MTROperationalCertificateChain?, Error?) -> Void)?
-  
+
+  /// A deployment that pre-issues its CSR nonce hands it over on the fabric object,
+  /// and it must be bound into the device's CSRRequest or the verify step
+  /// rejects the NOC. Neo does this via `/initiate`; classic RainMaker sends no nonce
+  /// and lets the stack generate one. The presence of the nonce is the only signal
+  /// needed, so any future deployment that pre-issues one works without a code change.
+  private var currentCsrNonce: Data?
+  private var isNonceBoundSession: Bool { currentCsrNonce != nil }
+
+  /// On iOS 26.2+ the nonce-bound path drives an MTRCommissioningOperation while this
+  /// object is still the controller's delegate. Apple only documents attestation being
+  /// redirected to MTRCommissioningDelegate, so one commissioning can report its
+  /// outcome twice, once per delegate. Acting on both would append the operate-CAT ACL
+  /// entry a second time and emit a second confirmation request whose terminal event
+  /// carries the ids the first pass already cleared. Both delegates are bound to the
+  /// same serial `matterQueue`, so a plain flag is enough.
+  private var didFireCommissioningOutcome = false
+
+  /// Bumped on every start and cancel, so work from a cancelled session (e.g. Apple's
+  /// sheet returning late) can tell it no longer owns the session.
+  private var commissioningSessionId = 0
+
+  /// The in-flight MTRCommissioningOperation on the iOS 26.2+ Neo path (type-erased
+  /// because stored properties cannot be availability-gated). On iOS 26.2+ the legacy
+  /// setupCommissioningSession → commissionNode split runs on an internally-created
+  /// operation whose parameters are fixed at creation, so a csrNonce supplied later
+  /// via commissionNode never reaches the CSRRequest — Neo sessions must instead
+  /// create the operation themselves with the nonce already in the parameters.
+  private var currentCommissioningOperation: AnyObject?
+
   // RainMaker device properties
   private var rainmakerNodeId: String?
   private var isRainMakerDevice: Bool = false
 
   /// Most recently parsed Matter device info from the post-commissioning attribute scan.
-  /// Used to populate the nested `endpoints` map in the cloud Matter metadata.
+  /// Used to populate the nested `endpoints` map in the Matter metadata.
   private var lastParsedDeviceInfo: MatterDeviceInfo?
-  
+
   // MARK: - RCTEventEmitter Override
   override func supportedEvents() -> [String]! {
     return [
@@ -79,65 +109,43 @@ class ESPMatterModule: RCTEventEmitter {
       ESPMatterControl.attributeReportEventName
     ]
   }
-  
+
   override static func requiresMainQueueSetup() -> Bool {
     return false
   }
-  
-  // MARK: - Event Emission
-  
-  private func emitMatterEvent(eventType: String, data: [String: Any]) {
-    let eventData: [String: Any] = [
-      ESPMatterConstants.eventType: eventType,
-      ESPMatterConstants.requestBody: data
-    ]
-    sendEvent(withName: matterEventIdentifier, body: eventData)
-  }
 
-  /// Notifies React Native (DeviceEventEmitter) when commissioning fails, so UI can leave the loading state.
-  /// Promise rejection alone may not reach screens that only listen for Matter events.
-  private func emitCommissioningErrorToReactNative(message: String) {
-    let data: [String: Any] = [
-      ESPMatterConstants.errorMessage: message,
-      ESPMatterConstants.success: false
-    ]
-    emitMatterEvent(eventType: ESPMatterConstants.commissioningError, data: data)
-  }
-  
-  
-  
   // MARK: - CSR Generation Methods
-  
+
   /// Generate Certificate Signing Request for fabric
   /// This method generates a CSR using iOS Keychain and prepares the request body
   /// - Parameter fabricInfo: Dictionary containing groupId, fabricId, and name (matching ESPRMGenerateCSRRequest)
   @objc func generateCSR(_ fabricInfo: [String: Any],
                          resolver resolve: @escaping RCTPromiseResolveBlock,
                          rejecter reject: @escaping RCTPromiseRejectBlock) {
-    
+
     guard let groupId = fabricInfo[ESPMatterConstants.groupId] as? String,
           let fabricId = fabricInfo[ESPMatterConstants.fabricId] as? String,
           let name = fabricInfo[ESPMatterConstants.name] as? String else {
       reject(ESPMatterConstants.invalidParams, ESPMatterConstants.missingRequiredParams, nil)
       return
     }
-    
+
     csrQueue.async {
       do {
         // Generate CSR using iOS Keychain
         let csr = try self.generateCSRForFabric(groupId: groupId)
-        
+
         let csrRequest: [String: Any] = [
           ESPMatterConstants.groupIdKeyDict: groupId,
           ESPMatterConstants.csr: csr
         ]
-        
+
         let requestBody: [String: Any] = [
           ESPMatterConstants.operation: ESPMatterConstants.operationAdd,
           ESPMatterConstants.csrType: ESPMatterConstants.user,
           ESPMatterConstants.csrRequests: [csrRequest]
         ]
-        
+
         let response: [String: Any] = [
           ESPMatterConstants.csr: csr,
           ESPMatterConstants.requestBody: try self.jsonString(from: requestBody),
@@ -145,11 +153,11 @@ class ESPMatterModule: RCTEventEmitter {
           ESPMatterConstants.fabricId: fabricId,
           ESPMatterConstants.name: name
         ]
-        
+
         DispatchQueue.main.async {
           resolve(response)
         }
-        
+
       } catch {
         // Failed to generate CSR
         DispatchQueue.main.async {
@@ -158,213 +166,303 @@ class ESPMatterModule: RCTEventEmitter {
       }
     }
   }
-  
+
   // MARK: - Matter Commissioning Methods
-  
-  /// Start Matter ecosystem commissioning
-  /// This method starts the native commissioning process for Matter devices
+
+  /// Starts the native commissioning process for a Matter device.
+  ///
+  /// - Parameters:
+  ///   - onboardingPayload: QR code or manual pairing payload scanned from the device.
+  ///   - fabric: Active fabric details. A `csrNonce` here selects the nonce-bound path
+  ///     (see `isNonceBoundSession`); its absence lets the stack generate its own.
+  ///   - resolve: Called when commissioning has been handed off to the Matter stack.
+  ///   - reject: Called when the payload or fabric details are invalid, or the
+  ///     controller cannot be started.
   @objc func startEcosystemCommissioning(_ onboardingPayload: String,
                                          fabric: [String: Any],
                                          resolver resolve: @escaping RCTPromiseResolveBlock,
                                          rejecter reject: @escaping RCTPromiseRejectBlock) {
-    
+
+    // One session at a time: a second start must not wipe the one in flight.
+    if currentFabricInfo != nil {
+      reject(ESPMatterConstants.commissioningInProgress, ESPMatterConstants.commissioningInProgressMsg, nil)
+      return
+    }
+    clearCommissioningSessionState()
+    commissioningSessionId += 1
+    let sessionId = commissioningSessionId
+
     // Store commissioning state
     currentFabricInfo = fabric
     currentCommissioningCompletion = resolve
     currentCommissioningReject = reject
 
+    // RMNeo detection (I1): the Neo SDK sets the `/initiate` challenge as `csrNonce`
+    // on the fabric object. Malformed input fails fast — commissioning with a random
+    // nonce would only surface later as a /verify 400.
+    if let csrNonceHex = fabric[ESPMatterConstants.csrNonce] as? String, !csrNonceHex.isEmpty {
+      guard csrNonceHex.count == 64, let nonce = csrNonceHex.matterHexData, nonce.count == 32 else {
+        let msg = ESPMatterConstants.invalidCsrNonceMsg
+        emitCommissioningErrorToReactNative(message: msg)
+        clearCommissioningSessionState()
+        reject(ESPMatterConstants.invalidParams, msg, nil)
+        return
+      }
+      currentCsrNonce = nonce
+    }
+    // Neo also seeds the `requestId` here so the confirmation request can be
+    // built even if the NOC response never echoes it back.
+    if let requestId = fabric[ESPMatterConstants.requestId] as? String, !requestId.isEmpty {
+      currentRequestId = requestId
+    }
     matterQueue.async {
       do {
         // Step 1: Apple Fabric Commissioning (using MatterSupport)
-        try self.startAppleFabricCommissioning(qrData: onboardingPayload, fabric: fabric)
-        // Note: Custom fabric commissioning will be triggered after Apple commissioning complete
+        try self.startAppleFabricCommissioning(qrData: onboardingPayload, fabric: fabric, sessionId: sessionId)
+        // Hand-off done: the outcome arrives as events, matching Android's start promise.
+        DispatchQueue.main.async {
+          self.resolveCommissioningStart()
+        }
       } catch {
         DispatchQueue.main.async {
           let msg = String(format: ESPMatterConstants.failedToStartCommissioning, error.localizedDescription)
           self.emitCommissioningErrorToReactNative(message: msg)
-          reject(ESPMatterConstants.commissioningFailed, msg, error)
+          self.rejectCommissioningStart(ESPMatterConstants.commissioningFailed, msg, error)
+          self.clearCommissioningSessionState()
         }
       }
     }
   }
-  
+
+  // MARK: - Cancel
+
+  /// Ends the current commissioning session, if any, so the next add can start.
+  /// JS calls it when an add fails or the user leaves before it finished. Safe to
+  /// call when nothing is running.
+  ///
+  /// - Parameters:
+  ///   - resolve: Called with `cancelled: true` when a session was ended.
+  @objc func cancelCommissioning(_ resolve: @escaping RCTPromiseResolveBlock,
+                                 rejecter _: @escaping RCTPromiseRejectBlock) {
+    DispatchQueue.main.async {
+      let wasRunning = self.currentFabricInfo != nil
+      if wasRunning {
+        self.commissioningSessionId += 1
+        let error = NSError(domain: ESPMatterConstants.moduleDomain, code: -1, userInfo: [
+          NSLocalizedDescriptionKey: ESPMatterConstants.commissioningCancelledMsg
+        ])
+        self.currentNOCCompletion?(nil, error)
+        self.rejectCommissioningStart(ESPMatterConstants.commissioningCancelled,
+                                      ESPMatterConstants.commissioningCancelledMsg, error)
+        self.endCommissioningSession()
+      }
+      resolve([ESPMatterConstants.cancelled: wasRunning])
+    }
+  }
+
   // MARK: - Post Message Method (Unified Message Router)
-  
+
   /// Unified method to route different types of data to appropriate native methods
   @objc func postMessage(_ payload: [String: Any],
                          resolver resolve: @escaping RCTPromiseResolveBlock,
                          rejecter reject: @escaping RCTPromiseRejectBlock) {
-    
+
     guard let type = payload[ESPMatterConstants.type] as? String else {
       reject(ESPMatterConstants.invalidPayload, ESPMatterConstants.postMessageRequiresType, nil)
       return
     }
-    
+
     guard let data = payload[ESPMatterConstants.data] as? [String: Any] else {
       reject(ESPMatterConstants.invalidPayload, ESPMatterConstants.postMessageRequiresData, nil)
       return
     }
-    
+
     switch type {
     case ESPMatterConstants.issueNodeNocResponse:
       var nocResponse: [String: Any] = [:]
-      
+
       // Extract nodeNoc (can be operationalCert or nodeNoc)
       if let nodeNoc = data[ESPMatterConstants.nodeNoc] as? String {
         nocResponse[ESPMatterConstants.nodeNoc] = nodeNoc
       } else if let operationalCert = data[ESPMatterConstants.operationalCert] as? String {
         nocResponse[ESPMatterConstants.nodeNoc] = operationalCert
       }
-      
+
       // Extract matterNodeId
       if let matterNodeId = data[ESPMatterConstants.matterNodeId] as? String {
         nocResponse[ESPMatterConstants.matterNodeId] = matterNodeId
       }
-      
+
       // Extract requestId
       if let requestId = data[ESPMatterConstants.requestId] as? String {
         nocResponse[ESPMatterConstants.requestId] = requestId
       }
-      
+
+      // RMNeo /verify failures arrive as {status:"failed", errorMessage/description}.
+      if let status = data[ESPMatterConstants.status] as? String {
+        nocResponse[ESPMatterConstants.status] = status
+      }
+      if let errorMessage = (data[ESPMatterConstants.errorMessage]
+                             ?? data[ESPMatterConstants.descriptionKey]) as? String {
+        nocResponse[ESPMatterConstants.errorMessage] = errorMessage
+      }
+
       sendNocResponse(nocResponse, resolver: resolve, rejecter: reject)
-      
+
     case ESPMatterConstants.commissioningConfirmationResponse:
       // Route to sendConfirmResponse
       sendConfirmResponse(data, resolver: resolve, rejecter: reject)
-      
+
     case ESPMatterConstants.csrGenerationResponse, ESPMatterConstants.fabricCreationResponse, ESPMatterConstants.startCommissioningResponse:
       // Map to NOC response format
       var nocResponse: [String: Any] = [:]
-      
+
       if let nodeNoc = data[ESPMatterConstants.nodeNoc] as? String {
         nocResponse[ESPMatterConstants.nodeNoc] = nodeNoc
       }
-      
+
       if let matterNodeId = data[ESPMatterConstants.matterNodeId] as? String {
         nocResponse[ESPMatterConstants.matterNodeId] = matterNodeId
       }
-      
+
       if let requestId = data[ESPMatterConstants.requestId] as? String {
         nocResponse[ESPMatterConstants.requestId] = requestId
       }
-    
+
       sendNocResponse(nocResponse, resolver: resolve, rejecter: reject)
-      
+
     default:
       reject(ESPMatterConstants.unsupportedPostMessage, String(format: ESPMatterConstants.unsupportedPostMessageType, type), nil)
     }
   }
-  
+
   // MARK: - NOC Response Methods (for device commissioning)
-  
-  /// Send NOC response to Matter framework
+
+  /// Answers the pending `issueOperationalCertificate` request with the issued
+  /// NOC, or fails it with the issuer's error.
+  ///
+  /// - Parameters:
+  ///   - nocResponse: `nodeNoc` (PEM) and `matterNodeId` (hex), optionally `requestId`;
+  ///     or `status: "failed"` with an `errorMessage` when issuance failed upstream.
+  ///   - resolve: Called once the certificate chain, or the failure, has been handed to CHIP.
+  ///   - reject: Called when no issuance is pending or the response cannot be turned
+  ///     into a certificate chain.
   @objc func sendNocResponse(_ nocResponse: [String: Any],
                              resolver resolve: @escaping RCTPromiseResolveBlock,
                              rejecter reject: @escaping RCTPromiseRejectBlock) {
-    
+
     guard let completion = currentNOCCompletion else {
       reject(ESPMatterConstants.noCompletionHandler, ESPMatterConstants.noNocCompletionHandler, nil)
       return
     }
-    
-    // Extract NOC data from response
-    guard let nodeNoc = nocResponse[ESPMatterConstants.nodeNoc] as? String,
-          let matterNodeId = nocResponse[ESPMatterConstants.matterNodeId] as? String else {
+
+    // Upstream NOC issuance failure (I4, RMNeo /verify): fail the CHIP NOC flow
+    // with the returned message instead of the generic missing-data error, and let
+    // the UI leave its loading state via COMMISSIONING_ERROR.
+    if let status = nocResponse[ESPMatterConstants.status] as? String,
+       status == ESPMatterConstants.failedStatus {
+      let message = nocResponse[ESPMatterConstants.errorMessage] as? String
+        ?? ESPMatterConstants.nodeNocIssuanceFailedMsg
       let error = NSError(domain: ESPMatterConstants.moduleDomain, code: -1, userInfo: [
-        NSLocalizedDescriptionKey: ESPMatterConstants.missingRequiredNocData
+        NSLocalizedDescriptionKey: message
       ])
       completion(nil, error)
       currentNOCCompletion = nil
-      reject(ESPMatterConstants.invalidNocResponse, ESPMatterConstants.missingRequiredNocData, error)
+      emitCommissioningErrorToReactNative(message: message)
+      // Terminal for this add: free the session now rather than wait for a callback.
+      endCommissioningSession()
+      resolve([ESPMatterConstants.success: false, ESPMatterConstants.message: message])
       return
     }
-    
+
+    guard let nodeNoc = nocResponse[ESPMatterConstants.nodeNoc] as? String,
+          let matterNodeId = nocResponse[ESPMatterConstants.matterNodeId] as? String else {
+      failNocIssuance(completion,
+                      code: ESPMatterConstants.invalidNocResponse,
+                      message: ESPMatterConstants.missingRequiredNocData,
+                      rejecter: reject)
+      return
+    }
+
     if let requestId = nocResponse[ESPMatterConstants.requestId] as? String {
       currentRequestId = requestId
     }
-    
     if let matterNodeIdUInt64 = UInt64(matterNodeId, radix: 16) {
       currentMatterNodeId = matterNodeIdUInt64
     }
-    
-    // Convert NOC from PEM to DER format
+
     guard let nocDerData = convertPEMToDER(nodeNoc) else {
-      let error = NSError(domain: ESPMatterConstants.moduleDomain, code: -1, userInfo: [
-        NSLocalizedDescriptionKey: ESPMatterConstants.failedToConvertNoc
-      ])
-      completion(nil, error)
-      currentNOCCompletion = nil
-      reject(ESPMatterConstants.nocConversionFailed, ESPMatterConstants.failedToConvertNoc, error)
+      failNocIssuance(completion,
+                      code: ESPMatterConstants.nocConversionFailed,
+                      message: ESPMatterConstants.failedToConvertNoc,
+                      rejecter: reject)
       return
     }
-    
-    // Create operational certificate chain
-    // Get the root CA certificate: first from fabricDetails, then fallback to keychain (precommission storage)
-    let fabricId = currentFabricInfo?[ESPMatterConstants.fabricId] as? String ?? currentFabricInfo?[ESPMatterConstants.id] as? String ?? ""
-    var rootCaString: String?
-    if let fabricDetails = currentFabricInfo?[ESPMatterConstants.fabricDetails] as? [String: Any],
-       let ca = (fabricDetails[ESPMatterConstants.rootCa] ?? fabricDetails["root_ca"]) as? String,
-       !ca.isEmpty {
-      rootCaString = ca
-    }
-    if (rootCaString == nil || rootCaString?.isEmpty == true) && !fabricId.isEmpty {
-      let userNOCData = loadUserNOCFromKeychain(fabricId: fabricId)
-      rootCaString = (userNOCData[ESPMatterConstants.rootCa] ?? userNOCData["root_ca"]) as? String
-    }
-    guard let rootCa = rootCaString, !rootCa.isEmpty,
-          let rootCaDerData = convertPEMToDER(rootCa) else {
-      let error = NSError(domain: ESPMatterConstants.moduleDomain, code: -1, userInfo: [
-        NSLocalizedDescriptionKey: ESPMatterConstants.failedToGetRootCa
-      ])
-      completion(nil, error)
-      currentNOCCompletion = nil
-      reject(ESPMatterConstants.rootCaNotFound, ESPMatterConstants.rootCaNotFoundMsg, error)
+
+    guard let rootCaDerData = resolveRootCaDer() else {
+      failNocIssuance(completion,
+                      code: ESPMatterConstants.rootCaNotFound,
+                      message: ESPMatterConstants.failedToGetRootCa,
+                      rejectMessage: ESPMatterConstants.rootCaNotFoundMsg,
+                      rejecter: reject)
       return
     }
-    
-    // adminSubject = group_cat_id_admin (CAT ID) - required for CASE
-    var adminSubject: NSNumber?
-    if let fabricDetails = currentFabricInfo?[ESPMatterConstants.fabricDetails] as? [String: Any],
-       let catIdAdminHex = (fabricDetails[ESPMatterConstants.groupCatIdAdmin] ?? fabricDetails["groupCatIdAdmin"]) as? String,
-       !catIdAdminHex.isEmpty {
-      let fullCatIdHex = ESPMatterConstants.prefixCATId + catIdAdminHex
-      if let catIdDecimal = fullCatIdHex.hexToDecimal {
-        adminSubject = NSNumber(value: catIdDecimal)
-      }
-    }
-    
+
     let certificateChain = MTROperationalCertificateChain(
       operationalCertificate: nocDerData,
       intermediateCertificate: nil,
       rootCertificate: rootCaDerData,
-      adminSubject: adminSubject
+      adminSubject: resolveAdminSubject()
     )
-    
-    // Call the completion handler with the certificate chain
+
     completion(certificateChain, nil)
     currentNOCCompletion = nil
     resolve([ESPMatterConstants.success: true, ESPMatterConstants.message: ESPMatterConstants.nocResponseProcessed])
   }
-  
-  /// Send confirmation response
+
+  /// Forwards the confirmation response to the device and ends the session.
+  ///
+  /// - Parameters:
+  ///   - confirmResponse: Confirmation payload returned by the confirm step.
+  ///   - resolve: Called once the response has been applied and session state cleared.
+  ///   - reject: Called when no commissioning session is in flight or the payload is invalid.
   @objc func sendConfirmResponse(_ confirmResponse: [String: Any],
                                  resolver resolve: @escaping RCTPromiseResolveBlock,
                                  rejecter reject: @escaping RCTPromiseRejectBlock) {
-    
+
     let deviceNameFromAppleCommissioning = ESPMatterEcosystemInfo.shared.getDeviceName()
-    
+
     // Clean up the device name from shared storage after retrieving it
     if deviceNameFromAppleCommissioning != nil {
       ESPMatterEcosystemInfo.shared.removeDeviceName()
     }
-    
+
     let finalDeviceName = deviceNameFromAppleCommissioning ?? confirmResponse[ESPMatterConstants.deviceName] as? String ?? ESPMatterConstants.defaultDeviceName
-    
+
     let status = confirmResponse[ESPMatterConstants.status] as? String ?? ESPMatterConstants.success
-    let rainmakerNodeId = confirmResponse[ESPMatterConstants.rainmakerNodeId] as? String ?? ""
-    let matterNodeId = confirmResponse[ESPMatterConstants.matterNodeIdKey] as? String ?? ""
-    let isRainmakerNode = confirmResponse[ESPMatterConstants.isRainmakerNode] as? Bool ?? false
-    
+    // The Neo SDK's confirmation response carries only {status, deviceName}; fall
+    // back to what this module learned during the EP0 probe so the terminal event
+    // still reports hybrid identity (the app's timezone push keys off it).
+    let rainmakerNodeIdFromResponse = confirmResponse[ESPMatterConstants.rainmakerNodeId] as? String ?? ""
+    let rainmakerNodeId = rainmakerNodeIdFromResponse.isEmpty
+      ? (self.rainmakerNodeId ?? "")
+      : rainmakerNodeIdFromResponse
+    let matterNodeIdFromResponse = confirmResponse[ESPMatterConstants.matterNodeIdKey] as? String ?? ""
+    let matterNodeId: String
+    if !matterNodeIdFromResponse.isEmpty {
+      matterNodeId = matterNodeIdFromResponse
+    } else if let currentMatterNodeId = currentMatterNodeId {
+      matterNodeId = String(format: ESPMatterConstants.matterNodeIdFormat, currentMatterNodeId)
+    } else {
+      matterNodeId = ""
+    }
+    let isRainmakerNode = confirmResponse[ESPMatterConstants.isRainmakerNode] as? Bool
+      ?? isRainMakerDevice
+    // Node id from the association step, supplied by the SDK. Unlike rainmakerNodeId this is
+    // not read off cluster 0x131bfc00, so it survives mirror-style hybrids that
+    // expose no RainMaker cluster — which is what the app's timezone push needs.
+    let rmNeoNodeId = confirmResponse[ESPMatterConstants.rmNeoNodeId] as? String ?? ""
+
     let commissioningCompleteEvent: [String: Any] = [
       ESPMatterConstants.eventType: ESPMatterConstants.commissioningComplete,
       ESPMatterConstants.status: status,
@@ -375,104 +473,17 @@ class ESPMatterModule: RCTEventEmitter {
       ESPMatterConstants.source: ESPMatterConstants.iosMatterFramework,
       ESPMatterConstants.isRainmakerNode: isRainmakerNode,
       ESPMatterConstants.rainmakerNodeId: rainmakerNodeId,
+      ESPMatterConstants.rmNeoNodeId: rmNeoNodeId,
       ESPMatterConstants.matterNodeId: matterNodeId
     ]
-    
+
     emitMatterEvent(eventType: ESPMatterConstants.commissioningComplete, data: commissioningCompleteEvent)
-    
-    currentCommissioningCompletion = nil
-    currentCommissioningReject = nil
-    currentFabricInfo = nil
-    currentDeviceId = nil
-    currentMatterNodeId = nil
-    currentRequestId = nil
-    
+
+    clearCommissioningSessionState()
+
     resolve([ESPMatterConstants.success: true, ESPMatterConstants.message: ESPMatterConstants.confirmationResponseSent])
   }
-  
-  // MARK: - Private Helper Methods
-  
-  /// Start Apple fabric commissioning using MatterSupport framework
-  private func startAppleFabricCommissioning(qrData: String, fabric: [String: Any]) throws {
-    
-    guard let fabricName = fabric[ESPMatterConstants.name] as? String else {
-      throw NSError(domain: ESPMatterConstants.moduleDomain, code: -1, userInfo: [
-        NSLocalizedDescriptionKey: ESPMatterConstants.fabricNameRequired
-      ])
-    }
-    
-    // Import MatterSupport framework for Apple commissioning
-    if #available(iOS 16.4, *) {
-      Task {
-        do {
-          // Parse the onboarding payload (QR "MT:..." or a manual pairing code).
-          // A nil result means the payload failed to parse; surface it through the
-          // catch below instead of silently completing the do-block (which would
-          // leave the JS commissioning promise pending and the screen stuck on the
-          // spinner). Mirrors startMatterCommissioningWithUserNOC's guard.
-          guard let setupPayload = try? MTRSetupPayload(onboardingPayload: qrData) else {
-            throw NSError(domain: ESPMatterConstants.moduleDomain, code: -1, userInfo: [
-              NSLocalizedDescriptionKey: ESPMatterConstants.failedToParseQR
-            ])
-          }
-          // Create MatterAddDeviceRequest topology
-          let topology = MatterAddDeviceRequest.Topology(
-            ecosystemName: ESPMatterConstants.ecosystemName,
-            homes: [MatterAddDeviceRequest.Home(displayName: fabricName)]
-          )
-          let setupRequest = MatterAddDeviceRequest(topology: topology, setupPayload: setupPayload)
 
-          try await setupRequest.perform()
-
-          // Step 2: Start custom fabric commissioning after Apple commissioning
-          if let qrData = ESPMatterEcosystemInfo.shared.getOnboardingPayload() {
-            try await self.startCustomFabricCommissioning(qrData: qrData, fabric: fabric)
-          }
-        } catch {
-
-          let msg = String(format: ESPMatterConstants.appleCommissioningFailedMsg, error.localizedDescription)
-          DispatchQueue.main.async {
-            self.emitCommissioningErrorToReactNative(message: msg)
-            self.currentCommissioningReject?(ESPMatterConstants.appleCommissioningFailed, msg, error)
-            self.currentCommissioningCompletion = nil
-            self.currentCommissioningReject = nil
-          }
-        }
-      }
-    } else {
-      throw NSError(domain: ESPMatterConstants.moduleDomain, code: -1, userInfo: [
-        NSLocalizedDescriptionKey: ESPMatterConstants.matterRequiresIOS164
-      ])
-    }
-  }
-  
-  /// Start custom fabric commissioning to ESP RainMaker Home fabric
-  private func startCustomFabricCommissioning(qrData: String, fabric: [String: Any]) async throws {
-    
-    guard let groupId = fabric[ESPMatterConstants.id] as? String else {
-      throw NSError(domain: ESPMatterConstants.moduleDomain, code: -1, userInfo: [
-        NSLocalizedDescriptionKey: ESPMatterConstants.fabricIdRequired
-      ])
-    }
-    
-    let fabricId = fabric[ESPMatterConstants.fabricId] as? String ?? groupId
-    
-    // Check if user NOC exists for this fabric (using fabricId to match storage)
-    let userNOCExists = checkUserNOCExists(fabricId: fabricId)
-    if !userNOCExists {
-      throw NSError(domain: ESPMatterConstants.moduleDomain, code: -1, userInfo: [
-        NSLocalizedDescriptionKey: String(format: ESPMatterConstants.userNocNotFound, fabricId)
-      ])
-    }
-    
-    // Initialize Matter controller with user NOC
-    try initializeMatterControllerWithFabric(fabric)
-    
-    // Start commissioning with user NOC
-    try startMatterCommissioningWithUserNOC(qrData: qrData)
-    
-  }
-  
   // MARK: - Post-login fabric bootstrap (cold start)
 
   /// Restores the Matter controller after login using fabric metadata + the Keychain-stored user NOC.
@@ -525,150 +536,217 @@ class ESPMatterModule: RCTEventEmitter {
       reject("SYNC_FABRIC_SESSION_ERROR", "Failed to restore Matter controller", error)
     }
   }
+}
 
-  /// Check if user NOC exists in iOS Keychain for the given fabric
-  /// - Parameter fabricId: Fabric ID used as the storage key (matches ESPMatterUtilityModule storage)
-  private func checkUserNOCExists(fabricId: String) -> Bool {
-    
-    let account = "user_noc_\(fabricId)"
-    let service = Bundle.bundleIdentifier()
-    
-    let query: [String: Any] = [
-      kSecClass as String: kSecClassGenericPassword,
-      kSecAttrService as String: service,
-      kSecAttrAccount as String: account,
-      kSecReturnData as String: false
+// MARK: - Session State and Events
+
+@available(iOS 16.4, *)
+extension ESPMatterModule {
+
+  private func emitMatterEvent(eventType: String, data: [String: Any]) {
+    let eventData: [String: Any] = [
+      ESPMatterConstants.eventType: eventType,
+      ESPMatterConstants.requestBody: data
     ]
-    
-    let status = SecItemCopyMatching(query as CFDictionary, nil)
-    let exists = status == errSecSuccess
-    
-    return exists
+    sendEvent(withName: matterEventIdentifier, body: eventData)
   }
-  
-  /// Initialize Matter controller with fabric details and user NOC
-  private func initializeMatterControllerWithFabric(_ fabric: [String: Any]) throws {
-    
+
+  /// Notifies React Native (DeviceEventEmitter) when commissioning fails, so UI can leave the loading state.
+  /// Promise rejection alone may not reach screens that only listen for Matter events.
+  private func emitCommissioningErrorToReactNative(message: String) {
+    let data: [String: Any] = [
+      ESPMatterConstants.errorMessage: message,
+      ESPMatterConstants.success: false
+    ]
+    emitMatterEvent(eventType: ESPMatterConstants.commissioningError, data: data)
+  }
+
+  /// Settles the start promise once; after hand-off, failures reach JS as events only.
+  private func resolveCommissioningStart() {
+    currentCommissioningCompletion?([
+      ESPMatterConstants.success: true,
+      ESPMatterConstants.message: ESPMatterConstants.commissioningStartedMsg
+    ])
+    currentCommissioningCompletion = nil
+    currentCommissioningReject = nil
+  }
+
+  private func rejectCommissioningStart(_ code: String, _ message: String, _ error: Error?) {
+    currentCommissioningReject?(code, message, error)
+    currentCommissioningCompletion = nil
+    currentCommissioningReject = nil
+  }
+
+  /// Clears all per-session commissioning state. Called on terminal completion
+  /// (`sendConfirmResponse`) and every terminal failure path so a stale Neo
+  /// `csrNonce`/`requestId` can never leak into the next session.
+  private func clearCommissioningSessionState() {
+    currentCommissioningCompletion = nil
+    currentCommissioningReject = nil
+    currentFabricInfo = nil
+    currentDeviceId = nil
+    currentMatterNodeId = nil
+    currentRequestId = nil
+    currentCsrNonce = nil
+    currentNOCCompletion = nil
+    currentCommissioningOperation = nil
+    rainmakerNodeId = nil
+    isRainMakerDevice = false
+    didFireCommissioningOutcome = false
+  }
+
+  /// Stops whatever commissioning is in flight and clears the session. The stopped
+  /// work's late failure callback is then ignored instead of reported a second time.
+  private func endCommissioningSession() {
+    if #available(iOS 26.2, *),
+       let operation = currentCommissioningOperation as? MTRCommissioningOperation {
+      _ = operation.stop()
+    } else if let deviceId = currentDeviceId, let controller = currentMatterController {
+      try? controller.cancelCommissioning(forNodeID: NSNumber(value: deviceId))
+    }
+    clearCommissioningSessionState()
+    didFireCommissioningOutcome = true
+  }
+
+  /// True for the first terminal callback of a session, false for any repeat.
+  private func claimCommissioningOutcome() -> Bool {
+    if didFireCommissioningOutcome {
+      return false
+    }
+    didFireCommissioningOutcome = true
+    return true
+  }
+}
+
+// MARK: - Commissioning Pipeline
+
+@available(iOS 16.4, *)
+extension ESPMatterModule {
+
+  /// Start Apple fabric commissioning using MatterSupport framework
+  private func startAppleFabricCommissioning(qrData: String, fabric: [String: Any], sessionId: Int) throws {
+
+    guard let fabricName = fabric[ESPMatterConstants.name] as? String else {
+      throw NSError(domain: ESPMatterConstants.moduleDomain, code: -1, userInfo: [
+        NSLocalizedDescriptionKey: ESPMatterConstants.fabricNameRequired
+      ])
+    }
+
+    // Import MatterSupport framework for Apple commissioning
+    if #available(iOS 16.4, *) {
+      Task {
+        do {
+          // Parse the onboarding payload (QR "MT:..." or a manual pairing code).
+          // A nil result means the payload failed to parse; surface it through the
+          // catch below instead of silently completing the do-block (which would
+          // leave the JS commissioning promise pending and the screen stuck on the
+          // spinner). Mirrors startMatterCommissioningWithUserNOC's guard.
+          guard let setupPayload = try? MTRSetupPayload(onboardingPayload: qrData) else {
+            throw NSError(domain: ESPMatterConstants.moduleDomain, code: -1, userInfo: [
+              NSLocalizedDescriptionKey: ESPMatterConstants.failedToParseQR
+            ])
+          }
+          // Create MatterAddDeviceRequest topology
+          let topology = MatterAddDeviceRequest.Topology(
+            ecosystemName: ESPMatterConstants.ecosystemName,
+            homes: [MatterAddDeviceRequest.Home(displayName: fabricName)]
+          )
+          let setupRequest = MatterAddDeviceRequest(topology: topology, setupPayload: setupPayload)
+
+          try await setupRequest.perform()
+
+          // The add was cancelled while Apple's sheet was open.
+          let stillCurrent = await MainActor.run { self.commissioningSessionId == sessionId }
+          guard stillCurrent else { return }
+
+          // Step 2: Start custom fabric commissioning after Apple commissioning
+          guard let qrData = ESPMatterEcosystemInfo.shared.getOnboardingPayload() else {
+            throw NSError(domain: ESPMatterConstants.moduleDomain, code: -1, userInfo: [
+              NSLocalizedDescriptionKey: ESPMatterConstants.missingOnboardingPayloadMsg
+            ])
+          }
+          try await self.startCustomFabricCommissioning(qrData: qrData, fabric: fabric)
+        } catch {
+
+          let msg = String(format: ESPMatterConstants.appleCommissioningFailedMsg, error.localizedDescription)
+          DispatchQueue.main.async {
+            // A cancelled session was already cleared; never touch a newer one.
+            guard self.commissioningSessionId == sessionId else { return }
+            self.emitCommissioningErrorToReactNative(message: msg)
+            self.rejectCommissioningStart(ESPMatterConstants.appleCommissioningFailed, msg, error)
+            self.clearCommissioningSessionState()
+          }
+        }
+      }
+    } else {
+      throw NSError(domain: ESPMatterConstants.moduleDomain, code: -1, userInfo: [
+        NSLocalizedDescriptionKey: ESPMatterConstants.matterRequiresIOS164
+      ])
+    }
+  }
+
+  /// Start custom fabric commissioning to ESP RainMaker Home fabric
+  private func startCustomFabricCommissioning(qrData: String, fabric: [String: Any]) async throws {
+
     guard let groupId = fabric[ESPMatterConstants.id] as? String else {
       throw NSError(domain: ESPMatterConstants.moduleDomain, code: -1, userInfo: [
-        NSLocalizedDescriptionKey: ESPMatterConstants.fabricIdRequiredForInit
+        NSLocalizedDescriptionKey: ESPMatterConstants.fabricIdRequired
       ])
     }
-    
+
     let fabricId = fabric[ESPMatterConstants.fabricId] as? String ?? groupId
-    let userNOCData = loadUserNOCFromKeychain(fabricId: fabricId)
-    
-    let userNOC = userNOCData[ESPMatterConstants.userNOC] as? String ?? userNOCData[ESPMatterConstants.userNoc] as? String
-    guard let userNOC = userNOC,
-          let matterUserId = userNOCData[ESPMatterConstants.matterUserId] as? String,
-          let rootCa = userNOCData[ESPMatterConstants.rootCa] as? String else {
+
+    // Check if user NOC exists for this fabric (using fabricId to match storage)
+    let userNOCExists = checkUserNOCExists(fabricId: fabricId)
+    if !userNOCExists {
       throw NSError(domain: ESPMatterConstants.moduleDomain, code: -1, userInfo: [
-        NSLocalizedDescriptionKey: String(format: ESPMatterConstants.userNocDataNotFound, fabricId)
+        NSLocalizedDescriptionKey: String(format: ESPMatterConstants.userNocNotFound, fabricId)
       ])
     }
-    
-    // Shutdown existing controller if any
-    shutdownMatterController()
-    
-    // Initialize Matter controller factory
-    let storage = ESPMatterStorage()
-    let factory = MTRDeviceControllerFactory.sharedInstance()
-    let factoryParams = MTRDeviceControllerFactoryParams(storage: storage)
-    
-    do {
-      try factory.start(factoryParams)
-    } catch {
-      throw NSError(domain: ESPMatterConstants.moduleDomain, code: -1, userInfo: [
-        NSLocalizedDescriptionKey: String(format: ESPMatterConstants.failedToStartFactory, error.localizedDescription)
-      ])
-    }
-    
-    // Create CSR keys for this fabric
-    let csrKeys = MTRCSRKeys(groupId: groupId)
-    
-    // Convert PEM certificates to DER format
-    guard let rootCADerBytes = convertPEMToDER(rootCa),
-          let nocDerBytes = convertPEMToDER(userNOC) else {
-      throw NSError(domain: ESPMatterConstants.moduleDomain, code: -1, userInfo: [
-        NSLocalizedDescriptionKey: ESPMatterConstants.failedToConvertCerts
-      ])
-    }
-    
-    // Prefer the cloud-synced IPK so all controllers on this fabric agree on it.
-    // Fall back to the locally generated IPK only if the cloud value is missing
-    // or fails to decode (matches the production esp-rainmaker-ios behavior).
-    var finalIPK = csrKeys.ipk
-    if let fabricDetails = fabric[ESPMatterConstants.fabricDetails] as? [String: Any],
-       let ipkHex = fabricDetails[ESPMatterConstants.ipk] as? String {
-      let trimmedIpk = ipkHex.replacingOccurrences(of: " ", with: "")
-      if !trimmedIpk.isEmpty, let cloudIPK = trimmedIpk.matterHexData {
-        finalIPK = cloudIPK
-      }
-    }
-    
-    // Create Matter controller startup parameters
-    let params = MTRDeviceControllerStartupParams(
-      ipk: finalIPK,
-      operationalKeypair: csrKeys,
-      operationalCertificate: nocDerBytes,
-      intermediateCertificate: nil,
-      rootCertificate: rootCADerBytes
-    )
-    
-    // Set vendor ID from configuration
-    let vendorIdString = Bundle.configValue(for: "MATTER_VENDOR_ID")
-    let vendorId = UInt16(strtoul(vendorIdString.replacingOccurrences(of: "0x", with: ""), nil, 16))
-    params.vendorID = NSNumber(value: vendorId)
-    params.operationalCertificateIssuer = self
-    params.operationalCertificateIssuerQueue = matterQueue
-    
-    // Create Matter controller
-    do {
-      // Try creating controller on existing fabric first
-      currentMatterController = try factory.createController(onExistingFabric: params)
-      currentMatterController?.setDeviceControllerDelegate(self, queue: self.matterQueue)
-    } catch {
-      do {
-        // If existing fabric fails, create new fabric
-        currentMatterController = try factory.createController(onNewFabric: params)
-        currentMatterController?.setDeviceControllerDelegate(self, queue: self.matterQueue)
-      } catch {
-        throw NSError(domain: ESPMatterConstants.moduleDomain, code: -1, userInfo: [
-          NSLocalizedDescriptionKey: String(format: ESPMatterConstants.failedToCreateController, error.localizedDescription)
-        ])
-      }
-    }
-    
-    guard let controller = currentMatterController else {
-      throw NSError(domain: ESPMatterConstants.moduleDomain, code: -1, userInfo: [
-        NSLocalizedDescriptionKey: ESPMatterConstants.controllerNilAfterCreation
-      ])
-    }
-    
-    // Set controller delegate for commissioning callbacks
-    controller.setDeviceControllerDelegate(self, queue: matterQueue)
+
+    // Initialize Matter controller with user NOC
+    try initializeMatterControllerWithFabric(fabric)
+
+    // Start commissioning with user NOC
+    try startMatterCommissioningWithUserNOC(qrData: qrData)
+
   }
-  
-  /// Start Matter commissioning with user NOC
+
+  /// Starts commissioning on the legacy `setupCommissioningSession` path, where the
+  /// NOC is issued through `MTROperationalCertificateIssuer`.
+  ///
+  /// - Parameter qrData: QR code or manual pairing payload for the device.
+  /// - Throws: When the controller is not initialised or the payload cannot be parsed.
   private func startMatterCommissioningWithUserNOC(qrData: String) throws {
-    
+
     guard let controller = currentMatterController else {
       throw NSError(domain: ESPMatterConstants.moduleDomain, code: -1, userInfo: [
         NSLocalizedDescriptionKey: ESPMatterConstants.controllerNotInitialized
       ])
     }
-    
+
+    // Neo sessions on iOS 26.2+ must NOT use the legacy setupCommissioningSession →
+    // commissionNode split: that path runs on an internally-created
+    // MTRCommissioningOperation whose parameters are fixed at creation with a random
+    // CSR nonce, so the /initiate challenge never reaches the device's CSRRequest and
+    // the verify step rejects it ("CSRNonce does not match the challenge from initiate").
+    // Creating the operation ourselves binds the nonce from the start.
+    if #available(iOS 26.2, *), isNonceBoundSession {
+      try startNonceBoundCommissioning(qrData: qrData, controller: controller)
+      return
+    }
+
     // Generate unique device ID for commissioning
     let deviceId = UInt64(Date().timeIntervalSince1970 * 1000) + UInt64.random(in: 1...999)
     currentDeviceId = deviceId
-    
+
     // Parse QR code payload with improved error handling
     guard let setupPayload = try? MTRSetupPayload(onboardingPayload: qrData) else {
       throw NSError(domain: ESPMatterConstants.moduleDomain, code: -1, userInfo: [
         NSLocalizedDescriptionKey: ESPMatterConstants.failedToParseQR
       ])
     }
-    
+
     // Setup commissioning session (synchronous call)
     do {
       try controller.setupCommissioningSession(with: setupPayload, newNodeID: NSNumber(value: deviceId))
@@ -681,65 +759,402 @@ class ESPMatterModule: RCTEventEmitter {
       throw error
     }
   }
-  
-  /// Generate CSR for fabric using iOS Keychain
-  private func generateCSRForFabric(groupId: String) throws -> String {
-    
-    // Create CSR keys using iOS Keychain
-    let csrKeys = MTRCSRKeys(groupId: groupId)
-    
-    // Generate CSR using Matter framework
-    let csrData = try MTRCertificates.createCertificateSigningRequest(csrKeys)
-    
-    // Convert to PEM format
-    let csrBase64 = csrData.base64EncodedString()
-    let csrPEM = "\(ESPMatterConstants.beginCertificateRequest)\n\(csrBase64)\n\(ESPMatterConstants.endCertificateRequest)"
-    
-    return csrPEM
-  }
-  
-  /// Load user NOC from iOS Keychain
-  /// - Parameter fabricId: Fabric ID used as the storage key
-  private func loadUserNOCFromKeychain(fabricId: String) -> [String: Any] {
-    
-    // Use fabricId to match storage key in ESPMatterUtilityModule.storePrecommissionInfo
-    let account = "\(ESPMatterConstants.userNocPrefix)\(fabricId)"
-    let service = ESPMatterConstants.bundleId
-    
-    let query: [String: Any] = [
-      kSecClass as String: kSecClassGenericPassword,
-      kSecAttrService as String: service,
-      kSecAttrAccount as String: account,
-      kSecReturnData as String: true
-    ]
-    
-    var result: AnyObject?
-    let status = SecItemCopyMatching(query as CFDictionary, &result)
-    
-    guard status == errSecSuccess,
-          let data = result as? Data,
-          let userNOCDict = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-      return [:]
+
+  /// iOS 26.2+ Neo commissioning: drives MTRCommissioningOperation directly with the
+  /// CSR nonce already in the parameters (they cannot be changed after creation).
+  /// Attestation and completion arrive via MTRCommissioningDelegate; the NOC flow
+  /// still goes through the controller's operationalCertificateIssuer unchanged.
+  @available(iOS 26.2, *)
+  private func startNonceBoundCommissioning(qrData: String, controller: MTRDeviceController) throws {
+    let params = MTRCommissioningParameters()
+    params.csrNonce = currentCsrNonce
+    // deviceAttestationDelegate is ignored by MTRCommissioningOperation — attestation
+    // is delivered to the MTRCommissioningDelegate instead.
+
+    guard let operation = MTRCommissioningOperation(
+      parameters: params,
+      setupPayload: qrData,
+      delegate: self,
+      queue: matterQueue
+    ) else {
+      throw NSError(domain: ESPMatterConstants.moduleDomain, code: -1, userInfo: [
+        NSLocalizedDescriptionKey: ESPMatterConstants.failedToParseQR
+      ])
     }
-    
-    return userNOCDict
+
+    currentCommissioningOperation = operation
+    operation.start(with: controller)
   }
-  
+
+  /// Builds commissioning parameters for the custom-fabric pass (I2). On Neo
+  /// sessions the `/initiate` challenge is bound as the CSR nonce so the
+  /// device echoes it inside its NOCSR elements — `/verify` rejects
+  /// any other nonce. Classic sessions let the CHIP stack pick a random nonce.
+  private func makeCommissioningParameters() -> MTRCommissioningParameters {
+    let params = MTRCommissioningParameters()
+    params.deviceAttestationDelegate = self
+    if let csrNonce = currentCsrNonce {
+      params.csrNonce = csrNonce
+    }
+    return params
+  }
+
+  /// Fails the pending NOC issuance and the JS promise with the same error.
+  ///
+  /// - Parameters:
+  ///   - completion: The CHIP issuer completion waiting on this response.
+  ///   - code: Promise rejection code.
+  ///   - message: Error description handed to CHIP, and to JS unless `rejectMessage` is set.
+  ///   - rejectMessage: Alternative description for the JS promise.
+  ///   - reject: The promise's reject block.
+  private func failNocIssuance(_ completion: (MTROperationalCertificateChain?, Error?) -> Void,
+                               code: String,
+                               message: String,
+                               rejectMessage: String? = nil,
+                               rejecter reject: RCTPromiseRejectBlock) {
+    let error = NSError(domain: ESPMatterConstants.moduleDomain, code: -1, userInfo: [
+      NSLocalizedDescriptionKey: message
+    ])
+    completion(nil, error)
+    currentNOCCompletion = nil
+    reject(code, rejectMessage ?? message, error)
+  }
+
+  /// The fabric's root CA in DER: from the live fabric details first, then from the
+  /// Keychain pre-commission copy.
+  private func resolveRootCaDer() -> Data? {
+    var rootCaString: String?
+    if let fabricDetails = currentFabricInfo?[ESPMatterConstants.fabricDetails] as? [String: Any],
+       let ca = (fabricDetails[ESPMatterConstants.rootCa] ?? fabricDetails[ESPMatterConstants.rootCaSnake]) as? String,
+       !ca.isEmpty {
+      rootCaString = ca
+    }
+    let fabricId = currentFabricId
+    if (rootCaString == nil || rootCaString?.isEmpty == true) && !fabricId.isEmpty {
+      let userNOCData = loadUserNOCFromKeychain(fabricId: fabricId)
+      rootCaString = (userNOCData[ESPMatterConstants.rootCa] ?? userNOCData[ESPMatterConstants.rootCaSnake]) as? String
+    }
+    guard let rootCa = rootCaString, !rootCa.isEmpty else { return nil }
+    return convertPEMToDER(rootCa)
+  }
+
+  /// The fabric's admin CAT (`group_cat_id_admin`) as the CASE admin subject, when
+  /// the fabric details carry one.
+  private func resolveAdminSubject() -> NSNumber? {
+    guard let fabricDetails = currentFabricInfo?[ESPMatterConstants.fabricDetails] as? [String: Any],
+          let catIdAdminHex = (fabricDetails[ESPMatterConstants.groupCatIdAdmin] ?? fabricDetails[ESPMatterConstants.groupCatIdAdminCamel]) as? String,
+          !catIdAdminHex.isEmpty,
+          let catIdDecimal = ESPMatterAclOps.subject(fromCatIdHex: catIdAdminHex) else {
+      return nil
+    }
+    return NSNumber(value: catIdDecimal)
+  }
+}
+
+// MARK: - Controller Lifecycle
+
+@available(iOS 16.4, *)
+extension ESPMatterModule {
+
+  /// Operational credentials for one fabric as stored in the Keychain by
+  /// `ESPMatterUtilityModule.storePrecommissionInfo`.
+  private struct FabricCredentials {
+    let groupId: String
+    let fabricId: String
+    let userNoc: String
+    let matterUserId: String
+    let rootCa: String
+  }
+
+  /// Starts a Matter controller on `fabric` using the Keychain-stored user NOC,
+  /// replacing any controller that is already running. A controller that is already
+  /// up on the same fabric is reused as is.
+  ///
+  /// - Parameter fabric: Fabric details; `id` is required, `fabricId` and a
+  ///   the synced `fabricDetails.ipk` are used when present.
+  /// - Throws: When the fabric has no stored credentials, the certificates cannot be
+  ///   decoded, or the controller factory or controller fails to start.
+  private func initializeMatterControllerWithFabric(_ fabric: [String: Any]) throws {
+    guard let groupId = fabric[ESPMatterConstants.id] as? String else {
+      throw NSError(domain: ESPMatterConstants.moduleDomain, code: -1, userInfo: [
+        NSLocalizedDescriptionKey: ESPMatterConstants.fabricIdRequiredForInit
+      ])
+    }
+    let fabricId = fabric[ESPMatterConstants.fabricId] as? String ?? groupId
+
+    // Nothing to do when this fabric is already loaded and its controller is alive.
+    // Both conditions matter: a controller that was shut down elsewhere leaves the
+    // factory stopped, and that case still has to rebuild.
+    if activeControllerFabricId == fabricId,
+       currentMatterController != nil,
+       MTRDeviceControllerFactory.sharedInstance().isRunning {
+      return
+    }
+
+    let credentials = try loadFabricCredentials(groupId: groupId, fabricId: fabricId)
+
+    // Shutdown existing controller if any
+    shutdownMatterController()
+
+    let factory = try startControllerFactory()
+    let params = try makeControllerStartupParams(fabric: fabric, credentials: credentials)
+    let controller = try createController(with: params, from: factory)
+
+    activeControllerFabricId = fabricId
+
+    // Set controller delegate for commissioning callbacks
+    controller.setDeviceControllerDelegate(self, queue: matterQueue)
+    currentMatterController = controller
+  }
+
+  /// Loads the fabric's user NOC, root CA and ids from the Keychain.
+  ///
+  /// - Parameters:
+  ///   - groupId: The fabric's group id, used to derive the operational keypair.
+  ///   - fabricId: The Keychain storage key for the fabric's NOC record.
+  /// - Throws: When the Keychain holds no complete NOC record for `fabricId`.
+  private func loadFabricCredentials(groupId: String, fabricId: String) throws -> FabricCredentials {
+    let userNOCData = loadUserNOCFromKeychain(fabricId: fabricId)
+
+    let userNoc = userNOCData[ESPMatterConstants.userNOC] as? String
+      ?? userNOCData[ESPMatterConstants.userNoc] as? String
+    guard let userNoc = userNoc,
+          let matterUserId = userNOCData[ESPMatterConstants.matterUserId] as? String,
+          let rootCa = userNOCData[ESPMatterConstants.rootCa] as? String else {
+      throw NSError(domain: ESPMatterConstants.moduleDomain, code: -1, userInfo: [
+        NSLocalizedDescriptionKey: String(format: ESPMatterConstants.userNocDataNotFound, fabricId)
+      ])
+    }
+
+    return FabricCredentials(groupId: groupId,
+                             fabricId: fabricId,
+                             userNoc: userNoc,
+                             matterUserId: matterUserId,
+                             rootCa: rootCa)
+  }
+
+  /// Starts the shared controller factory on this module's storage.
+  ///
+  /// - Throws: When the factory refuses to start.
+  private func startControllerFactory() throws -> MTRDeviceControllerFactory {
+    let factory = MTRDeviceControllerFactory.sharedInstance()
+    let factoryParams = MTRDeviceControllerFactoryParams(storage: ESPMatterStorage())
+    do {
+      try factory.start(factoryParams)
+    } catch {
+      throw NSError(domain: ESPMatterConstants.moduleDomain, code: -1, userInfo: [
+        NSLocalizedDescriptionKey: String(format: ESPMatterConstants.failedToStartFactory, error.localizedDescription)
+      ])
+    }
+    return factory
+  }
+
+  /// Builds the controller startup parameters: the fabric's operational keypair
+  /// and certificates, the IPK, the configured vendor id and this module as the
+  /// operational certificate issuer.
+  ///
+  /// - Parameters:
+  ///   - fabric: Fabric details, read for a synced `fabricDetails.ipk`.
+  ///   - credentials: The fabric's stored NOC and root CA.
+  /// - Throws: When either certificate fails to decode from PEM.
+  private func makeControllerStartupParams(fabric: [String: Any],
+                                           credentials: FabricCredentials) throws -> MTRDeviceControllerStartupParams {
+    // Create CSR keys for this fabric
+    let csrKeys = MTRCSRKeys(groupId: credentials.groupId)
+
+    guard let rootCADerBytes = convertPEMToDER(credentials.rootCa),
+          let nocDerBytes = convertPEMToDER(credentials.userNoc) else {
+      throw NSError(domain: ESPMatterConstants.moduleDomain, code: -1, userInfo: [
+        NSLocalizedDescriptionKey: ESPMatterConstants.failedToConvertCerts
+      ])
+    }
+
+    let params = MTRDeviceControllerStartupParams(
+      ipk: resolveIpk(fabric: fabric, localIpk: csrKeys.ipk),
+      operationalKeypair: csrKeys,
+      operationalCertificate: nocDerBytes,
+      intermediateCertificate: nil,
+      rootCertificate: rootCADerBytes
+    )
+
+    // Set vendor ID from configuration
+    let vendorIdString = Bundle.configValue(for: "MATTER_VENDOR_ID")
+    let vendorId = UInt16(strtoul(vendorIdString.replacingOccurrences(of: "0x", with: ""), nil, 16))
+    params.vendorID = NSNumber(value: vendorId)
+    params.operationalCertificateIssuer = self
+    params.operationalCertificateIssuerQueue = matterQueue
+    return params
+  }
+
+  /// Prefers the synced IPK so all controllers on this fabric agree on it, and
+  /// falls back to the locally generated IPK only if that value is missing or
+  /// fails to decode (matches the production esp-rainmaker-ios behavior).
+  private func resolveIpk(fabric: [String: Any], localIpk: Data) -> Data {
+    guard let fabricDetails = fabric[ESPMatterConstants.fabricDetails] as? [String: Any],
+          let ipkHex = fabricDetails[ESPMatterConstants.ipk] as? String else {
+      return localIpk
+    }
+    let trimmedIpk = ipkHex.replacingOccurrences(of: " ", with: "")
+    guard !trimmedIpk.isEmpty, let syncedIpk = trimmedIpk.matterHexData else {
+      return localIpk
+    }
+    return syncedIpk
+  }
+
+  /// Creates the controller on the fabric's existing entry, or on a new fabric when
+  /// the factory has none for these credentials yet.
+  ///
+  /// - Throws: When neither attempt yields a controller.
+  private func createController(with params: MTRDeviceControllerStartupParams,
+                                from factory: MTRDeviceControllerFactory) throws -> MTRDeviceController {
+    if let controller = try? factory.createController(onExistingFabric: params) {
+      return controller
+    }
+    do {
+      return try factory.createController(onNewFabric: params)
+    } catch {
+      throw NSError(domain: ESPMatterConstants.moduleDomain, code: -1, userInfo: [
+        NSLocalizedDescriptionKey: String(format: ESPMatterConstants.failedToCreateController, error.localizedDescription)
+      ])
+    }
+  }
+
   /// Shutdown existing Matter controller
   private func shutdownMatterController() {
-    
+
+    activeControllerFabricId = nil
+
     if let controller = currentMatterController {
       controller.shutdown()
       currentMatterController = nil
     }
-    
+
     // Also shutdown the factory if it's running
     let factory = MTRDeviceControllerFactory.sharedInstance()
     if factory.isRunning {
       factory.stop()
     }
   }
-  
+}
+
+// MARK: - Keychain Storage
+
+@available(iOS 16.4, *)
+extension ESPMatterModule {
+
+  /// Check if user NOC exists in iOS Keychain for the given fabric
+  /// - Parameter fabricId: Fabric ID used as the storage key (matches ESPMatterUtilityModule storage)
+  private func checkUserNOCExists(fabricId: String) -> Bool {
+
+    let account = "user_noc_\(fabricId)"
+    let service = Bundle.bundleIdentifier()
+
+    let query: [String: Any] = [
+      kSecClass as String: kSecClassGenericPassword,
+      kSecAttrService as String: service,
+      kSecAttrAccount as String: account,
+      kSecReturnData as String: false
+    ]
+
+    let status = SecItemCopyMatching(query as CFDictionary, nil)
+    let exists = status == errSecSuccess
+
+    return exists
+  }
+
+  /// Load user NOC from iOS Keychain
+  /// - Parameter fabricId: Fabric ID used as the storage key
+  private func loadUserNOCFromKeychain(fabricId: String) -> [String: Any] {
+
+    // Use fabricId to match storage key in ESPMatterUtilityModule.storePrecommissionInfo
+    let account = "\(ESPMatterConstants.userNocPrefix)\(fabricId)"
+    let service = ESPMatterConstants.bundleId
+
+    let query: [String: Any] = [
+      kSecClass as String: kSecClassGenericPassword,
+      kSecAttrService as String: service,
+      kSecAttrAccount as String: account,
+      kSecReturnData as String: true
+    ]
+
+    var result: AnyObject?
+    let status = SecItemCopyMatching(query as CFDictionary, &result)
+
+    guard status == errSecSuccess,
+          let data = result as? Data,
+          let userNOCDict = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+      return [:]
+    }
+
+    return userNOCDict
+  }
+
+  /// Store user NOC in iOS Keychain
+  private func storeUserNOCInKeychain(groupId: String, userNoc: String, matterUserId: String, rootCa: String?) throws {
+
+    // Create user NOC data structure
+    let userNOCData: [String: Any] = [
+      ESPMatterConstants.userNOC: userNoc,
+      ESPMatterConstants.matterUserId: matterUserId,
+      ESPMatterConstants.rootCa: rootCa ?? "",
+      ESPMatterConstants.groupId: groupId,
+      ESPMatterConstants.timestamp: ISO8601DateFormatter().string(from: Date())
+    ]
+
+    // Convert to JSON data
+    let jsonData = try JSONSerialization.data(withJSONObject: userNOCData)
+
+    // Store in iOS Keychain
+    let account = "\(ESPMatterConstants.userNocPrefix)\(groupId)"
+    let service = ESPMatterConstants.bundleId
+
+    // Delete existing item first
+    let deleteQuery: [String: Any] = [
+      kSecClass as String: kSecClassGenericPassword,
+      kSecAttrAccount as String: account,
+      kSecAttrService as String: service
+    ]
+    SecItemDelete(deleteQuery as CFDictionary)
+
+    // Add new item
+    let addQuery: [String: Any] = [
+      kSecClass as String: kSecClassGenericPassword,
+      kSecAttrAccount as String: account,
+      kSecAttrService as String: service,
+      kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlock,
+      kSecValueData as String: jsonData
+    ]
+
+    let status = SecItemAdd(addQuery as CFDictionary, nil)
+    guard status == errSecSuccess else {
+      throw NSError(domain: ESPMatterConstants.moduleDomain, code: Int(status), userInfo: [
+        NSLocalizedDescriptionKey: ESPMatterConstants.failedToStoreNoc
+      ])
+    }
+  }
+}
+
+// MARK: - Certificate and JSON Encoding
+
+@available(iOS 16.4, *)
+extension ESPMatterModule {
+
+  /// Generate CSR for fabric using iOS Keychain
+  private func generateCSRForFabric(groupId: String) throws -> String {
+
+    // Create CSR keys using iOS Keychain
+    let csrKeys = MTRCSRKeys(groupId: groupId)
+
+    // Generate CSR using Matter framework
+    let csrData = try MTRCertificates.createCertificateSigningRequest(csrKeys)
+
+    // Convert to PEM format
+    let csrBase64 = csrData.base64EncodedString()
+    let csrPEM = "\(ESPMatterConstants.beginCertificateRequest)\n\(csrBase64)\n\(ESPMatterConstants.endCertificateRequest)"
+
+    return csrPEM
+  }
+
   /// Convert PEM certificate to DER format
   private func convertPEMToDER(_ pemString: String) -> Data? {
     // Remove PEM headers and whitespace
@@ -751,225 +1166,141 @@ class ESPMatterModule: RCTEventEmitter {
       .replacingOccurrences(of: "\n", with: "")
       .replacingOccurrences(of: "\r", with: "")
       .replacingOccurrences(of: " ", with: "")
-    
+
     // Convert base64 to data
     return Data(base64Encoded: cleanPEM)
   }
-  
-  /// Store user NOC in iOS Keychain
-  private func storeUserNOCInKeychain(groupId: String, userNoc: String, matterUserId: String, rootCa: String?) throws {
-    
-    // Create user NOC data structure
-    let userNOCData: [String: Any] = [
-      ESPMatterConstants.userNOC: userNoc,
-      ESPMatterConstants.matterUserId: matterUserId,
-      ESPMatterConstants.rootCa: rootCa ?? "",
-      ESPMatterConstants.groupId: groupId,
-      ESPMatterConstants.timestamp: ISO8601DateFormatter().string(from: Date())
-    ]
-    
-    // Convert to JSON data
-    let jsonData = try JSONSerialization.data(withJSONObject: userNOCData)
-    
-    // Store in iOS Keychain
-    let account = "\(ESPMatterConstants.userNocPrefix)\(groupId)"
-    let service = ESPMatterConstants.bundleId
-    
-    // Delete existing item first
-    let deleteQuery: [String: Any] = [
-      kSecClass as String: kSecClassGenericPassword,
-      kSecAttrAccount as String: account,
-      kSecAttrService as String: service
-    ]
-    SecItemDelete(deleteQuery as CFDictionary)
-    
-    // Add new item
-    let addQuery: [String: Any] = [
-      kSecClass as String: kSecClassGenericPassword,
-      kSecAttrAccount as String: account,
-      kSecAttrService as String: service,
-      kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlock,
-      kSecValueData as String: jsonData
-    ]
-    
-    let status = SecItemAdd(addQuery as CFDictionary, nil)
-    guard status == errSecSuccess else {
-      throw NSError(domain: ESPMatterConstants.moduleDomain, code: Int(status), userInfo: [
-        NSLocalizedDescriptionKey: ESPMatterConstants.failedToStoreNoc
-      ])
-    }
-  }
-  
-  
+
   /// Convert dictionary to JSON string
   private func jsonString(from dictionary: [String: Any]) throws -> String {
     let jsonData = try JSONSerialization.data(withJSONObject: dictionary)
     return String(data: jsonData, encoding: .utf8) ?? ""
   }
-  
-  /// Perform post-commissioning actions immediately
+}
+
+// MARK: - Post-Commissioning
+
+@available(iOS 16.4, *)
+extension ESPMatterModule {
+
+  /// The node id post-commissioning steps address: the operational id from the NOC
+  /// response when known, otherwise the temporary id used to open the session.
+  private var commissionedDeviceId: UInt64? {
+    currentMatterNodeId ?? currentDeviceId
+  }
+
+  /// Runs the post-commissioning steps straight away against the device that was
+  /// just commissioned, falling back to the delayed detection when no device handle
+  /// is available.
   private func performPostCommissioningActionsImmediate() {
-    
+
     guard let fabricInfo = currentFabricInfo,
           let groupId = fabricInfo[ESPMatterConstants.id] as? String,
-          let controller = currentMatterController else {
+          let controller = currentMatterController,
+          let deviceId = commissionedDeviceId else {
       return
     }
-    
-    //Use the actual Matter Node ID from NOC response
-    let deviceId: UInt64
-    if let matterNodeId = currentMatterNodeId {
-      deviceId = matterNodeId
-    } else if let tempDeviceId = currentDeviceId {
-      deviceId = tempDeviceId
-    } else {
-      return
-    }
-    
-    var device: MTRBaseDevice? = nil
-    
-    if let commissionedDevice = try? controller.getDeviceBeingCommissioned(deviceId) {
-      device = commissionedDevice
-    } else {
-      device = MTRBaseDevice(nodeID: NSNumber(value: deviceId), controller: controller)
-    }
-    
-    guard let matterDevice = device else {
-      performPostCommissioningActions()
-      return
-    }
-    
-    detectDeviceTypeImmediate(device: matterDevice, deviceId: deviceId, groupId: groupId)
+
+    let device = (try? controller.getDeviceBeingCommissioned(deviceId))
+      ?? MTRBaseDevice(nodeID: NSNumber(value: deviceId), controller: controller)
+
+    detectDeviceTypeImmediate(device: device, deviceId: deviceId, groupId: groupId)
   }
-  
-  /// Perform post-commissioning actions with RainMaker cluster detection (Fallback with delays)
+
+  /// Runs the post-commissioning steps after the delayed, retrying RainMaker cluster
+  /// detection. Fallback for when the immediate wildcard read is not possible.
   private func performPostCommissioningActions() {
-    
+
     guard let fabricInfo = currentFabricInfo,
-          let groupId = fabricInfo[ESPMatterConstants.id] as? String else {
+          let groupId = fabricInfo[ESPMatterConstants.id] as? String,
+          let deviceId = commissionedDeviceId else {
       return
     }
-    
-    let deviceId: UInt64
-    if let matterNodeId = currentMatterNodeId {
-      deviceId = matterNodeId
-    } else if let tempDeviceId = currentDeviceId {
-      deviceId = tempDeviceId
-    } else {
-      return
-    }
-    
-    // Step 1: Detect if device supports RainMaker cluster
-    detectDeviceType(deviceId: deviceId) { [weak self] isRainMaker in
-      guard let self = self else { return }
-      
-      self.isRainMakerDevice = isRainMaker
-      
-      if isRainMaker {
-        self.handleRainMakerDevice(deviceId: deviceId, groupId: groupId)
-      } else {
-        self.handlePureMatterDevice(deviceId: deviceId, groupId: groupId)
-      }
-    }
+
+    detectDeviceTypeWithRetry(deviceId: deviceId, groupId: groupId)
   }
-  
+
   // MARK: - RainMaker Device Detection and Handling
-  
+
+  /// Reads the whole device data model in one wildcard read, records it for the
+  /// the Matter metadata, and routes the device by whether endpoint 0 serves the RainMaker
+  /// cluster. Falls back to the retrying descriptor read if the wildcard read fails.
   private func detectDeviceTypeImmediate(device: MTRBaseDevice, deviceId: UInt64, groupId: String) {
-    
-    // Read descriptor cluster to get server clusters list (same as Android)
-    let endpointId = NSNumber(value: 0) // Endpoint 0
-    let descriptorClusterId = NSNumber(value: 29) // Descriptor cluster ID
-    let serverListAttributeId = NSNumber(value: 1) // Server list attribute
-    
+
     device.readAttributes(withEndpointID: nil,
                           clusterID: nil,
                           attributeID: nil,
                           params: nil,
                           queue: matterQueue) { [weak self] values, error in
-      
+
       guard let self = self else {
         return
       }
-      
-      guard let values = values else {
-        self.detectDeviceType(deviceId: deviceId) { isRainMaker in
-          if isRainMaker {
-            self.handleRainMakerDevice(deviceId: deviceId, groupId: groupId)
-          } else {
-            self.handlePureMatterDevice(deviceId: deviceId, groupId: groupId)
-          }
-        }
+
+      guard let values = values, error == nil else {
+        self.detectDeviceTypeWithRetry(deviceId: deviceId, groupId: groupId)
         return
       }
-      
-      if let error = error {
-        self.detectDeviceType(deviceId: deviceId) { isRainMaker in
-          if isRainMaker {
-            self.handleRainMakerDevice(deviceId: deviceId, groupId: groupId)
-          } else {
-            self.handlePureMatterDevice(deviceId: deviceId, groupId: groupId)
-          }
-        }
-        return
-      }
-      
+
       let deviceInfo = ESPMatterModule.parseDeviceInfo(from: values)
       self.lastParsedDeviceInfo = deviceInfo
 
-      // Check for RainMaker cluster in server lists
-      var isRainMakerClusterFound = false
-      var totalServerClusters: [UInt32] = []
-      
-      for endpoint in deviceInfo.endpoints {
-        for server in endpoint.servers {
-          totalServerClusters.append(server.id)
-          
-          // Check for RainMaker cluster
-          if server.id == RainMakerCluster.clusterId {
-            isRainMakerClusterFound = true
-          }
-        }
+      let serverClusters = deviceInfo.endpoints.flatMap { endpoint in
+        endpoint.servers.map { $0.id }
       }
-      
+
       // Store parsed device info and server clusters data
       self.storeDeviceInfo(deviceId: deviceId, groupId: groupId, deviceInfo: deviceInfo)
-      self.storeServerClustersData(deviceId: deviceId, groupId: groupId, serverClusters: totalServerClusters)
-      
-      // Handle device based on detection result
-      self.isRainMakerDevice = isRainMakerClusterFound
-      
-      if isRainMakerClusterFound {
-        self.handleRainMakerDevice(deviceId: deviceId, groupId: groupId)
-      } else {
-        self.handlePureMatterDevice(deviceId: deviceId, groupId: groupId)
-      }
+      self.storeServerClustersData(deviceId: deviceId, groupId: groupId, serverClusters: serverClusters)
+
+      self.routeCommissionedDevice(isRainMaker: serverClusters.contains(RainMakerCluster.clusterId),
+                                   deviceId: deviceId,
+                                   groupId: groupId)
     }
   }
-  
+
+  /// Detects the RainMaker cluster with the delayed, retrying descriptor read and
+  /// routes the device accordingly.
+  private func detectDeviceTypeWithRetry(deviceId: UInt64, groupId: String) {
+    detectDeviceType(deviceId: deviceId) { [weak self] isRainMaker in
+      self?.routeCommissionedDevice(isRainMaker: isRainMaker, deviceId: deviceId, groupId: groupId)
+    }
+  }
+
+  /// Records the detection result for the terminal event and hands the device to the
+  /// RainMaker or pure Matter confirmation flow.
+  private func routeCommissionedDevice(isRainMaker: Bool, deviceId: UInt64, groupId: String) {
+    isRainMakerDevice = isRainMaker
+    if isRainMaker {
+      handleRainMakerDevice(deviceId: deviceId, groupId: groupId)
+    } else {
+      handlePureMatterDevice(deviceId: deviceId, groupId: groupId)
+    }
+  }
+
   private func detectDeviceType(deviceId: UInt64, completion: @escaping (Bool) -> Void) {
     guard let controller = currentMatterController else {
       completion(false)
       return
     }
-    
+
     // Add delay and retry logic for device detection
     DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) { [weak self] in
       self?.performClusterDetection(controller: controller, deviceId: deviceId, retryCount: 0, completion: completion)
     }
   }
-  
+
   /// Perform cluster detection with retry logic
   private func performClusterDetection(controller: MTRDeviceController, deviceId: UInt64, retryCount: Int, completion: @escaping (Bool) -> Void) {
     let maxRetries = 3
-    
+
     // Get connected device
     controller.getBaseDevice(deviceId, queue: matterQueue) { [weak self] device, error in
       guard let self = self else {
         completion(false)
         return
       }
-      
+
       guard let device = device, error == nil else {
         if retryCount < maxRetries {
           DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
@@ -980,18 +1311,18 @@ class ESPMatterModule: RCTEventEmitter {
         }
         return
       }
-      
+
       // Read descriptor cluster to get server clusters list
       let endpointId = NSNumber(value: 0) // Endpoint 0
       let descriptorClusterId = NSNumber(value: 29) // Descriptor cluster ID
       let serverListAttributeId = NSNumber(value: 1) // Server list attribute
-      
+
       device.readAttributes(withEndpointID: endpointId,
                             clusterID: descriptorClusterId,
                             attributeID: serverListAttributeId,
                             params: nil,
                             queue: self.matterQueue) { values, error in
-        
+
         guard let values = values, error == nil else {
           if retryCount < maxRetries {
             DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
@@ -1002,46 +1333,46 @@ class ESPMatterModule: RCTEventEmitter {
           }
           return
         }
-        
+
         // Check if RainMaker cluster is in the server list
         var isRainMakerClusterFound = false
-        
+
         for value in values {
           if let data = value["data"] as? [String: Any],
              let arrayValue = data["value"] as? [Any] {
-            
+
             for clusterValue in arrayValue {
               if let clusterDict = clusterValue as? [String: Any],
                  let clusterId = clusterDict["value"] as? UInt32 {
-                
+
                 if clusterId == RainMakerCluster.clusterId {
                   isRainMakerClusterFound = true
                   break
                 }
               }
             }
-            
+
             if isRainMakerClusterFound {
               break
             }
           }
         }
-        
+
         completion(isRainMakerClusterFound)
       }
     }
   }
-  
+
   /// Handle RainMaker + Matter hybrid device
   private func handleRainMakerDevice(deviceId: UInt64, groupId: String) {
-    
+
     // Step 1: Read RainMaker Node ID from device
     readRainMakerNodeId(deviceId: deviceId) { [weak self] rainmakerNodeId in
       guard let self = self else { return }
-      
+
       if let rainmakerNodeId = rainmakerNodeId {
         self.rainmakerNodeId = rainmakerNodeId
-        
+
         // Step 2: Send Matter Node ID to device
         let matterNodeIdHex = String(format: ESPMatterConstants.matterNodeIdFormat, deviceId) // Convert to 16-digit hex
         self.sendMatterNodeIdToDevice(deviceId: deviceId, matterNodeId: matterNodeIdHex) { success in
@@ -1065,7 +1396,7 @@ class ESPMatterModule: RCTEventEmitter {
       }
     }
   }
-  
+
   /// Handle pure Matter device
   private func handlePureMatterDevice(deviceId: UInt64, groupId: String) {
 
@@ -1073,7 +1404,7 @@ class ESPMatterModule: RCTEventEmitter {
     let deviceNameFromAppleCommissioning = ESPMatterEcosystemInfo.shared.getDeviceName()
     let deviceName = deviceNameFromAppleCommissioning ?? ESPMatterConstants.defaultDeviceName
 
-    let matterMetadata = buildCloudMatterMetadata(
+    let matterMetadata = buildMatterMetadata(
       deviceName: deviceName,
       isRainmaker: false,
       groupId: groupId
@@ -1085,7 +1416,7 @@ class ESPMatterModule: RCTEventEmitter {
 
     // Pure Matter confirm needs `matterNodeId` for the Matter SDK's
     // startCommissioning event handler validation; rainmakerNodeId / challenge
-    // are intentionally omitted (cloud `confirmPureMatterNode` does not require them).
+    // are intentionally omitted (`confirmPureMatterNode` does not require them).
     let matterNodeIdHex = String(format: ESPMatterConstants.matterNodeIdFormat, deviceId)
     let requestId = currentRequestId ?? String(deviceId)
 
@@ -1098,10 +1429,10 @@ class ESPMatterModule: RCTEventEmitter {
       ESPMatterConstants.metadata: metadata
     ]
 
-    emitMatterEvent(eventType: ESPMatterConstants.commissioningConfirmationRequest, data: requestData)
+    emitConfirmationRequestAfterAcl(deviceId: deviceId, requestData: requestData)
   }
 
-  /// Builds the canonical cloud Matter metadata payload (the `Matter` sub-object
+  /// Builds the canonical Matter metadata payload (the `Matter` sub-object
   /// inside `metadata`), aligned with reference iOS / reference Android apps and
   /// the matter SDK's `ESPRMMatterMetadataInterface`.
   ///
@@ -1120,7 +1451,7 @@ class ESPMatterModule: RCTEventEmitter {
   /// }
   /// ```
   /// `matterNodeId` is intentionally NOT included here — it is sent in the outer body.
-  private func buildCloudMatterMetadata(
+  private func buildMatterMetadata(
     deviceName: String,
     isRainmaker: Bool,
     groupId: String
@@ -1138,54 +1469,33 @@ class ESPMatterModule: RCTEventEmitter {
       }
     }
 
-    logMatterDeviceDataModel(matterMetadata)
     return matterMetadata
   }
 
-  /// Logs the complete Matter device data model as pretty-printed JSON after successful commissioning.
-  private func logMatterDeviceDataModel(_ metadata: [String: Any]) {
-    do {
-      let data = try JSONSerialization.data(
-        withJSONObject: metadata,
-        options: [.prettyPrinted, .sortedKeys]
-      )
-      guard let json = String(data: data, encoding: .utf8) else {
-        NSLog("[ESPMatterModule] Failed to encode Matter device data model for logging")
-        return
-      }
-      NSLog("[ESPMatterModule] Complete Matter device data model (post-commissioning):\n%@", json)
-    } catch {
-      NSLog(
-        "[ESPMatterModule] Failed to serialize Matter device data model for logging: %@",
-        error.localizedDescription
-      )
-    }
-  }
-  
   /// Store parsed device info
   private func storeDeviceInfo(deviceId: UInt64, groupId: String, deviceInfo: MatterDeviceInfo) {
     // Convert to JSON format and store
     let jsonFormat = ESPMatterModule.convertToJSONFormat(from: deviceInfo)
-    
+
     let key = "\(ESPMatterConstants.matterDeviceInfoPrefix)\(groupId)_\(deviceId)"
     if let jsonData = try? JSONSerialization.data(withJSONObject: jsonFormat),
        let jsonString = String(data: jsonData, encoding: .utf8) {
       UserDefaults.standard.set(jsonString, forKey: key)
     }
   }
-  
+
   /// Store server clusters data for device
   private func storeServerClustersData(deviceId: UInt64, groupId: String, serverClusters: [UInt32]) {
-  
+
     let clustersData: [String: [UInt32]] = [
       "0": serverClusters // Endpoint 0 clusters
     ]
-    
+
     let key = "\(ESPMatterConstants.matterClustersPrefix)\(groupId)_\(deviceId)"
     let clustersArray = serverClusters.map { Int($0) }
     UserDefaults.standard.set(clustersArray, forKey: key)
   }
-  
+
   private func isRainmakerClusterSupported(deviceId: UInt64, groupId: String) -> (Bool, String?) {
     let key = "\(ESPMatterConstants.matterClustersPrefix)\(groupId)_\(deviceId)"
     if let clustersArray = UserDefaults.standard.array(forKey: key) as? [Int] {
@@ -1221,7 +1531,7 @@ struct MatterDeviceInfo {
     let clients: [Cluster]
     let deviceTypes: [UInt32]
   }
-  
+
   struct Cluster {
     let id: UInt32
     let name: String
@@ -1229,13 +1539,13 @@ struct MatterDeviceInfo {
     let events: [Event]
     let acceptedCommands: [UInt32]
   }
-  
+
   struct Attribute {
     let id: UInt32
     let name: String
     let value: Any
   }
-  
+
   struct Event {
     let id: UInt32
     let name: String
@@ -1265,7 +1575,7 @@ extension ESPMatterModule {
     }
     return []
   }
-  
+
   /// Parse matter device info
   /// - Parameter result: result
   /// - Returns: MatterDeviceInfo object
@@ -1277,16 +1587,16 @@ extension ESPMatterModule {
             let data = item["data"] as? [String: Any] else {
         continue
       }
-      
+
       let endpoint = UInt16(attributePath.endpoint.uint32Value)
       let clusterId = attributePath.cluster.uint32Value
       let attributeId = attributePath.attribute.uint32Value
-      
+
       // Initialize endpoint if not exists
       if endpointMap[endpoint] == nil {
         endpointMap[endpoint] = (servers: [], clients: [], deviceTypes: [])
       }
-      
+
       // Handle Descriptor cluster data (0x1d)
       if clusterId == 0x1d {
         switch attributeId {
@@ -1319,7 +1629,7 @@ extension ESPMatterModule {
               }
               return nil
             }
-            
+
             // Create empty clusters for servers
             endpointMap[endpoint]?.servers = servers.map { serverId in
               MatterDeviceInfo.Cluster(id: serverId,
@@ -1329,7 +1639,7 @@ extension ESPMatterModule {
                                        acceptedCommands: [])
             }
           }
-          
+
         case 0x2: // ClientList
           if let clientData = data["value"] as? [[String: Any]] {
             let clients = clientData.compactMap { clientDict -> UInt32? in
@@ -1339,7 +1649,7 @@ extension ESPMatterModule {
               }
               return nil
             }
-            
+
             // Create empty clusters for clients
             endpointMap[endpoint]?.clients = clients.map { clientId in
               MatterDeviceInfo.Cluster(id: clientId,
@@ -1388,7 +1698,7 @@ extension ESPMatterModule {
         }
       }
     }
-    
+
     // Convert the map to array of endpoints
     let endpoints = endpointMap.map { (endpointId, clusterInfo) in
       MatterDeviceInfo.Endpoint(id: endpointId,
@@ -1396,11 +1706,11 @@ extension ESPMatterModule {
                                 clients: clusterInfo.clients,
                                 deviceTypes: clusterInfo.deviceTypes)
     }.sorted { $0.id < $1.id }
-    
+
     return MatterDeviceInfo(endpoints: endpoints)
   }
-  
-  /// Build the inner `endpoints` map for cloud Matter metadata, organized by clusters.
+
+  /// Build the inner `endpoints` map for the Matter metadata, organized by clusters.
   /// Shape: `{ "0x<EP>": { "deviceType": [<int>...], "clusters": { "servers": { "0x<CID>": { "attributes": [...], "accepted_commands": [...] } }, "clients": {...} } } }`
   /// matches reference iOS / reference Android.
   static func buildEndpointsDict(from deviceInfo: MatterDeviceInfo) -> [String: Any] {
@@ -1457,35 +1767,35 @@ extension ESPMatterModule {
 
 @available(iOS 16.4, *)
 extension ESPMatterModule {
-  
+
   /// Read RainMaker Node ID from device
   private func readRainMakerNodeId(deviceId: UInt64, completion: @escaping (String?) -> Void) {
     guard let controller = currentMatterController else {
       completion(nil)
       return
     }
-    
+
     controller.getBaseDevice(deviceId, queue: matterQueue) { device, error in
       guard let device = device, error == nil else {
         completion(nil)
         return
       }
-      
+
       let endpointId = NSNumber(value: 0)
       let clusterId = NSNumber(value: RainMakerCluster.clusterId)
       let attributeId = NSNumber(value: RainMakerCluster.Attributes.rainmakerNodeId)
-      
+
       device.readAttributes(withEndpointID: endpointId,
                             clusterID: clusterId,
                             attributeID: attributeId,
                             params: nil,
                             queue: self.matterQueue) { values, error in
-        
+
         guard let values = values, error == nil else {
           completion(nil)
           return
         }
-        
+
         // Extract the node ID from the response
         for value in values {
           if let data = value[ESPMatterConstants.data] as? [String: Any],
@@ -1494,41 +1804,41 @@ extension ESPMatterModule {
             return
           }
         }
-        
+
         completion(nil)
       }
     }
   }
-  
+
   /// Send Matter Node ID to device
   private func sendMatterNodeIdToDevice(deviceId: UInt64, matterNodeId: String, completion: @escaping (Bool) -> Void) {
     guard let controller = currentMatterController else {
       completion(false)
       return
     }
-    
+
     controller.getBaseDevice(deviceId, queue: matterQueue) { device, error in
       guard let device = device, error == nil else {
         completion(false)
         return
       }
-      
+
       let endpointId = NSNumber(value: 0)
       let clusterId = NSNumber(value: RainMakerCluster.clusterId)
       let commandId = NSNumber(value: RainMakerCluster.Commands.sendNodeId)
-      
+
       let commandFields: [String: Any] = [
         ESPMatterConstants.type: ESPMatterConstants.UTF8String,
         ESPMatterConstants.value: matterNodeId
       ]
-      
+
       device.invokeCommand(withEndpointID: endpointId,
                            clusterID: clusterId,
                            commandID: commandId,
                            commandFields: commandFields,
                            timedInvokeTimeout: nil,
                            queue: self.matterQueue) { values, error in
-        
+
         if let error = error {
           completion(false)
         } else {
@@ -1537,35 +1847,35 @@ extension ESPMatterModule {
       }
     }
   }
-  
+
   /// Read challenge from device
   private func readChallengeFromDevice(deviceId: UInt64, completion: @escaping (String?) -> Void) {
     guard let controller = currentMatterController else {
       completion(nil)
       return
     }
-    
+
     controller.getBaseDevice(deviceId, queue: matterQueue) { device, error in
       guard let device = device, error == nil else {
         completion(nil)
         return
       }
-      
+
       let endpointId = NSNumber(value: 0)
       let clusterId = NSNumber(value: RainMakerCluster.clusterId)
       let attributeId = NSNumber(value: RainMakerCluster.Attributes.challenge)
-      
+
       device.readAttributes(withEndpointID: endpointId,
                             clusterID: clusterId,
                             attributeID: attributeId,
                             params: nil,
                             queue: self.matterQueue) { values, error in
-        
+
         guard let values = values, error == nil else {
           completion(nil)
           return
         }
-        
+
         // Extract the challenge from the response
         for value in values {
           if let data = value[ESPMatterConstants.data] as? [String: Any],
@@ -1574,13 +1884,19 @@ extension ESPMatterModule {
             return
           }
         }
-        
+
         completion(nil)
       }
     }
   }
-  
-  /// Confirm RainMaker commissioning with challenge
+
+  /// Completes commissioning of a RainMaker node by answering the challenge.
+  ///
+  /// - Parameters:
+  ///   - deviceId: Matter operational node id of the commissioned device.
+  ///   - groupId: Fabric group the node was commissioned into.
+  ///   - rainmakerNodeId: RainMaker node id read from the device's RainMaker cluster.
+  ///   - challenge: Challenge string the device returned, echoed back through the SDK.
   private func confirmRainMakerCommissioning(deviceId: UInt64, groupId: String, rainmakerNodeId: String, challenge: String) {
 
     let deviceNameFromAppleCommissioning = ESPMatterEcosystemInfo.shared.getDeviceName()
@@ -1589,7 +1905,7 @@ extension ESPMatterModule {
     let matterNodeIdHex = String(format: ESPMatterConstants.matterNodeIdFormat, deviceId)
     let requestId = currentRequestId ?? String(deviceId)
 
-    let matterMetadata = buildCloudMatterMetadata(
+    let matterMetadata = buildMatterMetadata(
       deviceName: deviceName,
       isRainmaker: true,
       groupId: groupId
@@ -1598,7 +1914,7 @@ extension ESPMatterModule {
     let metadata: [String: Any] = [
       ESPMatterConstants.matter: matterMetadata
     ]
-    
+
     let requestData: [String: Any] = [
       ESPMatterConstants.rainmakerNodeId: rainmakerNodeId,
       ESPMatterConstants.matterNodeId: matterNodeIdHex,
@@ -1609,88 +1925,129 @@ extension ESPMatterModule {
       ESPMatterConstants.deviceName: deviceName,
       ESPMatterConstants.metadata: metadata
     ]
-    
-    emitMatterEvent(eventType: ESPMatterConstants.commissioningConfirmationRequest, data: requestData)
+
+    emitConfirmationRequestAfterAcl(deviceId: deviceId, requestData: requestData)
   }
 }
 
-// MARK: - MTRDevicePairingDelegate Protocol
-@available(iOS 16.4, *)
-extension ESPMatterModule: MTRDevicePairingDelegate {
-  
-  /// On status updated
-  func onStatusUpdate(_ status: MTRPairingStatus) {
-    // Status updates can be logged for debugging
-  }
-  
-  /// On pairing completed
-  func onPairingComplete(_ error: Error?) {
-    
-    guard error == nil else {
-      DispatchQueue.main.async {
-        let msg = String(format: ESPMatterConstants.pairingFailedMsg, error!.localizedDescription)
-        self.emitCommissioningErrorToReactNative(message: msg)
-        self.currentCommissioningReject?(ESPMatterConstants.pairingFailed,
-                                         msg,
-                                         error)
-        self.currentCommissioningCompletion = nil
-        self.currentCommissioningReject = nil
-      }
-      return
-    }
-    
-    // Continue with commissioning using device attestation delegate
-    guard let controller = currentMatterController,
-          let deviceId = currentDeviceId else {
-      return
-    }
-    
-    let params = MTRCommissioningParameters()
-    params.deviceAttestationDelegate = self
+// MARK: - Access Control (RMNeo)
 
-    do {
-      try controller.commissionNode(withID: NSNumber(value: deviceId), commissioningParams: params)
-    } catch {
-      DispatchQueue.main.async {
-        let msg = String(format: ESPMatterConstants.failedToStartCommissionNode, error.localizedDescription)
-        self.emitCommissioningErrorToReactNative(message: msg)
-        self.currentCommissioningReject?(ESPMatterConstants.commissionNodeAfterPairingFailed,
-                                         msg,
-                                         error)
-        self.currentCommissioningCompletion = nil
-        self.currentCommissioningReject = nil
-      }
+@available(iOS 16.4, *)
+extension ESPMatterModule {
+
+  /// The session's fabric id, from whichever key the fabric details carried it under.
+  private var currentFabricId: String {
+    currentFabricInfo?[ESPMatterConstants.fabricId] as? String
+      ?? currentFabricInfo?[ESPMatterConstants.id] as? String
+      ?? ""
+  }
+
+  /// ACL first (Neo-gated, non-fatal), then hand off to the SDK for confirm —
+  /// same ordering as Android's post-commissioning steps.
+  private func emitConfirmationRequestAfterAcl(deviceId: UInt64, requestData: [String: Any]) {
+    writeOperateCatAclIfNeeded(deviceId: deviceId) { [weak self] in
+      self?.emitMatterEvent(
+        eventType: ESPMatterConstants.commissioningConfirmationRequest,
+        data: requestData
+      )
     }
   }
-  
-  /// On pairing deleted callback
-  func onPairingDeleted(_ error: Error?) {
+
+  /// Resolves the fabric's *operate* CAT id (hex, no `0x`): live fabric details
+  /// first (snake_case from the node config, camelCase from JS), then the Keychain
+  /// pre-commission copy.
+  private func resolveGroupCatIdOperate() -> String? {
+    if let fabricDetails = currentFabricInfo?[ESPMatterConstants.fabricDetails] as? [String: Any],
+       let catId = (fabricDetails[ESPMatterConstants.groupCatIdOperate]
+                    ?? fabricDetails[ESPMatterConstants.groupCatIdOperateCamel]) as? String,
+       !catId.isEmpty {
+      return catId
+    }
+    let fabricId = currentFabricId
+    guard !fabricId.isEmpty else { return nil }
+    let stored = loadUserNOCFromKeychain(fabricId: fabricId)
+    let storedCatId = stored[ESPMatterConstants.groupCatIdOperateCamel] as? String
+    return (storedCatId?.isEmpty == false) ? storedCatId : nil
   }
-  
-  /// On commissioning complete
-  func onCommissioningComplete(_ error: Error?) {
-    
-    guard error == nil else {
-      DispatchQueue.main.async {
-        let msg = String(format: ESPMatterConstants.commissioningFailedPairingMsg, error!.localizedDescription)
-        self.emitCommissioningErrorToReactNative(message: msg)
-        self.currentCommissioningReject?(ESPMatterConstants.commissioningFailedPairing,
-                                         msg,
-                                         error)
-        self.currentCommissioningCompletion = nil
-        self.currentCommissioningReject = nil
-      }
+
+  /// Grants *Operate* to every fabric member by appending an ACL entry on endpoint 0
+  /// whose subject is the fabric's operate CAT (`0xFFFFFFFD` + CAT id), mirroring
+  /// Android's post-commissioning ACL write. Runs only for a nonce-bound session.
+  ///
+  /// Non-fatal by design, so `completion` always runs and commissioning proceeds.
+  ///
+  /// - Parameters:
+  ///   - deviceId: Matter operational node id of the commissioned device.
+  ///   - completion: Called once the write finishes or is skipped, success or not.
+  func writeOperateCatAclIfNeeded(deviceId: UInt64, completion: @escaping () -> Void) {
+    guard isNonceBoundSession, let controller = currentMatterController else {
+      completion()
       return
     }
-    
-    // Perform post-commissioning actions
-    performPostCommissioningActions()
+
+    guard let catIdHex = resolveGroupCatIdOperate(),
+          let subject = ESPMatterAclOps.subject(fromCatIdHex: catIdHex) else {
+      completion()
+      return
+    }
+
+    controller.getBaseDevice(deviceId, queue: matterQueue) { [weak self] device, error in
+      guard let self = self, let device = device, error == nil else {
+        completion()
+        return
+      }
+
+      ESPMatterAclOps.readEntries(device: device, queue: self.matterQueue) { result in
+        switch result {
+        case .failure:
+          completion()
+        case .success(let entries):
+          self.appendOperateCatEntry(subject: subject, to: entries, device: device, completion: completion)
+        }
+      }
+    }
+  }
+
+  /// Appends the operate-CAT entry to an entry list already read from the device,
+  /// unless the CAT is already granted.
+  ///
+  /// An ACL write replaces the fabric's whole entry list, so a second run against the
+  /// same device would append a duplicate operate-CAT entry and can exhaust
+  /// AccessControlEntriesPerFabric (typically 4–8). Past that the write fails with
+  /// RESOURCE_EXHAUSTED, and because this path is non-fatal commissioning would still
+  /// report success while the CAT never lands. Matching by CAT identifier the way
+  /// `matterUpdateCatAclSubject` does treats a rotated version as the same grant.
+  ///
+  /// - Parameters:
+  ///   - subject: The fabric's operate CAT subject.
+  ///   - entries: This fabric's ACL entries as read from the device.
+  ///   - device: The commissioned device.
+  ///   - completion: Called once the write finishes or is skipped, success or not.
+  private func appendOperateCatEntry(subject: UInt64,
+                                     to entries: [[String: Any]],
+                                     device: MTRBaseDevice,
+                                     completion: @escaping () -> Void) {
+    if ESPMatterAclOps.findSubject(sharingIdentifierWith: subject, in: entries) != nil {
+      completion()
+      return
+    }
+
+    // Reuse the admin entry's authMode/fabricIndex for the new entry, same as Android.
+    let context = ESPMatterAclOps.extractAdminEntryContext(from: entries) ?? .fallback
+    var updated = entries
+    updated.append(ESPMatterAclOps.makeOperateEntry(subject: subject,
+                                                    authMode: context.authMode,
+                                                    fabricIndex: context.fabricIndex))
+
+    ESPMatterAclOps.writeEntries(updated, device: device, queue: matterQueue) { _ in
+      completion()
+    }
   }
 }
 
 @available(iOS 16.4, *)
 extension ESPMatterModule: MTRDeviceAttestationDelegate {
-  
+
   /// Device attestation completed
   /// - Parameters:
   ///   - controller: controller
@@ -1705,7 +2062,7 @@ extension ESPMatterModule: MTRDeviceAttestationDelegate {
       print("[MatterCommission] iOS: continueCommissioning error: \(error)")
     }
   }
-  
+
   /// Device attestation failed
   /// - Parameters:
   ///   - controller: controller
@@ -1723,14 +2080,15 @@ extension ESPMatterModule: MTRDeviceAttestationDelegate {
 
 @available(iOS 16.4, *)
 extension ESPMatterModule: MTRDeviceControllerDelegate {
-  
+
   func controller(_ controller: MTRDeviceController, statusUpdate status: MTRCommissioningStatus) {
-    
+
   }
-  
+
   func controller(_ controller: MTRDeviceController, commissioningComplete error: Error?) {
-    
+
     guard error == nil else {
+      guard claimCommissioningOutcome() else { return }
       let err = error!
       let failureEvent: [String: Any] = [
         ESPMatterConstants.eventType: ESPMatterConstants.commissioningComplete,
@@ -1740,33 +2098,31 @@ extension ESPMatterModule: MTRDeviceControllerDelegate {
       let msg = String(format: ESPMatterConstants.commissioningFailedPairingMsg, err.localizedDescription)
       DispatchQueue.main.async {
         self.emitMatterEvent(eventType: ESPMatterConstants.commissioningComplete, data: failureEvent)
-        self.currentCommissioningReject?(ESPMatterConstants.commissioningFailedPairing, msg, err)
-        self.currentCommissioningCompletion = nil
-        self.currentCommissioningReject = nil
+        self.rejectCommissioningStart(ESPMatterConstants.commissioningFailedPairing, msg, err)
+        self.clearCommissioningSessionState()
       }
       return
     }
-    
+
+    guard claimCommissioningOutcome() else { return }
     // Perform post-commissioning actions immediately
     // The device is ready for cluster operations right after commissioning complete
     performPostCommissioningActionsImmediate()
   }
-  
+
   func controller(_ : MTRDeviceController, commissioningSessionEstablishmentDone error: Error?) {
     if let error = error {
       let msg = String(format: ESPMatterConstants.failedToSetupSession, error.localizedDescription)
       DispatchQueue.main.async {
         self.emitCommissioningErrorToReactNative(message: msg)
-        self.currentCommissioningReject?(ESPMatterConstants.commissioningFailed, msg, error)
-        self.currentCommissioningCompletion = nil
-        self.currentCommissioningReject = nil
+        self.rejectCommissioningStart(ESPMatterConstants.commissioningFailed, msg, error)
+        self.clearCommissioningSessionState()
       }
       shutdownMatterController()
       return
     }
     if let deviceId = currentDeviceId {
-      let params = MTRCommissioningParameters()
-      params.deviceAttestationDelegate = self
+      let params = makeCommissioningParameters()
       if let controller = currentMatterController {
         do {
           try controller.commissionNode(withID: NSNumber(value: deviceId), commissioningParams: params)
@@ -1774,53 +2130,125 @@ extension ESPMatterModule: MTRDeviceControllerDelegate {
           DispatchQueue.main.async {
             let failMsg = String(format: ESPMatterConstants.failedToStartCommissionNode, error.localizedDescription)
             self.emitCommissioningErrorToReactNative(message: failMsg)
-            self.currentCommissioningReject?(ESPMatterConstants.commissionNodeAfterPairingFailed, failMsg, error)
-            self.currentCommissioningCompletion = nil
-            self.currentCommissioningReject = nil
+            self.rejectCommissioningStart(ESPMatterConstants.commissionNodeAfterPairingFailed, failMsg, error)
+            self.clearCommissioningSessionState()
           }
         }
       }
     }
   }
-  
+}
+
+// MARK: - MTRCommissioningDelegate (iOS 26.2+ Neo path)
+
+@available(iOS 26.2, *)
+extension ESPMatterModule: MTRCommissioningDelegate {
+
+  func commissioning(_ commissioning: MTRCommissioningOperation,
+                     completedDeviceAttestation attestationDeviceInfo: MTRDeviceAttestationDeviceInfo,
+                     error: Error?,
+                     completion: @escaping () -> Void) {
+    // Parity with the legacy path's attestation delegate: proceed regardless of the
+    // attestation outcome (uncertified ESP dev boards must commission).
+    completion()
+  }
+
+  func commissioning(_ commissioning: MTRCommissioningOperation,
+                     succeededForNodeID nodeID: NSNumber,
+                     metrics: MTRMetrics) {
+    currentCommissioningOperation = nil
+    // The operational node id comes from the issued NOC; sendNocResponse
+    // normally records it already, so these are fallbacks.
+    if currentMatterNodeId == nil {
+      currentMatterNodeId = nodeID.uint64Value
+    }
+    if currentDeviceId == nil {
+      currentDeviceId = nodeID.uint64Value
+    }
+    guard claimCommissioningOutcome() else { return }
+    performPostCommissioningActionsImmediate()
+  }
+
+  func commissioning(_ commissioning: MTRCommissioningOperation,
+                     failedWithError error: Error,
+                     metrics: MTRMetrics) {
+    currentCommissioningOperation = nil
+    guard claimCommissioningOutcome() else { return }
+    let failureEvent: [String: Any] = [
+      ESPMatterConstants.eventType: ESPMatterConstants.commissioningComplete,
+      ESPMatterConstants.success: false,
+      ESPMatterConstants.error: error.localizedDescription
+    ]
+    let msg = String(format: ESPMatterConstants.commissioningFailedPairingMsg, error.localizedDescription)
+    DispatchQueue.main.async {
+      self.emitMatterEvent(eventType: ESPMatterConstants.commissioningComplete, data: failureEvent)
+      self.rejectCommissioningStart(ESPMatterConstants.commissioningFailedPairing, msg, error)
+      self.clearCommissioningSessionState()
+    }
+  }
 }
 
 // MARK: - MTROperationalCertificateIssuer Protocol
 
 @available(iOS 16.4, *)
 extension ESPMatterModule: MTROperationalCertificateIssuer {
-  
+
   var shouldSkipAttestationCertificateValidation: Bool {
     return true // Skip attestation for development
   }
-  
+
   func issueOperationalCertificate(forRequest csrInfo: MTROperationalCSRInfo,
                                    attestationInfo: MTRDeviceAttestationInfo,
                                    controller: MTRDeviceController,
                                    completion: @escaping (MTROperationalCertificateChain?, Error?) -> Void) {
-    
-    // Extract CSR and emit NOC request event.
-    let csrData = csrInfo.csr
-    let csrString = csrData.base64EncodedString()
-    let csrPEM = "\(ESPMatterConstants.beginCertificateRequest)\n\(csrString)\n\(ESPMatterConstants.endCertificateRequest)"
 
-    let groupId = currentFabricInfo?[ESPMatterConstants.id] as? String ?? ""
-    let fabricId = currentFabricInfo?[ESPMatterConstants.fabricId] as? String ?? ""
-    let deviceIdString = currentDeviceId?.description ?? ""
+    currentNOCCompletion = completion
+
+    if isNonceBoundSession {
+      emitNonceBoundAttestationData(csrInfo: csrInfo, attestationInfo: attestationInfo)
+    } else {
+      emitClassicNocRequest(csrInfo: csrInfo)
+    }
+  }
+
+  /// RMNeo (I3): /verify consumes the NOCSR evidence directly. The
+  /// csrElementsTLV MUST be forwarded verbatim (it embeds vendor_reserved1;
+  /// re-encoding would break the attestation signature). The SDK answers with
+  /// an ISSUE_NODE_NOC_RESPONSE postMessage that lands in `sendNocResponse`.
+  private func emitNonceBoundAttestationData(csrInfo: MTROperationalCSRInfo,
+                                             attestationInfo: MTRDeviceAttestationInfo) {
+    let attestationChallengeHex = attestationInfo.challenge.hexadecimalString.lowercased()
+
+    emitMatterEvent(eventType: ESPMatterConstants.rmNeoAttestationChallenge, data: [
+      ESPMatterConstants.attestationChallenge: attestationChallengeHex
+    ])
+
+    let nocsrHex = csrInfo.csrElementsTLV.hexadecimalString.lowercased()
+    let attestationData: [String: Any] = [
+      ESPMatterConstants.requestId: currentRequestId ?? "",
+      ESPMatterConstants.nocsrElements: nocsrHex,
+      ESPMatterConstants.attestationSignature: csrInfo.attestationSignature.hexadecimalString.lowercased(),
+      ESPMatterConstants.attestationChallenge: attestationChallengeHex
+    ]
+    emitMatterEvent(eventType: ESPMatterConstants.rmNeoMatterAttestationData, data: attestationData)
+  }
+
+  /// Classic RainMaker: hands the CSR to the SDK as PEM and waits for the NOC to
+  /// come back through `sendNocResponse`.
+  private func emitClassicNocRequest(csrInfo: MTROperationalCSRInfo) {
+    let csrString = csrInfo.csr.base64EncodedString()
+    let csrPEM = "\(ESPMatterConstants.beginCertificateRequest)\n\(csrString)\n\(ESPMatterConstants.endCertificateRequest)"
 
     var requestData: [String: Any] = [
       ESPMatterConstants.csr: csrPEM,
-      ESPMatterConstants.groupId: groupId,
-      ESPMatterConstants.fabricId: fabricId
+      ESPMatterConstants.groupId: currentFabricInfo?[ESPMatterConstants.id] as? String ?? "",
+      ESPMatterConstants.fabricId: currentFabricInfo?[ESPMatterConstants.fabricId] as? String ?? ""
     ]
-
-    if !deviceIdString.isEmpty {
+    if let deviceIdString = currentDeviceId?.description, !deviceIdString.isEmpty {
       requestData[ESPMatterConstants.deviceId] = deviceIdString
     }
 
     emitMatterEvent(eventType: ESPMatterConstants.nodeNocRequest, data: requestData)
-
-    currentNOCCompletion = completion
   }
 }
 
@@ -1831,23 +2259,22 @@ class ESPMatterStorage: NSObject, MTRStorage {
   func storageData(forKey key: String) -> Data? {
     return value(forKey: key)
   }
-  
+
   func setStorageData(_ value: Data, forKey key: String) -> Bool {
     return setValue(value, forKey: key)
   }
-  
+
   func removeStorageData(forKey key: String) -> Bool {
     return removeValue(forKey: key)
   }
-  
-  
+
   private let userDefaults = UserDefaults.standard
   private let storagePrefix = "ESPMatter_"
-  
+
   func value(forKey key: String) -> Data? {
     return userDefaults.data(forKey: storagePrefix + key)
   }
-  
+
   func setValue(_ value: Data?, forKey key: String) -> Bool {
     if let value = value {
       userDefaults.set(value, forKey: storagePrefix + key)
@@ -1856,7 +2283,7 @@ class ESPMatterStorage: NSObject, MTRStorage {
     }
     return true
   }
-  
+
   func removeValue(forKey key: String) -> Bool {
     userDefaults.removeObject(forKey: storagePrefix + key)
     return true
@@ -1866,7 +2293,7 @@ class ESPMatterStorage: NSObject, MTRStorage {
 // MARK: - Hex Decoding
 
 fileprivate extension String {
-  /// Decodes a hexadecimal string (e.g. an IPK delivered from the cloud) into raw bytes.
+  /// Decodes a hexadecimal string (e.g. an IPK delivered by the SDK) into raw bytes.
   /// Returns `nil` for empty input or strings that don't contain valid hex pairs.
   /// Mirrors the helper used by the production esp-rainmaker-ios app.
   var matterHexData: Data? {

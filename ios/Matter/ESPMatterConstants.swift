@@ -77,6 +77,10 @@ struct ESPMatterConstants {
     static let commissioningError = "COMMISSIONING_ERROR"
     static let nodeNocRequest = "NODE_NOC_REQUEST"
     static let commissioningConfirmationRequest = "COMMISSIONING_CONFIRMATION_REQUEST"
+    /// RMNeo `/verify` flow events — the Neo Matter SDK's event handler switches on
+    /// these names; classic RainMaker sessions never emit them.
+    static let rmNeoAttestationChallenge = "RMNEO_ATTESTATION_CHALLENGE"
+    static let rmNeoMatterAttestationData = "RMNEO_MATTER_ATTESTATION_DATA"
 
     // MARK: - Dictionary Keys
     static let groupId = "groupId"
@@ -98,13 +102,16 @@ struct ESPMatterConstants {
     static let deviceName = "deviceName"
     static let matterNodeIdKey = "matterNodeId"
     static let isRainmakerNode = "isRainmakerNode"
-    /// Cloud Matter metadata flag key, aligned with reference Android/iOS apps.
+    /// Matter metadata flag key, aligned with reference Android/iOS apps.
     static let isRainmaker = "isRainmaker"
     static let rainmakerNodeId = "rainmakerNodeId"
+    static let rmNeoNodeId = "neoNodeId"
     static let fabricDetails = "fabricDetails"
     static let rootCa = "rootCa"
+    static let rootCaSnake = "root_ca"
     static let prefixCATId = "FFFFFFFD"
     static let groupCatIdAdmin = "group_cat_id_admin"
+    static let groupCatIdAdminCamel = "groupCatIdAdmin"
     static let ipk = "ipk"
     static let userNOC = "userNOC"
     static let userNoc = "userNoc"
@@ -117,16 +124,48 @@ struct ESPMatterConstants {
     static let source = "source"
     static let status = "status"
     static let success = "success"
+    static let cancelled = "cancelled"
     static let error = "error"
     static let errorMessage = "errorMessage"
     static let challenge = "challenge"
     static let challengeResponse = "challengeResponse"
     static let metadata = "metadata"
+    /// RMNeo commissioning keys. `csrNonce` is the `/initiate` challenge the Neo SDK
+    /// sets on the fabric object; its presence marks a Neo session.
+    static let csrNonce = "csrNonce"
+    static let nocsrElements = "nocsrElements"
+    static let attestationSignature = "attestationSignature"
+    static let attestationChallenge = "attestationChallenge"
+    static let descriptionKey = "description"
+    static let failedStatus = "failed"
+    static let groupCatIdOperate = "group_cat_id_operate"
+    static let groupCatIdOperateCamel = "groupCatIdOperate"
+
+    // MARK: - Matter Data-Value Types (MTRDeviceResponseHandler representation)
+    static let unsignedIntegerType = "UnsignedInteger"
+    static let structureType = "Structure"
+    static let arrayType = "Array"
+    static let nullType = "Null"
+    static let contextTag = "contextTag"
+
+    // MARK: - Access Control Cluster (0x1F)
+    static let accessControlClusterId: UInt32 = 0x1F
+    static let aclAttributeId: UInt32 = 0x0
+    static let aclPrivilegeAdmin: UInt64 = 5
+    static let aclPrivilegeOperate: UInt64 = 3
+    static let aclAuthModeCase: UInt64 = 2
+    /// Context tags of the fields in an Access Control cluster ACL entry.
+    static let aclPrivilegeTag = 1
+    static let aclAuthModeTag = 2
+    static let aclSubjectsTag = 3
+    static let aclTargetsTag = 4
+    static let aclFabricIndexTag = 254
 
     // MARK: - Error Codes
     static let invalidParams = "INVALID_PARAMS"
     static let csrGenerationFailed = "CSR_GENERATION_FAILED"
     static let commissioningFailed = "COMMISSIONING_FAILED"
+    static let commissioningInProgress = "COMMISSIONING_IN_PROGRESS"
     static let invalidPayload = "INVALID_PAYLOAD"
     static let unsupportedPostMessage = "UNSUPPORTED_POST_MESSAGE"
     static let noCompletionHandler = "NO_COMPLETION_HANDLER"
@@ -134,14 +173,18 @@ struct ESPMatterConstants {
     static let nocConversionFailed = "NOC_CONVERSION_FAILED"
     static let rootCaNotFound = "ROOT_CA_NOT_FOUND"
     static let appleCommissioningFailed = "APPLE_COMMISSIONING_FAILED"
-    static let pairingFailed = "PAIRING_FAILED"
     static let commissionNodeAfterPairingFailed = "COMMISSION_NODE_AFTER_PAIRING_FAILED"
     static let commissioningFailedPairing = "COMMISSIONING_FAILED_PAIRING"
+    static let commissioningCancelled = "COMMISSIONING_CANCELLED"
     
     // MARK: - Error Messages
     static let missingRequiredParams = "Missing required parameters: groupId, fabricId, and name are required"
     static let failedToGenerateCSR = "Failed to generate CSR: %@"
     static let failedToStartCommissioning = "Failed to start commissioning: %@"
+    static let commissioningInProgressMsg = "A Matter commissioning session is already in progress"
+    static let commissioningStartedMsg = "Commissioning started"
+    static let commissioningCancelledMsg = "Matter commissioning was cancelled"
+    static let missingOnboardingPayloadMsg = "Apple's sheet returned no setup code for the device"
     static let postMessageRequiresType = "postMessage requires a valid type field"
     static let postMessageRequiresData = "postMessage requires a valid data field"
     static let unsupportedPostMessageType = "Unsupported postMessage event type: %@"
@@ -159,15 +202,16 @@ struct ESPMatterConstants {
     static let failedToStartFactory = "Failed to start Matter controller factory: %@"
     static let failedToConvertCerts = "Failed to convert certificates from PEM to DER format"
     static let failedToCreateController = "Failed to create Matter controller: %@"
-    static let controllerNilAfterCreation = "Matter controller is nil after creation"
     static let controllerNotInitialized = "Matter controller not initialized"
     static let failedToParseQR = "Failed to parse QR code payload"
     static let failedToSetupSession = "Failed to setup commissioning session: %@"
     static let failedToStoreNoc = "Failed to store user NOC in Keychain"
-    static let pairingFailedMsg = "Pairing failed: %@"
     static let failedToStartCommissionNode = "Failed to start commission node after pairing: %@"
     static let commissioningFailedPairingMsg = "Commissioning failed in pairing delegate: %@"
     static let appleCommissioningFailedMsg = "Apple commissioning failed: %@"
+    static let invalidCsrNonceMsg = "Invalid csrNonce: expected a 32-byte hex challenge from initiate"
+    static let nodeNocIssuanceFailedMsg = "Node operational certificate issuance failed"
+    static let aclReadReturnedNoData = "ACL read returned no data"
     
     // MARK: - Default Values
     static let defaultDeviceName = "Matter Device"

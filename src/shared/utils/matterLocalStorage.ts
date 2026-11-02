@@ -12,14 +12,14 @@ function storageKey(nodeId: string, suffix: string): string {
   return `${MATTER_STORAGE_PREFIX}${nodeId}.${suffix}`;
 }
 
-/** Persist Matter node ID for an RMNG node (cloud list may omit it for Matter-only nodes). */
+/** Persist Matter node ID for an RMNeo node (cloud list may omit it for Matter-only nodes). */
 export async function setMatterNodeId(
-  rmngNodeId: string,
+  rmneoNodeId: string,
   matterNodeId: string,
 ): Promise<void> {
   try {
     await AsyncStorage.setItem(
-      storageKey(rmngNodeId, "matter_node_id"),
+      storageKey(rmneoNodeId, "matter_node_id"),
       matterNodeId,
     );
   } catch (error) {
@@ -27,27 +27,27 @@ export async function setMatterNodeId(
   }
 }
 
-/** Reads the stored Matter node id for an RMNG node, or null. */
+/** Reads the stored Matter node id for an RMNeo node, or null. */
 export async function getMatterNodeId(
-  rmngNodeId: string,
+  rmneoNodeId: string,
 ): Promise<string | null> {
   try {
-    return await AsyncStorage.getItem(storageKey(rmngNodeId, "matter_node_id"));
+    return await AsyncStorage.getItem(storageKey(rmneoNodeId, "matter_node_id"));
   } catch {
     return null;
   }
 }
 
-/** Merges and persists Matter metadata for an RMNG node. */
+/** Merges and persists Matter metadata for an RMNeo node. */
 export async function setMatterMetadata(
-  rmngNodeId: string,
+  rmneoNodeId: string,
   metadata: Record<string, unknown>,
 ): Promise<void> {
   try {
-    const existing = await getMatterMetadata(rmngNodeId);
+    const existing = await getMatterMetadata(rmneoNodeId);
     const merged = { ...existing, ...metadata };
     await AsyncStorage.setItem(
-      storageKey(rmngNodeId, "matter_metadata"),
+      storageKey(rmneoNodeId, "matter_metadata"),
       JSON.stringify(merged),
     );
   } catch (error) {
@@ -55,12 +55,12 @@ export async function setMatterMetadata(
   }
 }
 
-/** Reads the stored Matter metadata for an RMNG node, or null. */
+/** Reads the stored Matter metadata for an RMNeo node, or null. */
 export async function getMatterMetadata(
-  rmngNodeId: string,
+  rmneoNodeId: string,
 ): Promise<Record<string, unknown> | null> {
   try {
-    const raw = await AsyncStorage.getItem(storageKey(rmngNodeId, "matter_metadata"));
+    const raw = await AsyncStorage.getItem(storageKey(rmneoNodeId, "matter_metadata"));
     if (!raw) return null;
     return JSON.parse(raw) as Record<string, unknown>;
   } catch {
@@ -92,20 +92,20 @@ export function deriveMatterNodeIdFromThingName(thingName: string): string {
   return hexStr.toUpperCase();
 }
 
-/** Resolves an RMNG node's operational Matter node id: group API → discovery → stored → derived. */
+/** Resolves an RMNeo node's operational Matter node id: group API → discovery → stored → derived. */
 export function resolveOperationalMatterNodeId(
-  rmngNodeId: string,
+  rmneoNodeId: string,
   options?: {
     storedId?: string | null;
     discoveryMap?: Record<string, string>;
     fromGroupApi?: string | null;
   },
 ): string {
-  if (!rmngNodeId) return "";
+  if (!rmneoNodeId) return "";
   const fromApi = options?.fromGroupApi?.trim();
   if (fromApi) return fromApi;
-  const fromDiscovery = options?.discoveryMap?.[rmngNodeId];
+  const fromDiscovery = options?.discoveryMap?.[rmneoNodeId];
   if (fromDiscovery) return fromDiscovery;
   if (options?.storedId) return options.storedId;
-  return deriveMatterNodeIdFromThingName(rmngNodeId);
+  return deriveMatterNodeIdFromThingName(rmneoNodeId);
 }

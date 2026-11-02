@@ -1,8 +1,8 @@
 {
   "name": "NOVA",
   "main": "expo-router/entry",
-  "version": "6.4.0",
-  "versionCode": 59,
+  "version": "6.5.0",
+  "versionCode": 60,
   "workspaces": [
     "modules/*"
   ],
@@ -59,8 +59,9 @@
   "dependencies": {
     "@espressif/rainmaker-base-cdf": "2.4.0",
     "@espressif/rainmaker-base-sdk": "3.5.1",
-    "@espressif/rainmaker-matter-sdk": "3.1.0",
-    "@espressif/rainmaker-neo-base-sdk": "1.2.1",
+    "@espressif/rainmaker-matter-sdk": "3.2.0",
+    "@espressif/rainmaker-neo-base-sdk": "1.2.2",
+    "@espressif/rainmaker-neo-matter-sdk": "1.0.1",
     "@expo/vector-icons": "^14.0.2",
     "@modules/ble-prov": "*",
     "@modules/kvs": "*",
@@ -172,5 +173,12 @@
   "resolutions": {
     "axios": "1.10.0"
   },
-  "private": true
+  "private": true,
+  "jest": {
+    "preset": "jest-expo",
+    "testPathIgnorePatterns": [
+      "/node_modules/",
+      "<rootDir>/test/"
+    ]
+  }
 }

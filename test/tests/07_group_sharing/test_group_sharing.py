@@ -98,7 +98,7 @@ def user_listed_under(helper, registered_user_resolver, login_user, section):
 @then(parsers.parse('"{login_user}" should not be listed under "{section}"'))
 def user_not_listed_under(helper, registered_user_resolver, login_user, section):
     key = "pending" if section.startswith("pending") else "shared"
-    assert not helper.group_sharing.is_user_listed(key, registered_user_resolver(login_user), timeout=3), (
+    assert not helper.group_sharing.is_user_listed(key, registered_user_resolver(login_user)), (
         f"{login_user} still listed under {section}"
     )
 

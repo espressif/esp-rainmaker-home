@@ -12,6 +12,7 @@ import { globalStyles } from "@shared/theme/globalStyleSheet";
 import { DeviceAction } from "@shared/components";
 import { testProps } from "@shared/utils/testProps";
 import type { DeviceSelectionData } from "@src/types/global";
+import { getDeviceDisplayName } from "@shared/utils/deviceDisplayName";
 
 export interface ActionDeviceSelectionDeviceItemProps {
   device: DeviceSelectionData;
@@ -46,7 +47,7 @@ export const ActionDeviceSelectionDeviceItem: React.FC<
       <DeviceAction
         qaId="action_device_action_item"
         device={device.device.type ?? ""}
-        displayDeviceName={device.device.displayName ?? ""}
+        displayDeviceName={getDeviceDisplayName(device.device, device.node)}
         actions={actions as Record<string, any>}
         onPress={() => !isDisabled && onPress()}
         rightSlot={

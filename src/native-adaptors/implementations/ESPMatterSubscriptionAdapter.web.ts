@@ -49,6 +49,20 @@ function getMatterNodeIdForRmNodeId(_rmNodeId: string): string | undefined {
   return undefined;
 }
 
+/** No Matter links on web, so none is ever live */
+function isMatterSubscriptionLive(
+  ..._nodeIds: (string | undefined)[]
+): boolean {
+  return false;
+}
+
+/** No Matter links on web, so the listener is never called */
+function onMatterLinkLive(_listener: (nodeId: string) => void): () => void {
+  return () => {
+    /* no-op */
+  };
+}
+
 /** No-op reachability cache on web */
 function setMatterNodeReachability(
   _matterNodeId: string,
@@ -65,6 +79,8 @@ export {
   syncMatterNodeIdMappings,
   getMatterNodeIdForRmNodeId,
   setMatterNodeReachability,
+  isMatterSubscriptionLive,
+  onMatterLinkLive,
 };
 
 export default ESPMatterSubscriptionAdapter;

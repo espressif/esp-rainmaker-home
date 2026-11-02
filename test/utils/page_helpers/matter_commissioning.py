@@ -21,17 +21,21 @@ class MatterCommissioning(BasePage):
     def check_screen_displayed(self, timeout=15, poll=0.5, quiet=False, handle_alerts=True):
         return self.is_visible("app_commissioning_screen", timeout=timeout, poll=poll)
 
-    def complete_commissioning(self, timeout=240, max_retries=2):
-        """Drive the platform's out-of-app pairing UI until the device is commissioned."""
+    def complete_commissioning(self, timeout=240, max_retries=2, name=None):
+        """Drive the platform's out-of-app pairing UI until the device is commissioned.
+
+        `name` is typed into Apple's naming step on iOS, where the app has no name screen of
+        its own; Google's sheet asks for no name, so Android ignores it.
+        """
         if self.platform == "ios":
-            return self._complete_apple_sheet(timeout)
+            return self._complete_apple_sheet(timeout, name)
         return self._complete_gps_half_sheet(timeout, max_retries)
 
-    def _complete_apple_sheet(self, timeout):
+    def _complete_apple_sheet(self, timeout, name=None):
         """Apple's sheet has no queryable elements; dismiss it on failure so it can't strand the next test."""
         sheet = AppleMatterSheet(self.driver)
         try:
-            return sheet.complete_commissioning(timeout=timeout)
+            return sheet.complete_commissioning(timeout=timeout, name=name)
         except Exception:
             sheet.dismiss()
             raise

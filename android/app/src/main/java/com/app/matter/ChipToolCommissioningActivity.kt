@@ -7,6 +7,7 @@
 package com.app.matter
 
 import android.Manifest
+import android.annotation.SuppressLint
 import android.app.Activity
 import android.app.AlertDialog
 import android.bluetooth.BluetoothGatt
@@ -146,6 +147,9 @@ class ChipToolCommissioningActivity : AppCompatActivity() {
     // Commissioning
     // ---------------------------------------------------------------------------------------
 
+    // onCreate() refuses to reach this path until hasRequiredBlePermissions() passes,
+    // but lint cannot follow the guard across that early return and two call hops.
+    @SuppressLint("MissingPermission")
     private fun startCommissioning(ssid: String, password: String) {
         val info = deviceInfo ?: run {
             failAndFinish(getString(R.string.chiptool_status_invalid_payload))
@@ -173,11 +177,11 @@ class ChipToolCommissioningActivity : AppCompatActivity() {
             fabricInfo.groupCatIdAdmin ?: ""
         )
         chipClient = client
-        fabricInfo.requestId?.let { client.requestId = it }
         // The headless confirm-commission task and any other native callbacks look the
         // ChipClient up via FabricSessionManager, so register the freshly-created one here
         // before kicking off pairing.
         FabricSessionManager.setCurrentChipClient(client)
+        FabricSessionManager.syncCommissioningCredentialsToChipClient()
 
         val networkCredentials = NetworkCredentials.forWiFi(
             NetworkCredentials.WiFiCredentials(ssid, password)

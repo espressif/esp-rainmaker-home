@@ -5,6 +5,7 @@
  */
 
 import { READ_PERMISSION, WRITE_PERMISSION } from "./constants";
+import { isPureMatterNode } from "./matterNodeType";
 import {
   ESPCDFNode,
   ESPCDFService,
@@ -15,6 +16,7 @@ import {
 } from "@store";
 import { delay } from "./common";
 import { ESPCDF } from "@store";
+import { getFeatures } from "@config/features.config";
 /**
  * List of all available timezones
  * @returns {string[]} List of all available timezones
@@ -652,6 +654,17 @@ async function getReportedIanaTzFromNodeParams(
 /** Retries for post-provision node timezone: config (writable Time/TZ) then write. */
 const PROVISION_TZ_MAX_ATTEMPTS = 8;
 const PROVISION_TZ_RETRY_DELAY_MS = 300;
+
+/**
+ * Matter-path retry budget: about 20 s, against the provision path's 2.4 s.
+ *
+ * Returning from the Google Play Services commissioning activity resumes the app,
+ * which forces an MQTT teardown and reconnect. Measured on device, the transport is
+ * unusable for ~7 s and the per-node resubscribe lands ~10 s after teardown — so the
+ * provision budget expires before a write can succeed.
+ */
+const MATTER_TZ_MAX_ATTEMPTS = 20;
+const MATTER_TZ_RETRY_DELAY_MS = 1000;
 /** Wait after node first reported online before first TZ write. */
 const PROVISION_TZ_SETTLE_MS = 5000;
 /** Brief pause so MQTT shadow can accept the TZ write before getParams verify (Neo). */
@@ -744,6 +757,9 @@ export type ApplyProvisionTimezoneOptions = {
    * RainMaker Classic leaves unset: success = setTimeZone accepted.
    */
   neoLiveVerify?: boolean;
+  /** Retry policy; both default to the provision-path constants when omitted. */
+  maxAttempts?: number;
+  retryDelayMs?: number;
 };
 
 /** Last provision TZ outcome by node id — consumed once by the provision UI. */
@@ -788,6 +804,8 @@ export async function applyProvisionNodeTimezoneWithRetries(
 ): Promise<ApplyProvisionTimezoneResult> {
   let node = initialNode;
   const neoLiveVerify = options?.neoLiveVerify === true;
+  const maxAttempts = options?.maxAttempts ?? PROVISION_TZ_MAX_ATTEMPTS;
+  const retryDelayMs = options?.retryDelayMs ?? PROVISION_TZ_RETRY_DELAY_MS;
 
   const finish = (
     next: ESPCDFNode,
@@ -807,12 +825,12 @@ export async function applyProvisionNodeTimezoneWithRetries(
 
   await delay(PROVISION_TZ_SETTLE_MS);
 
-  for (let attempt = 0; attempt < PROVISION_TZ_MAX_ATTEMPTS; attempt++) {
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
     if (getNodeTimezoneConfig(node).hasWritePermission) {
       break;
     }
-    if (attempt < PROVISION_TZ_MAX_ATTEMPTS - 1) {
-      await delay(PROVISION_TZ_RETRY_DELAY_MS);
+    if (attempt < maxAttempts - 1) {
+      await delay(retryDelayMs);
       const next = await safeGetNodeDetails(nodeId, getNodeDetails);
       if (next) {
         node = next;
@@ -828,14 +846,14 @@ export async function applyProvisionNodeTimezoneWithRetries(
     return finish(node, false);
   }
 
-  for (let attempt = 0; attempt < PROVISION_TZ_MAX_ATTEMPTS; attempt++) {
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
     if (neoLiveVerify) {
       ensureMqttTransport(node);
     }
     const ok = await setNodeTimeZone(node, timeZoneStr);
     if (!ok) {
-      if (attempt < PROVISION_TZ_MAX_ATTEMPTS - 1) {
-        await delay(PROVISION_TZ_RETRY_DELAY_MS);
+      if (attempt < maxAttempts - 1) {
+        await delay(retryDelayMs);
         if (!neoLiveVerify) {
           const next = await safeGetNodeDetails(nodeId, getNodeDetails);
           if (next) {
@@ -869,8 +887,8 @@ export async function applyProvisionNodeTimezoneWithRetries(
       "reported=",
       reportedTimeZone
     );
-    if (attempt < PROVISION_TZ_MAX_ATTEMPTS - 1) {
-      await delay(PROVISION_TZ_RETRY_DELAY_MS);
+    if (attempt < maxAttempts - 1) {
+      await delay(retryDelayMs);
     }
   }
 
@@ -883,19 +901,58 @@ export async function applyProvisionNodeTimezoneWithRetries(
 
 /**
  * Applies the device/user timezone to a freshly Matter-commissioned hybrid node.
+ * Pure Matter nodes are skipped — see {@link isPureMatterNode}.
+ *
+ * Matter commissioning never runs the provisioning-time timezone stage, so this is
+ * the only place a hybrid node gets its timezone. Two things it must pass that the
+ * provision path also passes, and which are load-bearing here:
+ *
+ * - `neoLiveVerify` on Neo only, matching the provision path. It is what calls
+ *   `ensureMqttTransport(node)`; without it a freshly-fetched node carries no mqtt
+ *   transport and every write fails as `NODE_UNREACHABLE` from
+ *   `DelegatedTransportHandler` — the device then keeps its firmware-default
+ *   timezone with no visible error, because this runs fire-and-forget. Classic has
+ *   no service-level `getParams` to read back with, so forcing it there fails every
+ *   verify and burns the whole retry budget on a write that already landed.
+ * - a longer retry budget, because returning from the Play Services activity forces
+ *   an MQTT reconnect that outlasts the provision-path budget. See
+ *   {@link MATTER_TZ_MAX_ATTEMPTS}.
  */
 export async function applyMatterCommissionedNodeTimezone(
   user: ESPCDFUser | null,
-  rainmakerNodeId: string | undefined
+  rainmakerNodeId: string | undefined,
+  knownPureMatter?: boolean
 ): Promise<void> {
   const nodeId = typeof rainmakerNodeId === "string" ? rainmakerNodeId.trim() : "";
   if (!user || !nodeId) return;
 
+  // `getNodeDetails` is not a free probe: it rebuilds the node from the cloud
+  // config, and a pure Matter config carries `endpoints` and never `devices`,
+  // so the rebuild lands in the store and blanks the card just commissioned.
+  // A pure Matter node has no Time service to write anyway, so
+  // when the caller already knows, decide before fetching. Callers that don't
+  // pass this still fall through to the post-fetch check below.
+  if (knownPureMatter) return;
+
   try {
     const node = await user.getNodeDetails(nodeId);
     if (!node) return;
-    await applyProvisionNodeTimezoneWithRetries(user, nodeId, node, (id) =>
-      user.getNodeDetails(id)
+    if (isPureMatterNode(node)) {
+      // No RainMaker Time service exists, so the write can never land; without
+      // this the 20-attempt budget refetches the node for half a minute and
+      // ends in `No timezone write permission after config retries`.
+      return;
+    }
+    await applyProvisionNodeTimezoneWithRetries(
+      user,
+      nodeId,
+      node,
+      (id) => user.getNodeDetails(id),
+      {
+        neoLiveVerify: getFeatures().timezoneLiveVerify,
+        maxAttempts: MATTER_TZ_MAX_ATTEMPTS,
+        retryDelayMs: MATTER_TZ_RETRY_DELAY_MS,
+      }
     );
   } catch (error) {
     console.warn(

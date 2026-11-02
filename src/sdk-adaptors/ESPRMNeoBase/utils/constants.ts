@@ -91,10 +91,6 @@ export const ESPRMNEO_NODE_ERR_PUSH_OTA_UNSUPPORTED =
 export const ESPRMNEO_NODE_ERR_GET_OTA_STATUS_UNSUPPORTED =
   "RMNeoBase SDK does not support node getOTAUpdateStatus";
 
-// Matter metadata (node-level; device name for Matter-commissioned nodes)
-export const MATTER_METADATA_KEY = "Matter";
-export const MATTER_METADATA_DEVICE_NAME_KEY = "deviceName";
-
 // RMNeo GET /v1/groups/{groupId}/users — `access_type` on each listed member
 export const ESPRMNEO_GROUP_USER_ACCESS_PRIMARY = "primary";
 export const ESPRMNEO_GROUP_USER_ACCESS_SECONDARY = "secondary";
@@ -182,14 +178,6 @@ export const ESPRMNEO_USER_ATTR_PHONE_NUMBER = "phone_number";
 /** Custom Cognito phone attribute fallback. */
 export const ESPRMNEO_USER_ATTR_CUSTOM_PHONE = "custom:phone";
 
-// USER TRANSFORM — node-update debug transport labels
-/** Debug-log transport label when `ESPNodeUpdateData.source` is Matter. */
-export const ESPRMNEO_NODE_UPDATE_TRANSPORT_MATTER = "matter";
-/** Debug-log transport label for non-Matter (MQTT) node updates. */
-export const ESPRMNEO_NODE_UPDATE_TRANSPORT_MQTT = "mqtt";
-/** `ESPNodeUpdateData.source` value that maps to the Matter debug transport. */
-export const ESPRMNEO_NODE_UPDATE_SOURCE_MATTER = "matter";
-
 // USER TRANSFORM — success descriptions
 export const ESPRMNEO_USER_DESC_INFO_FETCHED =
   "User info fetched successfully";
@@ -252,6 +240,8 @@ export const ESPRMNEO_USER_LOG_PUSH_UNREGISTER_FAILED =
   "unregisterForNotification: push endpoint unregistration failed:";
 export const ESPRMNEO_USER_LOG_SUBSCRIBE_ALL_NODES_FAILED =
   "subscribeToAllNodes failed:";
+export const ESPRMNEO_USER_LOG_CLOUD_WRITE_REGISTER_FAILED =
+  "Could not register node for cloud writes:";
 export const ESPRMNEO_USER_LOG_INITIAL_USER_INFO_FAILED =
   "Failed to fetch initial user info:";
 
@@ -433,7 +423,7 @@ export const ESPRMNEO_AUTH_ERR_RESET_PASSWORD = "Failed to reset password";
  * @returns Human-readable verification-code-sent description.
  */
 export function formatVerificationCodeSentDescription(
-  username?: string
+  username?: string,
 ): string {
   return `Verification code sent to ${
     username || ESPRMNEO_AUTH_DESC_VERIFICATION_CODE_SENT_FALLBACK_RECIPIENT

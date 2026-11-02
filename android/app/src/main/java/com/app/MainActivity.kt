@@ -16,6 +16,7 @@ import android.location.LocationManager
 import android.os.Build
 import android.os.Bundle
 import android.util.Log
+import android.view.KeyEvent
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 
@@ -81,6 +82,25 @@ class MainActivity : ReactActivity() {
     override fun onResume() {
         super.onResume()
     }
+
+    // Debug dev-client builds only: while expo-dev-launcher fetches the bundle on a
+    // cold start, it swaps in a stand-in delegate with no React inside, and in
+    // expo-dev-launcher 55.x that stand-in crashes on leave-hint and key events.
+    private val canForwardToReact: Boolean
+        get() = reactActivityDelegate is ReactActivityDelegateWrapper || reactDelegate != null
+
+    override fun onUserLeaveHint() {
+        if (canForwardToReact) super.onUserLeaveHint()
+    }
+
+    override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean =
+        canForwardToReact && super.onKeyDown(keyCode, event)
+
+    override fun onKeyUp(keyCode: Int, event: KeyEvent): Boolean =
+        canForwardToReact && super.onKeyUp(keyCode, event)
+
+    override fun onKeyLongPress(keyCode: Int, event: KeyEvent): Boolean =
+        canForwardToReact && super.onKeyLongPress(keyCode, event)
 
     private fun checkPermissionsWithUtilityModule(onComplete: (bleGranted: Boolean, locationGranted: Boolean) -> Unit) {
         val bleGranted = if (appUtilityModule != null) {

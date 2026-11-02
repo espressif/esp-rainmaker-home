@@ -11,6 +11,7 @@ import {
   ESPCDFPaginatedAPIResponse,
 } from "@store";
 import {
+  ESPCDF,
   getValidHomes,
   ensureHomesAreMutuallyExclusive,
   findHomeGroup,
@@ -21,6 +22,8 @@ import { setCurrentHome as esprmSetCurrentHome } from "@sdk-adaptors/ESPRMBase/g
 import type { ESPRMGroup, ESPRMUser } from "@espressif/rainmaker-matter-sdk";
 import type { ESPRMGetGroupsRequestParams } from "@espressif/rainmaker-matter-sdk";
 import { ESPRMMatterBaseAdaptorIdentifier } from "./constants";
+import { HomeSyncGivenUpError } from "@shared/utils/homeSyncTracker";
+import { chooseHomeToShow } from "@sdk-adaptors/shared/utils/homeToShow";
 import { transformToESPCDFGroup } from "./transformers/transformToESPCDFGroup";
 import { fetchMatterGroupNodes } from "./nodeFetch";
 
@@ -161,18 +164,31 @@ export async function syncHomeWithNodes(
   await ensureHomesAreMutuallyExclusive(primaryGroups, true);
   const finalValid = getValidHomes(allGroups);
 
-  callbacks.setGroupsList(finalValid);
+  // This session's home, else the saved choice (read again if the profile
+  // never loaded, e.g. after an offline start), else the first home.
+  const choice = await chooseHomeToShow(
+    user,
+    finalValid,
+    ESPCDF.instance?.groupStore?.currentHomeId,
+    (homes) => findHomeGroup(homes, {}) ?? homes[0] ?? null,
+  );
+  let selected = choice.home;
 
-  const preferredId = user.customData?.lastSelectedHomeId?.value ?? undefined;
-  let selected =
-    findHomeGroup(finalValid, { preferredId }) ?? finalValid[0] ?? null;
+  // The list goes in only now: Home must never see homes with no current one
+  // while the saved choice is read, or its recovery would save the first home.
+  callbacks.setGroupsList(finalValid);
 
   if (finalValid.length === 0) {
     const newHome = await ensureDefaultHomeForNewOrMigratedUser(user, [], allGroups);
     await esprmSetCurrentHome(user, callbacks, newHome);
     selected = newHome;
   } else if (selected) {
-    await esprmSetCurrentHome(user, callbacks, selected);
+    if (choice.saveAsLastChoice) {
+      await esprmSetCurrentHome(user, callbacks, selected);
+    } else {
+      // Shown without saving, so the user's saved choice is kept.
+      callbacks.setCurrentHomeId(selected.id);
+    }
   }
 
   // Await the selected home's nodes so callers treat settle as authoritative
@@ -200,6 +216,11 @@ async function syncSelectedHomeNodes(
     const nodes = await fetchMatterGroupNodes(home, esprmUser);
     if (nodes.length > 0) callbacks.addNodesToGroup(home.id, nodes);
   } catch (e) {
+    // A sync the store gave up on stops here on purpose: not an error.
+    if (e instanceof HomeSyncGivenUpError) {
+      console.log(`[matterGroupSync] Skipped late nodes for home ${home.id}: ${e.message}`);
+      return;
+    }
     console.error(`[matterGroupSync] Failed to fetch nodes for home ${home.id}:`, e);
   }
 }

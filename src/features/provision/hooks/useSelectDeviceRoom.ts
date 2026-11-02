@@ -30,6 +30,8 @@ export interface UseSelectDeviceRoomReturn {
   isLoading: boolean;
   provisionedNode: ESPCDFNode | null;
   currentHomeId: string | null | undefined;
+  /** Where Back goes when no name step is under this screen; undefined for a plain back. */
+  backUrl: string | undefined;
 }
 
 /** Post-provision: pick a room, assign device, then Guide (if readme) or Home. */
@@ -42,9 +44,15 @@ export const useSelectDeviceRoom = (): UseSelectDeviceRoomReturn => {
     nodeId: string;
     /** Set when returning from Create Room (provision) so the new room appears selected */
     selectedRoomId?: string | string[];
+    /** "1" when no name step is under this screen (iOS Matter add), so Back goes Home. */
+    backToHome?: string | string[];
   }>();
   const nodeId = normalizeLocalParam(params.nodeId);
   const selectedRoomId = normalizeLocalParam(params.selectedRoomId);
+  // Read once: coming back from Create Room replaces the params.
+  const [backUrl] = useState<string | undefined>(() =>
+    normalizeLocalParam(params.backToHome) === "1" ? "/(group)/Home" : undefined,
+  );
 
   const [selectedRoom, setSelectedRoom] = useState<ESPCDFGroup | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -212,5 +220,6 @@ export const useSelectDeviceRoom = (): UseSelectDeviceRoomReturn => {
     isLoading,
     provisionedNode,
     currentHomeId,
+    backUrl,
   };
 };

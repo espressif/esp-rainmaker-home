@@ -85,6 +85,9 @@ const ScreenWrapper: React.FC<ScreenWrapperProps> = ({
         <TouchableWithoutFeedback
           {...(qaId ? testProps(qaId) : {})}
           accessible={false}
+          // Not focusable: closing the keyboard (Done) handed focus to this
+          // full-screen view, and Android greyed it with its focus highlight.
+          focusable={false}
           onPress={handleDismissKeyboard}
         >
           <View style={{ flex: 1 }}>{children}</View>

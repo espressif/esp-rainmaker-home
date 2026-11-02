@@ -21,6 +21,10 @@ import { ChartNoAxesCombined } from "lucide-react-native";
 import { ParamControlChildProps } from "./lib/types";
 import { observer } from "mobx-react-lite";
 import { useTranslation } from "react-i18next";
+import { resolveParamUnitSymbol } from "@shared/utils/paramUnits";
+
+/** Used when the param declares no unit, so existing readings are unchanged. */
+const TEMPERATURE_FALLBACK_UNIT_SYMBOL = "°C";
 
 /**
  * Temperature
@@ -29,12 +33,15 @@ import { useTranslation } from "react-i18next";
  * On click, opens the chart for time series visualization.
  * @param param - The parameter object containing value and setValue function
  * @param disabled - Optional flag to disable the control
+ * @param meta - Display metadata; `unit` carries the declared unit token.
  * @returns Temperature readout that invokes `onOpenChart` when charts are enabled
  */
 const Temperature = observer(
-  ({ label, value, onOpenChart }: ParamControlChildProps) => {
+  ({ label, value, onOpenChart, meta }: ParamControlChildProps) => {
     const { t } = useTranslation();
     const canOpenChart = Boolean(onOpenChart);
+    const unitSymbol =
+      resolveParamUnitSymbol(meta?.unit) || TEMPERATURE_FALLBACK_UNIT_SYMBOL;
 
     /**
      * Opens the time-series chart when this param supports it.
@@ -44,13 +51,13 @@ const Temperature = observer(
     };
 
     /**
-     * Formats a temperature readout with a Celsius suffix.
+     * Formats a temperature readout with the unit the param declares.
      * @param val - Current param value
      * @returns Display string, or the localized "not available" when the value is missing
      */
     const formatTemperature = (val: unknown): string => {
       if (val === null || val === undefined) return t("common.notAvailable");
-      return `${val}°C`;
+      return `${val}${unitSymbol}`;
     };
 
     return (

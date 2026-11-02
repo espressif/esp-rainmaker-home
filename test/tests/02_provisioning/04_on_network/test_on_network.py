@@ -26,6 +26,8 @@ from pathlib import Path
 import pytest
 from pytest_bdd import scenarios, then, when
 
+from utils.registered_user_resolver import deployment_type
+
 logger = logging.getLogger(__name__)
 pytestmark = [pytest.mark.regression, pytest.mark.provisioning, pytest.mark.on_network]
 
@@ -38,7 +40,8 @@ _CONSOLE_READY_MARKERS = ("provisioning started",)
 # The local-control mDNS service only starts once the provisioning/BLE window
 # closes (~30-40s after boot). chal-resp-enable returns "Local control service
 # not started" if sent before this line appears, so wait for it first.
-_LOCAL_CTRL_STARTED_MARKERS = ("esp_local_ctrl service started",)
+_LOCAL_CTRL_STARTED_MARKERS = ("esp_local_ctrl service started", "local control started: _esp_rmaker_ctrl")
+_CHAL_RESP_ENABLED_MARKERS = ("challenge-response endpoint enabled",)
 
 
 # The node's local-control session uses security_1 with its OWN POP (separate
@@ -46,7 +49,8 @@ _LOCAL_CTRL_STARTED_MARKERS = ("esp_local_ctrl service started",)
 # "Local Control":{"POP":"0ba78da8","Type":1}. The app must enter this POP for
 # the on-network session, or security_1 fails with "Key mismatch".
 _LOCAL_CTRL_POP_RE = re.compile(r'"Local Control":\s*\{[^}]*"POP":"([^"]+)"')
-_NODE_ID_RE = re.compile(r'Node ID -----\s*(\S+)')
+_LOCAL_CTRL_POP_PARAM_RE = re.compile(r'Local Control\.POP = (\S+)')
+_NODE_ID_RE = re.compile(r'Node ID(?: -----|:)\s*(\S+)')
 
 
 def _log_offset(log_path):
@@ -69,14 +73,28 @@ def _local_ctrl_pop(log_path):
     return matches[-1] if matches else ""
 
 
-def _new_serial_text(log_path, since_offset):
-    """Lower-cased serial output appended to the log after `since_offset`."""
+def _console_local_ctrl_pop(resource_manager, resource, log_path):
+    """RainMaker Neo keeps the local-control POP as a param of its Local Control service instead of printing it, so read it over the console."""
+    offset = _log_offset(log_path)
+    resource_manager.serial_logger.send_command(resource, 'get-param "Local Control" POP')
+    time.sleep(2)
+    match = _LOCAL_CTRL_POP_PARAM_RE.search(_serial_text(log_path, offset))
+    return match.group(1) if match else ""
+
+
+def _serial_text(log_path, since_offset):
+    """Serial output appended to the log after `since_offset`."""
     path = Path(log_path)
     if not path.exists():
         return ""
     with open(path, "r", errors="replace") as handle:
         handle.seek(since_offset)
-        return handle.read().lower()
+        return handle.read()
+
+
+def _new_serial_text(log_path, since_offset):
+    """Lower-cased serial output appended to the log after `since_offset`."""
+    return _serial_text(log_path, since_offset).lower()
 
 
 def _wait_for(resource_manager, resource, log_path, markers, timeout, since_offset=0):
@@ -142,24 +160,28 @@ def device_online_on_network(hardware_session, resource_manager, request, hardwa
 
     # Open the node-mapping window for the app's challenge-response handshake.
     # Retry until the console stops reporting the service as not-started.
-    for attempt in range(5):
-        cmd_offset = _log_offset(log_path)
-        resource_manager.serial_logger.send_command(resource, "chal-resp-enable")
-        time.sleep(3)
-        if "local control service not started" not in _new_serial_text(log_path, cmd_offset):
-            logger.info("chal-resp-enable accepted (attempt %s)", attempt + 1)
-            break
-        logger.warning("chal-resp-enable not yet accepted, retrying")
+    if any(marker in _new_serial_text(log_path, offset) for marker in _CHAL_RESP_ENABLED_MARKERS):
+        logger.info("Firmware opened the challenge-response endpoint with local control")
+    else:
+        for attempt in range(5):
+            cmd_offset = _log_offset(log_path)
+            resource_manager.serial_logger.send_command(resource, "chal-resp-enable")
+            time.sleep(3)
+            if "local control service not started" not in _new_serial_text(log_path, cmd_offset):
+                logger.info("chal-resp-enable accepted (attempt %s)", attempt + 1)
+                break
+            logger.warning("chal-resp-enable not yet accepted, retrying")
     logger.info("Opened the on-network challenge-response mapping window")
     time.sleep(3)  # let the mDNS chal-resp service advertise
 
     # The app's PoP screen for the local-control session needs the node's
     # local-control POP (security_1), not the BLE provisioning PoP. Capture it
     # from serial so POP screen submits the right code.
+    neo = deployment_type(request.config.getoption("--deployment")) == "rmneo"
     pop = ""
     pop_deadline = time.time() + 30
     while time.time() < pop_deadline:
-        pop = _local_ctrl_pop(log_path)
+        pop = _console_local_ctrl_pop(resource_manager, resource, log_path) if neo else _local_ctrl_pop(log_path)
         if pop:
             break
         time.sleep(2)

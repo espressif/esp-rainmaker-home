@@ -51,7 +51,7 @@ import {
   finalizeProvisionedNode,
 } from "@shared/utils/provisionNode";
 import { persistWifiCredential } from "./useWifiStorage";
-import { isRmneoStackSdkId } from "@config/sdk.identifiers";
+import { getFeatures } from "@config/features.config";
 
 /**
  * Batches related state updates. react-native-web does not export
@@ -782,11 +782,11 @@ export const useProvision = (): UseProvisionReturn => {
         );
 
         const retriedNodeId = retriedNodeIdRef.current;
-        // Neo's timezone write needs its MQTT transport attached first.
-        const isNeoStack = isRmneoStackSdkId(store?.getActiveAdaptorIdentifier());
+        // A live-verified timezone write needs its MQTT transport attached first.
+        const { timezoneLiveVerify } = getFeatures();
         const node =
           user && retriedNodeId
-            ? await finalizeProvisionedNode(user, retriedNodeId, isNeoStack)
+            ? await finalizeProvisionedNode(user, retriedNodeId, timezoneLiveVerify)
             : null;
         if (!node) {
           throw new Error(t("device.errors.nodeNotFound"));
@@ -805,7 +805,6 @@ export const useProvision = (): UseProvisionReturn => {
       t,
       ssid,
       user,
-      store,
       handleProvisionUpdate,
       handleProvisionError,
       handleAddDeviceSuccess,

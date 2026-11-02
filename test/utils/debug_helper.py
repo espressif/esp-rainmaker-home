@@ -14,6 +14,7 @@ import logging
 import shutil
 import subprocess
 import tempfile
+from datetime import datetime
 from pathlib import Path
 
 from hardware.artifacts import TestArtifactDir, timestamped_test_folder_name
@@ -245,6 +246,15 @@ class DebugHelper:
                 logcat_cmd = adb_prefix + ['logcat', '-d', '-t', '8000']
                 result = subprocess.run(logcat_cmd, capture_output=True, text=True, timeout=30)
                 content = result.stdout or ""
+
+            try:
+                started = datetime.strptime(artifact_dir.root.name[:15], "%Y%m%d_%H%M%S")
+                crash = subprocess.run(adb_prefix + ['logcat', '-b', 'crash', '-t', started.strftime("%m-%d %H:%M:%S.000")],
+                                       capture_output=True, text=True, timeout=30).stdout or ""
+                if crash.strip():
+                    content += "\n----- logcat crash buffer since the test started -----\n" + crash
+            except Exception:
+                pass
 
             with open(log_path, 'w', encoding='utf-8') as f:
                 f.write(content)

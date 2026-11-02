@@ -5,10 +5,6 @@
  */
 
 import { NativeModules, Platform } from "react-native";
-import {
-  formatMatterNodeIdForChipLog,
-  MATTER_DISCOVERY_VERIFY_LOG,
-} from "@shared/utils/matterNodeIdHex";
 
 /** Matter node ids (hex) the CHIP discovery module should probe on the LAN. */
 let matterDiscoveryTargetNodeIds: string[] = [];
@@ -36,10 +32,6 @@ function getMatterDiscoveryTargetNodeIds(): readonly string[] {
  */
 function syncMatterDiscoveryTargetNodeIds(nodeIds: string[]): void {
   setMatterDiscoveryTargetNodeIds(nodeIds);
-  console.log(
-    `${MATTER_DISCOVERY_VERIFY_LOG} matterDiscoveryTargets → native setTargetMatterNodeIds:`,
-    nodeIds.map((id) => formatMatterNodeIdForChipLog(id)),
-  );
   if (
     Platform.OS === "android" &&
     typeof NativeModules.MatterDiscoveryModule?.setTargetMatterNodeIds ===

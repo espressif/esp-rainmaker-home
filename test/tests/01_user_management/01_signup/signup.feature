@@ -27,7 +27,7 @@ Feature: Sign Up
     Then user should proceed to verification screen
     When user enters verification code "000000"
     And user taps "verify"
-    Then user should see toast with title "Failed to confirm signup" and message "incorrect verification code"
+    Then user should see toast with title "Failed to confirm signup" and message "signup incorrect verification code"
     And user should remain on verification screen
 
   @regression

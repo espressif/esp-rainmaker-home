@@ -67,10 +67,11 @@ function normalizedServiceTypeKey(serviceType: string): string {
 }
 
 /**
- * Active browse service types (normalized keys). Each concurrent `startDiscovery`
- * registers its type so multi-browse listeners can filter cross-talk.
+ * Active browse service types: normalized key → the exact type native was started
+ * with. Each concurrent `startDiscovery` registers its type so multi-browse
+ * listeners can filter cross-talk, and `stopDiscovery` can stop just these.
  */
-const registeredServiceTypes = new Set<string>();
+const registeredServiceTypes = new Map<string, string>();
 
 /** Reference count per service type — native browse starts/stops with first/last ref. */
 const serviceTypeRefCounts = new Map<string, number>();
@@ -84,7 +85,9 @@ function acquireServiceType(serviceType: string): boolean {
   const key = normalizedServiceTypeKey(serviceType);
   const next = (serviceTypeRefCounts.get(key) ?? 0) + 1;
   serviceTypeRefCounts.set(key, next);
-  registeredServiceTypes.add(key);
+  if (next === 1) {
+    registeredServiceTypes.set(key, serviceType);
+  }
   return next === 1;
 }
 
@@ -140,6 +143,8 @@ function shouldForwardDiscoveryEvent(
 export const EspLocalDiscoveryAdapter: ESPLocalDiscoveryAdapterInterface & {
   /** Stops only the browse session for the given service type (per-type teardown for multi-browse). */
   stopDiscoveryForType: (serviceType: string) => Promise<void>;
+  /** Starts a running browse afresh, so devices already found are reported again. */
+  restartDiscoveryForType: (serviceType: string) => Promise<void>;
   /** Adds listener for service-loss events filtered by service type. */
   addLostListener: (
     callback: (data: Record<string, any>) => void,
@@ -209,18 +214,27 @@ export const EspLocalDiscoveryAdapter: ESPLocalDiscoveryAdapterInterface & {
   },
 
   /**
-   * Stop every active mDNS browse session.
+   * Stop every mDNS browse this adapter started.
    *
-   * Note: This stops ALL service-type browses on the native side. To stop a
-   * single service type while leaving others running, use `stopDiscoveryForType`.
+   * Browses started by others keep running: on iOS the same native module also
+   * runs the `_matter._tcp.` browse, and the Neo SDK calls this on every local
+   * discovery re-subscribe. To stop one service type, use `stopDiscoveryForType`.
    * Event listeners should be cleaned up separately using the cleanup function
    * returned by `startDiscovery`.
    */
   stopDiscovery: async (): Promise<void> => {
     try {
+      const startedServiceTypes = Array.from(registeredServiceTypes.values());
       registeredServiceTypes.clear();
       serviceTypeRefCounts.clear();
-      ESPDiscoveryModule.stopDiscovery();
+      if (typeof ESPDiscoveryModule?.stopDiscoveryForType === "function") {
+        startedServiceTypes.forEach((serviceType) =>
+          ESPDiscoveryModule.stopDiscoveryForType(serviceType),
+        );
+      } else {
+        // Older native build without per-type stop — fall back to global stop.
+        ESPDiscoveryModule.stopDiscovery();
+      }
     } catch (error) {
       console.error("Error stopping discovery:", error);
     }
@@ -245,6 +259,24 @@ export const EspLocalDiscoveryAdapter: ESPLocalDiscoveryAdapterInterface & {
       }
     } catch (error) {
       console.error("Error stopping discovery for type:", error);
+    }
+  },
+
+  /** Restarts a running browse, keeping its listeners. No-op if not browsing the type. */
+  restartDiscoveryForType: async (serviceType: string): Promise<void> => {
+    try {
+      const startedAs = registeredServiceTypes.get(
+        normalizedServiceTypeKey(serviceType),
+      );
+      if (!startedAs || typeof ESPDiscoveryModule?.stopDiscoveryForType !== "function") {
+        return;
+      }
+      ESPDiscoveryModule.stopDiscoveryForType(startedAs);
+      ESPDiscoveryModule.startDiscovery(
+        resolvedMdnsParams({ serviceType: startedAs, domain: MDNS_DOMAIN_LOCAL }),
+      );
+    } catch (error) {
+      console.error("Error restarting discovery for type:", error);
     }
   },
 

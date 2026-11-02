@@ -7,10 +7,16 @@
 import { ESPNodeUpdateData } from "@espressif/rainmaker-base-sdk";
 import {
     getClusterRegistryEntry,
+    matterXyToHueSaturation,
     type ClusterParamDefinition,
     type ClusterParamResolver,
 } from "@espressif/rainmaker-matter-sdk";
-import { MATTER_PARAM_VALUE_UNKNOWN } from "../matterParamConstants";
+import { MATTER_CLUSTER_ID_COLOR_CONTROL } from "@config/matter.identifiers";
+import {
+    MATTER_COLOR_ATTRIBUTE_CURRENT_X,
+    MATTER_COLOR_ATTRIBUTE_CURRENT_Y,
+    MATTER_PARAM_VALUE_UNKNOWN,
+} from "@shared/utils/matterParamConstants";
 import {
     coerceParamValueForDataType,
     coerceParamValueToBoolean,
@@ -108,9 +114,27 @@ export function rewriteMatterShadowPayload(
     const sdkAlreadyScaled =
       !isRaw && isSdkPrescaledAttr(clusterId, attributeId);
 
-    // Walk nodeConfig.devices (Rainmaker) or top-level devices (RMNG Matter payload).
+    // Walk nodeConfig.devices (Rainmaker) or top-level devices (RMNeo Matter payload).
     const devices = collectMatterRoutingDevices(node);
     if (!devices) return undefined;
+
+    // XY-backed color params (SDK ≥ 3.2 compiles them on XY-only lights): a
+    // CurrentX/CurrentY frame only becomes a hue/sat update once its sibling
+    // coordinate is known — pair it here, since no param is backed by either
+    // attribute on its own.
+    if (
+        clusterId === MATTER_CLUSTER_ID_COLOR_CONTROL &&
+        (attributeId === MATTER_COLOR_ATTRIBUTE_CURRENT_X ||
+            attributeId === MATTER_COLOR_ATTRIBUTE_CURRENT_Y)
+    ) {
+        return routeXyColorFrame(
+            update.nodeId,
+            endpointId,
+            attributeId,
+            extracted,
+            devices,
+        );
+    }
 
     for (const device of devices) {
         if (!device?.params || !device.name) continue;
@@ -304,6 +328,8 @@ interface MatterDeviceParamLike {
     clusterId?: number;
     endpointId?: number;
     matterAttributeId?: number;
+    /** XY-backed color param marker (SDK ≥ 3.2, XY-only color lights). */
+    xyColorComponent?: "hue" | "saturation";
     rawModes?: Record<string, number>;
     /** Cloud-config params carry UI bounds (min/max/step) used when coercing. */
     bounds?: Record<string, any>;
@@ -314,6 +340,73 @@ interface MatterDeviceParamLike {
             rawModes?: Record<string, number>,
         ) => string;
     };
+}
+
+/**
+ * Last known CurrentX/CurrentY wire values per `<nodeId>::<endpointId>` —
+ * hue/saturation are a function of the PAIR, so a lone coordinate frame is
+ * cached here and rendered when its sibling arrives. Mirrors the pair cache
+ * the Neo SDK keeps in its subscription channel; on classic the raw frames
+ * surface here instead (the SDK channel is node-blind).
+ */
+const xyPairByNodeEndpoint = new Map<string, { rawX?: number; rawY?: number }>();
+
+/**
+ * Routes one CurrentX/CurrentY frame: caches the coordinate and, once the
+ * endpoint's pair is complete, projects hue+saturation onto the XY-backed
+ * params in one shadow payload. Frames for endpoints without XY-backed params
+ * (HS lights, hybrids) and incomplete pairs return `undefined` — the caller
+ * drops the frame, exactly like any other unroutable update.
+ */
+function routeXyColorFrame(
+    nodeId: string | undefined,
+    endpointId: number,
+    attributeId: number,
+    extracted: { value: unknown; isRaw: boolean } | undefined,
+    devices: { name?: string; params?: MatterDeviceParamLike[] }[],
+): Record<string, Record<string, unknown>> | undefined {
+    if (!nodeId) return undefined;
+    let deviceName: string | undefined;
+    const xyParams: MatterDeviceParamLike[] = [];
+    for (const device of devices) {
+        if (!device?.params || !device.name) continue;
+        for (const param of device.params) {
+            if (
+                param.xyColorComponent !== undefined &&
+                param.endpointId === endpointId
+            ) {
+                deviceName = device.name;
+                xyParams.push(param);
+            }
+        }
+    }
+    if (!deviceName || xyParams.length === 0) return undefined;
+
+    const value = Number(extracted?.value);
+    if (!Number.isFinite(value)) return undefined;
+
+    const key = `${nodeId}::${endpointId}`;
+    const pair = xyPairByNodeEndpoint.get(key) ?? {};
+    if (attributeId === MATTER_COLOR_ATTRIBUTE_CURRENT_X) {
+        pair.rawX = value;
+    } else {
+        pair.rawY = value;
+    }
+    xyPairByNodeEndpoint.set(key, pair);
+    if (pair.rawX === undefined || pair.rawY === undefined) return undefined;
+
+    const { hue, saturation } = matterXyToHueSaturation(pair.rawX, pair.rawY);
+    const shadow: Record<string, unknown> = {};
+    for (const param of xyParams) {
+        if (!param.name) continue;
+        // Same convention as registry resolvers: decoded values are strings.
+        const decoded = String(
+            param.xyColorComponent === "hue" ? hue : saturation,
+        );
+        param.value = decoded;
+        shadow[param.name] = decoded;
+    }
+    return { [deviceName]: shadow };
 }
 
 function collectMatterRoutingDevices(

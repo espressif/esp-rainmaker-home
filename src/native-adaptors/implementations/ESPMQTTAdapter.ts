@@ -10,8 +10,35 @@ import {
     NativeModules,
     type EmitterSubscription
 } from "react-native";
+import { withTimeout } from "@shared/utils/asyncTimeout";
 
 const { ESPMQTTModule } = NativeModules;
+
+/**
+ * Longest a native connect may take. The native modules give up by themselves
+ * after 15 s; this covers a native side that still never answers.
+ */
+const NATIVE_CONNECT_TIMEOUT_MS = 20_000;
+
+/** True from a sign-out until the next signed-in session starts MQTT. */
+let connectsRefused = false;
+
+/**
+ * Called when a signed-in session starts MQTT: connects are accepted again.
+ */
+export function allowMqttConnects(): void {
+    connectsRefused = false;
+}
+
+/**
+ * Called at sign-out: ends the native client (a connect still running
+ * included) and refuses connects until the next session starts, so a connect
+ * still waiting on the network cannot come up for the signed-out user.
+ */
+export async function refuseMqttConnects(): Promise<void> {
+    connectsRefused = true;
+    await ESPMQTTAdapter.disconnect().catch(() => {});
+}
 
 const MQTT_MESSAGE_EVENT = "mqttMessageReceived";
 const MQTT_CONNECTION_STATUS_EVENT = "mqttConnectionStatus";
@@ -219,7 +246,28 @@ export const ESPMQTTAdapter: ESPMQTTInterface = {
         if (config.region != null && config.region !== "") {
             _config.region = config.region;
         }
-        return ESPMQTTModule.connect(_config);
+        if (connectsRefused) {
+            throw new Error("MQTT connect refused: signed out");
+        }
+        const timedOut = new Error("Native MQTT connect gave no answer");
+        try {
+            await withTimeout(
+                ESPMQTTModule.connect(_config),
+                NATIVE_CONNECT_TIMEOUT_MS,
+                timedOut
+            );
+            if (connectsRefused) {
+                // Signed out while it was connecting: close what it opened.
+                await Promise.resolve(ESPMQTTModule.disconnect()).catch(() => {});
+                throw new Error("MQTT connect finished after sign-out; closed");
+            }
+        } catch (error) {
+            if (error === timedOut) {
+                // Ends the stuck connect so the next one starts clean.
+                await Promise.resolve(ESPMQTTModule.disconnect()).catch(() => {});
+            }
+            throw error;
+        }
     },
     disconnect: async () => {
         topicHandlers.clear();

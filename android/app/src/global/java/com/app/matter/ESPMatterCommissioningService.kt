@@ -39,7 +39,6 @@ class ESPMatterCommissioningService : Service(), CommissioningService.Callback {
     override fun onCreate() {
         super.onCreate()
         val fabricInfo = FabricSessionManager.getCurrentFabric()
-        Log.d(TAG, "Retrieved fabric info: ${fabricInfo?.name ?: "None"}")
 
         if (fabricInfo?.groupId != null) {
             chipClient = ChipClient(
@@ -52,8 +51,8 @@ class ESPMatterCommissioningService : Service(), CommissioningService.Callback {
                 fabricInfo.groupCatIdOperate!!,
                 fabricInfo.groupCatIdAdmin ?: ""
             )
-            fabricInfo.requestId?.let { chipClient.requestId = it }
             FabricSessionManager.setCurrentChipClient(chipClient)
+            FabricSessionManager.syncCommissioningCredentialsToChipClient()
         } else {
             chipClient = ChipClient(applicationContext, "", "", "", "", "", "")
             FabricSessionManager.setCurrentChipClient(chipClient)
@@ -150,7 +149,6 @@ class ESPMatterCommissioningService : Service(), CommissioningService.Callback {
             }
         }
     }
-
 
     /**
      * Send commissioning complete event via EventBus

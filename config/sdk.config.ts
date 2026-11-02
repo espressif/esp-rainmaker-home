@@ -25,13 +25,16 @@ import { ESPMatterSubscriptionAdapter } from "@native-adaptors/implementations/E
 import { ESPMQTTAdapter } from "@native-adaptors/implementations/ESPMQTTAdapter";
 import { ESPRMBaseConfig } from "@espressif/rainmaker-base-sdk";
 import type { ESPRMMatterBaseConfig } from "@espressif/rainmaker-matter-sdk";
-import type { ESPRMNeoBaseConfig } from "@espressif/rainmaker-neo-base-sdk";
-import { matterClusterConfig } from "@sdk-adaptors/ESPRMMatterBase/cluster.config";
+import { type ESPRMNeoBaseConfig } from "@espressif/rainmaker-neo-base-sdk";
+import { reportDerivedShadowParams } from "@sdk-adaptors/ESPRMNeoMatterBase/utils/derivedShadowReporter";
+import type { ESPRMNeoMatterBaseConfig } from "@espressif/rainmaker-neo-matter-sdk";
+import { matterClusterConfig } from "@config/cluster.config";
 import {
   DEFAULT_ACTIVE_SDK_ID,
   ESPRM_BASE_SDK_ID,
   ESPRMMatter_BASE_SDK_ID,
   ESPRMNeo_BASE_SDK_ID,
+  ESPRMNeoMatter_BASE_SDK_ID,
   type SDKIdentifier,
   isRmneoStackSdkId,
   normalizeSdkIdentifier,
@@ -50,6 +53,16 @@ export {
   normalizeSdkIdentifier,
   type SDKIdentifier,
 } from "./sdk.identifiers";
+
+/**
+ * Pure Matter nodes: PUT a *derived* RainMaker Neo node config raised from the
+ * endpoint tree through the attribute<->param mapping (`data_model: "rmng"`,
+ * `origin.type: "derived"`) instead of the Matter pass-through. Write side
+ * only for now — reading it back into a device model is the next step.
+ */
+const MATTER_DERIVED_NODE_CONFIG = true;
+/** Derived configs carry the Identify param, so pure Matter nodes keep their identify button. */
+const MATTER_DERIVED_NODE_CONFIG_INCLUDE_IDENTIFY = true;
 
 // Binary-level extra (region-invariant values). Region-scoped config comes
 // from getRegionConfig() at call time — no legacy rmSdk/rmSdkCn fallback.
@@ -174,6 +187,39 @@ export const CDFConfig = {
 
 // ─── Matter SDK Config ────────────────────────────────────────────────────────
 
+/**
+ * Neo Matter SDK config — the Neo base config plus the full Matter surface.
+ *
+ * Reuses the exact adapter objects the classic stack passes: they are pure
+ * native bridges / data registries with stack-agnostic contracts (the Neo SDK's
+ * adapter interfaces are shape-identical to the classic ones by design), so one
+ * object satisfies both SDKs. `clusterConfig` is the same cluster → UI param
+ * registry, which is structurally typed and valid for either package.
+ *
+ * @returns Neo Matter SDK configuration.
+ */
+export function getNeoMatterSDKConfig(): ESPRMNeoMatterBaseConfig {
+  return {
+    ...getRMNeoSDKConfig(),
+    matterCommissioningAdaptor,
+    matterControlAdapter: ESPMatterControlAdapter,
+    matterSubscriptionAdapter: ESPMatterSubscriptionAdapter,
+    matterLocalDiscoveryAdapter,
+    matterVendorId: matterSdk.vendorId,
+    // Returned unasserted on purpose: this is the only place one shared
+    // `matterClusterConfig` is handed to both stacks, so letting the Neo SDK's own
+    // `ClusterConfigMap` check it here is what catches a classic/Neo divergence at
+    // build time instead of as a silent mis-decode at runtime.
+    clusterConfig: matterClusterConfig,
+    derivedNodeConfig: MATTER_DERIVED_NODE_CONFIG,
+    includeIdentify: MATTER_DERIVED_NODE_CONFIG_INCLUDE_IDENTIFY,
+    // The app is a derived pure Matter node's reporter: params the SDK learns
+    // over the fabric are published as the node's reported shadow state, where
+    // a native node's firmware would put them (same MQTT session, same policy).
+    shadowReporter: reportDerivedShadowParams,
+  };
+}
+
 export function getMatterSDKConfig(): ESPRMMatterBaseConfig {
   return {
     ...getRMSDKConfig(),
@@ -181,7 +227,7 @@ export function getMatterSDKConfig(): ESPRMMatterBaseConfig {
     matterControlAdapter: ESPMatterControlAdapter,
     matterSubscriptionAdapter: ESPMatterSubscriptionAdapter,
     matterLocalDiscoveryAdapter,
-    matterVendorId: matterSdk.vendorId ?? "0x131B",
+    matterVendorId: matterSdk.vendorId,
     clusterConfig: matterClusterConfig,
   };
 }
@@ -192,6 +238,47 @@ export function getMatterSDKConfig(): ESPRMMatterBaseConfig {
 // Defines which features each SDK adaptor supports.
 // This is the technical truth — UI consumes this via config/features.config.ts.
 // Add a new SDK entry here when a new adaptor is registered.
+
+/** RainMaker Neo base stack. The Neo Matter stack inherits it and flips one flag. */
+const RMNEO_SDK_FEATURES: Record<string, boolean | readonly string[]> = {
+  scenes: false,
+  schedules: true,
+  automations: true,
+  // Neo automations do not expose Allow retrigger in the product UI.
+  automationRetrigger: false,
+  localControl: true,
+  notifications: true,
+  groupSharing: true,
+  subGroupSharing: true,
+  transferGroupSharing: false,
+  ota: false,
+  controlGroups: true,
+  secondaryGroupManagement: true,
+  aiAgent: false,
+  thirdPartyAuth: false,
+  voiceAssistants: false,
+  authAllowedUsernameTypes: ["email", "phone"],
+  // Challenge-response association over LAN HTTP, against the `ch_resp`
+  // endpoint set on the shared `_esp_rmaker_ctrl._tcp` instance.
+  onNetworkProvisioning: true,
+  softApProvisioning: true,
+  // The RMNeo stack has no Matter support: its CDF group exposes no
+  // `convertToMatterFabric` / `issueUserNoC`, so commissioning cannot run.
+  matterCommissioning: false,
+  // Neo has no account-deletion API.
+  accountDeletion: false,
+  // Neo has no `updateName` API: the profile shows email / phone read-only.
+  nicknameEditing: false,
+  // A hybrid automates over RainMaker; only pure Matter nodes are left out.
+  hybridMatterAutomation: true,
+  // Neo accepts schedule writes for offline nodes, so they stay selectable.
+  offlineDeviceSchedules: true,
+  // On-network provisionable nodes announce on the shared `_esp_rmaker_ctrl._tcp`
+  // instance: filtered on `cap`, security read from the version endpoint.
+  onNetworkDiscoveryViaLocalControl: true,
+  // A node timezone write is confirmed by reading the Time param back over MQTT.
+  timezoneLiveVerify: true,
+};
 
 export const SDK_FEATURE_MAP: Record<
   SDKIdentifier,
@@ -220,34 +307,22 @@ export const SDK_FEATURE_MAP: Record<
     // Matter lives in the separate ESPRMMatterBase adaptor, not this one.
     matterCommissioning: false,
     accountDeletion: true,
+    nicknameEditing: true,
+    // Every Matter-backed node stays out of automations until hybrid
+    // automation is validated on classic.
+    hybridMatterAutomation: false,
+    offlineDeviceSchedules: false,
+    // Dedicated `_esp_rmaker_chal_resp._tcp` service; TXT carries the security details.
+    onNetworkDiscoveryViaLocalControl: false,
+    // No service-level getParams to read back with: an accepted write is success.
+    timezoneLiveVerify: false,
   },
-  [ESPRMNeo_BASE_SDK_ID]: {
-    scenes: false,
-    schedules: true,
-    automations: true,
-    // Neo automations do not expose Allow retrigger in the product UI.
-    automationRetrigger: false,
-    localControl: true,
-    notifications: true,
-    groupSharing: true,
-    subGroupSharing: true,
-    transferGroupSharing: false,
-    ota: false,
-    controlGroups: true,
-    secondaryGroupManagement: true,
-    aiAgent: false,
-    thirdPartyAuth: false,
-    voiceAssistants: false,
-    authAllowedUsernameTypes: ["email", "phone"],
-    // Challenge-response association over LAN HTTP, against the `ch_resp`
-    // endpoint set on the shared `_esp_rmaker_ctrl._tcp` instance.
-    onNetworkProvisioning: true,
-    softApProvisioning: true,
-    // The RMNeo stack has no Matter support: its CDF group exposes no
-    // `convertToMatterFabric` / `issueUserNoC`, so commissioning cannot run.
-    matterCommissioning: false,
-    // Neo has no account-deletion API.
-    accountDeletion: false,
+  [ESPRMNeo_BASE_SDK_ID]: RMNEO_SDK_FEATURES,
+  // Neo plus Matter commissioning: this adaptor's CDF group carries
+  // convertToMatterFabric / getFabricDetails / startCommissioning.
+  [ESPRMNeoMatter_BASE_SDK_ID]: {
+    ...RMNEO_SDK_FEATURES,
+    matterCommissioning: true,
   },
   [ESPRMMatter_BASE_SDK_ID]: {
     scenes: true,
@@ -269,5 +344,10 @@ export const SDK_FEATURE_MAP: Record<
     onNetworkProvisioning: true,
     softApProvisioning: true,
     accountDeletion: true,
+    nicknameEditing: true,
+    hybridMatterAutomation: false,
+    offlineDeviceSchedules: false,
+    onNetworkDiscoveryViaLocalControl: false,
+    timezoneLiveVerify: false,
   },
 };

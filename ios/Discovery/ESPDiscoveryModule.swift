@@ -290,7 +290,7 @@ private final class BrowseSession: NSObject, NetServiceBrowserDelegate, NetServi
     let txt = txtRecordDictionary(sender)
     var nodeId = nodeIdFromTxtRecord(txt)
     if nodeId.isEmpty {
-      nodeId = sender.name
+      nodeId = fallbackNodeId(for: sender)
     }
     guard !nodeId.isEmpty else {
       NSLog("ESPDiscoveryModule: Could not determine node id (type=%@)", serviceType)
@@ -337,10 +337,24 @@ private final class BrowseSession: NSObject, NetServiceBrowserDelegate, NetServi
   /// Bonjour TXT `node_id` (case-insensitive), same as Android `mDNSManager`.
   private func nodeIdFromTxtRecord(_ txt: [String: String]) -> String {
     for (key, value) in txt where key.lowercased() == "node_id" {
-      let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+      let trimmed = value.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines.union(CharacterSet(charactersIn: "\0")))
       if !trimmed.isEmpty { return trimmed }
     }
     return ""
+  }
+
+  /// Node id when TXT `node_id` is absent (older firmware). For `_esp_local_ctrl._tcp.` the
+  /// firmware sets the mDNS hostname to the node id, so use the hostname label before the
+  /// first `.`; other types keep the instance name (Matter derives its ids from it).
+  private func fallbackNodeId(for service: NetService) -> String {
+    let dots = CharacterSet(charactersIn: ".")
+    let isLocalCtrl = serviceType.trimmingCharacters(in: dots)
+      == kDefaultMdnsServiceType.trimmingCharacters(in: dots)
+    if isLocalCtrl, let hostName = service.hostName {
+      let label = hostName.range(of: ".").map { String(hostName[..<$0.lowerBound]) } ?? hostName
+      if !label.isEmpty { return label }
+    }
+    return service.name
   }
 
   /// Decode TXT record into a `[String: String]` of UTF-8 values.
