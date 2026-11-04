@@ -32,6 +32,10 @@ export {
   type MigrationPromptModalProps,
 } from "./Home/MigrationPromptModal";
 export {
+  StyleUpdateBanner,
+  type StyleUpdateBannerProps,
+} from "./Home/StyleUpdateBanner";
+export {
   HomeDeviceSkeletonList,
 } from "./Home/HomeLoadingSkeleton";
 

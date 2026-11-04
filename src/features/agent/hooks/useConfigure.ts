@@ -144,12 +144,11 @@ export function useConfigure() {
           successfulUpdates === totalDevices
             ? t("agent.configure.devicesUpdatedCount", {
               count: successfulUpdates,
-            }) || `${successfulUpdates} device(s) updated successfully`
+            })
             : t("agent.configure.devicesUpdatedPartial", {
               successful: successfulUpdates,
               total: totalDevices,
-            }) ||
-            `${successfulUpdates} of ${totalDevices} device(s) updated successfully`
+            })
         );
       } else {
         toast.showError(t("agent.configure.updateError"));

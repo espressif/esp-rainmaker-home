@@ -1,0 +1,105 @@
+{
+  "schemaVersion": 1,
+  "checksum": "7f5684f5713238e8efac662e1f7d2069eb1f549633bf9cffba370654a3d83413",
+  "publishedAt": 1793105426,
+  "config": {
+    "brandName": "Xxx Dummy Brand",
+    "supportedThemes": [
+      "light",
+      "dark"
+    ],
+    "brandTagline": "Dummy tagline goes here.",
+    "company": "Xxx Dummy Brand Co., Ltd.",
+    "brandLogo": {
+      "light": "https://rmng-public-assets-123456789012.s3.us-east-1.amazonaws.com/eu-west-1/brand/images/3f1a9c0d7e2b4a61.png",
+      "dark": "https://rmng-public-assets-123456789012.s3.us-east-1.amazonaws.com/eu-west-1/brand/images/a07c2e19bb5d8f34.png"
+    },
+    "ui": {
+      "radius": 20,
+      "logoScale": 1.25,
+      "colors": {
+        "light": {
+          "primary": "#C2410C",
+          "bg": "#F4EADC",
+          "bg1": "#F0DCCB",
+          "bg2": "#ECCFBB",
+          "bg3": "#E5B79E",
+          "bg4": "rgba(194, 65, 12, 0.15)",
+          "bg5": "#F4EADC",
+          "error": "#B71C1C",
+          "warn": "#B25B00",
+          "warnBg": "#FFF4D6",
+          "success": "#237804",
+          "green": "#27AE60",
+          "red": "#E74C3C",
+          "orange": "#F39C12",
+          "white": "#FFFBF4",
+          "blue": "#C2410C",
+          "black": "#2B1D14",
+          "gray": "#8A7663",
+          "lightBlue": "rgba(194, 65, 12, 0.3)",
+          "textPrimary": "#2B1D14",
+          "textSecondary": "#8A7663",
+          "borderColor": "rgba(138, 118, 99, 0.22)",
+          "darkBorderColor": "rgba(138, 118, 99, 0.4)"
+        },
+        "dark": {
+          "primary": "#F97316",
+          "bg": "#181310",
+          "bg1": "#2A1B10",
+          "bg2": "#3C2211",
+          "bg3": "#5C3012",
+          "bg4": "rgba(249, 115, 22, 0.15)",
+          "bg5": "#181310",
+          "error": "#ED7E7E",
+          "warn": "#FFB454",
+          "warnBg": "#3B2E12",
+          "success": "#6EE7A0",
+          "green": "#5AD07F",
+          "red": "#FF6B6B",
+          "orange": "#FF9F43",
+          "white": "#241C16",
+          "blue": "#F97316",
+          "black": "#F7EFE6",
+          "gray": "#A89482",
+          "lightBlue": "rgba(249, 115, 22, 0.3)",
+          "textPrimary": "#F7EFE6",
+          "textSecondary": "#A89482",
+          "borderColor": "rgba(168, 148, 130, 0.28)",
+          "darkBorderColor": "rgba(168, 148, 130, 0.45)"
+        }
+      }
+    },
+    "glossary": {
+      "device": "Light",
+      "devices": "Lights",
+      "room": "Space",
+      "rooms": "Spaces",
+      "scene": "Mood",
+      "scenes": "Moods"
+    },
+    "assets": {
+      "images": {
+        "devices": {
+          "light1": "https://rmng-public-assets-123456789012.s3.us-east-1.amazonaws.com/eu-west-1/brand/images/fd3c76927fe2e2b1.png",
+          "light1Online": "https://rmng-public-assets-123456789012.s3.us-east-1.amazonaws.com/eu-west-1/brand/images/0b9e4a7d21c35f88.png",
+          "light3": "https://rmng-public-assets-123456789012.s3.us-east-1.amazonaws.com/eu-west-1/brand/images/24830395b44ac3fb.png",
+          "socket": "https://rmng-public-assets-123456789012.s3.us-east-1.amazonaws.com/eu-west-1/brand/images/e5d671304f4a0fc3.png",
+          "switch": "https://rmng-public-assets-123456789012.s3.us-east-1.amazonaws.com/eu-west-1/brand/images/3890907f52e6b5c2.png",
+          "illuminanceSensor": "https://rmng-public-assets-123456789012.s3.us-east-1.amazonaws.com/eu-west-1/brand/images/7b5cf1e39b30f158.png",
+          "occupancySensor": "https://rmng-public-assets-123456789012.s3.us-east-1.amazonaws.com/eu-west-1/brand/images/fe6e8676ceb89334.png"
+        },
+        "agents": {
+          "chatIcon": "https://rmng-public-assets-123456789012.s3.us-east-1.amazonaws.com/eu-west-1/brand/images/69562e57ad074c26.png",
+          "aiAssistant": "https://rmng-public-assets-123456789012.s3.us-east-1.amazonaws.com/eu-west-1/brand/images/c1d84e0f5a2b7936.png"
+        },
+        "illustrations": {
+          "home": "https://rmng-public-assets-123456789012.s3.us-east-1.amazonaws.com/eu-west-1/brand/images/9971ed72eaec2b3e.png",
+          "room": "https://rmng-public-assets-123456789012.s3.us-east-1.amazonaws.com/eu-west-1/brand/images/b4f2541662251115.png",
+          "network": "https://rmng-public-assets-123456789012.s3.us-east-1.amazonaws.com/eu-west-1/brand/images/81d5e4210083d8e6.png",
+          "wifi": "https://rmng-public-assets-123456789012.s3.us-east-1.amazonaws.com/eu-west-1/brand/images/27bf3435c65c1bf4.png"
+        }
+      }
+    }
+  }
+}

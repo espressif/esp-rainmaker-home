@@ -238,6 +238,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: tokens.spacing._40,
     fontFamily: tokens.fonts.medium,
     fontWeight: "bold",
+    color: tokens.colors.text_primary,
   },
   titlePressable: {
     textAlign: "center",

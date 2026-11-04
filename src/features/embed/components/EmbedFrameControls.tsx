@@ -9,6 +9,11 @@ import { RotateCcw, ChevronLeft } from "lucide-react-native";
 import { useTranslation } from "react-i18next";
 
 import { tokens } from "@shared/theme/tokens";
+import {
+  WEB_EMBED_CONTROL_BG,
+  WEB_EMBED_CONTROL_BORDER,
+  WEB_EMBED_CONTROL_INK,
+} from "@shared/utils/constants";
 import { testProps } from "@shared/utils/testProps";
 
 export interface EmbedFrameControlsProps {
@@ -38,7 +43,7 @@ export function EmbedFrameControls({
         accessibilityRole="button"
         accessibilityLabel={t("embed.frame.a11y.back")}
       >
-        <ChevronLeft size={tokens.iconSize._15} color={tokens.colors.black} />
+        <ChevronLeft size={tokens.iconSize._15} color={WEB_EMBED_CONTROL_INK} />
         <Text style={styles.label}>{t("layout.shared.back")}</Text>
       </Pressable>
       <Pressable
@@ -48,7 +53,7 @@ export function EmbedFrameControls({
         accessibilityRole="button"
         accessibilityLabel={t("embed.frame.a11y.refresh")}
       >
-        <RotateCcw size={tokens.iconSize._15} color={tokens.colors.black} />
+        <RotateCcw size={tokens.iconSize._15} color={WEB_EMBED_CONTROL_INK} />
         <Text style={styles.label}>{t("layout.shared.refresh")}</Text>
       </Pressable>
     </View>
@@ -70,9 +75,9 @@ const styles = StyleSheet.create({
     paddingVertical: tokens.spacing._10,
     paddingHorizontal: tokens.spacing._15,
     borderRadius: tokens.radius.md,
-    backgroundColor: tokens.colors.white,
+    backgroundColor: WEB_EMBED_CONTROL_BG,
     borderWidth: 1,
-    borderColor: tokens.colors.borderColor,
+    borderColor: WEB_EMBED_CONTROL_BORDER,
   },
   pressed: {
     opacity: 0.75,
@@ -80,6 +85,6 @@ const styles = StyleSheet.create({
   label: {
     fontSize: tokens.fontSize.sm,
     fontFamily: tokens.fonts.medium,
-    color: tokens.colors.black,
+    color: WEB_EMBED_CONTROL_INK,
   },
 });

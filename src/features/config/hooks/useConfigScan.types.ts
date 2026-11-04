@@ -5,11 +5,15 @@
  */
 
 import type { ConfigScanPhase } from "@src/types/global";
+import type { UseDeploymentTrustReturn } from "./useDeploymentTrust";
+
+/** Trust dialog state and handlers returned by the native and web scan hooks. */
+type DeploymentTrust = Pick<UseDeploymentTrustReturn, "trustPrompt" | "confirmTrust" | "cancelTrust">;
 
 /**
  * Config-scan lifecycle shared by the web paste/upload flow.
  */
-export interface UseConfigScanBaseReturn {
+export interface UseConfigScanBaseReturn extends DeploymentTrust {
   phase: ConfigScanPhase;
   errorMessage: string;
   showScanner: boolean;
@@ -29,7 +33,7 @@ export interface UseConfigScanBaseReturn {
  * `handleScan` returns whether the payload was accepted so the scanner can
  * freeze and show Scan Again on failure (same pattern as provision ScanQR).
  */
-export interface UseConfigScanReturn {
+export interface UseConfigScanReturn extends DeploymentTrust {
   phase: ConfigScanPhase;
   showScanner: boolean;
   setShowScanner: (show: boolean) => void;

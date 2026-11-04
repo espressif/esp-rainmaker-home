@@ -137,6 +137,12 @@ export const WEB_EMBED_PHONE_BEZEL = 12;
  * Tuned toward modern iPhone continuous corners at the 390×844 glass size.
  */
 export const WEB_EMBED_PHONE_RADIUS = 56;
+export const WEB_EMBED_PAGE_BG = "#ffffff";
+export const WEB_EMBED_CHASSIS_BG = "#1c1c1e";
+export const WEB_EMBED_GLASS_BG = "#ffffff";
+export const WEB_EMBED_CONTROL_BG = "#ffffff";
+export const WEB_EMBED_CONTROL_BORDER = "#d1d1d6";
+export const WEB_EMBED_CONTROL_INK = "#1c1c1e";
 /** Dynamic Island / notch pill width (fixed design px) */
 export const WEB_EMBED_PHONE_ISLAND_WIDTH = 120;
 /** Dynamic Island / notch pill height (fixed design px) */
@@ -843,6 +849,43 @@ export const MATTER_STATUS_ISSUING_CERTIFICATE = "Issuing user certificate...";
 
 // Config Scan constants
 export const CONFIG_FETCH_TIMEOUT_MS = 10000;
+
+// APP BRAND
+/** File name of the saved brand.json in the app's documents directory. */
+export const BRAND_FILE_NAME = "brand.json";
+/** Documents-directory folder holding one subfolder of downloaded images per brand checksum. */
+export const BRAND_IMAGES_DIR = "brand";
+/** Brand `schemaVersion`s this app draws; a brand with any other version is not applied. */
+export const SUPPORTED_BRAND_SCHEMA_VERSIONS: readonly number[] = [1];
+/** Largest brand.json the app accepts, in bytes. */
+export const BRAND_JSON_MAX_BYTES = 32 * 1024;
+/** Theme names a brand can list in `config.supportedThemes`. */
+export const BRAND_THEME_LIGHT = "light";
+export const BRAND_THEME_DARK = "dark";
+/** Suffix of a device icon key for the device's online look. */
+export const BRAND_ONLINE_ICON_SUFFIX = "-online";
+/** Image references the app can draw: hosted images and the phone's saved copies of them. */
+export const BRAND_DRAWABLE_IMAGE_PREFIXES: readonly string[] = ["https://", "file://"];
+/** The `brand` parameter of the web page URL, carrying the brand as base64url JSON. */
+export const BRAND_URL_PARAM = "brand";
+/** Largest brand image the app downloads, in bytes. */
+export const BRAND_IMAGE_MAX_BYTES = 2 * 1024 * 1024;
+/** Timeout for each brand image download. */
+export const BRAND_IMAGE_FETCH_TIMEOUT_MS = 30000;
+/** Max brand images downloaded at the same time. */
+export const BRAND_IMAGE_FETCH_CONCURRENCY = 4;
+/** Wait before the single retry of a brand.json fetch that failed on the network. */
+export const BRAND_FETCH_RETRY_MS = 1500;
+/** brand.json HTTP statuses that mean no brand is published; S3 returns 403 for a missing key in an unlistable bucket. */
+export const BRAND_NOT_PUBLISHED_STATUSES: readonly number[] = [403, 404];
+
+// DEPLOYMENT TRUST SHEET
+/** Bottom-sheet height as a fraction of the phone window for the trust prompt. */
+export const DEPLOYMENT_TRUST_SHEET_HEIGHT_RATIO = 0.75;
+/** SDK and brand logo size in the trust sheet (px). */
+export const DEPLOYMENT_TRUST_ICON_SIZE = 75;
+/** Max wait for the deployment logo prefetch; the trust sheet shows no logo if it takes longer. */
+export const BRAND_LOGO_PREFETCH_TIMEOUT_MS = 3000;
 
 // QR Code Scanner constants
 export const QR_CODE_TYPE = "qr";

@@ -10,6 +10,7 @@ import {
   ConfigScanLoadingView,
   ConfigScanSuccessView,
   ConfigScanErrorView,
+  DeploymentTrustDialog,
 } from "@features/config/components";
 import { ConfigScanInputView } from "@features/config/components/ConfigScanInputView.web";
 import { useConfigScan } from "@features/config/hooks/useConfigScan.web";
@@ -33,6 +34,9 @@ export function ConfigScanScreen() {
     handleBackFromScanner,
     savedDeploymentLabel,
     handleContinueWithSaved,
+    trustPrompt,
+    confirmTrust,
+    cancelTrust,
   } = useConfigScan();
 
   if (!showScanner) {
@@ -53,11 +57,18 @@ export function ConfigScanScreen() {
         ? t("config.scan.fetching")
         : t("config.scan.applying");
     return (
-      <ConfigScanLoadingView
-        title={title}
-        message={message}
-        onCancel={handleCancel}
-      />
+      <>
+        <ConfigScanLoadingView
+          title={title}
+          message={message}
+          onCancel={handleCancel}
+        />
+        <DeploymentTrustDialog
+          prompt={trustPrompt}
+          onConfirm={confirmTrust}
+          onCancel={cancelTrust}
+        />
+      </>
     );
   }
 

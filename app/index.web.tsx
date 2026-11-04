@@ -26,6 +26,7 @@ import { getPreAuthRoute } from "@features/landing";
 import { shouldShowWebDesktopEmbedPhone } from "@features/embed/utils/shouldShowWebDesktopEmbedPhone";
 import { WEB_EMBED_ROUTE } from "@shared/utils/constants";
 import { tokens } from "@shared/theme/tokens";
+import { styleQuery } from "@shared/runtimeStyle/config";
 
 /**
  * Root splash / auth gate for web (no native Matter bootstrap import).
@@ -92,7 +93,7 @@ const Index = () => {
   );
 
   if (useDesktopEmbedPhone) {
-    return <Redirect href={WEB_EMBED_ROUTE as never} />;
+    return <Redirect href={`${WEB_EMBED_ROUTE}${styleQuery}` as never} />;
   }
 
   return (

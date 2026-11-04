@@ -9,6 +9,8 @@ import { Image, StyleSheet, Text } from "react-native";
 import Animated, { Easing, FadeInDown } from "react-native-reanimated";
 import { useTranslation } from "react-i18next";
 
+import { resolveLogo } from "@shared/runtimeStyle/assets";
+import { styleConfig } from "@shared/runtimeStyle/config";
 import { tokens } from "@shared/theme/tokens";
 import { testProps } from "@shared/utils/testProps";
 
@@ -21,9 +23,9 @@ const ENTER_OFFSET_Y = 56;
 /**
  * LandingHero
  *
- * Branded hero for the Landing screen. The app logo (which already carries the
- * "ESP RainMaker Home" wordmark) is shown large on the light top of the soft
- * gradient — no backing badge — with a short tagline below. Fades/rises in.
+ * Hero for the Landing screen: the style's logo (or the bundled app logo), the
+ * style's app name when set, and the style's tagline or the default subtitle.
+ * Fades and rises in on mount.
  */
 const LandingHero: React.FC = () => {
   const { t } = useTranslation();
@@ -40,12 +42,17 @@ const LandingHero: React.FC = () => {
     >
       <Image
         {...testProps("image_landing_logo")}
-        source={require("@assets/images/logo.png")}
+        source={resolveLogo(require("@assets/images/logo.png"))}
         style={styles.logo}
         resizeMode="contain"
       />
+      {styleConfig?.brandName ? (
+        <Text {...testProps("text_landing_app_name")} style={styles.appName}>
+          {styleConfig.brandName}
+        </Text>
+      ) : null}
       <Text {...testProps("text_landing_tagline")} style={styles.tagline}>
-        {t("landing.subtitle")}
+        {styleConfig?.brandTagline || t("landing.subtitle")}
       </Text>
     </Animated.View>
   );
@@ -66,6 +73,13 @@ const styles = StyleSheet.create({
     fontFamily: tokens.fonts.regular,
     fontSize: tokens.fontSize.sm,
     color: tokens.colors.text_secondary,
+    textAlign: "center",
+    marginTop: tokens.spacing._5,
+  },
+  appName: {
+    fontFamily: tokens.fonts.medium,
+    fontSize: tokens.fontSize.xl,
+    color: tokens.colors.text_primary,
     textAlign: "center",
     marginTop: tokens.spacing._5,
   },

@@ -34,6 +34,7 @@ import {
 } from "@features/provision/components";
 import { Checkbox } from "react-native-paper";
 import { testProps } from "@shared/utils/testProps";
+import { resolveIllustration } from "@shared/runtimeStyle/assets";
 
 /**
  * WiFi Configuration Screen
@@ -100,7 +101,7 @@ const Wifi = () => {
           >
             <View style={styles.imageContainer} {...testProps("view_wifi")}>
               <Image
-                source={require("@assets/images/wifi.png")}
+                source={resolveIllustration("wifi", require("@assets/images/wifi.png"))}
                 style={styles.networkImage}
                 resizeMode="contain"
                 {...testProps("image_wifi")}

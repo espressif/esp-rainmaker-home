@@ -24,6 +24,7 @@ import {
   isAIAgentFromAdvertisement,
   parseBleManufacturerAdvertisement,
 } from "./bleAdvertisement";
+import { resolveDeviceIcon } from "@shared/runtimeStyle/assets";
 import { mqttTransportUiState } from "@shared/state/mqttTransportUiState";
 import { DEVICE_TYPE_LIST } from "@/config/devices.config";
 import { getFeatures, type FeatureKey } from "@config/features.config";
@@ -58,8 +59,8 @@ export type { BleAdvertisedDeviceKind, ParsedBleManufacturerAdvertisement } from
 
 /**
  * Device images
- */ 
-const deviceImages: Record<string, any> = {
+ */
+const bundledDeviceImages: Record<string, any> = {
   "light-1": require("@assets/images/devices/light-1.png"),
   "light-1-online": require("@assets/images/devices/light-1-online.png"),
   "light-3": require("@assets/images/devices/light-3.png"),
@@ -91,6 +92,16 @@ const deviceImages: Record<string, any> = {
   "matter-controller": require("@assets/images/devices/matter-controller.png"),
   "matter-controller-online": require("@assets/images/devices/matter-controller-online.png"),
 };
+
+// Returns the style's icon for a key when it has one, even for keys with no bundled image.
+const deviceImages: Record<string, any> = new Proxy(bundledDeviceImages, {
+  get(target, key) {
+    if (typeof key !== "string") {
+      return Reflect.get(target, key);
+    }
+    return resolveDeviceIcon(key, target[key]);
+  },
+});
 
 /**
  * Extracts the node type from a node

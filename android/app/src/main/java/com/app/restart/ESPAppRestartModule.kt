@@ -13,15 +13,8 @@ import com.facebook.react.bridge.ReactMethod
 import com.facebook.react.bridge.UiThreadUtil
 
 /**
- * Restarts the app by relaunching it as a brand-new OS process.
- *
- * An in-place JS runtime reload (`ReactHost.reload()`, what
- * expo-react-native-restart performs) keeps the native process alive, so JSI
- * state bound to the destroyed Hermes runtime outlives it. react-native-skia
- * caches `PropNameID`s inside its `JsiHostObject`s; after a reload those
- * dangle and the next Skia property read segfaults the JS thread. Killing and
- * relaunching the process is the only way to guarantee that no stale
- * JSI/native state carries over.
+ * Relaunches the app as a new OS process. JS calls this only when reloading
+ * the JS runtime in place fails.
  */
 class ESPAppRestartModule(private val reactCtx: ReactApplicationContext) :
     ReactContextBaseJavaModule(reactCtx) {
@@ -33,8 +26,7 @@ class ESPAppRestartModule(private val reactCtx: ReactApplicationContext) :
      * recreates the process from scratch.
      *
      * On success the promise never settles — the process is gone first. Every
-     * failure path rejects instead, which is what lets `ESPAppRestartAdapter`
-     * fall back to an in-place runtime reload.
+     * failure path rejects instead, so the JS caller gets the error.
      */
     @ReactMethod
     fun restartApp(promise: Promise) {
@@ -63,9 +55,8 @@ class ESPAppRestartModule(private val reactCtx: ReactApplicationContext) :
                 appCtx.startActivity(Intent.makeRestartActivityTask(component))
                 Runtime.getRuntime().exit(0)
             } catch (t: Throwable) {
-                // Must reject rather than let this escape: an uncaught throw on
-                // the UI thread would crash the app and leave the promise
-                // unsettled, so the JS-side fallback would never run.
+                // Rejects instead of throwing: an uncaught throw on the UI thread
+                // would crash the app and the JS caller would never get the error.
                 promise.reject(ERR_RESTART_FAILED, t)
             }
         }

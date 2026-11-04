@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import Constants from "expo-constants";
 import {
   IMAGE_MIME_TYPE_GIF,
   IMAGE_MIME_TYPE_JPEG,
@@ -26,6 +27,14 @@ export const CLIENT_OUTPUTS_DASHBOARD_KEY = "rmng-admin-dashboard";
 
 /** Field carrying the deployment's dashboard origin inside the stack above. */
 export const CLIENT_OUTPUTS_DASHBOARD_URL_FIELD = "FrontendUrl";
+
+/** Default brand file path, relative to the client-outputs URL. */
+const DEFAULT_CLIENT_OUTPUTS_BRAND_PATH = "brand/brand.json";
+
+/** Brand file path, relative to the client-outputs URL; `BRAND_JSON_PATH` in `.env` overrides the default. */
+export const CLIENT_OUTPUTS_BRAND_PATH: string =
+  (Constants.expoConfig?.extra?.brandJsonPath as string | undefined)?.trim() ||
+  DEFAULT_CLIENT_OUTPUTS_BRAND_PATH;
 
 /** Accepted URL scheme prefixes for Config Scan remote fetch. */
 export const CONFIG_SCAN_URL_SCHEME_HTTP = "http://";
