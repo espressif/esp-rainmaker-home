@@ -8,6 +8,9 @@
 import logging
 import time
 
+from selenium.common.exceptions import NoSuchElementException, StaleElementReferenceException, TimeoutException
+from selenium.webdriver.support.ui import WebDriverWait
+
 from .base import BasePage
 
 logger = logging.getLogger(__name__)
@@ -22,9 +25,13 @@ class HomeManagement(BasePage):
         return home
 
     def open_home_management(self):
-        """Home -> banner dropdown -> Home Management."""
+        """Home -> banner dropdown -> Home Management; the dropdown ignores taps while the home name skeleton is up, so re-tap until the menu opens."""
         self.go_home_ready()
-        self.click("home_banner_dropdown", timeout=5)
+        for _ in range(4):
+            self.click("home_banner_dropdown", timeout=5)
+            if self.is_visible("home_management_option", timeout=3):
+                break
+            self._clear_blocking_system_alert()
         self.click("home_management_option", timeout=5)
         return self
 
@@ -68,18 +75,24 @@ class HomeManagement(BasePage):
             time.sleep(1)
 
     def rename_home(self, new_name):
-        """Rename the home from its Settings screen; the app saves on blur/submit, so commit explicitly and confirm the name persisted."""
+        """Rename the home from its Settings screen; the app saves on blur/submit and redraws the field, so every read finds the field again before checking the saved name."""
         self.click("edit_home_name_button", timeout=5)
         self.send_keys("home_name_input", new_name, clear_first=True, timeout=5)
         self.commit_text_input("home_name_input")
-        deadline = time.time() + 10
-        current = ""
-        while time.time() < deadline:
-            current = (self.get_text("home_name_input", timeout=2) or "").strip()
-            if current == new_name:
-                return self
-            time.sleep(1)
-        raise AssertionError(f"Home rename did not persist: field shows '{current}', wanted '{new_name}'")
+        by, locator_value = self._resolve_locator("home_name_input")
+        shown = ""
+
+        def _name_saved(driver):
+            nonlocal shown
+            shown = (driver.find_element(by, locator_value).text or "").strip()
+            return shown == new_name
+
+        try:
+            WebDriverWait(self.driver, 10, poll_frequency=1,
+                          ignored_exceptions=(StaleElementReferenceException, NoSuchElementException)).until(_name_saved)
+        except TimeoutException:
+            raise AssertionError(f"Home rename did not persist: field shows '{shown}', wanted '{new_name}'")
+        return self
 
     def assert_leave_home_available(self):
         assert self.is_visible("leave_home_button", timeout=5), "Leave Home option is not available for a secondary user"

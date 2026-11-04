@@ -6,9 +6,11 @@
 """Firmware flashing and hard-reset orchestration using esptool."""
 from __future__ import annotations
 
+import hashlib
 import logging
 import os
 import subprocess
+import time
 from typing import List
 
 from hardware.config import HardwareConfig
@@ -64,6 +66,7 @@ BAUD_RATE = 921600
 _FLASH_TIMEOUT_SECONDS = 45
 # The nvs erase is quick; 20s (with a retry) covers a slow-to-enter-download board.
 _HARD_RESET_TIMEOUT_SECONDS = 20
+_RESERVATION_EVENTS = ("reserved", "reserved_mac")
 
 
 class FlashingService:
@@ -73,13 +76,17 @@ class FlashingService:
         self,
         esptool_path: str = "python -m esptool",
         config: HardwareConfig | None = None,
+        store=None,
     ):
         self.esptool_path = esptool_path
         self.config = config or HardwareConfig.load()
+        self.store = store
         # last-written image signature per MAC; a repeat same-firmware request skips the ~30s write.
         self._flashed_sig: dict = {}
         # last-flashed (nvs_offset, nvs_size) per MAC so a later imageless hard_reset erases the right offset.
         self._nvs_region: dict = {}
+        self._flash_mark: dict = {}
+        self._digests: dict = {}
 
     @staticmethod
     def _image_signature(image: FirmwareImage) -> str:
@@ -101,14 +108,21 @@ class FlashingService:
         @param firmware_image - Resolved binaries and esptool arguments
         """
         signature = self._image_signature(firmware_image)
+        digest = self._image_digest(firmware_image, signature)
         self._nvs_region[resource.mac_address] = _nvs_region_for_image(firmware_image)
-        if self._flashed_sig.get(resource.mac_address) == signature:
+        same_image = self._flashed_sig.get(resource.mac_address) == signature
+        changed = self.changed_since_flash(resource.mac_address, digest) if same_image else ""
+        if same_image and not changed:
             # Same app image already on the device this session; skip the ~30s write.
             logger.info(
                 "Skipping re-flash of %s: same image this session",
                 resource.mac_address,
             )
+            self._record(resource.mac_address, "flash-kept", digest)
         else:
+            if changed:
+                logger.info("Re-flashing %s: %s", resource.mac_address, changed)
+            self._flashed_sig.pop(resource.mac_address, None)
             command = self._build_write_flash_command(resource.port, firmware_image, BAUD_RATE)
             logger.info("Flashing %s on %s: %s", resource.chip_type, resource.port, command)
             # esptool occasionally fails mid-write on a contended USB bus ("Checksum
@@ -136,11 +150,71 @@ class FlashingService:
                     f"Flash failed for {resource.mac_address}: {output[-2000:]}"
                 )
             self._flashed_sig[resource.mac_address] = signature
+            self._flash_mark[resource.mac_address] = (time.time(), 0)
+            self._record(resource.mac_address, "flashed", digest)
             logger.info("Flash completed for %s", resource.mac_address)
+
+    def _image_digest(self, image: FirmwareImage, signature: str) -> str:
+        """Content hash of the image (segment offsets and bytes), so sessions running from different checkouts recognise the same firmware."""
+        if signature not in self._digests:
+            digest = hashlib.sha256()
+            try:
+                for segment in sorted(image.segments, key=lambda item: item.offset):
+                    digest.update(f"{segment.offset}:".encode())
+                    with open(segment.path, "rb") as handle:
+                        for chunk in iter(lambda: handle.read(1 << 20), b""):
+                            digest.update(chunk)
+                self._digests[signature] = digest.hexdigest()[:16]
+            except OSError:
+                self._digests[signature] = signature
+        return self._digests[signature]
+
+    def _record(self, mac_address: str, event: str, digest: str) -> None:
+        if self.store is not None:
+            self.store.record_event(mac_address, event, digest)
+
+    def note_release(self, mac_address: str, released_at: float) -> None:
+        """Move the mark past this session's own release of a chip whose image it knows, so only the reservation it makes next counts as its own."""
+        if mac_address in self._flash_mark:
+            self._flash_mark[mac_address] = (released_at, 1)
+
+    def note_external_flash(self, mac_address: str, digest: str) -> None:
+        """An image written outside this service (the Matter fixture's own esptool): the generic cache forgets the chip and the shared log learns what is on it."""
+        self._flashed_sig.pop(mac_address, None)
+        self._flash_mark[mac_address] = (time.time(), 0)
+        self._record(mac_address, "flashed", digest)
+
+    def changed_since_flash(self, mac_address: str, digest: str) -> str:
+        """Why the chip may no longer hold `digest` since this session wrote or last released it, '' when it still does. Another session's hold changes it when it started a flash or reserved by MAC (writes its own image) without recording this same image afterwards; holds that never flashed leave it alone."""
+        mark = self._flash_mark.get(mac_address)
+        if self.store is None or mark is None:
+            return ""
+        since, own_reservations = mark
+        events = self.store.events_since(mac_address, since)
+        starts = [index for index, event in enumerate(events) if event["event"] in _RESERVATION_EVENTS]
+        if not own_reservations:
+            return "another session reserved it while this session held it" if starts else ""
+        if not starts:
+            return "this session's own reservation is missing from the lock log"
+        image, holder, cause = digest, "", ""
+        for event in events[:starts[-1]]:
+            kind, details = event["event"], event["details"] or ""
+            at = time.strftime("%H:%M:%S", time.localtime(event["created_at"]))
+            if kind in _RESERVATION_EVENTS:
+                holder = details or "another session"
+                if kind == "reserved_mac":
+                    image, cause = None, f"{holder} reserved it by MAC at {at} and writes its own image"
+            elif kind == "status:flashing":
+                image, cause = None, f"{holder} started a flash at {at} without recording which image"
+            elif kind in ("flashed", "flash-kept"):
+                image = details
+                cause = "" if details == digest else f"{holder} left other firmware on it at {at}"
+        return "" if image == digest else cause
 
     def invalidate_flash_cache(self, mac_address: str) -> None:
         """Forget the last-flashed image for a chip that was flashed outside this service (e.g. the Matter fixture's own esptool call), so the next request writes instead of skipping."""
         self._flashed_sig.pop(mac_address, None)
+        self._flash_mark.pop(mac_address, None)
 
     def last_flash_signature(self, mac_address: str) -> "str | None":
         return self._flashed_sig.get(mac_address)

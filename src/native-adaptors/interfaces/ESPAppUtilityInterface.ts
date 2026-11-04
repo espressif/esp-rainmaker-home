@@ -38,6 +38,15 @@ interface ESPAppUtilityInterface {
    * non-CN builds).
    */
   acceptCnConsent(): Promise<boolean>;
+
+  /**
+   * iOS only: asks for time to finish work if the app goes to the background.
+   * @returns Id to pass to endBackgroundTask.
+   */
+  beginBackgroundTask?(name: string): Promise<number>;
+
+  /** iOS only: gives the background time back. */
+  endBackgroundTask?(taskId: number): void;
 }
 
 const { ESPAppUtilityModule } = NativeModules;

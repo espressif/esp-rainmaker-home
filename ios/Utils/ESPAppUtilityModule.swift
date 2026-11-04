@@ -6,6 +6,7 @@
 
 import Foundation
 import React
+import UIKit
 import CoreBluetooth
 import CoreLocation
 
@@ -156,5 +157,37 @@ class ESPAppUtilityModule: NSObject, RCTBridgeModule, CBCentralManagerDelegate {
     }
     resolve(true)
   }
+  /// Background time held for JS, by the id handed back to it.
+  private var backgroundTasks: [Int: UIBackgroundTaskIdentifier] = [:]
+  private var nextBackgroundTaskId = 1
+
+  /**
+   * Asks iOS for time to finish work if the user leaves the app, so a cloud
+   * call in flight is not cut off when the app is suspended. iOS may take the
+   * time back early; the task then ends by itself.
+   */
+  @objc(beginBackgroundTask:resolver:rejecter:)
+  func beginBackgroundTask(_ name: String,
+                           resolver resolve: @escaping RCTPromiseResolveBlock,
+                           rejecter reject: @escaping RCTPromiseRejectBlock) {
+    DispatchQueue.main.async {
+      let id = self.nextBackgroundTaskId
+      self.nextBackgroundTaskId += 1
+      self.backgroundTasks[id] = UIApplication.shared.beginBackgroundTask(withName: name) { [weak self] in
+        self?.finishBackgroundTask(id)
+      }
+      resolve(id)
+    }
+  }
+
+  @objc(endBackgroundTask:)
+  func endBackgroundTask(_ id: NSNumber) {
+    DispatchQueue.main.async { self.finishBackgroundTask(id.intValue) }
+  }
+
+  /// Main queue only.
+  private func finishBackgroundTask(_ id: Int) {
+    guard let task = backgroundTasks.removeValue(forKey: id), task != .invalid else { return }
+    UIApplication.shared.endBackgroundTask(task)
+  }
 }
- 

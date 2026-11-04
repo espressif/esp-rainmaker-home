@@ -92,6 +92,7 @@ export async function runScheduleOpsForEachNode(
       await run(nodeId);
       results.push({ node_id: nodeId, status: SUCESS });
     } catch (err) {
+      console.warn(`[rmneoSchedule] operation failed for node ${nodeId}:`, err);
       results.push({
         node_id: nodeId,
         status: err instanceof Error ? err.message : HEADLESS_ERROR_UNKNOWN,

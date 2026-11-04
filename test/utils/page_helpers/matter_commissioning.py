@@ -41,9 +41,10 @@ class MatterCommissioning(BasePage):
             raise
 
     def _complete_gps_half_sheet(self, timeout=240, max_retries=2):
-        """Drive the Google Play services half-sheet to a commissioned device; cap 'Try again' retries and surface the on-screen error on give-up."""
+        """Drive the Google Play services half-sheet to a commissioned device; accept the 'Uncertified device' warning the test VID/PID firmware gets (as iOS does with 'Add Anyway'), cap 'Try again' retries and surface the on-screen text on give-up."""
         deadline = time.time() + timeout
         retries = 0
+        overrides = 0
         while time.time() < deadline:
             if self.is_visible("gps_device_connected_text", timeout=2):
                 logger.info("Matter device connected; finishing Google Play services flow")
@@ -52,6 +53,12 @@ class MatterCommissioning(BasePage):
             if self.is_visible("gps_ready_button", timeout=2):
                 logger.info("Google Play services setup ready; starting discovery")
                 self.click("gps_ready_button", timeout=5)
+            elif self.is_visible("gps_uncertified_device_dialog", timeout=2):
+                if overrides >= max_retries:
+                    break
+                overrides += 1
+                logger.info("Google Play services flagged the test firmware as an uncertified device; Set up anyway %s/%s", overrides, max_retries)
+                self.click("gps_set_up_anyway_button", timeout=5)
             elif self.is_visible("gps_try_again_button", timeout=2):
                 if retries >= max_retries:
                     break
@@ -59,5 +66,5 @@ class MatterCommissioning(BasePage):
                 logger.info("Discovery not ready; retry %s/%s", retries, max_retries)
                 self.click("gps_try_again_button", timeout=5)
             time.sleep(2)
-        err = self.get_text("app_commissioning_error", timeout=2) or self.get_text("app_commissioning_status", timeout=2) or "no on-screen error"
-        raise RuntimeError(f"Matter commissioning did not reach 'Device connected' (app: {err})")
+        shown = next((element.text for element in (self.find_visible(name, timeout=2) for name in ("app_commissioning_error", "app_commissioning_status", "gps_sheet_title")) if element is not None and element.text), "no on-screen text")
+        raise RuntimeError(f"Matter commissioning did not reach 'Device connected' (screen: {shown})")

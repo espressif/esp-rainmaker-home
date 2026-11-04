@@ -8,6 +8,8 @@ Add To Room Page Helper
 """
 import logging
 
+from selenium.common.exceptions import NoSuchElementException
+
 from .base import BasePage
 
 logger = logging.getLogger(__name__)
@@ -58,7 +60,10 @@ class AddToRoom(BasePage):
         return True
 
     def skip(self):
-        """Skip the add to room screen."""
-        self.click("skip_button")
+        """Skip the add to room screen once it has finished sliding in; iOS drops a tap made during the push transition."""
+        button = self.find_settled("skip_button", timeout=10)
+        if button is None:
+            raise NoSuchElementException("Skip did not settle on the add to room screen within 10s")
+        button.click()
         logger.info("Add to room skipped")
         return self

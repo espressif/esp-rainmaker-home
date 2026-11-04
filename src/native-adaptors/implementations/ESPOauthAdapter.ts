@@ -16,18 +16,23 @@ import ESPOauthModule from "../interfaces/ESPOauthInterface";
  * - No dependency on React Native's Linking API
  */
 export class ESPOauthAdapter {
-  /** True once the current attempt's authorization code has been received. */
-  private authCodeReceived = false;
+  /** True while `getOauthCode` waits for the browser redirect. */
+  private waitingForBrowser = false;
 
   /**
-   * Whether the in-flight OAuth attempt has already received its authorization
-   * code from the browser redirect — i.e. the browser leg is complete and only
-   * the token exchange remains. Used by the login flow's browser-abandon
-   * watchdog to avoid cancelling an attempt that is past the browser phase.
-   * Reset at the start of each `getOauthCode` call.
+   * Whether the browser is open and no redirect has come back yet.
+   * @returns True while `getOauthCode` is waiting.
    */
-  hasReceivedAuthCode(): boolean {
-    return this.authCodeReceived;
+  isWaitingForBrowser(): boolean {
+    return this.waitingForBrowser;
+  }
+
+  /**
+   * Clears the wait for a request that was given up. The native module keeps
+   * only the newest request, so the old promise may never settle.
+   */
+  stopWaitingForBrowser(): void {
+    this.waitingForBrowser = false;
   }
 
   /**
@@ -41,16 +46,14 @@ export class ESPOauthAdapter {
    * @throws Error if the OAuth flow fails or times out
    */
   async getOauthCode(requestURL: string): Promise<string> {
-    this.authCodeReceived = false;
+    this.waitingForBrowser = true;
     try {
       // Call the native module which handles everything:
       // 1. Opens the URL in browser
       // 2. Waits for deep link redirect
       // 3. Extracts auth code from redirect
       // 4. Returns the auth code or throws error
-      const authCode = await ESPOauthModule.getOauthCode(requestURL);
-      this.authCodeReceived = true;
-      return authCode;
+      return await ESPOauthModule.getOauthCode(requestURL);
     } catch (error) {
       console.error("OAuth flow failed:", error);
 
@@ -60,6 +63,8 @@ export class ESPOauthAdapter {
       } else {
         throw new Error(`OAuth flow failed: ${String(error)}`);
       }
+    } finally {
+      this.waitingForBrowser = false;
     }
   }
 }

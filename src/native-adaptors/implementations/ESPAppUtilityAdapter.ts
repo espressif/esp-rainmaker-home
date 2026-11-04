@@ -82,6 +82,32 @@ export const ESPAppUtilityAdapter = {
       console.error("ESPAppUtilityAdapter: Error accepting consent:", error);
       return false;
     }
+  },
+
+  /**
+   * Runs work while holding iOS background time, so a cloud call in flight
+   * finishes even if the user leaves the app. Elsewhere it just runs the work.
+   * @param name - Label for the background task.
+   * @param work - The work to run.
+   * @returns The work's result.
+   */
+  async runWithBackgroundTime<T>(name: string, work: () => Promise<T>): Promise<T> {
+    if (!ESPAppUtilityModule?.beginBackgroundTask) {
+      return work();
+    }
+    let taskId: number | null = null;
+    try {
+      taskId = await ESPAppUtilityModule.beginBackgroundTask(name);
+    } catch (error) {
+      console.warn("ESPAppUtilityAdapter: background time not granted:", error);
+    }
+    try {
+      return await work();
+    } finally {
+      if (taskId !== null) {
+        ESPAppUtilityModule.endBackgroundTask?.(taskId);
+      }
+    }
   }
 };
 

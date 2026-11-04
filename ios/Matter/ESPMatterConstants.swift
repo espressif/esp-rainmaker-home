@@ -224,7 +224,11 @@ struct ESPMatterConstants {
     static var ecosystemName: String {
         return Bundle.configValue(for: "MATTER_ECOSYSTEM_NAME")
     }
-    
+    /// Extra searches for the device after the first 30 s search finds nothing.
+    static let deviceSearchRetries = 1
+    /// Pause before searching again, so the stack has closed the last search.
+    static let deviceSearchRetryDelay: TimeInterval = 1
+
     // MARK: - Post Message Types
     static let issueNodeNocResponse = "ISSUE_NODE_NOC_RESPONSE"
     static let commissioningConfirmationResponse = "COMMISSIONING_CONFIRMATION_RESPONSE"

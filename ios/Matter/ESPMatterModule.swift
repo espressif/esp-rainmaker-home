@@ -94,6 +94,14 @@ class ESPMatterModule: RCTEventEmitter {
   /// create the operation themselves with the nonce already in the parameters.
   private var currentCommissioningOperation: AnyObject?
 
+  /// Payload and searches left for finding the device again when a search times out
+  /// before the device has answered. The pairing window stays open for minutes, so a
+  /// second search is still in time, and nothing on the device is half set up yet.
+  private var currentOnboardingPayload: String?
+  private var searchRetriesLeft = 0
+  private var isSearchRetryPending = false
+  private var didReachDevice = false
+
   // RainMaker device properties
   private var rainmakerNodeId: String?
   private var isRainMakerDevice: Bool = false
@@ -590,6 +598,10 @@ extension ESPMatterModule {
     currentCsrNonce = nil
     currentNOCCompletion = nil
     currentCommissioningOperation = nil
+    currentOnboardingPayload = nil
+    searchRetriesLeft = 0
+    isSearchRetryPending = false
+    didReachDevice = false
     rainmakerNodeId = nil
     isRainMakerDevice = false
     didFireCommissioningOutcome = false
@@ -708,8 +720,49 @@ extension ESPMatterModule {
     try initializeMatterControllerWithFabric(fabric)
 
     // Start commissioning with user NOC
+    currentOnboardingPayload = qrData
+    searchRetriesLeft = ESPMatterConstants.deviceSearchRetries
     try startMatterCommissioningWithUserNOC(qrData: qrData)
 
+  }
+
+  /// Searches for the device once more when the last search timed out before the
+  /// device answered. Also swallows the second report of a failure that is already
+  /// being retried (one failure can reach both delegates).
+  ///
+  /// - Parameter error: The failure a commissioning delegate reported.
+  /// - Returns: True when the caller must not report the failure.
+  private func handledBySearchRetry(_ error: Error) -> Bool {
+    if isSearchRetryPending {
+      return true
+    }
+    let nsError = error as NSError
+    guard nsError.domain == MTRError.errorDomain,
+          nsError.code == MTRError.Code.timeout.rawValue,
+          !didReachDevice, !didFireCommissioningOutcome, searchRetriesLeft > 0,
+          let qrData = currentOnboardingPayload else {
+      return false
+    }
+    searchRetriesLeft -= 1
+    isSearchRetryPending = true
+    let sessionId = commissioningSessionId
+    print("[MatterCommission] iOS: device not found in time, searching once more")
+    matterQueue.asyncAfter(deadline: .now() + ESPMatterConstants.deviceSearchRetryDelay) { [weak self] in
+      guard let self, self.commissioningSessionId == sessionId else { return }
+      self.isSearchRetryPending = false
+      do {
+        try self.startMatterCommissioningWithUserNOC(qrData: qrData)
+      } catch {
+        let msg = String(format: ESPMatterConstants.failedToSetupSession, error.localizedDescription)
+        DispatchQueue.main.async {
+          guard self.commissioningSessionId == sessionId else { return }
+          self.emitCommissioningErrorToReactNative(message: msg)
+          self.rejectCommissioningStart(ESPMatterConstants.commissioningFailed, msg, error)
+          self.clearCommissioningSessionState()
+        }
+      }
+    }
+    return true
   }
 
   /// Starts commissioning on the legacy `setupCommissioningSession` path, where the
@@ -2088,8 +2141,9 @@ extension ESPMatterModule: MTRDeviceControllerDelegate {
   func controller(_ controller: MTRDeviceController, commissioningComplete error: Error?) {
 
     guard error == nil else {
-      guard claimCommissioningOutcome() else { return }
       let err = error!
+      if handledBySearchRetry(err) { return }
+      guard claimCommissioningOutcome() else { return }
       let failureEvent: [String: Any] = [
         ESPMatterConstants.eventType: ESPMatterConstants.commissioningComplete,
         ESPMatterConstants.success: false,
@@ -2112,6 +2166,7 @@ extension ESPMatterModule: MTRDeviceControllerDelegate {
 
   func controller(_ : MTRDeviceController, commissioningSessionEstablishmentDone error: Error?) {
     if let error = error {
+      if handledBySearchRetry(error) { return }
       let msg = String(format: ESPMatterConstants.failedToSetupSession, error.localizedDescription)
       DispatchQueue.main.async {
         self.emitCommissioningErrorToReactNative(message: msg)
@@ -2121,6 +2176,7 @@ extension ESPMatterModule: MTRDeviceControllerDelegate {
       shutdownMatterController()
       return
     }
+    didReachDevice = true
     if let deviceId = currentDeviceId {
       let params = makeCommissioningParameters()
       if let controller = currentMatterController {
@@ -2150,6 +2206,7 @@ extension ESPMatterModule: MTRCommissioningDelegate {
                      completion: @escaping () -> Void) {
     // Parity with the legacy path's attestation delegate: proceed regardless of the
     // attestation outcome (uncertified ESP dev boards must commission).
+    didReachDevice = true
     completion()
   }
 
@@ -2173,6 +2230,7 @@ extension ESPMatterModule: MTRCommissioningDelegate {
                      failedWithError error: Error,
                      metrics: MTRMetrics) {
     currentCommissioningOperation = nil
+    if handledBySearchRetry(error) { return }
     guard claimCommissioningOutcome() else { return }
     let failureEvent: [String: Any] = [
       ESPMatterConstants.eventType: ESPMatterConstants.commissioningComplete,

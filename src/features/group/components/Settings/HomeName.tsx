@@ -86,6 +86,7 @@ const HomeName: React.FC<HomeNameProps> = ({
           value={homeName}
           onFieldChange={(value: string) => setHomeName(value)}
           validator={homeNameValidator}
+          // Done also blurs the field, so blur is the one save trigger.
           onBlur={handleSaveHomeName}
           validateOnBlur={true}
           placeholder={t("group.homeManagement.homeNamePlaceholder")}
@@ -94,11 +95,6 @@ const HomeName: React.FC<HomeNameProps> = ({
           marginBottom={false}
           editable={!disabled}
           returnKeyType="done"
-          onSubmitEditing={() => {
-            if (homeName?.trim() && !disabled && !isSaving) {
-              handleSaveHomeName();
-            }
-          }}
         />
         <View style={[globalStyles.editIcon]}>
           {isSaving ? (

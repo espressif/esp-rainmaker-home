@@ -12,9 +12,10 @@ import time
 import base64
 import logging
 import shutil
+import signal
 import subprocess
 import tempfile
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 from hardware.artifacts import TestArtifactDir, timestamped_test_folder_name
@@ -38,6 +39,7 @@ class DebugHelper:
         self.use_artifact_host = use_artifact_host and ARTIFACT_HOST_AVAILABLE
         self._artifact_host = artifact_host
         self._attached_crash_reports = set()
+        self._ios_syslog_checked_udids = set()
         self._recording_started = {}
         self._session_start = time.time()
         if self.use_artifact_host and not self._artifact_host:
@@ -227,15 +229,18 @@ class DebugHelper:
 
             package = driver.capabilities.get('appPackage', 'com.espressif.novahome')
 
-            # Try app-filtered logs first: get PID and filter by --pid
+            # App logs since the test started, by app uid: --pid misses an app
+            # process that restarted during the test.
             content = ""
-            pid = None
             try:
-                pid_cmd = adb_prefix + ['shell', 'pidof', '-s', package]
-                pid_result = subprocess.run(pid_cmd, capture_output=True, text=True, timeout=5)
-                pid = (pid_result.stdout or '').strip() if pid_result.returncode == 0 else None
-                if pid:
-                    logcat_cmd = adb_prefix + ['logcat', '-d', '--pid', pid]
+                # A minute early: the phone's clock can differ a little from this host's.
+                started = datetime.strptime(artifact_dir.root.name[:15], "%Y%m%d_%H%M%S") - timedelta(seconds=60)
+                uid_out = subprocess.run(adb_prefix + ['shell', 'cmd', 'package', 'list', 'packages', '-U', package],
+                                         capture_output=True, text=True, timeout=10).stdout or ''
+                uid = re.search(rf'package:{re.escape(package)} uid:(\d+)', uid_out)
+                if uid:
+                    logcat_cmd = adb_prefix + ['logcat', '-d', '-v', 'threadtime', '--uid', uid.group(1),
+                                               '-T', started.strftime("%m-%d %H:%M:%S.000")]
                     result = subprocess.run(logcat_cmd, capture_output=True, text=True, timeout=30)
                     content = result.stdout or ''
             except Exception:
@@ -273,9 +278,10 @@ class DebugHelper:
                 return None
             udid = driver.capabilities.get('udid')
             process = getattr(driver, '_test_info', {}).get('capabilities', {}).get('iosLogProcess', 'APP')
+            self._stop_orphan_ios_syslog(udid)
             log_file = open(artifact_dir.ios_syslog_log(), 'w', encoding='utf-8')
             try:
-                cmd = ['idevicesyslog'] + (['-u', udid] if udid else []) + ['-p', process]
+                cmd = ['idevicesyslog', '--exit'] + (['-u', udid] if udid else []) + ['-p', process]
                 proc = subprocess.Popen(cmd, stdout=log_file, stderr=subprocess.STDOUT)
             except Exception:
                 log_file.close()
@@ -284,6 +290,22 @@ class DebugHelper:
         except Exception as e:
             logger.warning("Failed to start iOS syslog stream: %s", e)
             return None
+
+    def _stop_orphan_ios_syslog(self, udid) -> None:
+        """Once per session, stop syslog readers a killed run left attached to this phone:
+        they reconnect after every reboot and the phone's input synthesis slows down until taps and typing fail."""
+        if not udid or udid in self._ios_syslog_checked_udids:
+            return
+        self._ios_syslog_checked_udids.add(udid)
+        try:
+            listed = subprocess.run(['pgrep', '-f', f'idevicesyslog .*-u {udid}'], capture_output=True, text=True, timeout=5)
+            for pid in listed.stdout.split():
+                parent = subprocess.run(['ps', '-o', 'ppid=', '-p', pid], capture_output=True, text=True, timeout=5)
+                if parent.stdout.strip() == '1':
+                    os.kill(int(pid), signal.SIGTERM)
+                    logger.warning("Stopped orphan idevicesyslog %s attached to %s", pid, udid)
+        except Exception as e:
+            logger.warning("Orphan iOS syslog check failed: %s", e)
 
     def stop_ios_syslog(self, handle) -> None:
         """Stop an iOS syslog stream started by start_ios_syslog and flush its file."""

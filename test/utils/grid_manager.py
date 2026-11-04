@@ -162,14 +162,13 @@ class AppiumGridManager:
             "updatedWDABundleId": rainmaker_home_config.get("updated_wda_bundle_id"),
             "shouldTerminateApp": True,
             "includeSafariInWebviews": True,
-            "wdaEventloopIdleDelay": 1,
             "newCommandTimeout": 0,
             "useNewWDA": False,
             "wdaStartupRetries": 3,
             "wdaStartupRetryInterval": 10000,
             "clearSystemFiles": True,
             "skipLogCapture": False,
-            "waitForIdleTimeout": 0,
+            "waitForIdleTimeout": 2,
             "reduceMotion": True,
             "maxTypingFrequency": 10
         }

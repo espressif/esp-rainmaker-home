@@ -26,5 +26,17 @@
   "gps_device_connected_text": {
     "by": "android_uiautomator",
     "value": "new UiSelector().textContains(\"Device connected\")"
+  },
+  "gps_uncertified_device_dialog": {
+    "by": "id",
+    "value": "com.google.android.gms.optional_home:id/commissioning_error_device_attestation"
+  },
+  "gps_set_up_anyway_button": {
+    "by": "id",
+    "value": "com.google.android.gms.optional_home:id/common_retry"
+  },
+  "gps_sheet_title": {
+    "by": "id",
+    "value": "com.google.android.gms.optional_home:id/title"
   }
 }

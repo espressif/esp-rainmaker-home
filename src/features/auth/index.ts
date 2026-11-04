@@ -12,5 +12,6 @@ export {
   useConfirmationCode,
   useResetPassword,
   useChangePassword,
+  useSessionEndedRedirect,
   type PipelineProgress,
 } from "./hooks";
