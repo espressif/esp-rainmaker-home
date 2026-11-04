@@ -11,6 +11,8 @@ import { initReactI18next } from "react-i18next";
 
 import en from "./locales/en.json";
 import zh from "./locales/zh.json";
+import { styleConfig } from "./src/shared/runtimeStyle/config";
+import { glossaryVariables } from "./src/shared/runtimeStyle/glossary";
 import {
   LANGUAGE_CODE_SYSTEM,
   LANGUAGE_DEFAULT,
@@ -50,6 +52,19 @@ const getDeviceLanguage = (): SupportedLanguageCode => {
 
 const deviceLanguage = getDeviceLanguage();
 
+/**
+ * Sets i18next `defaultVariables` from the style glossary so placeholders
+ * such as `{{device}}` and `{{roomLower}}` resolve in every `t()` call.
+ * @param overrides - Style `config.glossary`, if any
+ */
+export const applyStyleGlossary = (
+  overrides?: Partial<Record<string, string>>,
+): void => {
+  const interpolation = i18n.options.interpolation;
+  if (!interpolation || typeof interpolation === "function") return;
+  interpolation.defaultVariables = glossaryVariables(overrides);
+};
+
 i18n.use(initReactI18next).init({
   resources: {
     en: { translation: en },
@@ -60,6 +75,7 @@ i18n.use(initReactI18next).init({
   supportedLngs: [...SUPPORTED_LANGUAGE_CODES],
   interpolation: {
     escapeValue: false,
+    defaultVariables: glossaryVariables(styleConfig?.glossary),
   },
 });
 

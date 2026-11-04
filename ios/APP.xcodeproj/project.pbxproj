@@ -36,6 +36,8 @@
 		F15D5FEE2E559899005F3B57 /* ESPSoftAPModule.swift in Sources */ = {isa = PBXBuildFile; fileRef = F15D5FEB2E559899005F3B57 /* ESPSoftAPModule.swift */; };
 		F18184B92E4B1C33002C7B0A /* ESPAppUtilityModule.m in Sources */ = {isa = PBXBuildFile; fileRef = F18184B52E4B1C33002C7B0A /* ESPAppUtilityModule.m */; };
 		F18184BB2E4B1C33002C7B0A /* ESPAppUtilityModule.swift in Sources */ = {isa = PBXBuildFile; fileRef = F18184B62E4B1C33002C7B0A /* ESPAppUtilityModule.swift */; };
+		F9A01A012F8302B4004B8801 /* ESPAppRestartModule.m in Sources */ = {isa = PBXBuildFile; fileRef = F9A01A032F8302B4004B8801 /* ESPAppRestartModule.m */; };
+		F9A01A022F8302B4004B8801 /* ESPAppRestartModule.swift in Sources */ = {isa = PBXBuildFile; fileRef = F9A01A042F8302B4004B8801 /* ESPAppRestartModule.swift */; };
 		F18184BC2E4B1C34002C7B0A /* ESPPermissionUtils.swift in Sources */ = {isa = PBXBuildFile; fileRef = F18184B72E4B1C34002C7B0A /* ESPPermissionUtils.swift */; };
 		F1A40E242EBC9E3A008A590D /* ESPMatterConstants.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1A40E1F2EBC9E3A008A590D /* ESPMatterConstants.swift */; };
 		F1A40E262EBC9E3A008A590D /* ESPMatterUtilityModule.m in Sources */ = {isa = PBXBuildFile; fileRef = F1A40E222EBC9E3A008A590D /* ESPMatterUtilityModule.m */; };
@@ -139,6 +141,8 @@
 		F18184B52E4B1C33002C7B0A /* ESPAppUtilityModule.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = ESPAppUtilityModule.m; sourceTree = "<group>"; };
 		F18184B62E4B1C33002C7B0A /* ESPAppUtilityModule.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ESPAppUtilityModule.swift; sourceTree = "<group>"; };
 		F18184B72E4B1C34002C7B0A /* ESPPermissionUtils.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ESPPermissionUtils.swift; sourceTree = "<group>"; };
+		F9A01A032F8302B4004B8801 /* ESPAppRestartModule.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = ESPAppRestartModule.m; sourceTree = "<group>"; };
+		F9A01A042F8302B4004B8801 /* ESPAppRestartModule.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ESPAppRestartModule.swift; sourceTree = "<group>"; };
 		F1A40E1E2EBC9E3A008A590D /* ESPLocalStorage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ESPLocalStorage.swift; sourceTree = "<group>"; };
 		F1A40E1F2EBC9E3A008A590D /* ESPMatterConstants.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ESPMatterConstants.swift; sourceTree = "<group>"; };
 		F1A40E212EBC9E3A008A590D /* ESPMatterEcosystemInfo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ESPMatterEcosystemInfo.swift; sourceTree = "<group>"; };
@@ -194,6 +198,7 @@
 				F15D5FEC2E559899005F3B57 /* SoftAP */,
 				F2E0D5EC2E55A900005F3B74 /* MQTT */,
 				F18184B82E4B1C33002C7B0A /* Utils */,
+				F9A01A052F8302B4004B8801 /* Restart */,
 				5A1455712E45C0D10066A31F /* OAuth */,
 				5A1455782E45C0D30066A31F /* WeChat */,
 				5A1455842E45C0D40066A31F /* GoogleSignIn */,
@@ -369,6 +374,15 @@
 				F18184B72E4B1C34002C7B0A /* ESPPermissionUtils.swift */,
 			);
 			path = Utils;
+			sourceTree = "<group>";
+		};
+		F9A01A052F8302B4004B8801 /* Restart */ = {
+			isa = PBXGroup;
+			children = (
+				F9A01A032F8302B4004B8801 /* ESPAppRestartModule.m */,
+				F9A01A042F8302B4004B8801 /* ESPAppRestartModule.swift */,
+			);
+			path = Restart;
 			sourceTree = "<group>";
 		};
 		F1B602712E30C21D003DA0C4 /* Provisioning */ = {
@@ -701,6 +715,8 @@
 				F18184B92E4B1C33002C7B0A /* ESPAppUtilityModule.m in Sources */,
 				F18184BB2E4B1C33002C7B0A /* ESPAppUtilityModule.swift in Sources */,
 				F18184BC2E4B1C34002C7B0A /* ESPPermissionUtils.swift in Sources */,
+				F9A01A012F8302B4004B8801 /* ESPAppRestartModule.m in Sources */,
+				F9A01A022F8302B4004B8801 /* ESPAppRestartModule.swift in Sources */,
 				B18059E884C0ABDD17F3DC3D /* ExpoModulesProvider.swift in Sources */,
 				DA803ADE4C6C4736BAE299F2 /* ESPUpdatesBootstrap.swift in Sources */,
 			);

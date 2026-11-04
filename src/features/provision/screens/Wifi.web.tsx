@@ -29,6 +29,7 @@ import {
 import { Checkbox } from "react-native-paper";
 import { flattenStyle } from "@shared/utils/flattenStyle";
 import { testProps } from "@shared/utils/testProps";
+import { resolveIllustration } from "@shared/runtimeStyle/assets";
 
 /**
  * Web Wi-Fi configuration screen with flattened styles for DOM-backed renderers.
@@ -89,7 +90,7 @@ const Wifi = () => {
           >
             <View style={styles.imageContainer} {...testProps("view_wifi")}>
               <Image
-                source={require("@assets/images/wifi.png")}
+                source={resolveIllustration("wifi", require("@assets/images/wifi.png"))}
                 style={styles.networkImage}
                 resizeMode="contain"
                 {...testProps("image_wifi")}

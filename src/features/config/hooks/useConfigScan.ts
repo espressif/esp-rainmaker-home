@@ -16,11 +16,43 @@ import { CONFIG_SCAN_INVALID_PAYLOAD_ERROR } from "@features/config/constants";
 import { resolveConfigFromScan } from "@features/config/utils/configScan";
 import { getPreAuthRoute } from "@features/landing/utils/currentDeployment";
 import { useToast } from "@shared/hooks/useToast";
+import { UnreadableStyleError, syncSaved } from "@shared/runtimeStyle/store";
 import { resetStackTo } from "@shared/utils/navigation";
 import type { ConfigScanPhase } from "@src/types/global";
 import type { UseConfigScanReturn } from "./useConfigScan.types";
+import { useDeploymentTrust } from "./useDeploymentTrust";
 
 export type { UseConfigScanReturn } from "./useConfigScan.types";
+
+/** Brand error toast duration; the switch waits this long so it does not clear the toast. */
+const BRAND_TOAST_MS = 3000;
+
+/** Result of syncing the chosen deployment's brand. */
+interface BrandOutcome {
+  /** The saved brand differs from the one on screen and needs a JS reload to show. */
+  changed: boolean;
+  /** The deployment has a brand file this app cannot read. */
+  unreadable: boolean;
+}
+
+/**
+ * Fetches and saves the chosen deployment's brand.json. A failed fetch does not throw: it
+ * keeps the saved brand when the URL is the active deployment's, otherwise (or when the
+ * file is unreadable) it clears the saved brand.
+ * @param brandUrl - The chosen deployment's brand.json URL, if any
+ * @returns Whether the brand changed, and whether the brand file was unreadable
+ */
+async function applyChosenBrand(brandUrl: string | undefined): Promise<BrandOutcome> {
+  try {
+    return { changed: await syncSaved(brandUrl), unreadable: false };
+  } catch (error) {
+    console.warn("[ConfigScan] Could not fetch the deployment's brand:", error);
+    // An unreadable brand file (e.g. unsupported schemaVersion) also clears the saved brand.
+    const unreadable = error instanceof UnreadableStyleError;
+    const keepSaved = !unreadable && !!brandUrl && brandUrl === runtimeConfigManager.config?.brandUrl;
+    return { changed: keepSaved ? false : await syncSaved(), unreadable };
+  }
+}
 
 /**
  * Native config-scan hook: camera permission plus scan lifecycle.
@@ -41,10 +73,11 @@ export function useConfigScan(): UseConfigScanReturn {
   const [showScanner, setShowScanner] = useState(false);
   const scannedRef = useRef(false);
   const switchingRef = useRef(false);
+  const { trustPrompt, askTrust, confirmTrust, cancelTrust } = useDeploymentTrust();
 
   /**
    * Rebuilds the SDK layer in place for the config just persisted, then routes
-   * to auth. Falls back to a relaunch on failure — the config is already stored.
+   * to auth. On failure it reloads the JS runtime; the config is already saved.
    */
   const applyDeploymentSwitch = useCallback(async () => {
     try {
@@ -52,12 +85,36 @@ export function useConfigScan(): UseConfigScanReturn {
       resetStackTo(router, "/(auth)/Login");
     } catch (error) {
       console.error(
-        "[ConfigScan] In-place SDK switch failed, relaunching:",
+        "[ConfigScan] In-place SDK switch failed, reloading JS:",
         error,
       );
       restartApp();
     }
   }, [router, reinitializeSdk, restartApp]);
+
+  /**
+   * Shows an error toast and waits when the brand file was unreadable, or reloads
+   * the JS runtime when the brand changed so theme tokens are rebuilt.
+   * @param brand - Result of syncing the chosen deployment's brand
+   * @returns Whether the JS runtime is reloading
+   */
+  const reportBrand = useCallback(
+    async (brand: BrandOutcome): Promise<boolean> => {
+      if (brand.unreadable) {
+        toast.showError(t("config.scan.brandNotApplied"), undefined, {
+          duration: BRAND_TOAST_MS,
+        });
+        await new Promise((resolve) => setTimeout(resolve, BRAND_TOAST_MS));
+        return false;
+      }
+      if (brand.changed) {
+        restartApp();
+        return true;
+      }
+      return false;
+    },
+    [restartApp, t, toast],
+  );
 
   /**
    * Resolves and applies a scanned config. On failure, toasts and returns
@@ -73,7 +130,19 @@ export function useConfigScan(): UseConfigScanReturn {
       try {
         const json = await resolveConfigFromScan(scannedValue);
 
+        // The screen shows the trust dialog only in the "fetching" phase.
+        // Nothing is saved unless the user trusts the deployment.
+        setPhase("fetching");
+        if (!(await askTrust(json.sdk, json.config as SDKConfig))) {
+          setShowScanner(false);
+          setPhase("info");
+          scannedRef.current = false;
+          return true;
+        }
+
         setPhase("applying");
+        // Saves brand.json now; its images are cached at the next launch.
+        const brand = await applyChosenBrand(json.config.brandUrl);
         await runtimeConfigManager.applyAndPersist(
           json.sdk,
           json.config as SDKConfig,
@@ -85,6 +154,9 @@ export function useConfigScan(): UseConfigScanReturn {
         await asyncStorageAdapter.clear();
 
         setPhase("success");
+        if (await reportBrand(brand)) {
+          return true;
+        }
         await applyDeploymentSwitch();
         return true;
       } catch (e) {
@@ -99,7 +171,7 @@ export function useConfigScan(): UseConfigScanReturn {
         return false;
       }
     },
-    [applyDeploymentSwitch, t, toast],
+    [applyDeploymentSwitch, askTrust, reportBrand, t, toast],
   );
 
   /**
@@ -143,25 +215,29 @@ export function useConfigScan(): UseConfigScanReturn {
     if (!saved) return;
     if (switchingRef.current) return;
 
-    const isAlreadyActive =
-      runtimeConfigManager.activeSdk === saved.sdk &&
-      runtimeConfigManager.config?.baseUrl === saved.config.baseUrl;
-
-    await runtimeConfigManager.applyAndPersist(saved.sdk, saved.config);
-
-    if (isAlreadyActive) {
-      resetStackTo(router, "/(auth)/Login");
-      return;
-    }
-
     switchingRef.current = true;
     try {
+      const isAlreadyActive =
+        runtimeConfigManager.activeSdk === saved.sdk &&
+        runtimeConfigManager.config?.baseUrl === saved.config.baseUrl;
+
+      const brand = await applyChosenBrand(saved.config.brandUrl);
+      await runtimeConfigManager.applyAndPersist(saved.sdk, saved.config);
+      if (await reportBrand(brand)) {
+        return;
+      }
+
+      if (isAlreadyActive) {
+        resetStackTo(router, "/(auth)/Login");
+        return;
+      }
+
       await asyncStorageAdapter.clear();
       await applyDeploymentSwitch();
     } finally {
       switchingRef.current = false;
     }
-  }, [router, applyDeploymentSwitch]);
+  }, [router, applyDeploymentSwitch, reportBrand]);
 
   return {
     phase,
@@ -175,5 +251,8 @@ export function useConfigScan(): UseConfigScanReturn {
     handleBackFromScanner,
     savedDeploymentLabel,
     handleContinueWithSaved,
+    trustPrompt,
+    confirmTrust,
+    cancelTrust,
   };
 }

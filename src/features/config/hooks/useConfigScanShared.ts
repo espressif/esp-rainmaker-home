@@ -15,6 +15,7 @@ import { getPreAuthRoute } from "@features/landing/utils/currentDeployment";
 import { resetStackTo } from "@shared/utils/navigation";
 import type { ConfigScanPhase } from "@src/types/global";
 import type { UseConfigScanBaseReturn } from "./useConfigScan.types";
+import { useDeploymentTrust } from "./useDeploymentTrust";
 
 /**
  * Shared config-scan apply lifecycle (no camera).
@@ -30,10 +31,11 @@ export function useConfigScanShared(): UseConfigScanBaseReturn {
   const [showScanner, setShowScanner] = useState(false);
   const scannedRef = useRef(false);
   const switchingRef = useRef(false);
+  const { trustPrompt, askTrust, confirmTrust, cancelTrust } = useDeploymentTrust();
 
   /**
    * Rebuilds the SDK layer in place for the config just persisted, then routes
-   * to auth. Falls back to a relaunch on failure — the config is already stored.
+   * to auth. On failure it reloads the JS runtime; the config is already saved.
    */
   const applyDeploymentSwitch = useCallback(async () => {
     try {
@@ -41,7 +43,7 @@ export function useConfigScanShared(): UseConfigScanBaseReturn {
       resetStackTo(router, "/(auth)/Login");
     } catch (error) {
       console.error(
-        "[ConfigScan] In-place SDK switch failed, relaunching:",
+        "[ConfigScan] In-place SDK switch failed, reloading JS:",
         error,
       );
       restartApp();
@@ -60,6 +62,14 @@ export function useConfigScanShared(): UseConfigScanBaseReturn {
 
       try {
         const json = await resolveConfigFromScan(scannedValue);
+
+        // Nothing is saved unless the user trusts the deployment.
+        if (!(await askTrust(json.sdk, json.config as SDKConfig))) {
+          setShowScanner(false);
+          setPhase("info");
+          scannedRef.current = false;
+          return;
+        }
 
         setPhase("applying");
         await runtimeConfigManager.applyAndPersist(
@@ -80,7 +90,7 @@ export function useConfigScanShared(): UseConfigScanBaseReturn {
         scannedRef.current = false;
       }
     },
-    [applyDeploymentSwitch],
+    [applyDeploymentSwitch, askTrust],
   );
 
   /**
@@ -163,5 +173,8 @@ export function useConfigScanShared(): UseConfigScanBaseReturn {
     handleBackFromScanner,
     savedDeploymentLabel,
     handleContinueWithSaved,
+    trustPrompt,
+    confirmTrust,
+    cancelTrust,
   };
 }

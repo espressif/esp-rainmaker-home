@@ -9,6 +9,7 @@ import { tokens } from "./tokens";
 import { verticalScale } from "@shared/utils/styling";
 import { PLATFORM_WEB } from "@shared/utils/constants";
 import { chartStyles } from "./chartStyleSheet";
+import { hasPalette } from "@shared/runtimeStyle/config";
 
 const isWeb = Platform.OS === PLATFORM_WEB;
 
@@ -2374,7 +2375,7 @@ export const globalStyles = StyleSheet.create({
   },
   chatContainer: {
     flex: 1,
-    backgroundColor: "#F5F7F9",
+    backgroundColor: hasPalette ? tokens.colors.bg5 : "#F5F7F9",
     padding: 0,
     margin: 0,
   },
@@ -2470,7 +2471,7 @@ export const globalStyles = StyleSheet.create({
   },
   chatUserBubble: {
     maxWidth: "70%",
-    backgroundColor: "#DDE3ED",
+    backgroundColor: hasPalette ? tokens.colors.bg1 : "#DDE3ED",
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 18,

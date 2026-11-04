@@ -4,47 +4,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { BRAND_THEME_DARK, BRAND_THEME_LIGHT } from "@shared/utils/constants";
 import { scale, verticalScale } from "@shared/utils/styling";
+import { styleConfig, styleTheme } from "@shared/runtimeStyle/config";
+import { getColors, getRadius, type ColorToken } from "@shared/runtimeStyle/resolve";
 
-type ThemeColors = {
-  white: string;
-  black: string;
-  bluetooth: string;
-  gray: string;
-  lightGray: string;
-  red: string;
-  orange: string;
-  blue: string;
-  green: string;
-  yellow: string;
-  lightBlue: string;
-  bg: string;
-  bg1: string;
-  bg2: string;
-  bg3: string;
-  bg4: string;
-  bg5: string;
-  borderColor: string;
-  width: number;
-  darkBorderColor: string;
-  primary: string;
-  text_primary: string;
-  text_primary_light: string;
-  text_primary_dark: string;
-  text_secondary: string;
-  text_secondary_light: string;
-  text_secondary_dark: string;
-
-  warn: string;
-  error: string;
-  success: string;
-
-  warnBg: string;
-  errorBg: string;
-  successBg: string;
-
-  qrCodeScanLoader: string;
-};
+type ThemeColors = Record<ColorToken, string> & { width: number };
 
 const themes = {
   light: {
@@ -133,8 +98,12 @@ const themes = {
   },
 };
 
-// Default theme selected
-let currentThemeName: keyof typeof themes = "light";
+Object.assign(themes.light.colors, getColors(styleConfig, BRAND_THEME_LIGHT));
+Object.assign(themes.dark.colors, getColors(styleConfig, BRAND_THEME_DARK));
+
+const STYLE_RADIUS_MD: number = getRadius(styleConfig);
+
+let currentThemeName: keyof typeof themes = styleTheme;
 
 // Function to set the current theme
 /**
@@ -193,8 +162,8 @@ export const tokens = {
   },
 
   radius: {
-    sm: verticalScale(10),
-    md: verticalScale(16),
+    sm: verticalScale(STYLE_RADIUS_MD * (10 / 16)),
+    md: verticalScale(STYLE_RADIUS_MD),
   },
 
   spacing: {

@@ -23,6 +23,7 @@ import {
 } from "@features/provision/components";
 import { flattenStyle } from "@shared/utils/flattenStyle";
 import { testProps } from "@shared/utils/testProps";
+import { resolveIllustration } from "@shared/runtimeStyle/assets";
 
 /**
  * Web provision screen with flattened styles for DOM-backed renderers.
@@ -78,7 +79,7 @@ const Provision = () => {
           >
             <Image
               {...testProps("image_provision")}
-              source={require("@assets/images/network.png")}
+              source={resolveIllustration("network", require("@assets/images/network.png"))}
               style={styles.networkImage}
               resizeMode="contain"
             />

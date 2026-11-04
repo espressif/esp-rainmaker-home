@@ -274,6 +274,7 @@ The legal links support a `{lang}` placeholder, replaced at runtime with the act
 | Variable                    | Description                                  | Default |
 | --------------------------- | -------------------------------------------- | ------- |
 | `ENABLE_SCAN_CONFIGURATION` | Enable QR-code-based runtime config override | `true`  |
+| `BRAND_JSON_PATH` | Optional path of a scanned deployment's `brand.json`, relative to its client-outputs URL. Leave blank for the app default. | _(empty → `brand/brand.json`)_ |
 
 When enabled, tapping the app logo 5 times on the login screen opens a QR scanner that can override `BASE_URL`, `API_VERSION`, and OAuth settings at runtime without a new build.
 

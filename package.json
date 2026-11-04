@@ -1,8 +1,8 @@
 {
   "name": "NOVA",
   "main": "expo-router/entry",
-  "version": "6.5.0",
-  "versionCode": 60,
+  "version": "6.6.0",
+  "versionCode": 61,
   "workspaces": [
     "modules/*"
   ],
@@ -96,6 +96,7 @@
     "expo-font": "~55.0.6",
     "expo-haptics": "~55.0.14",
     "expo-image-picker": "~55.0.20",
+    "expo-keep-awake": "~55.0.8",
     "expo-linear-gradient": "~55.0.13",
     "expo-linking": "~55.0.14",
     "expo-localization": "~55.0.16",

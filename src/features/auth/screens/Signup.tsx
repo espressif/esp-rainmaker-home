@@ -71,7 +71,7 @@ export function SignupScreen() {
 
   // Same deployment mark as Login, so signing up for ESP RainMaker Classic /
   // Neo shows that deployment's logo rather than the generic app lockup.
-  const { deploymentLabel, deploymentWordmark } = useDeploymentBranding();
+  const { deploymentLabel, deploymentLogo } = useDeploymentBranding();
 
   const usernameFieldProps = useMemo(() => {
     const allowsPhone = getAuthAllowedUsernameTypes().includes("phone");
@@ -117,7 +117,7 @@ export function SignupScreen() {
             <Logo
               qaId="logo_signup"
               caption={deploymentLabel}
-              captionSource={deploymentWordmark}
+              captionSource={deploymentLogo}
             />
 
             <View

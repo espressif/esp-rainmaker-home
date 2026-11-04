@@ -13,6 +13,7 @@ import {
   WEB_EMBED_IFRAME_ALLOW,
   WEB_EMBED_PHONE_WIDTH,
 } from "@shared/utils/constants";
+import { styleQuery } from "@shared/runtimeStyle/config";
 
 export interface EmbeddedAppIframeProps {
   /** Increment to remount the iframe (hard refresh to app root) */
@@ -24,14 +25,15 @@ export interface EmbeddedAppIframeProps {
 /**
  * Resolves the absolute same-origin URL for the full app (never `/embed`).
  * Uses the host pathname so versioned CDN prefixes
- * (e.g. `/web/prod/global/6.1.0`) are preserved.
+ * (e.g. `/web/prod/global/6.1.0`) are preserved, and appends the page's
+ * `brand` parameter, if any, so the embedded app uses the same style.
  * @returns Absolute URL pointing at the app root under the current deploy prefix
  */
 function getEmbeddedAppSrc(): string {
   if (typeof window === "undefined") {
-    return WEB_EMBED_APP_SRC_PATH;
+    return `${WEB_EMBED_APP_SRC_PATH}${styleQuery}`;
   }
-  return `${window.location.origin}${getEmbeddedAppSrcPath(window.location.pathname)}`;
+  return `${window.location.origin}${getEmbeddedAppSrcPath(window.location.pathname)}${styleQuery}`;
 }
 
 /**

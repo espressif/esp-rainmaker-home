@@ -11,6 +11,7 @@ import {
   ConfigScanLoadingView,
   ConfigScanSuccessView,
   ConfigScanScannerView,
+  DeploymentTrustDialog,
 } from "@features/config/components";
 import { useConfigScan } from "@features/config/hooks";
 
@@ -18,7 +19,7 @@ import { useConfigScan } from "@features/config/hooks";
  * Renders the config scan screen UI section.
  *
  * Invalid QR payloads stay on the scanner with toast, freeze, red border, and
- * Scan Again (same pattern as provision ScanQR).
+ * Scan Again. While fetching, the trust dialog shows over the loading view.
  */
 export function ConfigScanScreen() {
   const { t } = useTranslation();
@@ -35,49 +36,76 @@ export function ConfigScanScreen() {
     handleBackFromScanner,
     savedDeploymentLabel,
     handleContinueWithSaved,
+    trustPrompt,
+    confirmTrust,
+    cancelTrust,
   } = useConfigScan();
 
-  if (!showScanner) {
-    return (
-      <ConfigScanInfoView
-        title={title}
-        onUpdateConfig={handleUpdateConfig}
-        onCancel={handleCancel}
-        savedDeploymentLabel={savedDeploymentLabel}
-        onContinueWithSaved={handleContinueWithSaved}
-      />
-    );
-  }
+  /**
+   * Builds the main scan body for the current phase.
+   */
+  const renderBody = () => {
+    if (!showScanner) {
+      return (
+        <ConfigScanInfoView
+          title={title}
+          onUpdateConfig={handleUpdateConfig}
+          onCancel={handleCancel}
+          savedDeploymentLabel={savedDeploymentLabel}
+          onContinueWithSaved={handleContinueWithSaved}
+        />
+      );
+    }
 
-  if (!permission?.granted) {
+    if (!permission?.granted) {
+      return (
+        <ConfigScanPermissionView
+          title={title}
+          onGrant={requestPermission}
+          onBack={handleBackFromScanner}
+        />
+      );
+    }
+
+    if (phase === "fetching") {
+      return (
+        <>
+          <ConfigScanLoadingView
+            title={title}
+            message={t("config.scan.fetching")}
+            onCancel={handleCancel}
+          />
+          <DeploymentTrustDialog
+            prompt={trustPrompt}
+            onConfirm={confirmTrust}
+            onCancel={cancelTrust}
+          />
+        </>
+      );
+    }
+
+    if (phase === "applying") {
+      return (
+        <ConfigScanLoadingView
+          title={title}
+          message={t("config.scan.applying")}
+          onCancel={handleCancel}
+        />
+      );
+    }
+
+    if (phase === "success") {
+      return <ConfigScanSuccessView />;
+    }
+
     return (
-      <ConfigScanPermissionView
+      <ConfigScanScannerView
         title={title}
-        onGrant={requestPermission}
+        onScan={handleScan}
         onBack={handleBackFromScanner}
       />
     );
-  }
+  };
 
-  if (phase === "applying") {
-    return (
-      <ConfigScanLoadingView
-        title={title}
-        message={t("config.scan.applying")}
-        onCancel={handleCancel}
-      />
-    );
-  }
-
-  if (phase === "success") {
-    return <ConfigScanSuccessView />;
-  }
-
-  return (
-    <ConfigScanScannerView
-      title={title}
-      onScan={handleScan}
-      onBack={handleBackFromScanner}
-    />
-  );
+  return renderBody();
 }

@@ -53,6 +53,10 @@ interface ConfirmationDialogProps {
   isLoading?: boolean;
   /** QA automation identifier */
   qaId?: string;
+  /** Optional content above the title, such as a logo */
+  header?: ReactNode;
+  /** Optional content between the description and the buttons */
+  children?: ReactNode;
 }
 
 /**
@@ -71,6 +75,8 @@ const ConfirmationDialog: React.FC<ConfirmationDialogProps> = ({
   confirmColor = tokens.colors.primary,
   isLoading = false,
   qaId,
+  header,
+  children,
 }) => {
   const [internalOpen, setInternalOpen] = useState(false);
   const isVisible = open ?? internalOpen;
@@ -108,6 +114,7 @@ const ConfirmationDialog: React.FC<ConfirmationDialogProps> = ({
       >
         <View style={globalStyles.modalOverlay}>
           <View style={globalStyles.modalContent}>
+            {header}
             {title && (
               <Text
                 {...testProps(`text_title_${qaId}`)}
@@ -122,6 +129,7 @@ const ConfirmationDialog: React.FC<ConfirmationDialogProps> = ({
             >
               {description}
             </Text>
+            {children}
 
             <View style={globalStyles.modalActions}>
               <Button

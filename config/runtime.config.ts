@@ -25,7 +25,15 @@ interface DeploymentDashboard {
   dashboardUrl?: string;
 }
 
-export interface ESPRMRuntimeConfig extends DeploymentDashboard {
+/**
+ * URL of the brand.json a scanned deployment publishes next to its client outputs,
+ * fetched at every launch. Absent for built-in deployments and inline-JSON scans.
+ */
+interface DeploymentBrand {
+  brandUrl?: string;
+}
+
+export interface ESPRMRuntimeConfig extends DeploymentDashboard, DeploymentBrand {
   baseUrl?: string;
   claimUrl?: string;
   version?: string;
@@ -35,7 +43,7 @@ export interface ESPRMRuntimeConfig extends DeploymentDashboard {
   authProviders?: string[];
 }
 
-export interface ESPRMNeoRuntimeConfig extends DeploymentDashboard {
+export interface ESPRMNeoRuntimeConfig extends DeploymentDashboard, DeploymentBrand {
   baseUrl?: string;
   userApiBase?: string;
   awsRegion?: string;

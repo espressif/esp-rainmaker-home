@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useState, useCallback, useRef, useMemo, useEffect } from "react";
+import { useState, useCallback, useRef, useMemo, useEffect, useContext } from "react";
 import type { ESPCDFGroup } from "@store";
 import { useCDF } from "@shared/hooks/useCDF";
 import { useHomeViewModel, type UseHomeViewModelResult } from "./useHomeViewModel";
@@ -24,6 +24,9 @@ import { startMatterLocalDiscovery } from "@features/matter/utils/matterLocalDis
 import { loadHomeNodes } from "@features/group/utils/homeNodes";
 import type { RoomTab } from "@src/types/global";
 import { getFeatures } from "@/config/features.config";
+import { runtimeConfigManager } from "@config/runtime.config";
+import { AppRestartContext } from "@context/appRestart.context";
+import { syncSaved } from "@shared/runtimeStyle/store";
 import { DEFAULT_HOME_GROUP_NAME } from "@shared/utils/constants";
 import { retryHomeLoadUntilItWorks } from "@features/group/utils/retryHomeLoad";
 import { onHomeSyncSucceeded } from "@shared/utils/homeSyncTracker";
@@ -55,6 +58,14 @@ export interface UseHomeScreenResult {
   redirectOperations: (type: string) => void;
   showMigrationPrompt: boolean;
   handleMigrationPromptUnderstood: () => Promise<void>;
+  /** True once a pull-to-refresh saves a style that differs from the one on screen. */
+  styleUpdateAvailable: boolean;
+  /** Whether the dialog offering to apply the saved style is open. */
+  showStyleUpdateDialog: boolean;
+  /** Closes the dialog and reloads the JS runtime to apply the saved style. */
+  applyStyleUpdate: () => void;
+  /** Closes the dialog without applying the style. */
+  dismissStyleUpdateDialog: () => void;
 }
 
 /**
@@ -67,6 +78,7 @@ export function useHomeScreen(): UseHomeScreenResult {
   const unifiedUser = unifiedUserStore?.user;
   const toast = useToast();
   const router = useRouter();
+  const { restartApp } = useContext(AppRestartContext);
   const goToAddDevice = useAddDeviceNavigation();
   const defaultTabs = useMemo(() => getDefaultHomeTabs(t), [t]);
   const hasInitialized = useRef(false);
@@ -84,6 +96,8 @@ export function useHomeScreen(): UseHomeScreenResult {
   syncHomeWithNodesRef.current = syncHomeWithNodes;
   const [isNavigatingToAddDevice, setIsNavigatingToAddDevice] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [styleUpdateAvailable, setStyleUpdateAvailable] = useState(false);
+  const [showStyleUpdateDialog, setShowStyleUpdateDialog] = useState(false);
   const [selectedRoom, setSelectedRoom] = useState<RoomTab>(
     defaultTabs[0] ?? { label: "", id: ALL_DEVICES_TAB_ID }
   );
@@ -268,13 +282,30 @@ export function useHomeScreen(): UseHomeScreenResult {
     }
   }, [homeLoadFailed, store]);
 
+  /**
+   * Handles pull-to-refresh: resyncs home nodes, restarts local discovery and
+   * syncs the saved style. Opens the style update dialog when the style changed.
+   */
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     try {
       const syncPromise = syncHomeWithNodes({ force: true });
       startNodeLocalDiscovery(store);
       startMatterLocalDiscovery(store);
-      await syncPromise;
+
+      const brandUrl = runtimeConfigManager.config?.brandUrl;
+      const stylePromise = brandUrl
+        ? syncSaved(brandUrl).catch((error: unknown) => {
+            console.warn("[Home] Style sync on refresh failed:", error);
+            return false;
+          })
+        : Promise.resolve(false);
+
+      const [, styleChanged] = await Promise.all([syncPromise, stylePromise]);
+      if (styleChanged) {
+        setStyleUpdateAvailable(true);
+        setShowStyleUpdateDialog(true);
+      }
     } catch (error) {
       console.error("Error refreshing home:", error);
       setHomeLoadFailed(true);
@@ -282,6 +313,17 @@ export function useHomeScreen(): UseHomeScreenResult {
       setRefreshing(false);
     }
   }, [syncHomeWithNodes, store]);
+
+  /** Closes the dialog and reloads the JS runtime to apply the saved style. */
+  const applyStyleUpdate = useCallback(() => {
+    setShowStyleUpdateDialog(false);
+    restartApp();
+  }, [restartApp]);
+
+  /** Closes the dialog; `styleUpdateAvailable` stays true. */
+  const dismissStyleUpdateDialog = useCallback(() => {
+    setShowStyleUpdateDialog(false);
+  }, []);
 
   const handleHomeSelect = useCallback(
     async (home: ESPCDFGroup) => {
@@ -393,5 +435,9 @@ export function useHomeScreen(): UseHomeScreenResult {
     redirectOperations,
     showMigrationPrompt,
     handleMigrationPromptUnderstood,
+    styleUpdateAvailable,
+    showStyleUpdateDialog,
+    applyStyleUpdate,
+    dismissStyleUpdateDialog,
   };
 }

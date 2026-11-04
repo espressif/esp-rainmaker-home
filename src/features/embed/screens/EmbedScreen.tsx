@@ -16,6 +16,7 @@ import {
 import { usePreventHostFileDrop } from "@features/embed/hooks";
 import { shouldShowWebDesktopEmbedPhone } from "@features/embed/utils/shouldShowWebDesktopEmbedPhone";
 import { tokens } from "@shared/theme/tokens";
+import { WEB_EMBED_PAGE_BG } from "@shared/utils/constants";
 
 /**
  * Web `/embed` screen: full RainMaker app inside an iPhone frame.
@@ -73,7 +74,7 @@ export function EmbedScreen() {
 const styles = StyleSheet.create({
   scroll: {
     flex: 1,
-    backgroundColor: tokens.colors.bg5,
+    backgroundColor: WEB_EMBED_PAGE_BG,
   },
   scrollContent: {
     flexGrow: 1,

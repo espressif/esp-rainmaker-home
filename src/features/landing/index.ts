@@ -15,7 +15,7 @@ export {
   DEPLOYMENT_KIND,
   getCurrentDeploymentKind,
   getDeploymentLabelKey,
-  getDeploymentWordmark,
+  getDeploymentLogo,
   shouldSkipLandingScreen,
   getPreAuthRoute,
 } from "./utils/currentDeployment";

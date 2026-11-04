@@ -33,6 +33,7 @@ import {
   HomeGroupControlList,
   HomeTooltip,
   MigrationPromptModal,
+  StyleUpdateBanner,
   DeviceTypeFilterTabs,
   RoomControlSwitch,
   AddYourFirstDeviceBanner,
@@ -40,6 +41,7 @@ import {
   HomeLoadFailedNotice,
 } from "@features/group/components";
 import { testProps } from "@shared/utils/testProps";
+import { resolveIllustration } from "@shared/runtimeStyle/assets";
 
 /**
  * Home Screen – first screen after login.
@@ -76,6 +78,10 @@ const HomeScreen = () => {
     redirectOperations,
     showMigrationPrompt,
     handleMigrationPromptUnderstood,
+    styleUpdateAvailable,
+    showStyleUpdateDialog,
+    applyStyleUpdate,
+    dismissStyleUpdateDialog,
   } = useHomeScreen();
 
   const { controlGroups: controlGroupsEnabled, aiAgent: aiAgentEnabled } =
@@ -111,7 +117,7 @@ const HomeScreen = () => {
       <Banner
         activeGroup={selectedHome}
         onDropdownPress={handleDropdownPress}
-        image={require("@assets/images/home.png")}
+        image={resolveIllustration("home", require("@assets/images/home.png"))}
         isHomeNameLoading={(isLoading || homeLoadFailed) && !selectedHome?.name}
       />
       <Tabs
@@ -215,6 +221,9 @@ const HomeScreen = () => {
         }
         qaId="header_home"
       />
+      {styleUpdateAvailable && (
+        <StyleUpdateBanner onUpdate={applyStyleUpdate} />
+      )}
       <ScreenWrapper
         style={globalStyles.homeScreenContainer}
         qaId="screen_wrapper_home"
@@ -252,6 +261,17 @@ const HomeScreen = () => {
         title={t("group.home.migrationPromptTitle")}
         message={t("group.home.migrationPromptMessage")}
         buttonLabel={t("group.home.migrationPromptUnderstood")}
+      />
+
+      <ConfirmationDialog
+        open={showStyleUpdateDialog}
+        title={t("group.home.styleUpdateTitle")}
+        description={t("group.home.styleUpdateMessage")}
+        confirmText={t("group.home.styleUpdateAction")}
+        cancelText={t("group.home.styleUpdateLater")}
+        onConfirm={applyStyleUpdate}
+        onCancel={dismissStyleUpdateDialog}
+        qaId="style_update"
       />
 
       <ConfirmationDialog
