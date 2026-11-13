@@ -5,6 +5,7 @@
  */
 
 import { useCallback, useContext } from "react";
+import { Platform } from "react-native";
 import { useRouter } from "expo-router";
 
 import {
@@ -12,16 +13,18 @@ import {
   type SDKConfig,
 } from "@config/runtime.config";
 import { getResolvedActiveSdk } from "@config/sdk.config";
+import type { SDKIdentifier } from "@config/sdk.identifiers";
 import {
-  ESPRMMatter_BASE_SDK_ID,
-  ESPRMNeoMatter_BASE_SDK_ID,
-  type SDKIdentifier,
-} from "@config/sdk.identifiers";
+  getBuiltInClassicSdkId,
+  getBuiltInNeoSdkId,
+} from "@config/sdkSession.config";
 import { getRegionConfig } from "@config/region.config";
 import asyncStorageAdapter from "@native-adaptors/implementations/ESPAsyncStorage";
 import { AppRestartContext } from "@context/appRestart.context";
+import { useApplyDeploymentSwitch } from "@shared/hooks/useApplyDeploymentSwitch";
 import { syncSaved } from "@shared/runtimeStyle/store";
-import { resetStackTo } from "@shared/utils/navigation";
+import { clearWebBrandUrlHash } from "@shared/runtimeStyle/webBrandParam";
+import { AUTH_LOGIN_SCREEN_ROUTE, PLATFORM_WEB } from "@shared/utils/constants";
 
 import type { PlatformKind, PlatformOption } from "../config/platformOptions";
 
@@ -42,8 +45,8 @@ function resolveBuiltInSelection(kind: "classic" | "neo"): {
 } {
   const region = getRegionConfig();
   return kind === "neo"
-    ? { sdk: ESPRMNeoMatter_BASE_SDK_ID, config: region.rmneoSdk as SDKConfig }
-    : { sdk: ESPRMMatter_BASE_SDK_ID, config: region.rmSdk as SDKConfig };
+    ? { sdk: getBuiltInNeoSdkId(), config: region.rmneoSdk as SDKConfig }
+    : { sdk: getBuiltInClassicSdkId(), config: region.rmSdk as SDKConfig };
 }
 
 /**
@@ -93,25 +96,10 @@ function isConfigAlreadyActive(
  */
 export function useLanding(): UseLandingReturn {
   const router = useRouter();
-  const { restartApp, reinitializeSdk } = useContext(AppRestartContext);
-
-  /**
-   * Rebuilds the SDK layer in place for the config just persisted, then routes
-   * to auth. On failure it reloads the JS runtime; the config is already saved.
-   */
-  const applyDeploymentSwitch = useCallback(async () => {
-    try {
-      await reinitializeSdk();
-      // Reset, not replace: this screen is usually reached by pushing Landing
-      // on top of Login ("Change deployment"), so replacing only swaps
-      // Landing for a second Login. Cycling through deployments would stack
-      // one more each time, and back would walk the user through all of them.
-      resetStackTo(router, "/(auth)/Login");
-    } catch (error) {
-      console.error("[Landing] In-place SDK switch failed, reloading JS:", error);
-      restartApp();
-    }
-  }, [router, restartApp, reinitializeSdk]);
+  const { restartApp } = useContext(AppRestartContext);
+  const { applyDeploymentSwitch } = useApplyDeploymentSwitch({
+    logPrefix: "[Landing]",
+  });
 
   /**
    * Goes back when there is a screen below (usually Login), otherwise replaces
@@ -125,9 +113,18 @@ export function useLanding(): UseLandingReturn {
       // the choice was just persisted so Landing is skipped from now on.
       // Pushing would strand it under Login — and then under Home, since
       // login replaces only the top entry.
-      router.replace("/(auth)/Login");
+      router.replace(AUTH_LOGIN_SCREEN_ROUTE);
     }
   }, [router]);
+
+  /**
+   * Drops a private `#brand=` URL theme on web before showing public Classic / Neo.
+   * @returns True when the page is reloading without the brand hash
+   */
+  const dropWebBrandHashIfPresent = useCallback((): boolean => {
+    if (Platform.OS !== PLATFORM_WEB) return false;
+    return clearWebBrandUrlHash();
+  }, []);
 
   const selectPlatform = useCallback(
     async (option: PlatformOption) => {
@@ -150,6 +147,9 @@ export function useLanding(): UseLandingReturn {
       // Landing was pushed (from the Login deployment banner), pop back instead.
       if (alreadyActive) {
         await runtimeConfigManager.applyAndPersist(sdk, config);
+        if (dropWebBrandHashIfPresent()) {
+          return;
+        }
         // Clears any saved brand; reloads the JS runtime if that changes the style.
         try {
           if (await syncSaved()) {
@@ -168,6 +168,10 @@ export function useLanding(): UseLandingReturn {
       // asyncStorageAdapter.clear(), so the selection just made survives.
       await asyncStorageAdapter.clear();
 
+      if (dropWebBrandHashIfPresent()) {
+        return;
+      }
+
       // Clears any saved brand. Theme tokens are built at JS load, so a change
       // reloads the JS runtime.
       try {
@@ -181,7 +185,7 @@ export function useLanding(): UseLandingReturn {
 
       await applyDeploymentSwitch();
     },
-    [router, restartApp, applyDeploymentSwitch, goToAuth],
+    [router, restartApp, applyDeploymentSwitch, goToAuth, dropWebBrandHashIfPresent],
   );
 
   return { selectPlatform };

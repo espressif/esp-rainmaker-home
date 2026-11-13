@@ -24,9 +24,8 @@ export interface EmbeddedAppIframeProps {
 
 /**
  * Resolves the absolute same-origin URL for the full app (never `/embed`).
- * Uses the host pathname so versioned CDN prefixes
- * (e.g. `/web/prod/global/6.1.0`) are preserved, and appends the page's
- * `brand` parameter, if any, so the embedded app uses the same style.
+ * Preserves versioned CDN prefixes and forwards the host `brand` param (or
+ * storage-derived {@link styleQuery}) so the embedded app matches the shell theme.
  * @returns Absolute URL pointing at the app root under the current deploy prefix
  */
 function getEmbeddedAppSrc(): string {
@@ -38,7 +37,6 @@ function getEmbeddedAppSrc(): string {
 
 /**
  * Same-origin iframe locked to a standard mobile width (390px).
- * Clipped by the parent glass so nothing paints outside the phone frame.
  * @param props - Reload key and optional iframe ref
  * @param props.reloadKey - Remount token for refresh
  * @param props.iframeRef - DOM ref for back navigation
@@ -47,7 +45,8 @@ export function EmbeddedAppIframe({
   reloadKey = 0,
   iframeRef,
 }: EmbeddedAppIframeProps) {
-  const src = useMemo(() => getEmbeddedAppSrc(), []);
+  const src = useMemo(() => getEmbeddedAppSrc(), [reloadKey]);
+
 
   const iframe = createElement("iframe", {
     key: reloadKey,

@@ -10,10 +10,9 @@ import { runtimeConfigManager } from "@config/runtime.config";
 import { getRegionConfig, isCnRegion } from "@config/region.config";
 import { getFeatures } from "@config/features.config";
 import {
-  ESPRMMatter_BASE_SDK_ID,
-  ESPRMNeo_BASE_SDK_ID,
-  ESPRMNeoMatter_BASE_SDK_ID,
-} from "@config/sdk.identifiers";
+  isBuiltInClassicSdkId,
+  isBuiltInNeoSdkId,
+} from "@config/sdkSession.config";
 import classicLogo from "@assets/images/rainmaker-classic-logo.png";
 import neoLogo from "@assets/images/rainmaker-neo-logo.png";
 
@@ -48,13 +47,10 @@ export function getCurrentDeploymentKind(): CurrentDeploymentKind | null {
   const baseUrl = runtimeConfigManager.config?.baseUrl;
   const region = getRegionConfig();
 
-  if (sdk === ESPRMMatter_BASE_SDK_ID && baseUrl === region.rmSdk?.baseUrl) {
+  if (isBuiltInClassicSdkId(sdk) && baseUrl === region.rmSdk?.baseUrl) {
     return DEPLOYMENT_KIND.RMCLASSIC;
   }
-  if (
-    (sdk === ESPRMNeo_BASE_SDK_ID || sdk === ESPRMNeoMatter_BASE_SDK_ID) &&
-    baseUrl === region.rmneoSdk?.baseUrl
-  ) {
+  if (isBuiltInNeoSdkId(sdk) && baseUrl === region.rmneoSdk?.baseUrl) {
     return DEPLOYMENT_KIND.RMNEO;
   }
   return DEPLOYMENT_KIND.PRIVATE;

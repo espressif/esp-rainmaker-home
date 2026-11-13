@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-// Picks the active style once at start-up: the page URL `brand` parameter on web, else the saved style on the phone.
+// Picks the active style once at start-up: URL `brand` on web, else saved runtime brand / native file cache.
 
 import { Appearance } from "react-native";
 
@@ -14,6 +14,7 @@ import { getColors, chooseTheme } from "./resolve";
 import {
   readUrlParam,
   decodeUrlStyle,
+  encodeUrlStyle,
   parseUrlStyle,
   type StyleConfig,
   type StyleDocument,
@@ -79,7 +80,19 @@ export const styleTheme: StyleTheme = chooseTheme(
 export const hasPalette: boolean =
   Object.keys(getColors(styleConfig, styleTheme)).length > 0;
 
-/** `?brand=` / `#brand=` suffix to forward to the embedded app, or `""` when absent. */
-export const styleQuery: string = styleParam
-  ? `${styleParam.separator}${BRAND_URL_PARAM}=${encodeURIComponent(styleParam.raw)}`
-  : "";
+/**
+ * `?brand=` / `#brand=` suffix to forward to the embedded app.
+ * Prefers the live URL param; falls back to re-encoding the saved boot document
+ * so `/embed` matches a storage-only private deployment theme.
+ */
+function buildStyleQuery(): string {
+  if (styleParam) {
+    return `${styleParam.separator}${BRAND_URL_PARAM}=${encodeURIComponent(styleParam.raw)}`;
+  }
+  if (!document) return "";
+  const encoded = encodeUrlStyle(document);
+  return encoded ? `#${BRAND_URL_PARAM}=${encodeURIComponent(encoded)}` : "";
+}
+
+/** Brand URL suffix for the embedded app iframe, or `""` when absent. */
+export const styleQuery: string = buildStyleQuery();

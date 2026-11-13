@@ -2231,11 +2231,9 @@ export const globalStyles = StyleSheet.create({
     color: tokens.colors.primary,
   },
 
-  // Shadow styles and elevation
+  // Shadow styles and elevation (no stroke — border read as a harsh frame on dark scan screens)
   shadowElevationForLightTheme: {
     borderRadius: tokens.radius.md,
-    borderWidth: tokens.border.defaultWidth,
-    borderColor: tokens.colors.borderColor,
     shadowColor: tokens.colors.primary,
     shadowOffset: {
       width: 0,

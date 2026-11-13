@@ -589,6 +589,10 @@ export const QA_GUIDE_LOAD_FAILED_DESCRIPTION =
 export const COLOR_TAB = "Colour";
 export const WHITE_TAB = "White";
 
+// AUTH NAVIGATION ROUTES
+/** Expo Router href for the Login screen (post-deployment switch destination). */
+export const AUTH_LOGIN_SCREEN_ROUTE = "/(auth)/Login";
+
 // CONTROL NAVIGATION ROUTES
 export const CONTROL_SCREEN_ROUTE = "/(control)/Control";
 export const DEVICE_SETTINGS_SCREEN_ROUTE = "/(control)/Settings";

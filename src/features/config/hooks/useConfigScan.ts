@@ -15,8 +15,10 @@ import { AppRestartContext } from "@context/appRestart.context";
 import { CONFIG_SCAN_INVALID_PAYLOAD_ERROR } from "@features/config/constants";
 import { resolveConfigFromScan } from "@features/config/utils/configScan";
 import { getPreAuthRoute } from "@features/landing/utils/currentDeployment";
+import { useApplyDeploymentSwitch } from "@shared/hooks/useApplyDeploymentSwitch";
 import { useToast } from "@shared/hooks/useToast";
 import { UnreadableStyleError, syncSaved } from "@shared/runtimeStyle/store";
+import { AUTH_LOGIN_SCREEN_ROUTE } from "@shared/utils/constants";
 import { resetStackTo } from "@shared/utils/navigation";
 import type { ConfigScanPhase } from "@src/types/global";
 import type { UseConfigScanReturn } from "./useConfigScan.types";
@@ -66,7 +68,10 @@ export function useConfigScan(): UseConfigScanReturn {
   const router = useRouter();
   const { t } = useTranslation();
   const toast = useToast();
-  const { restartApp, reinitializeSdk } = useContext(AppRestartContext);
+  const { restartApp } = useContext(AppRestartContext);
+  const { applyDeploymentSwitch } = useApplyDeploymentSwitch({
+    logPrefix: "[ConfigScan]",
+  });
   const [permission, requestPermission] = useCameraPermissions();
 
   const [phase, setPhase] = useState<ConfigScanPhase>("info");
@@ -74,23 +79,6 @@ export function useConfigScan(): UseConfigScanReturn {
   const scannedRef = useRef(false);
   const switchingRef = useRef(false);
   const { trustPrompt, askTrust, confirmTrust, cancelTrust } = useDeploymentTrust();
-
-  /**
-   * Rebuilds the SDK layer in place for the config just persisted, then routes
-   * to auth. On failure it reloads the JS runtime; the config is already saved.
-   */
-  const applyDeploymentSwitch = useCallback(async () => {
-    try {
-      await reinitializeSdk();
-      resetStackTo(router, "/(auth)/Login");
-    } catch (error) {
-      console.error(
-        "[ConfigScan] In-place SDK switch failed, reloading JS:",
-        error,
-      );
-      restartApp();
-    }
-  }, [router, reinitializeSdk, restartApp]);
 
   /**
    * Shows an error toast and waits when the brand file was unreadable, or reloads
@@ -228,7 +216,7 @@ export function useConfigScan(): UseConfigScanReturn {
       }
 
       if (isAlreadyActive) {
-        resetStackTo(router, "/(auth)/Login");
+        resetStackTo(router, AUTH_LOGIN_SCREEN_ROUTE);
         return;
       }
 

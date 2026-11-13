@@ -95,7 +95,7 @@ The file is **gitignored**; only `cdn.yaml.example` is committed.
 | --- | --- |
 | Node.js 22+ | Same as mobile CI |
 | AWS CLI v2 | `aws sts get-caller-identity` must work |
-| `.env.web` | `npm run env:pull:web` (GitLab Secure File), or copy `.env.web.example` and fill it in; CI downloads the Secure File itself |
+| `.env.web` | `npm run env:pull:web` (GitLab Secure File), or copy `.env.web.example` and fill it in; CI downloads the Secure File itself. `web` / `build:web` run `scripts/sync-env-to-web.js` to copy it onto `.env` (feature flags / identity). Region clouds still come from `.env.global` / `.env.cn` |
 | `deployment/web/cdn.yaml` | Optional; auto-created from example |
 
 ### CI / env variables
