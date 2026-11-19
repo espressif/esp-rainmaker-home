@@ -6,12 +6,8 @@
 
 import { ESPCDFStorageAdapterInterface } from "@store";
 import asyncStorageAdapter from "@native-adaptors/implementations/ESPAsyncStorage";
-import {
-  ESPRMNeo_BASE_SDK_ID,
-  ESPRMNeoMatter_BASE_SDK_ID,
-  normalizeSdkIdentifier,
-  type SDKIdentifier,
-} from "./sdk.identifiers";
+import { normalizeSdkIdentifier, type SDKIdentifier } from "./sdk.identifiers";
+import { normalizePersistedSdkId } from "./sdkSession.config";
 import { RUNTIME_CONFIG_STORAGE_KEYS } from "./runtime.keys.config";
 
 export type { SDKIdentifier } from "./sdk.identifiers";
@@ -77,31 +73,33 @@ class RuntimeConfigManager {
   }
 
   /**
+   * Turns a raw storage string into a session-safe SDK id.
+   *
+   * 1. {@link normalizeSdkIdentifier} — accept only the four known ids; anything
+   *    else becomes `null` so callers can drop the key and fall back to env.
+   * 2. {@link normalizePersistedSdkId} — apply the same platform rules as Landing
+   *    / scan (`finalizeSessionSdkId` in sdkSession.config): on native, when
+   *    region `ACTIVE_SDK` is Matter, upgrade Neo base → Neo Matter; when it is
+   *    not, downgrade Matter ids to their base twins. On web, always downgrade
+   *    Matter → base (web has no Matter adaptors).
+   *
+   * Used for both the active runtime SDK and the remembered private deployment.
+   *
+   * @param stored - Raw id read from storage (may be null, unknown, or legacy).
+   * @returns Canonical platform-adjusted id, or `null` when unrecognized.
+   */
+  private _rehydrateSdkId(stored: string | null): SDKIdentifier | null {
+    const normalized = normalizeSdkIdentifier(stored);
+    return normalized ? normalizePersistedSdkId(normalized) : null;
+  }
+
+  /**
    * Load persisted runtime config from storage adapter.
    * Must be called ONCE at app startup (in _layout.tsx), before any
    * SDK is configured or any screen is rendered.
    *
    * Unrecognized SDK ids are dropped so the env default applies.
    */
-  /**
-   * Rehydrates a persisted SDK id, upgrading the plain RMNeo base to the Matter
-   * adaptor.
-   *
-   * Deployments scanned before the config-scan mapper emitted the Matter id are
-   * still on disk carrying the base one, which resolves `matterCommissioning:
-   * false` — so "continue with saved" would silently keep Matter disabled with
-   * no way to fix it but forgetting the deployment. The Matter adaptor is the
-   * same stack plus the fabric verbs, so the upgrade only adds capability.
-   * @param stored - Raw id read from storage.
-   * @returns Canonical id, or `null` when unrecognized.
-   */
-  private _rehydrateSdkId(stored: string | null): SDKIdentifier | null {
-    const normalized = normalizeSdkIdentifier(stored);
-    return normalized === ESPRMNeo_BASE_SDK_ID
-      ? ESPRMNeoMatter_BASE_SDK_ID
-      : normalized;
-  }
-
   async loadFromStorage(): Promise<void> {
     try {
       const sdk = await this._storageAdapter.getItem(RUNTIME_CONFIG_STORAGE_KEYS.SDK);
@@ -179,7 +177,6 @@ class RuntimeConfigManager {
   /**
    * Validate, persist, and apply a newly scanned config payload.
    * Called by ConfigScan screen after JSON is fetched and validated.
-   *
    * @param sdk - Target SDK id (must be a supported {@link SDKIdentifier})
    * @param config - Cloud config for that SDK
    */
@@ -205,6 +202,9 @@ class RuntimeConfigManager {
     );
     await this._storageAdapter.removeItem(
       RUNTIME_CONFIG_STORAGE_KEYS.PRIVATE_CONFIG
+    );
+    await this._storageAdapter.removeItem(
+      RUNTIME_CONFIG_STORAGE_KEYS.ACTIVE_BRAND_JSON
     );
     this._sdk = null;
     this._config = null;

@@ -57,6 +57,7 @@ import { setCloudUpdateFilter } from "./utils/helpers/cloudUpdateFilter";
 import { clearParamDeliveries } from "./utils/helpers/paramDeliveryHelpers";
 import { SUCESS } from "@shared/utils/constants";
 import { ESPRMNeoBaseAdaptorIdentifier } from "@config/sdk.identifiers";
+import { retryOnNetworkFailure } from "@sdk-adaptors/shared/utils/networkRetry";
 
 export { ESPRMNeoBaseAdaptorIdentifier };
 
@@ -158,7 +159,7 @@ export class ESPRMNeoBaseSDKAdaptor implements ESPSDKAdaptor {
     async login(input: ESPSDKAdaptorAPIRequest<ESPCDFLoginRequestPayload>): Promise<ESPSDKAdaptorAPIDataResponse<ESPCDFUser>> {
         const { username, password } = input.request as { username: string, password: string };
         try {
-            const esprmneoUser = await this._authInstance.login(username, password);
+            const esprmneoUser = await retryOnNetworkFailure(() => this._authInstance.login(username, password), "ESPRMNeoBase.login");
             if (!esprmneoUser) {
                 throw new Error(ESPRMNEO_AUTH_ERR_LOGIN_NO_USER);
             }
@@ -186,7 +187,7 @@ export class ESPRMNeoBaseSDKAdaptor implements ESPSDKAdaptor {
      */
     async getCurrentLoggedInUser(): Promise<ESPSDKAdaptorAPIDataResponse<ESPCDFUser>> {
         try {
-            const esprmneoUser = await this._authInstance.getLoggedInUser();
+            const esprmneoUser = await retryOnNetworkFailure(() => this._authInstance.getLoggedInUser(), "ESPRMNeoBase.getLoggedInUser");
             if (!esprmneoUser) {
                 throw new Error(ESPRMNEO_AUTH_ERR_NO_LOGGED_IN_USER);
             }
@@ -221,7 +222,7 @@ export class ESPRMNeoBaseSDKAdaptor implements ESPSDKAdaptor {
         const { username, password } = input.request as { username: string, password: string };
         assertSignupPasswordPolicy(password);
         try {
-            const response = await this._authInstance.sendSignUpCode(username, password);
+            const response = await retryOnNetworkFailure(() => this._authInstance.sendSignUpCode(username, password), "ESPRMNeoBase.sendSignUpCode");
             return {
                 status: SUCESS,
                 description: response.message || ESPRMNEO_AUTH_DESC_SIGNUP_CODE_SENT,
@@ -260,7 +261,7 @@ export class ESPRMNeoBaseSDKAdaptor implements ESPSDKAdaptor {
     async forgotPassword(input: ESPSDKAdaptorAPIRequest<ESPCDFForgotPasswordRequestPayload>): Promise<ESPSDKAdaptorAPIResponse> {
         const { username } = input.request as { username: string };
         try {
-            let response = await this._authInstance.forgotPassword(username);
+            let response = await retryOnNetworkFailure(() => this._authInstance.forgotPassword(username), "ESPRMNeoBase.forgotPassword");
             return {
                 status: SUCESS,
                 description: response.message || formatVerificationCodeSentDescription(username),

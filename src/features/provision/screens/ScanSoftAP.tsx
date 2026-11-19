@@ -274,13 +274,10 @@ const IOSScanSoftAP = () => {
     return "denied";
   };
 
-  // Handle permission request
-  const handleRequestPermission = () => {
-    requestPermissions();
-    // Re-check after a delay
-    setTimeout(() => {
-      checkPermissions();
-    }, 1000);
+  // Handle permission request: explains the purpose first, then the OS prompt.
+  const handleRequestPermission = async () => {
+    await requestPermissions();
+    await checkPermissions();
   };
 
   // Show permission screen if location permission is not granted
@@ -301,7 +298,9 @@ const IOSScanSoftAP = () => {
         >
           <PermissionScreen
             status={getPermissionStatus()}
-            onRequestPermission={handleRequestPermission}
+            onRequestPermission={() => {
+              void handleRequestPermission();
+            }}
           />
         </ScreenWrapper>
       </>
@@ -325,7 +324,9 @@ const IOSScanSoftAP = () => {
         >
           <PermissionScreen
             status="requesting"
-            onRequestPermission={handleRequestPermission}
+            onRequestPermission={() => {
+              void handleRequestPermission();
+            }}
           />
         </ScreenWrapper>
       </>
@@ -499,13 +500,10 @@ const AndroidScanSoftAP = () => {
     return "denied";
   };
 
-  // Handle permission request
-  const handleRequestPermission = () => {
-    requestPermissions();
-    // Re-check after a delay
-    setTimeout(() => {
-      checkPermissions();
-    }, 1000);
+  // Handle permission request: explains the purpose first, then the OS prompt.
+  const handleRequestPermission = async () => {
+    await requestPermissions();
+    await checkPermissions();
   };
 
   // Check if location permission is required and granted
@@ -659,7 +657,9 @@ const AndroidScanSoftAP = () => {
         >
           <PermissionScreen
             status={getPermissionStatus()}
-            onRequestPermission={handleRequestPermission}
+            onRequestPermission={() => {
+              void handleRequestPermission();
+            }}
           />
         </ScreenWrapper>
       </>
@@ -687,7 +687,9 @@ const AndroidScanSoftAP = () => {
         >
           <PermissionScreen
             status="requesting"
-            onRequestPermission={handleRequestPermission}
+            onRequestPermission={() => {
+              void handleRequestPermission();
+            }}
           />
         </ScreenWrapper>
       </>

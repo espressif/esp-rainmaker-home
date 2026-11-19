@@ -5,7 +5,6 @@
  */
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import { AppState } from "react-native";
 import { useFocusEffect, useRouter } from "expo-router";
 import { useTranslation } from "react-i18next";
 import { ESPCDFProvisioningDevice, ESPCDFTransport } from "@store";
@@ -14,7 +13,6 @@ import { useToast } from "@shared/hooks/useToast";
 import { useDevicePermissions } from "./useDevicePermissions";
 import { parseRMakerCapabilities } from "@features/provision/utils/rmakerCapabilities";
 import { getAgentTermsAccepted } from "@features/agent/utils/storage";
-import ESPAppUtilityAdapter from "@native-adaptors/implementations/ESPAppUtilityAdapter";
 import { getScanErrorType } from "@features/provision/utils/scanBLEHelper";
 import {
   getSupportedDeviceTypes,
@@ -26,6 +24,7 @@ import {
   WEB_BLE_PICKER_NOT_FOUND_ERROR,
 } from "@shared/utils/constants";
 import { logWebDebug } from "@shared/utils/webDebugLog";
+import { promptBleAndLocationPermissions } from "@shared/permissions";
 import { DEFAULT_PROVISION_DEVICE_PREFIX } from "@features/provision/constants";
 import type {
   UseScanBLEReturn,
@@ -77,16 +76,18 @@ export const useScanBLE = (): UseScanBLEWebReturn => {
     (device: ESPCDFProvisioningDevice) => Promise<void>
   >(async () => undefined);
 
-  useEffect(() => {
-    const subscription = AppState.addEventListener("change", (nextAppState) => {
-      if (nextAppState === "active") {
-        checkPermissions();
-      }
-    });
-
-    return () => {
-      subscription.remove();
-    };
+  /**
+   * Explains why Bluetooth/location access is needed, then sends the same
+   * request as native. On web that request is a no-op (see webPermissions.ts),
+   * so this only re-reads the permission state afterwards.
+   */
+  const requestPermissions = useCallback(async () => {
+    if ( !await promptBleAndLocationPermissions() ) {
+      return;
+    }
+    setTimeout(() => {
+      checkPermissions();
+    }, 2000);
   }, [checkPermissions]);
 
   /**
@@ -100,11 +101,9 @@ export const useScanBLE = (): UseScanBLEWebReturn => {
 
       switch (errorType) {
         case "permission": {
-          ESPAppUtilityAdapter.requestAllPermissions();
+          // Explains the purpose first, then the browser prompt on "Allow".
+          void requestPermissions();
           toast.showError(t("device.scan.ble.blePermissionRequired"));
-          setTimeout(() => {
-            checkPermissions();
-          }, 2000);
           break;
         }
         case "bluetoothDisabled": {
@@ -121,7 +120,7 @@ export const useScanBLE = (): UseScanBLEWebReturn => {
         }
       }
     },
-    [t, toast, checkPermissions],
+    [t, toast, requestPermissions],
   );
 
   /**
@@ -391,6 +390,7 @@ export const useScanBLE = (): UseScanBLEWebReturn => {
     allPermissionsGranted,
     webNeedsUserConnect,
     handleScanAgain,
+    requestPermissions,
     handleBleDeviceConnect,
     handleAgentTermsComplete,
     handleAgentTermsClose,

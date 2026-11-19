@@ -9,6 +9,7 @@
  * | §2B | `src/shared` → no `src/features` | `no-shared-to-features` |
  * | §1–2 | Store/adaptors/integrations/tasks/config/context → no features | `no-features-from-lower-layers` |
  * | —   | `modules/*` leaf packages: no reverse / no deep imports | `no-modules-reverse-imports`, `no-modules-deep-imports` |
+ * | —   | Permission gate private: `@shared/permissions` index only | `permissions-through-public-api` |
  *
  * **Not enforceable by dependency-cruiser** (use ESLint, review, or tests):
  * - JSDoc, magic strings, `getFeatures()` vs raw env (§3–4).
@@ -79,6 +80,14 @@ module.exports = {
         path: "^modules/[^/]+/src/",
         pathNot: "^modules/[^/]+/src/index\\.tsx?$",
       },
+    },
+    {
+      name: "permissions-through-public-api",
+      severity: "error",
+      comment:
+        "Import `@shared/permissions` (its index) only. The gate (`requestWithPurpose`) and the OS calls stay private, so no caller can raise an OS prompt without the purpose dialog.",
+      from: { pathNot: "^src/shared/permissions/" },
+      to: { path: "^src/shared/permissions/(?!index[.]ts$)" },
     },
   ],
   options: {

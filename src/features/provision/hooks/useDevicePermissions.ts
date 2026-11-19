@@ -5,7 +5,9 @@
  */
 
 import { useState, useEffect, useRef, useCallback } from "react";
+import { AppState } from "react-native";
 import { ESPAppUtilityAdapter } from "@native-adaptors/implementations/ESPAppUtilityAdapter";
+import { promptBleAndLocationPermissions } from "@shared/permissions";
 
 interface DevicePermissionsState {
   bleGranted: boolean | null;
@@ -22,7 +24,7 @@ interface UseDevicePermissionsReturn {
   bluetoothEnabled: boolean | null;
   isChecking: boolean;
   allPermissionsGranted: boolean;
-  requestPermissions: () => void;
+  requestPermissions: () => Promise<void>;
   checkPermissions: () => Promise<void>;
 }
 
@@ -111,13 +113,19 @@ export const useDevicePermissions = (): UseDevicePermissionsReturn => {
   }, []);
 
   /**
-   * Request all required permissions
+   * Requests the Bluetooth + location permissions needed to scan for devices.
+   *
+   * Always explains the purpose first: the in-app dialog names the permissions,
+   * the feature and what the data is used for, and the OS prompt is only shown
+   * once the user taps "Allow" there. Declining is a no-op.
    */
-  const requestPermissions = useCallback(() => {
+  const requestPermissions = useCallback(async () => {
     try {
+      if (!(await promptBleAndLocationPermissions())) {
+        return;
+      }
       // Reset initial check flag so we show loading state after explicit permission request
       isInitialCheckDone.current = false;
-      ESPAppUtilityAdapter.requestAllPermissions();
       // Re-check permissions after requesting
       setTimeout(() => {
         checkPermissions();
@@ -132,6 +140,20 @@ export const useDevicePermissions = (): UseDevicePermissionsReturn => {
     checkPermissions();
   // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional hook deps
   }, []);
+
+  // Re-check when the app is active again: closing an OS permission prompt or
+  // returning from Settings does that, however long the user took to answer.
+  useEffect(() => {
+    const subscription = AppState.addEventListener("change", (nextAppState) => {
+      if (nextAppState === "active") {
+        checkPermissions();
+      }
+    });
+
+    return () => {
+      subscription.remove();
+    };
+  }, [checkPermissions]);
 
   // Determine if all required permissions are granted
   const allPermissionsGranted =

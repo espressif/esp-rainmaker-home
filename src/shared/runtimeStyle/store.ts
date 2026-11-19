@@ -7,17 +7,15 @@
 import { Directory, File, Paths } from "expo-file-system";
 
 import {
-  BRAND_FETCH_RETRY_MS,
   BRAND_FILE_NAME,
   BRAND_IMAGE_FETCH_CONCURRENCY,
   BRAND_IMAGE_FETCH_TIMEOUT_MS,
   BRAND_IMAGE_MAX_BYTES,
   BRAND_IMAGES_DIR,
-  BRAND_JSON_MAX_BYTES,
-  BRAND_NOT_PUBLISHED_STATUSES,
   CONFIG_FETCH_TIMEOUT_MS,
 } from "@shared/utils/constants";
 import { runWithConcurrency } from "@shared/utils/concurrency";
+import { fetchPublishedBrandText } from "./fetchPublishedBrand";
 import { listImageUris, mapImageUris } from "./resolve";
 import { parsePublished, type StyleDocument, type PublishedStyle } from "./schema";
 
@@ -38,7 +36,6 @@ interface HostedImage {
 const HOSTED_IMAGE = /^(https:\/\/[^/]+)\/.*\/brand\/images\/([0-9a-f]{16}\.png)$/;
 const ORIGIN = /^https:\/\/[^/]+/;
 const PARTIAL_SUFFIX = ".part";
-const ABORT_ERROR = "AbortError";
 const LOG_PREFIX = "[RuntimeStyle]";
 const WARN_STYLE = "color: #E6A817; font-weight: bold";
 
@@ -144,34 +141,6 @@ async function fetchBytes(
 }
 
 /**
- * Checks whether a fetch failed because it was aborted. Callers pass no signal of
- * their own, so an abort here means the timeout fired.
- * @param error - Caught fetch failure
- * @returns Whether the request was aborted
- */
-function isTimeoutAbort(error: unknown): boolean {
-  return error instanceof Error && error.name === ABORT_ERROR;
-}
-
-/**
- * Downloads brand.json with one retry on network failure (timeouts are not retried).
- * @param brandUrl - Deployment brand.json URL
- * @returns HTTP response and body bytes
- */
-async function fetchPublishedBytes(
-  brandUrl: string,
-): Promise<{ res: Response; bytes: Uint8Array }> {
-  const options = { timeoutMs: CONFIG_FETCH_TIMEOUT_MS };
-  try {
-    return await fetchBytes(brandUrl, BRAND_JSON_MAX_BYTES, options);
-  } catch (error) {
-    if (isTimeoutAbort(error)) throw error;
-    await new Promise((resolve) => setTimeout(resolve, BRAND_FETCH_RETRY_MS));
-    return fetchBytes(brandUrl, BRAND_JSON_MAX_BYTES, options);
-  }
-}
-
-/**
  * Fetches and validates the deployment's published style.
  * @param brandUrl - Deployment brand.json URL
  * @returns Parsed style and raw body, or null when none is published (403/404)
@@ -179,11 +148,9 @@ async function fetchPublishedBytes(
 async function fetchPublished(
   brandUrl: string,
 ): Promise<{ style: PublishedStyle; text: string } | null> {
-  const { res, bytes } = await fetchPublishedBytes(brandUrl);
-  if (BRAND_NOT_PUBLISHED_STATUSES.includes(res.status)) return null;
-  if (!res.ok) throw new Error(`Brand fetch failed: HTTP ${res.status}`);
+  const text = await fetchPublishedBrandText(brandUrl);
+  if (!text) return null;
 
-  const text = new TextDecoder().decode(bytes);
   const { style, error } = parsePublished(text);
   if (!style) {
     throw new UnreadableStyleError(`The published style is not one this app can draw: ${error}`);

@@ -15,7 +15,10 @@ import {
 
 import { EmbedStatusBar } from "@features/embed/components/EmbedStatusBar";
 import { getEmbedFrameSize } from "@features/embed/utils/embedFrameSize";
+import { styleTheme } from "@shared/runtimeStyle/config";
+import { tokens } from "@shared/theme/tokens";
 import {
+  BRAND_THEME_DARK,
   WEB_EMBED_CHASSIS_BG,
   WEB_EMBED_GLASS_BG,
 } from "@shared/utils/constants";
@@ -45,6 +48,8 @@ export function IPhoneFrame({ children }: IPhoneFrameProps) {
   );
 
   const glassRadius = size.radius - size.bezel;
+  const glassBackground =
+    styleTheme === BRAND_THEME_DARK ? tokens.colors.bg5 : WEB_EMBED_GLASS_BG;
 
   return (
     <View
@@ -93,6 +98,7 @@ export function IPhoneFrame({ children }: IPhoneFrameProps) {
               height: size.glassHeight,
               borderRadius: glassRadius,
               paddingTop: size.safeInsetTop,
+              backgroundColor: glassBackground,
             },
           ]}
         >
@@ -125,6 +131,5 @@ const styles = StyleSheet.create({
   },
   glass: {
     overflow: "hidden",
-    backgroundColor: WEB_EMBED_GLASS_BG,
   },
 });

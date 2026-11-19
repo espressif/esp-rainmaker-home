@@ -42,6 +42,14 @@ class ScanQr(BasePage):
     def open_add_device_selection(self):
         """Tap 'no QR code' to reach the Bluetooth/SoftAP/On Network list, which this screen now gates."""
         self.grant_runtime_permissions_if_needed()
+        # The camera can read a stray code (e.g. on a nearby screen); the footer
+        # then offers only "Scan Again" until scanning restarts.
+        for _ in range(3):
+            if self.find_visible("no_qr_code_button", timeout=3) is not None:
+                break
+            if self.find_visible("rescan_button", timeout=1) is not None:
+                logger.info("Camera read a code; tapping Scan Again to get 'No QR code' back")
+                self.click("rescan_button", timeout=3)
         self.click("no_qr_code_button", timeout=10)
         return self
 

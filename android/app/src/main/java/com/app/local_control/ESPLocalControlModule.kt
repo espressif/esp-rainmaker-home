@@ -280,7 +280,7 @@ class ESPLocalControlModule(reactContext: ReactApplicationContext) :
             val normalizedPath = if (path.startsWith("http")) URL(path).path else path
             val url = URL("$baseUrl/${normalizedPath.removePrefix("/")}")
 
-            val urlConnection = url.openConnection() as HttpURLConnection
+            val urlConnection = LocalNetworkRoute.openConnection(reactApplicationContext, url)
             urlConnection.doOutput = true
             urlConnection.requestMethod = "POST"
             urlConnection.setRequestProperty("Accept", "text/plain")

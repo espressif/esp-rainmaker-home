@@ -47,14 +47,14 @@ workflow:
       aws sts get-caller-identity
 
 
-# Deployment/SDK select (orthogonal to the region APP_FLAVOR global/cn): ACTIVE_SDK (build) + DEPLOYMENT (test) from the commit message — contains "NEO" (any case) -> rmneo, else rm; "NEO" plus "MATTER" builds the Neo Matter SDK so the Matter suites run on Neo; a preset ACTIVE_SDK/DEPLOYMENT CI/CD variable overrides.
+# Deployment/SDK select (orthogonal to the region APP_FLAVOR global/cn): ACTIVE_SDK (build) + DEPLOYMENT (test) from the commit TITLE only — the word "neo" or "rmneo" (any case, also "rm-neo"/"rm_neo", e.g. "[RMNeo]", "RMNEO:", "RainMaker Neo") -> rmneo, else rm; plus the word "matter" in the title builds the Neo Matter SDK so the Matter suites run on Neo. Whole words only: the body, and words or identifiers that merely contain the letters (esprmneoUser, sidewalk_for_neo, neon, simultaneous), are ignored. A preset ACTIVE_SDK/DEPLOYMENT CI/CD variable overrides.
 .select_deployment:
   script:
     - |
-      _sel_msg="${CI_COMMIT_MESSAGE:-${CI_COMMIT_TITLE:-}}"
-      if printf '%s' "${_sel_msg}" | grep -qi 'NEO'; then
+      _sel_title="${CI_COMMIT_TITLE:-}"
+      if printf '%s' "${_sel_title}" | grep -qiE '(^|[^[:alnum:]_])(rm[ _-]?)?neo([^[:alnum:]_]|$)'; then
         _sel_dep="rmneo"
-        if printf '%s' "${_sel_msg}" | grep -qi 'MATTER'; then
+        if printf '%s' "${_sel_title}" | grep -qiE '(^|[^[:alnum:]_])matter([^[:alnum:]_]|$)'; then
           _sel_sdk="rainmaker-neo-matter-sdk"
         else
           _sel_sdk="rainmaker-neo-base-sdk"
@@ -69,7 +69,7 @@ workflow:
         _sel_marker="regression"
       fi
       export MARKER="${MARKER:-$_sel_marker}"
-      echo "Commit-message deployment select: ACTIVE_SDK=${ACTIVE_SDK} DEPLOYMENT=${DEPLOYMENT} MARKER=${MARKER}"
+      echo "Commit-title deployment select: ACTIVE_SDK=${ACTIVE_SDK} DEPLOYMENT=${DEPLOYMENT} MARKER=${MARKER} (title: ${_sel_title})"
 
 
 # Both build jobs bake the selected ACTIVE_SDK into the env file the app reads at build time.
@@ -208,11 +208,13 @@ android_apk:
     matrix:
       - APP_FLAVOR: global
       - APP_FLAVOR: cn
-  # MR-only; skip any flavor whose CI/CD secrets are unset (keeps the
-  # pipeline green when only one flavor's secrets are configured).
+  # MR-only; cn builds only for release MRs (target release/v*, the full
+  # regression ones), since sanity MRs test only the global APK. Skip any
+  # flavor whose CI/CD secrets are unset (keeps the pipeline green when only
+  # one flavor's secrets are configured).
   rules:
     - if: '$CI_MERGE_REQUEST_ID && $APP_FLAVOR == "global" && $FS_KEYSTORE_GLOBAL_FILE'
-    - if: '$CI_MERGE_REQUEST_ID && $APP_FLAVOR == "cn" && $FS_KEYSTORE_CN_FILE'
+    - if: '$CI_MERGE_REQUEST_ID && $APP_FLAVOR == "cn" && $FS_KEYSTORE_CN_FILE && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME =~ /^release\/v/'
     - when: never
   script:
     - !reference [.select_deployment, script]
@@ -408,7 +410,7 @@ android_sourcemap:
   interruptible: true
   before_script: []
   rules:
-    - if: '$CI_MERGE_REQUEST_ID'
+    - if: '$CI_MERGE_REQUEST_ID && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME =~ /^release\/v/'
     - when: never
   needs:
     - job: android_apk
@@ -428,7 +430,7 @@ ios_sourcemap:
   interruptible: true
   before_script: []
   rules:
-    - if: '$CI_MERGE_REQUEST_ID'
+    - if: '$CI_MERGE_REQUEST_ID && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME =~ /^release\/v/'
     - when: never
   needs:
     - job: ios_ipa
@@ -509,6 +511,20 @@ ios_sourcemap:
       TEST_EXIT=$?
       set -e
 
+    # Optional second pass over the failures only (RERUN_FAILED=y, e.g. nightly):
+    # a separate report, so the first pass still shows the true flake rate. The
+    # first pass gets its MR comment here; the rerun's email subject and MR
+    # comment are marked RE-RUN FAILURES.
+    - |
+      if [ "${RERUN_FAILED:-n}" = "y" ] && [ "${TEST_EXIT}" != "0" ] && ls reports/results_*.json >/dev/null 2>&1; then
+        python scripts/notify_mr.py || true
+        set +e
+        python -m pytest --rerun-failed-from latest --model "${TEST_MODEL}" --deployment "${DEPLOYMENT}" \
+          --active-sdk "${ACTIVE_SDK}" --tb=short --disable-warnings -v
+        TEST_EXIT=$?
+        set -e
+      fi
+
     # Comment on the triggering MR with the report link (needs GITLAB_MR_TOKEN
     # CI variable: project access token with `api` scope).
     - python scripts/notify_mr.py || true
@@ -577,7 +593,7 @@ ios_test:
     - !reference [.device_test_run, script]
 
 # Release MRs: full regression on both deployments from the same build. The
-# matrix values win over the commit-message pick in .select_deployment; the two
+# matrix values win over the commit-title pick in .select_deployment; the two
 # jobs share the phone's resource_group, so they run one after the other.
 .both_deployments:
   parallel:

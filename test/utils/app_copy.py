@@ -12,6 +12,7 @@ maintained in the test tree.
 """
 import json
 import logging
+import re
 import urllib.request
 from functools import lru_cache
 from pathlib import Path
@@ -33,11 +34,27 @@ def _locale_strings() -> dict:
     raise FileNotFoundError("locales/en.json not found beside or above the test tree")
 
 
+@lru_cache(maxsize=1)
+def _glossary_words() -> dict:
+    """Default nouns the app fills into {{device}}, {{deviceLower}} and the like, read from glossary.ts."""
+    glossary = _TEST_ROOT.parent / "src" / "shared" / "runtimeStyle" / "glossary.ts"
+    if not glossary.exists():
+        return {}
+    block = re.search(r"GLOSSARY_DEFAULTS\s*=\s*\{(.*?)\}", glossary.read_text(encoding="utf-8"), re.S)
+    words = dict(re.findall(r'(\w+):\s*"([^"]*)"', block.group(1))) if block else {}
+    words.update({f"{name}Lower": word.lower() for name, word in list(words.items())})
+    return words
+
+
 def app_i18n(key: str) -> str:
-    """Dot-path lookup into the app's locale file, e.g. app_i18n('auth.verification.heading')."""
+    """Dot-path lookup into the app's locale file, e.g. app_i18n('auth.verification.heading').
+    Glossary placeholders are filled the way the app shows them; others like {{count}} stay."""
     node = _locale_strings()
     for part in key.split("."):
         node = node[part]
+    if isinstance(node, str):
+        words = _glossary_words()
+        node = re.sub(r"\{\{(\w+)\}\}", lambda m: words.get(m.group(1), m.group(0)), node)
     return node
 
 

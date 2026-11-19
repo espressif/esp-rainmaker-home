@@ -212,21 +212,40 @@ export function getFeatures(): Record<FeatureKey, boolean> {
 }
 
 /**
+ * Whether the Google provider should use the native account picker instead of
+ * the hosted browser OAuth flow.
+ *
+ * Like `isNativeAppleSignInEnabled`, NOT a FeatureKey: it picks a transport for
+ * one provider. It is also separate from the client ids, which only decide
+ * whether the build CAN show the picker — they are build identity, and the
+ * single iOS binary carries .env.global's ids in every region, so a per-region
+ * off switch has to be this. Requires Android or iOS, third-party auth (SDK /
+ * region / binary cascade), and ENABLE_NATIVE_GOOGLE_SIGN_IN — disable-only, so
+ * an absent key means enabled; CN sets it false.
+ *
+ * A false result is not a dead end — the SDK uses the hosted flow instead.
+ */
+export function isNativeGoogleSignInEnabled(): boolean {
+  if (Platform.OS !== 'android' && Platform.OS !== 'ios') return false;
+  if (!getFeatures().thirdPartyAuth) return false;
+  return getRegionConfig().features.enableNativeGoogleSignIn === true;
+}
+
+/**
  * Whether the Apple provider should use the system Sign in with Apple sheet
  * instead of the hosted browser OAuth flow.
  *
  * Deliberately NOT a FeatureKey: this selects a transport for one provider, not
- * whether a product surface exists, and it is opt-in rather than part of the
- * disable-only cascade. Three conditions, all required:
+ * whether a product surface exists, so it sits outside the FeatureKey cascade.
+ * Three conditions, all required:
  *
  *   • iOS — Android has no native Sign in with Apple.
  *   • third-party auth available at all (SDK / region / binary cascade).
- *   • the active region opts in via ENABLE_NATIVE_APPLE_SIGN_IN, which gates on
+ *   • the active region allows it via ENABLE_NATIVE_APPLE_SIGN_IN, which gates on
  *     whether that deployment's backend supports the `apple` federated
- *     provider. Default false; see .env.global.example.
+ *     provider. Disable-only: an absent key means enabled; CN sets it false.
  *
- * A false result is not a dead end — the caller uses the hosted flow, which is
- * how Apple login works today.
+ * A false result is not a dead end — the SDK uses the hosted flow instead.
  */
 export function isNativeAppleSignInEnabled(): boolean {
   if (Platform.OS !== 'ios') return false;

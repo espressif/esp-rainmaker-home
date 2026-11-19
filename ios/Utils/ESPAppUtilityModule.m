@@ -26,4 +26,10 @@ RCT_EXTERN_METHOD(requestAllPermissions)
 RCT_EXTERN_METHOD(acceptCnConsent:(RCTPromiseResolveBlock)resolve
                   rejecter:(RCTPromiseRejectBlock)reject)
 
+RCT_EXTERN_METHOD(beginBackgroundTask:(NSString *)name
+                  resolver:(RCTPromiseResolveBlock)resolve
+                  rejecter:(RCTPromiseRejectBlock)reject)
+
+RCT_EXTERN_METHOD(endBackgroundTask:(nonnull NSNumber *)taskId)
+
 @end

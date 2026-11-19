@@ -19,6 +19,7 @@ import { ESPCDFForgotPasswordRequestPayload } from "@store";
 // import { getGroups } from "./groups/getGroups";
 import { transformToESPCDFUser } from "./transformers";
 import { ESPRMBaseAdaptorIdentifier } from "./constants";
+import { retryOnNetworkFailure } from "@sdk-adaptors/shared/utils/networkRetry";
 
 export { ESPRMBaseAdaptorIdentifier };
 
@@ -65,10 +66,7 @@ export class ESPRMBaseSDKAdaptor implements ESPSDKAdaptor {
 
     async login(input: ESPSDKAdaptorAPIRequest<ESPCDFLoginRequestPayload>): Promise<ESPSDKAdaptorAPIDataResponse<ESPCDFUser>> {
         const { username, password } = input.request as { username: string, password: string };
-        const esprmUser = await this._authInstance.login(
-            username,
-            password,
-        );
+        const esprmUser = await retryOnNetworkFailure(() => this._authInstance.login(username, password), "ESPRMBase.login");
         if (!esprmUser) {
             throw new Error("Login failed: No user returned");
         }
@@ -95,7 +93,7 @@ export class ESPRMBaseSDKAdaptor implements ESPSDKAdaptor {
 
     async getSignUpCode(input: ESPSDKAdaptorAPIRequest<ESPCDFGetSignUpCodeRequestPayload>): Promise<ESPSDKAdaptorAPIResponse> {
         const { username, password } = input.request as { username: string, password: string };
-        const response = await this._authInstance.sendSignUpCode(username, password);
+        const response = await retryOnNetworkFailure(() => this._authInstance.sendSignUpCode(username, password), "ESPRMBase.sendSignUpCode");
         return {
             status: "success",
             description: response?.description || "Signup code fetched successfully",
@@ -116,7 +114,7 @@ export class ESPRMBaseSDKAdaptor implements ESPSDKAdaptor {
 
     async forgotPassword(input: ESPSDKAdaptorAPIRequest<ESPCDFForgotPasswordRequestPayload>): Promise<ESPSDKAdaptorAPIResponse> {
         const { username } = input.request as { username: string };
-        const response = await this._authInstance.forgotPassword(username);
+        const response = await retryOnNetworkFailure(() => this._authInstance.forgotPassword(username), "ESPRMBase.forgotPassword");
         return {
             status: "success",
             description: response?.description || "Forgot password successful",

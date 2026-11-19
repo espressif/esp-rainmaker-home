@@ -4,41 +4,122 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-// Web build of the style store. Web reads its style from the page URL `brand` parameter, so nothing is saved or fetched.
+// Web: style from URL `brand` (config.ts) or `@esp_runtime_brand_json` (same storage family as runtime config).
 
-import type { PublishedStyle, StyleDocument } from "./schema";
+import { RUNTIME_CONFIG_STORAGE_KEYS } from "@config/runtime.keys.config";
+import asyncStorageAdapter from "@native-adaptors/implementations/ESPAsyncStorage";
+import { fetchBrandDocumentForUrl } from "./fetchPublishedBrand";
+import { parseUrlStyle, type PublishedStyle, type StyleDocument } from "./schema";
 
-/** Same export as on native; never thrown on web. */
+/** Same export as on native; rarely thrown on web fetch. */
 export class UnreadableStyleError extends Error {}
 
+const LOG_PREFIX = "[RuntimeStyle]";
+
 /**
- * Web has no saved style file.
- * @returns Always null
+ * Reads persisted brand JSON synchronously for module boot (AsyncStorage on web uses localStorage).
+ * @returns Parsed style document, or null when absent or invalid
+ */
+function readStoredBrandSync(): StyleDocument | null {
+  if (typeof localStorage === "undefined") return null;
+  try {
+    const raw = localStorage.getItem(RUNTIME_CONFIG_STORAGE_KEYS.ACTIVE_BRAND_JSON);
+    if (!raw) return null;
+    const { style } = parseUrlStyle(JSON.parse(raw));
+    return style ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** Style read once when the module loads; this launch draws it. */
+const bootStoredBrand = readStoredBrandSync();
+
+/**
+ * @returns Whether a brand document is stored for the active deployment
+ */
+function hasStoredBrand(): boolean {
+  if (typeof localStorage === "undefined") return false;
+  return localStorage.getItem(RUNTIME_CONFIG_STORAGE_KEYS.ACTIVE_BRAND_JSON) !== null;
+}
+
+/**
+ * Saved style for this launch (see {@link config.ts}).
+ * @returns Cached document from runtime storage, or null
  */
 export function readSaved(): StyleDocument | null {
-  return null;
+  return bootStoredBrand;
 }
 
 /**
- * Web does not sync a saved style.
- * @param _styleUrl - Ignored on web
- * @returns Always false
+ * Removes the saved brand from runtime storage immediately (before a hard navigation).
  */
-export async function syncSaved(_styleUrl?: string): Promise<boolean> {
-  return false;
+export function clearActiveBrandStorageSync(): void {
+  if (typeof localStorage === "undefined") return;
+  localStorage.removeItem(RUNTIME_CONFIG_STORAGE_KEYS.ACTIVE_BRAND_JSON);
 }
 
 /**
- * Web does not fetch a published style.
- * @param _brandUrl - Ignored on web
- * @returns Always null
+ * Persists the active deployment brand document (survives refresh and logout clear).
+ * @param document - Full brand.json payload for the private deployment
  */
-export async function previewPublished(_brandUrl: string): Promise<PublishedStyle | null> {
-  return null;
+export async function persistActiveBrandDocument(document: StyleDocument): Promise<void> {
+  await asyncStorageAdapter.setItem(
+    RUNTIME_CONFIG_STORAGE_KEYS.ACTIVE_BRAND_JSON,
+    JSON.stringify(document),
+  );
 }
 
 /**
- * Web has no launch style sync.
- * @param _styleUrl - Ignored on web
+ * Drops the saved brand when switching to a built-in deployment or on config reset.
  */
-export function syncOnLaunch(_styleUrl?: string): void {}
+export async function clearActiveBrandDocument(): Promise<void> {
+  clearActiveBrandStorageSync();
+  await asyncStorageAdapter.removeItem(RUNTIME_CONFIG_STORAGE_KEYS.ACTIVE_BRAND_JSON);
+}
+
+/**
+ * Saves or clears the web brand cache. Returns whether the on-disk value differs from this launch.
+ * @param brandUrl - Deployment brand.json URL, or undefined to clear
+ * @returns True when a reload would pick up a different style than {@link bootStoredBrand}
+ */
+export async function syncSaved(brandUrl?: string): Promise<boolean> {
+  if (!brandUrl) {
+    const had = bootStoredBrand !== null || hasStoredBrand();
+    await clearActiveBrandDocument();
+    return had;
+  }
+
+  const { document, unreadable } = await fetchBrandDocumentForUrl(brandUrl);
+  if (unreadable || !document) return false;
+
+  const nextChecksum = document.checksum ?? null;
+  const bootChecksum = bootStoredBrand?.checksum ?? null;
+  if (nextChecksum === bootChecksum && hasStoredBrand()) {
+    return false;
+  }
+
+  await persistActiveBrandDocument(document);
+  return nextChecksum !== bootChecksum;
+}
+
+/**
+ * Fetches brand.json for the trust dialog.
+ * @param brandUrl - Deployment brand.json URL
+ * @returns Parsed style for preview, or null when missing or invalid
+ */
+export async function previewPublished(brandUrl: string): Promise<PublishedStyle | null> {
+  const { document, unreadable } = await fetchBrandDocumentForUrl(brandUrl);
+  if (unreadable || !document) return null;
+  return document as PublishedStyle;
+}
+
+/**
+ * Refreshes saved brand from the active deployment URL in the background.
+ * @param brandUrl - Active deployment brand.json URL, if any
+ */
+export function syncOnLaunch(brandUrl?: string): void {
+  void syncSaved(brandUrl).catch((error: unknown) => {
+    console.warn(`${LOG_PREFIX} Launch style sync failed`, error);
+  });
+}

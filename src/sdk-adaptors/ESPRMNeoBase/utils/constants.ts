@@ -467,3 +467,18 @@ export const ESPRMNEO_PROVISION_LOG_DISCONNECT =
   "Provisioning device disconnect";
 export const ESPRMNEO_PROVISION_LOG_CHAL_RESP_SUPPORT =
   "Challenge-response support check";
+
+// ─── Per-node service credentials (assumed-roles) ─────────────────────────────
+
+/** Default services requested when the CDF caller does not name any. */
+export const ESPRMNEO_ASSUME_ROLE_DEFAULT_SERVICES = ["kvs"] as const;
+export const ESPRMNEO_ASSUME_ROLE_SUPPORTED_SERVICES = ["kvs", "s3"] as const;
+export const ESPRMNEO_USER_ERR_ASSUME_ROLE_NODE_REQUIRED =
+  "RMNeo assumeRole: exactly one nodeId is required (per-node service credentials)";
+export const ESPRMNEO_USER_ERR_ASSUME_ROLE_GROUP_NOT_FOUND =
+  "RMNeo assumeRole: pass groupIds or select a current home before requesting credentials";
+export const ESPRMNEO_USER_ERR_ASSUME_ROLE_UNSUPPORTED_SERVICE =
+  "RMNeo assumeRole: unsupported service (expected kvs and/or s3)";
+export const ESPRMNEO_USER_ERR_ASSUME_ROLE_FAILED =
+  "RMNeo assumeRole: failed to obtain per-node service credentials";
+export const ESPRMNEO_USER_LOG_ASSUME_ROLE_PREFIX = "[rmneoAssumeRole]";

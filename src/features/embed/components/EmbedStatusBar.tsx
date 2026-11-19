@@ -9,8 +9,10 @@ import { View, Text, StyleSheet } from "react-native";
 import { Zap } from "lucide-react-native";
 
 import { useHostBattery } from "@features/embed/hooks";
+import { styleTheme } from "@shared/runtimeStyle/config";
 import { tokens } from "@shared/theme/tokens";
 import {
+  BRAND_THEME_DARK,
   WEB_EMBED_DOCUMENT_VISIBILITY_EVENT,
   WEB_EMBED_DOCUMENT_VISIBILITY_VISIBLE,
   WEB_EMBED_CONTROL_INK,
@@ -95,6 +97,10 @@ export function EmbedStatusBar({ height }: EmbedStatusBarProps) {
   }, []);
 
   const fillWidth = percent == null ? 0 : Math.round(18 * (percent / 100));
+  const ink =
+    styleTheme === BRAND_THEME_DARK
+      ? tokens.colors.black
+      : WEB_EMBED_CONTROL_INK;
 
   return (
     <View
@@ -102,24 +108,22 @@ export function EmbedStatusBar({ height }: EmbedStatusBarProps) {
       style={[styles.row, { height, paddingHorizontal: WEB_EMBED_STATUS_BAR_PADDING_X }]}
       accessibilityLabel="iPhone status bar"
     >
-      <Text style={styles.clock}>{clock}</Text>
+      <Text style={[styles.clock, { color: ink }]}>{clock}</Text>
       <View style={styles.spacer} />
       {percent != null ? (
         <View style={styles.batteryCluster}>
-          <Text style={styles.percent}>{percent}%</Text>
-          <View style={styles.batteryBody}>
-            <View style={[styles.batteryFill, { width: fillWidth }]} />
+          <Text style={[styles.percent, { color: ink }]}>{percent}%</Text>
+          <View style={[styles.batteryBody, { borderColor: ink }]}>
+            <View
+              style={[styles.batteryFill, { width: fillWidth, backgroundColor: ink }]}
+            />
             {charging ? (
               <View style={styles.boltWrap}>
-                <Zap
-                  size={9}
-                  color={WEB_EMBED_CONTROL_INK}
-                  fill={WEB_EMBED_CONTROL_INK}
-                />
+                <Zap size={9} color={ink} fill={ink} />
               </View>
             ) : null}
           </View>
-          <View style={styles.batteryCap} />
+          <View style={[styles.batteryCap, { backgroundColor: ink }]} />
         </View>
       ) : null}
     </View>
@@ -140,7 +144,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "600",
     fontFamily: tokens.fonts.medium,
-    color: WEB_EMBED_CONTROL_INK,
   },
   spacer: {
     flex: 1,
@@ -154,14 +157,12 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "600",
     fontFamily: tokens.fonts.medium,
-    color: WEB_EMBED_CONTROL_INK,
   },
   batteryBody: {
     width: 22,
     height: 10,
     borderRadius: 2,
     borderWidth: 1,
-    borderColor: WEB_EMBED_CONTROL_INK,
     padding: 1,
     justifyContent: "center",
     overflow: "hidden",
@@ -169,7 +170,6 @@ const styles = StyleSheet.create({
   batteryFill: {
     height: "100%",
     borderRadius: 1,
-    backgroundColor: WEB_EMBED_CONTROL_INK,
   },
   boltWrap: {
     ...StyleSheet.absoluteFillObject,
@@ -181,6 +181,5 @@ const styles = StyleSheet.create({
     height: 4,
     borderTopRightRadius: 1,
     borderBottomRightRadius: 1,
-    backgroundColor: WEB_EMBED_CONTROL_INK,
   },
 });

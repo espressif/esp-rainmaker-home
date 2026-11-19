@@ -13,7 +13,17 @@ logger = logging.getLogger(__name__)
 
 
 class Permissions(BasePage):
-    """Clears OS permission dialogs across Android brands and iOS."""
+    """
+    Clears permission prompts: the app's own purpose dialog first, then the OS
+    dialogs across Android brands and iOS.
+
+    On the Android CN build the app never shows a system permission prompt on
+    its own. Every request is preceded by an in-app dialog naming the
+    permission, the feature and what the data is used for, which does not
+    auto-dismiss. The OS prompt only appears after that dialog is answered, so
+    anything waiting on a system alert has to answer the in-app one first.
+    Other builds show the OS prompts directly (Bluetooth + location at launch).
+    """
 
     def __init__(self, driver, page_helper_manager=None):
         super().__init__(driver, page_helper_manager)
@@ -55,7 +65,55 @@ class Permissions(BasePage):
                 return brand
         return 'generic'
 
+    def rationale_present(self, timeout=1) -> bool:
+        """Return True while the app's in-app permission purpose dialog is shown."""
+        return self._visible_by_key('rationale_allow', timeout)
+
+    def handle_rationale_dialog(self, action='allow', timeout=2) -> bool:
+        """
+        Answer the app's in-app permission purpose dialog.
+
+        On the Android CN build it is shown immediately before every OS
+        permission prompt and never auto-dismisses, so the system dialog does
+        not appear until this is answered. Returns True when a dialog was
+        answered.
+        """
+        key = 'rationale_deny' if action == 'deny' else 'rationale_allow'
+        if self._click_by_key(key, timeout):
+            logger.info("In-app permission rationale %s - clicked '%s'", action, key)
+            return True
+        return False
+
+    def handle_native_rationale_dialog(self, action='allow', timeout=2) -> bool:
+        """
+        Answer the native rationale AlertDialog shown by the in-app ChipTool
+        Matter commissioning activity (the only screen that asks for a permission
+        outside React Native).
+
+        Deliberately not part of `handle_all_permissions`: it matches any
+        AlertDialog button, so it is opt-in for the Matter flow rather than
+        something the generic drain can click by accident.
+        """
+        key = 'native_rationale_deny' if action == 'deny' else 'native_rationale_allow'
+        if self._click_by_key(key, timeout):
+            logger.info("Native permission rationale %s - clicked '%s'", action, key)
+            return True
+        return False
+
     def any_system_alert_present(self, timeout=1) -> bool:
+        """
+        Probe for anything blocking the screen with a permission question: the
+        app's in-app purpose dialog, or an OS permission dialog.
+
+        Callers use this as the "is a permission prompt in the way?" gate before
+        `handle_all_permissions`, so it has to cover the in-app dialog too — the
+        OS prompt is queued behind it and would not be found on its own.
+        """
+        if self.rationale_present(timeout=min(timeout, 1)):
+            return True
+        return self._os_alert_present(timeout)
+
+    def _os_alert_present(self, timeout=1) -> bool:
         """
         Probe for a blocking system permission dialog, polling up to `timeout`.
 
@@ -77,15 +135,22 @@ class Permissions(BasePage):
 
     def handle_all_permissions(self, action='allow', timeout=5, accept_join=False):
         """
-        Clear every system permission dialog currently shown (location,
-        Bluetooth, local network, notifications, camera). Fast no-op when none
-        is displayed, so it is safe to call from screen checks. Returns the list
-        of dialogs handled.
+        Clear every permission prompt currently shown: the app's in-app purpose
+        dialog and the system dialogs queued behind it (location, Bluetooth,
+        local network, notifications, camera). Fast no-op when none is
+        displayed, so it is safe to call from screen checks. Returns the list of
+        dialogs handled.
         """
         handled = []
         deadline = time.time() + timeout
         while time.time() < deadline:
-            if not self.any_system_alert_present():
+            # On the Android CN build the app explains each permission first;
+            # its dialog has to be answered before the OS prompt is shown.
+            if self.handle_rationale_dialog(action, timeout=1):
+                handled.append('rationale')
+                time.sleep(0.8)  # let the OS prompt come up
+                continue
+            if not self._os_alert_present():
                 break
             if self._handle_permission(action, 2, accept_join=accept_join):
                 handled.append('system_alert')
@@ -99,12 +164,17 @@ class Permissions(BasePage):
         return handled
 
     def drain_system_alerts(self, action='allow', overall_timeout=15, quiet_rounds=2, accept_join=False):
-        """Proactively clear all queued system permission dialogs up front and return the count cleared."""
+        """Proactively clear all queued permission dialogs (in-app purpose dialog first, then system) and return the count cleared."""
         deadline = time.time() + overall_timeout
         quiet = 0
         cleared = 0
         while time.time() < deadline and quiet < quiet_rounds:
-            if self.any_system_alert_present(timeout=1):
+            if self.handle_rationale_dialog(action, timeout=1):
+                cleared += 1
+                quiet = 0
+                time.sleep(0.8)
+                continue
+            if self._os_alert_present(timeout=1):
                 if self._handle_permission(action, 2, accept_join=accept_join):
                     cleared += 1
                 quiet = 0

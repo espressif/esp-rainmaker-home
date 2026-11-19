@@ -8,10 +8,6 @@ on:
 permissions:
   contents: write
 
-env:
-  # Bump this to reset cache manually if needed
-  CACHE_VERSION: v1
-
 jobs:
   quality:
     runs-on: ubuntu-latest
@@ -38,32 +34,32 @@ jobs:
           - APP_FLAVOR: cn
 
     steps:
-      # 1. Checkout code
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # 2. Setup Node (for Expo/React Native deps)
+      - name: Free disk space
+        run: |
+          set -euo pipefail
+          # Drop unused GH-hosted toolchains. Do not remove /usr/local/lib/android
+          # itself — setup-android@v4 recreates it without sudo and hits EACCES.
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/share/boost \
+            "$AGENT_TOOLSDIRECTORY" \
+            /usr/local/lib/android/sdk/ndk \
+            /usr/local/lib/android/sdk/system-images || true
+          df -h
+
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version-file: '.nvmrc'
           cache: 'npm'
 
-      # Cache node_modules (helps in release-only pipelines)
-      - name: Cache node_modules
-        uses: actions/cache@v4
-        with:
-          path: node_modules
-          key: node-modules-${{ env.CACHE_VERSION }}
-
-      # 3. Install dependencies
       - name: Install dependencies
         run: npm ci
 
-      # 4. Environment + native config for THIS flavor (decoded from per-flavor CI secrets).
-      # 4b. Release signing + Firebase config from GitHub Secrets (base64-encoded files)
-      #     Create repo secrets: FS_ENV_<FLAVOR>_FILE, FS_KEYSTORE_<FLAVOR>_FILE, FS_GOOGLE_SERVICES_JSON (global)
-      #     (see scripts/print-ci-secrets-base64.sh). keystore.properties via prebuild.
+      # Release signing + Firebase config from GitHub Secrets (base64-encoded).
+      # Secrets: FS_ENV_<FLAVOR>_FILE, FS_KEYSTORE_<FLAVOR>_FILE,
+      # FS_GOOGLE_SERVICES_JSON (global). keystore.properties via prebuild.
       - name: Decode CI secrets for ${{ matrix.APP_FLAVOR }}
         env:
           APP_FLAVOR: ${{ matrix.APP_FLAVOR }}
@@ -108,50 +104,45 @@ jobs:
       - name: Prebuild ${{ matrix.APP_FLAVOR }} (sync env to Android)
         run: npm run prebuild:android:${{ matrix.APP_FLAVOR }}
 
-      # 5. Setup Java (required for Android build)
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
           distribution: "temurin"
           java-version: "17"
 
-      # 6. Setup Android SDK
-      # v4+ is required: Google stopped serving the legacy `tools` SDK package
-      # in Sep 2026, so the v3 line (which requests it by default) fails at
-      # sdkmanager on every run and is no longer maintained upstream.
+      # v4+ required: Google stopped serving legacy `tools` SDK package.
       - name: Setup Android SDK
         uses: android-actions/setup-android@v4
 
-      # Cache Gradle dependencies (main speed boost across releases)
-      - name: Cache Gradle
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.gradle/caches
-            ~/.gradle/wrapper
-          key: gradle-${{ env.CACHE_VERSION }}
-          restore-keys: |
-            gradle-
-
-      # 7. Make Gradle executable
       - name: Grant execute permission
         run: chmod +x android/gradlew
 
-      # 8. Build the flavor's APK (Release)
+      # GitHub-only build knobs (local android/gradle.properties stays at 3g / 2 R8 workers):
+      # - 6g heap: -Dorg.gradle.jvmargs overrides gradle.properties for the build JVM
+      # - one R8 worker: ORG_GRADLE_PROJECT_* overrides the project property
+      # - arm64-v8a only (matches repo default; skips emulator ABIs)
+      # - skip PNG crunch / vital lint to cut disk + peak memory
+      # - no Gradle dependency cache restore (was filling the runner disk)
       - name: Build ${{ matrix.APP_FLAVOR }} APK
         env:
           APP_FLAVOR: ${{ matrix.APP_FLAVOR }}
+          ORG_GRADLE_PROJECT_android.r8.maxWorkers: "1"
+          ORG_GRADLE_PROJECT_reactNativeArchitectures: arm64-v8a
+          ORG_GRADLE_PROJECT_android.enablePngCrunchInReleaseBuilds: "false"
+          ORG_GRADLE_PROJECT_android.enableAaptPngCrunch: "false"
+          ORG_GRADLE_PROJECT_android.lint.checkReleaseBuilds: "false"
         run: |
           GRADLE_FLAVOR="$(echo "${APP_FLAVOR}" | awk '{print toupper(substr($0,1,1)) tolower(substr($0,2))}')"
           cd android
           ./gradlew "assemble${GRADLE_FLAVOR}Release" \
-            --build-cache \
-            -x lint -x test \
+            "-Dorg.gradle.jvmargs=-Xmx6g -XX:MaxMetaspaceSize=1g -Dfile.encoding=UTF-8 -XX:+UseParallelGC" \
+            -x lint \
+            -x test \
             --no-daemon \
+            --no-build-cache \
             --console=plain \
             --stacktrace
 
-      # 8b. Copy to per-flavor filename
       - name: Copy APK
         env:
           APP_FLAVOR: ${{ matrix.APP_FLAVOR }}
@@ -159,15 +150,12 @@ jobs:
           APK_PATH="android/app/build/outputs/apk/${APP_FLAVOR}/release/app-${APP_FLAVOR}-release.apk"
           cp "${APK_PATH}" "esp-rainmaker-home-${APP_FLAVOR}.apk"
 
-      # 9. Upload this flavor's APK as an artifact
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: esp-rainmaker-home-${{ matrix.APP_FLAVOR }}.apk
           path: esp-rainmaker-home-${{ matrix.APP_FLAVOR }}.apk
 
-  # 10. Attach BOTH flavors' APKs to a single GitHub Release (runs after both
-  #     matrix legs succeed).
   release:
     needs: build
     runs-on: ubuntu-latest

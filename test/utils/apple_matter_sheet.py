@@ -275,6 +275,10 @@ class AppleMatterSheet:
             if error:
                 text, _, _ = error
                 raise RuntimeError(f"Apple Matter sheet reported a failure: {text!r}")
+            # OCR can split one message over lines ("Unable to" / "Add Accessory").
+            screen = " ".join(text for text, _ in lines)
+            if any(marker.lower() in screen.lower() for marker in ERROR_MARKERS):
+                raise RuntimeError(f"Apple Matter sheet reported a failure: {screen[:200]!r}")
 
             if not self._match(lines, SHEET_MARKERS):
                 if appeared:

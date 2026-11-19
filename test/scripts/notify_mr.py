@@ -41,9 +41,14 @@ def _build_note(summary: dict) -> str:
     report_url = summary.get("report_url") or "report URL unavailable (artifact host offline?)"
     device = f" on {summary['model']}" if summary.get("model") else ""
     deployment = f" ({os.environ['DEPLOYMENT']})" if os.environ.get("DEPLOYMENT") else ""
+    rerun_of = summary.get("rerun_of")
     lines = [
-        f"## {status_icon} {_platform_label()}{deployment} Test Report — {summary.get('status', 'UNKNOWN')}{device}",
+        f"## {status_icon} {'RE-RUN FAILURES — ' if rerun_of else ''}{_platform_label()}{deployment} Test Report — {summary.get('status', 'UNKNOWN')}{device}",
         "",
+    ]
+    if rerun_of:
+        lines += [f"Re-run of only the tests that failed in run {rerun_of}; that run has its own comment and report.", ""]
+    lines += [
         "| Total | Pass | Fail | Skip | Abort |",
         "|-------|------|------|------|-------|",
         f"| {summary.get('total_tests', 0)} | {summary.get('total_pass', 0)} "

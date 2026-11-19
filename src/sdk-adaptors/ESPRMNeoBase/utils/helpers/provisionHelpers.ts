@@ -20,7 +20,9 @@ import {
   type GroupStoreCallbacks,
 } from "@store";
 import { delay } from "@shared/utils/common";
+import ESPAppUtilityAdapter from "@native-adaptors/implementations/ESPAppUtilityAdapter";
 import {
+  ADD_DEVICE_BACKGROUND_TASK,
   ESP_CHALLENGE_RESPONSE_CONSTANTS,
   PROVISION_NODE_ONLINE_TIMEOUT_ERROR,
   PROVISION_SETUP_PROGRESS_MESSAGES,
@@ -266,21 +268,25 @@ class ProvisionFlow {
         `${LOG_PREFIX} createProvisionProgressHandler() must run before invokeProvisionOperation()`,
       );
     }
+    const progressHandler = this.progressHandler;
 
     try {
-      await provisioningDevice.operations.provision(
-        ssid,
-        password,
-        this.progressHandler,
-        groupId,
-        ProvisionType.CHAL_RESP,
-        {
-          // App runs waitForOnline after nodeId is known so we can purge any
-          // stale NodeMQTTOrchestrator binding first (same nodeId after
-          // factory-reset kept a subgroup shadow and skipped rebind).
-          waitForOnline: false,
-          user: this.user._raw,
-        },
+      // Holds iOS background time so the provisioning cloud calls finish if the app goes to the background.
+      await ESPAppUtilityAdapter.runWithBackgroundTime(ADD_DEVICE_BACKGROUND_TASK, () =>
+        provisioningDevice.operations.provision(
+          ssid,
+          password,
+          progressHandler,
+          groupId,
+          ProvisionType.CHAL_RESP,
+          {
+            // App runs waitForOnline after nodeId is known so we can purge any
+            // stale NodeMQTTOrchestrator binding first (same nodeId after
+            // factory-reset kept a subgroup shadow and skipped rebind).
+            waitForOnline: false,
+            user: this.user._raw,
+          },
+        ),
       );
     } catch (error) {
       console.error(`${LOG_PREFIX} Provision failed:`, error);

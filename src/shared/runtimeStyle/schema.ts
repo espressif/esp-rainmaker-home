@@ -386,3 +386,33 @@ export function decodeUrlStyle(raw: string): unknown {
     return undefined;
   }
 }
+
+/**
+ * Encodes a style document for the `brand` URL parameter (base64url of UTF-8 JSON, no padding).
+ * @param document - Style document to embed in the URL
+ * @returns Encoded parameter value (not URL-encoded)
+ */
+export function encodeUrlStyle(document: StyleDocument): string {
+  const g = globalThis as { btoa?: (data: string) => string; TextEncoder?: typeof TextEncoder };
+  const json = JSON.stringify(document);
+  if (typeof g.TextEncoder === "function" && typeof g.btoa === "function") {
+    const bytes = new g.TextEncoder().encode(json);
+    let binary = "";
+    for (const byte of bytes) {
+      binary += String.fromCharCode(byte);
+    }
+    return g
+      .btoa(binary)
+      .replace(/\+/g, "-")
+      .replace(/\//g, "_")
+      .replace(/=+$/, "");
+  }
+  if (typeof g.btoa === "function") {
+    return g
+      .btoa(json)
+      .replace(/\+/g, "-")
+      .replace(/\//g, "_")
+      .replace(/=+$/, "");
+  }
+  return "";
+}

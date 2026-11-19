@@ -11,6 +11,7 @@ import sys
 import logging
 import atexit
 import os
+import json
 import re
 import subprocess
 import time
@@ -424,13 +425,24 @@ def _name_e2e_node(cloud, node_id, fw_name, target_name):
         return "error"
 
 
+def _node_names(cloud, node_id, fw_name):
+    """The names the app may still show for a reused node BEFORE the liveness probe renames it: the Name param and the node's config name; the home card can keep the old name until it refreshes, and ensure_device_name renames it from the device settings."""
+    try:
+        node = next((n for n in cloud.nodes() if n.get("node_id") == node_id), {})
+    except Exception:
+        return []
+    names = [((node.get("params") or {}).get(fw_name) or {}).get("Name"), node.get("name")]
+    return [n for n in names if n]
+
+
 def _e2e_node_live(cloud, device_serial, node_id, fw_name, target_name, timeout=60, attempts=3):
     """(live, reason): the cloud reports the node online, accepts the Name write, and the chip's UART shows it arrived (online alone where the cloud cannot write node params); retried because opening the serial port reboots the chip and a write sent before it reconnects is lost."""
     import time as _time
     reason = ""
+    online = _poll_node_online(cloud, node_id, timeout=timeout)
+    if not online:
+        e2e_log.info("Cloud has not flagged node %s online within %ss (the connected flag lags a fresh provision by minutes); deciding on the Name write + UART echo instead", node_id, timeout)
     for _ in range(attempts):
-        if not _poll_node_online(cloud, node_id, timeout=timeout):
-            return False, f"cloud did not report node {node_id} online within {timeout}s"
         since = device_serial.marker()
         status = _name_e2e_node(cloud, node_id, fw_name, target_name)
         if status == "unsupported":
@@ -439,8 +451,8 @@ def _e2e_node_live(cloud, device_serial, node_id, fw_name, target_name, timeout=
             return True, ""
         reason = {"offline": "cloud answered Node is offline",
                   "error": "the cloud Name write failed"}.get(status, "the chip never received the cloud Name write")
-        _time.sleep(5)
-    return False, f"node {node_id}: {reason} ({attempts} attempts)"
+        _time.sleep(5 if online else 30)
+    return False, f"node {node_id}: {reason} ({attempts} attempts{'' if online else ', cloud never flagged it online'})"
 
 
 _E2E_FIRST_ACQUIRE_WAIT_S = 120
@@ -587,6 +599,7 @@ def reserve_online_device(request, helper, hardware_session, resource_manager, h
         e2e_log.info("Reusing session-held E2E chip %s (node %s) on %s", chosen.mac_address, chosen_node, chosen.port)
 
     device_serial = DeviceSerial(resource_manager, chosen, fw_name)
+    prior_names = _node_names(cloud, chosen_node, fw_name) if (cloud is not None and chosen_node and not provisioned_now) else []
     if cloud is not None:
         live, reason = _e2e_node_live(cloud, device_serial, chosen_node, fw_name, device_name,
                                       timeout=120 if provisioned_now else 60)
@@ -623,7 +636,7 @@ def reserve_online_device(request, helper, hardware_session, resource_manager, h
     hardware_session["fw_name"] = fw_name
     param_name = (sel_node.get("params") or {}).get(fw_name, {}).get("Name")
     aliases = []
-    for candidate in (param_name, sel_node.get("name")):
+    for candidate in prior_names + [param_name, sel_node.get("name")]:
         if candidate and candidate != device_name and candidate not in aliases:
             aliases.append(candidate)
     helper.home.ensure_device_name(device_name, aliases)
@@ -880,6 +893,8 @@ def pytest_addoption(parser):
                      help="Iterations for @scale scenarios (env: SCALE_COUNT)")
     parser.addoption("--active-sdk", action="store", default=None, help="SDK the app under test was built with, overriding ACTIVE_SDK (ids in config/sdk.identifiers.ts)")
     parser.addoption("--fresh-users", action="store_true", default=False, help="Clear persisted registered users at session start so the run creates fresh ones")
+    parser.addoption("--rerun-failed-from", action="store", default=os.environ.get("RERUN_FAILED_FROM", ""),
+                     help="Run only the tests that failed in a previous run: a reports/results_<run_id>.json path, a report URL's run id, or 'latest'")
 
 
 def _active_sdk_under_test(config) -> str:
@@ -923,6 +938,45 @@ def pytest_collection_modifyitems(config, items):
     if deselected:
         config.hook.pytest_deselected(items=deselected)
         items[:] = selected
+    _apply_rerun_failed(config, items)
+
+
+def _rerun_source(config):
+    """Resolve --rerun-failed-from to a results JSON: a path, 'latest', or a run id such as 141412_03112026_motorolaedge60pro_56596."""
+    raw = (config.getoption("--rerun-failed-from") or "").strip()
+    if not raw:
+        return None
+    reports = Path("reports")
+    if raw == "latest":
+        candidates = sorted(reports.glob("results_*.json"), key=lambda p: p.stat().st_mtime)
+        if not candidates:
+            raise pytest.UsageError("--rerun-failed-from latest: no reports/results_*.json found")
+        return candidates[-1]
+    path = Path(raw)
+    if path.exists():
+        return path
+    match = re.search(r"(\d{6}_\d{8}_[A-Za-z0-9]+_\d+)", raw)
+    if match and (reports / f"results_{match.group(1)}.json").exists():
+        return reports / f"results_{match.group(1)}.json"
+    raise pytest.UsageError(f"--rerun-failed-from: no results file for '{raw}'")
+
+
+def _apply_rerun_failed(config, items):
+    """Keep only the tests the previous run failed, so a rerun is the same command plus one flag on CI and on a machine alike."""
+    source = _rerun_source(config)
+    if source is None:
+        return
+    data = json.loads(source.read_text())
+    failed = {t["nodeid"] for t in data.get("tests", []) if t.get("outcome") in ("failed", "error")}
+    config.rerun_failed_of = data.get("run_id") or source.stem.replace("results_", "", 1)
+    keep = [item for item in items if item.nodeid in failed]
+    dropped = [item for item in items if item.nodeid not in failed]
+    e2e_log.info("Rerun of %s: %s failed test(s) selected from %s collected", source.name, len(keep), len(items))
+    if dropped:
+        config.hook.pytest_deselected(items=dropped)
+        items[:] = keep
+    if not keep:
+        e2e_log.warning("Nothing to rerun: %s has no failed test among the collected ones", source.name)
 
 
 def pytest_configure(config):
@@ -1416,6 +1470,7 @@ _UIA2_CRASH_SIGNATURES = (
     "cannot be proxied to UiAutomator2",
 )
 _uia2_whitelisted_udids = set()
+_logcat_buffer_grown_udids = set()
 _ANDROID_SYSTEM_RESTART_SIGNATURES = (
     "Cannot start the 'io.appium.settings' application",
     "instrumentation process cannot be initialized",
@@ -1451,6 +1506,17 @@ def _whitelist_uiautomator2(udid):
             logger.warning("uia2 doze whitelist failed for %s: %s", pkg, error)
     _uia2_whitelisted_udids.add(udid)
     logger.info("uia2 server whitelisted from doze on %s", udid or "default device")
+
+
+def _grow_logcat_buffer(udid):
+    """Raises the phone's log buffer so a whole test's log is kept, the default one rolls over in seconds."""
+    if udid in _logcat_buffer_grown_udids:
+        return
+    try:
+        subprocess.run(_adb_prefix(udid) + ["logcat", "-G", "16M"], capture_output=True, text=True, timeout=15)
+        _logcat_buffer_grown_udids.add(udid)
+    except Exception as error:
+        logger.warning("logcat buffer resize failed: %s", error)
 
 
 def _unwedge_android_uiautomator2(udid, model="android device"):
@@ -1711,11 +1777,12 @@ def driver(request, appium_grid, app_installer):
         try:
             if platform == "android":
                 _whitelist_uiautomator2(capabilities.get("udid"))
+                _grow_logcat_buffer(capabilities.get("udid"))
                 driver_instance.update_settings({"waitForIdleTimeout": 200})
                 logger.info("Android: waitForIdleTimeout=200")
             elif platform == "ios":
-                driver_instance.update_settings({"animationCoolOffTimeout": 0})
-                logger.info("iOS: animationCoolOffTimeout=0")
+                driver_instance.update_settings({"animationCoolOffTimeout": 1})
+                logger.info("iOS: animationCoolOffTimeout=1")
         except Exception as e:
             logger.warning(f"Failed to update driver settings: {e}")
         

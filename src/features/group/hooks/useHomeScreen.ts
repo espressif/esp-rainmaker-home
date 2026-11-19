@@ -29,6 +29,7 @@ import { AppRestartContext } from "@context/appRestart.context";
 import { syncSaved } from "@shared/runtimeStyle/store";
 import { DEFAULT_HOME_GROUP_NAME } from "@shared/utils/constants";
 import { retryHomeLoadUntilItWorks } from "@features/group/utils/retryHomeLoad";
+import { isSessionLostError } from "@features/auth/utils/sessionLost";
 import { onHomeSyncSucceeded } from "@shared/utils/homeSyncTracker";
 
 export interface UseHomeScreenResult {
@@ -169,6 +170,11 @@ export function useHomeScreen(): UseHomeScreenResult {
       void syncHomeWithNodes()
         .catch((error: unknown) => {
           console.error("Failed to initialize home:", error);
+          if (isSessionLostError(error)) {
+            // No token to retry with: the session-ended listener takes the user to login.
+            unifiedUser?.sessionEnded("unauthorized");
+            return;
+          }
           setHomeLoadFailed(true);
           toast.showError(
             t("group.errors.failedToInitializeHome"),

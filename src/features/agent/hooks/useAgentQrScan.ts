@@ -6,9 +6,9 @@
 
 import { useCallback, useRef } from "react";
 import { useRouter } from "expo-router";
-import { useCameraPermissions } from "expo-camera";
 import { useTranslation } from "react-i18next";
 import { useToast } from "@shared/hooks/useToast";
+import { useCameraPermissionsWithPurpose } from "@shared/permissions";
 import { useCDF } from "@shared/hooks/useCDF";
 import { useAgent } from "./useAgent";
 import {
@@ -28,7 +28,7 @@ export function useAgentQrScan() {
   const { t } = useTranslation();
   const { store } = useCDF();
   const { addAgent, selectAgent } = useAgent();
-  const [permission, requestPermission] = useCameraPermissions();
+  const [permission, requestPermission] = useCameraPermissionsWithPurpose();
   const scannedRef = useRef(false);
   const processingRef = useRef(false);
 

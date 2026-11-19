@@ -39,6 +39,7 @@ class ResourceManager:
         self.flasher = FlashingService(
             esptool_path=self.config.esptool_path,
             config=self.config,
+            store=self.store,
         )
         self.serial_logger = SerialLogService()
         self._job_id = os.environ.get("CI_JOB_ID") or os.environ.get("BUILD_ID") or "local"
@@ -231,7 +232,7 @@ class ResourceManager:
         """Release a resource back to the available pool."""
         if failed:
             self.store.update_status(mac_address, ResourceStatus.FAILED, error=error)
-        self.store.release(mac_address)
+        self.flasher.note_release(mac_address, self.store.release(mac_address))
         logger.info("Released resource %s", mac_address)
 
     def update_status(self, mac_address: str, status: ResourceStatus, error: str = "") -> None:

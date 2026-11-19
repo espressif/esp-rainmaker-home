@@ -52,6 +52,9 @@ import { clearAllCdfProjectedNcfg } from "../utils/helpers/nodeHelpers";
 import { provisionDevice } from "../utils/helpers/provisionHelpers";
 import { addOnNetworkDeviceProvision } from "../utils/helpers/onNetworkProvisionHelpers";
 import {
+  getAssumeRoleCreds,
+} from "../utils/helpers/assumeRoleHelper";
+import {
   applyRmneoAdaptorUserCustomDataPatch,
   getRmneoAdaptorUserCustomData,
   resolveRmneoUserIdForCustomDataStorage,
@@ -73,7 +76,6 @@ import {
   ESPRMNEO_USER_DESC_PASSWORD_CHANGED,
   ESPRMNEO_USER_DESC_RECEIVED_SHARING_FETCHED,
   ESPRMNEO_USER_DESC_TIMEZONE_UPDATED,
-  ESPRMNEO_USER_ERR_ASSUME_ROLE,
   ESPRMNEO_USER_ERR_CONFIRM_ACCOUNT_DELETION,
   ESPRMNEO_USER_ERR_CUSTOM_DATA_NO_USER_ID,
   ESPRMNEO_USER_ERR_GET_GROUP_BY_ID,
@@ -560,13 +562,14 @@ export function transformToESPCDFUser(
     },
 
     /**
-     * Assume-role for arbitrary node/group scopes is not supported; always throws.
-     * @param _request - Unused assume-role request.
+     * Returns temporary AWS credentials for the assume-role request.
+     * @param request - CDF assume-role request.
+     * @returns Short-lived access key, secret key, and session token.
      */
     async assumeRole(
-      _request: ESPCDFAssumeRoleRequest,
+      request: ESPCDFAssumeRoleRequest,
     ): Promise<ESPCDFAssumeRoleResponse> {
-      throw new Error(ESPRMNEO_USER_ERR_ASSUME_ROLE);
+      return getAssumeRoleCreds(esprmneoUser, request);
     },
 
     /**

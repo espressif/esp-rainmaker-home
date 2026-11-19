@@ -161,6 +161,11 @@ export interface BLEPermissionScreenProps {
   status: "requesting" | "denied";
   missingPermission: "ble" | "location" | "both" | "none";
   testIdPrefix?: string;
+  /**
+   * Shows the in-app purpose dialog and then the OS prompt. When omitted the
+   * screen renders as an explanation only (no grant action).
+   */
+  onRequestPermission?: () => void | Promise<void>;
 }
 
 // ============================================================================

@@ -776,6 +776,58 @@ class PytestReportPlugin:
         except Exception as e:
             logger.warning("Could not update test history: %s", e)
 
+    def _rerun_of(self) -> str:
+        """Run id whose failures this session reruns (--rerun-failed-from); '' for a normal run."""
+        return getattr(getattr(self.session, 'config', None), 'rerun_failed_of', '') or ''
+
+    def _write_results_json(self):
+        """Persist the per-test records (minus screenshot bytes) for a rerun of the failures and other post-run tools: reports/results_<run_id>.json."""
+        try:
+            records = []
+            for t in self.test_results:
+                artifacts = {k: v for k, v in (t.get('artifacts') or {}).items() if k != 'screenshot_b64' and isinstance(v, (str, int, float))}
+                records.append({
+                    'nodeid': t.get('nodeid', ''), 'outcome': t.get('outcome', ''), 'duration': t.get('duration', 0),
+                    'retry': t.get('retry', False), 'logs': (t.get('logs') or '')[-20000:], 'stdout': (t.get('stdout') or '')[-8000:],
+                    'stderr': (t.get('stderr') or '')[-8000:], 'artifacts': artifacts, 'hardware_info': t.get('hardware_info') or [],
+                })
+            payload = {'run_id': self.run_id, 'model': getattr(self, 'device_model', None) or '', 'platform': self._platform_label(),
+                       'deployment': self._deployment_name(), 'tests': records}
+            path = Path('reports') / f'results_{self.run_id}.json'
+            path.parent.mkdir(parents=True, exist_ok=True)
+            _atomic_write_text(path, json.dumps(payload, indent=2))
+            return path
+        except Exception as e:
+            logger.warning("Could not write results json: %s", e)
+            return None
+
+    def _write_rerun_script(self, results_path):
+        """reports/rerun_failed_<run_id>.sh: the exact pytest command to rerun this run's failures, for a developer, a CI manual job, or the rig launcher."""
+        if not results_path:
+            return
+        failed = [t['nodeid'] for t in self.test_results if t.get('outcome') in ('failed', 'error')]
+        if not failed:
+            return
+        try:
+            model = getattr(self, 'device_model', None) or ''
+            deployment = self._deployment_name() or ''
+            sdk = (self.session.config.getoption('--active-sdk', default='') if getattr(self, 'session', None) else '') or self._active_sdk() or ''
+            cmd = ['python -m pytest', f'--rerun-failed-from {results_path.name and "reports/" + results_path.name}']
+            if model:
+                cmd.append(f'--model "{model}"')
+            if deployment:
+                cmd.append(f'--deployment {deployment}')
+            if sdk:
+                cmd.append(f'--active-sdk {sdk}')
+            cmd.append('--tb=short --disable-warnings -v "$@"')
+            script = Path('reports') / f'rerun_failed_{self.run_id}.sh'
+            body = "#!/bin/bash\n# Rerun the %d failure(s) of run %s; extra pytest args are passed through\ncd \"$(dirname \"$0\")/..\"\n%s\n" % (len(failed), self.run_id, " \\\n  ".join(cmd))
+            _atomic_write_text(script, body)
+            os.chmod(script, 0o755)
+            logger.info("Rerun failures with: bash %s", script)
+        except Exception as e:
+            logger.warning("Could not write rerun script: %s", e)
+
     def _write_run_summary(self, report_path: str, report_url: str = None):
         """
         Persist run summary JSON for CI post-steps (e.g. scripts/notify_mr.py).
@@ -816,10 +868,13 @@ class PytestReportPlugin:
                 'total_abort': total_abort,
                 'pass_percentage': round(pass_pct, 1),
                 'status': run_status,
+                'rerun_of': self._rerun_of(),
             }
             with _reports_lock():
                 _atomic_write_text(Path('reports') / 'last_run_summary.json', json.dumps(summary, indent=2))
             logger.info("Run summary written: reports/last_run_summary.json")
+            results_path = self._write_results_json()
+            self._write_rerun_script(results_path)
         except Exception as e:
             logger.warning(f"Could not write run summary: {e}")
 
@@ -935,6 +990,8 @@ class PytestReportPlugin:
         app_version = self._app_version()
         if app_version:
             subject = f"{subject} - v{app_version}"
+        if self._rerun_of():
+            subject = f"RE-RUN FAILURES - {subject}"
 
         # Send email
         attach_report = email_config.get('attach_report', True)
