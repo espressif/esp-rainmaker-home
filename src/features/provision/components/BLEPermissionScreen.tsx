@@ -6,7 +6,7 @@
 
 
 import React from "react";
-import { View, Text } from "react-native";
+import { View, Text, TouchableOpacity } from "react-native";
 
 // Styles
 import { tokens } from "@shared/theme/tokens";
@@ -16,10 +16,11 @@ import { globalStyles } from "@shared/theme/globalStyleSheet";
 import { useTranslation } from "react-i18next";
 
 // Icons
-import { BluetoothOff, MapPin } from "lucide-react-native";
+import { BluetoothOff, MapPin, ShieldCheck } from "lucide-react-native";
 
 // Utils
 import { testProps } from "@shared/utils/testProps";
+import { usesCnPermissionFlow } from "@shared/permissions";
 
 // Types
 import { BLEPermissionScreenProps } from "@src/types/global";
@@ -32,11 +33,13 @@ import { BLEPermissionScreenProps } from "@src/types/global";
  * @param status - The permission status ("requesting" or "denied")
  * @param missingPermission - Which permission is missing ("ble", "location", "both", or "none")
  * @param testIdPrefix - Optional prefix for test IDs (default: "scan")
+ * @param onRequestPermission - Shows the purpose dialog, then the OS prompt
  */
 const BLEPermissionScreen: React.FC<BLEPermissionScreenProps> = ({
   status,
   missingPermission,
   testIdPrefix = "scan",
+  onRequestPermission,
 }) => {
   const { t } = useTranslation();
 
@@ -96,6 +99,31 @@ const BLEPermissionScreen: React.FC<BLEPermissionScreenProps> = ({
         >
           {getDescription()}
         </Text>
+        {status === "denied" && onRequestPermission && usesCnPermissionFlow() && (
+          <TouchableOpacity
+            {...testProps(`button_permission_${testIdPrefix}`)}
+            style={[
+              globalStyles.actionButton,
+              globalStyles.actionButtonPrimary,
+              globalStyles.permissionButton,
+            ]}
+            onPress={() => {
+              void onRequestPermission();
+            }}
+          >
+            <ShieldCheck
+              size={20}
+              color={tokens.colors.white}
+              style={globalStyles.buttonIcon}
+            />
+            <Text
+              {...testProps(`text_grant_permission_${testIdPrefix}`)}
+              style={globalStyles.actionButtonTextPrimary}
+            >
+              {t("device.scan.ble.grantPermission")}
+            </Text>
+          </TouchableOpacity>
+        )}
       </View>
     </View>
   );

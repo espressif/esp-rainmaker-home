@@ -5,6 +5,8 @@
  */
 
 import StorageAdapter from "@native-adaptors/implementations/ESPAsyncStorage";
+import { getResolvedActiveSdk, getRMNeoSDKConfig } from "@config/sdk.config";
+import { ESPRMNeo_BASE_SDK_ID } from "@config/sdk.identifiers";
 
 /** Storage key for the ID token (matches Base_SDK StorageKeys.IDTOKEN) */
 const ID_TOKEN_STORAGE_KEY = "com.esprmbase.idToken";
@@ -60,22 +62,32 @@ function decodeJwtPayload(token: string): Record<string, any> | null {
 export async function getAwsRegionFromToken(): Promise<string> {
   try {
     const idToken = await StorageAdapter.getItem(ID_TOKEN_STORAGE_KEY);
-    if (!idToken) {
-      return DEFAULT_AWS_REGION;
-    }
-
-    const payload = decodeJwtPayload(idToken);
-    if (!payload?.iss) {
-      return DEFAULT_AWS_REGION;
-    }
-
-    const match = AWS_REGION_REGEX.exec(payload.iss);
+    const payload = idToken ? decodeJwtPayload(idToken) : null;
+    const match = payload?.iss ? AWS_REGION_REGEX.exec(payload.iss) : null;
     if (match && match[1]) {
       return match[1];
     }
-
-    return DEFAULT_AWS_REGION;
+    return getConfiguredAwsRegion() ?? DEFAULT_AWS_REGION;
   } catch {
-    return DEFAULT_AWS_REGION;
+    return getConfiguredAwsRegion() ?? DEFAULT_AWS_REGION;
+  }
+}
+
+/**
+ * Region from the active deployment config, for SDKs whose ID token issuer
+ * carries no region. RainMaker Neo's issuer is an S3-hosted OIDC document
+ * (`espuser-oauth-...`), so the token path above yields nothing and the KVS
+ * endpoints must follow the deployment's `awsRegion` (QR-scanned or env).
+ * @returns Configured region, or null when the active SDK does not define one.
+ */
+function getConfiguredAwsRegion(): string | null {
+  try {
+    if (getResolvedActiveSdk() !== ESPRMNeo_BASE_SDK_ID) {
+      return null;
+    }
+    const region = getRMNeoSDKConfig().awsRegion;
+    return region && region.trim() ? region.trim() : null;
+  } catch {
+    return null;
   }
 }

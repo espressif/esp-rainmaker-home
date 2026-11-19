@@ -17,9 +17,14 @@ import { StatusBar } from "expo-status-bar";
 
 // Styles
 import { globalStyles } from "@shared/theme/globalStyleSheet";
+import { tokens } from "@shared/theme/tokens";
+import { styleTheme } from "@shared/runtimeStyle/config";
 
 import { testProps } from "@shared/utils/testProps";
-import { PLATFORM_WEB } from "@shared/utils/constants";
+import {
+  BRAND_THEME_DARK,
+  PLATFORM_WEB,
+} from "@shared/utils/constants";
 
 // Types
 interface ScreenWrapperProps {
@@ -78,9 +83,15 @@ const ScreenWrapper: React.FC<ScreenWrapperProps> = ({
   const useTapToDismiss =
     dismissKeyboard && Platform.OS !== PLATFORM_WEB;
 
+  const isDarkTheme = styleTheme === BRAND_THEME_DARK;
+
   return (
     <SafeAreaView style={[globalStyles.container, style]} edges={safeAreaEdges}>
-      <StatusBar style="dark" backgroundColor="#ffffff" translucent={false} />
+      <StatusBar
+        style={isDarkTheme ? "light" : "dark"}
+        backgroundColor={tokens.colors.bg5}
+        translucent={false}
+      />
       {useTapToDismiss ? (
         <TouchableWithoutFeedback
           {...(qaId ? testProps(qaId) : {})}

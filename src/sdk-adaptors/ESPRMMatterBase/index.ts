@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { retryOnNetworkFailure } from "@sdk-adaptors/shared/utils/networkRetry";
 import {
     ESPSDKAdaptorAPIDataResponse,
     ESPSDKAdaptorAPIRequest,
@@ -208,7 +209,7 @@ export class ESPRMMatterBaseSDKAdaptor {
 
     async login(input: ESPSDKAdaptorAPIRequest<ESPCDFLoginRequestPayload>): Promise<ESPSDKAdaptorAPIDataResponse<ESPCDFUser>> {
         const { username, password } = input.request as { username: string, password: string };
-        const esprmUser = await this._authInstance.login(username, password);
+        const esprmUser = await retryOnNetworkFailure(() => this._authInstance.login(username, password), "ESPRMMatterBase.login");
         if (!esprmUser) {
             throw new Error("Login failed: No user returned");
         }
@@ -235,7 +236,7 @@ export class ESPRMMatterBaseSDKAdaptor {
 
     async getSignUpCode(input: ESPSDKAdaptorAPIRequest<any>): Promise<ESPSDKAdaptorAPIResponse> {
         const { username, password } = input.request as { username: string, password: string };
-        const response = await this._authInstance.sendSignUpCode(username, password);
+        const response = await retryOnNetworkFailure(() => this._authInstance.sendSignUpCode(username, password), "ESPRMMatterBase.sendSignUpCode");
         return {
             status: "success",
             description: response?.description || "Signup code fetched successfully",
@@ -256,7 +257,7 @@ export class ESPRMMatterBaseSDKAdaptor {
 
     async forgotPassword(input: ESPSDKAdaptorAPIRequest<any>): Promise<ESPSDKAdaptorAPIResponse> {
         const { username } = input.request as { username: string };
-        const response = await this._authInstance.forgotPassword(username);
+        const response = await retryOnNetworkFailure(() => this._authInstance.forgotPassword(username), "ESPRMMatterBase.forgotPassword");
         return {
             status: "success",
             description: response?.description || "Forgot password successful",

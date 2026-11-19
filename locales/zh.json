@@ -6,6 +6,54 @@
     "declinedTitle": "需要同意",
     "declinedMessage": "您需要接受隐私政策才能使用本应用。"
   },
+  "permissions": {
+    "labels": {
+      "permission": "申请的权限",
+      "feature": "对应功能",
+      "purpose": "使用目的"
+    },
+    "allow": "允许",
+    "notNow": "暂不允许",
+    "optionalNote": "该权限为可选权限。若不允许，仅上述功能无法使用，不影响 App 的其他功能。",
+    "purposes": {
+      "bleAndLocation": {
+        "title": "是否允许访问附近的设备和位置信息？",
+        "permissions": "附近的设备（蓝牙扫描与连接）、精确位置信息",
+        "feature": "添加新设备——蓝牙扫描与配网",
+        "purpose": "Android 系统要求应用具备上述权限，才能搜索附近待配网设备的蓝牙信号并与其建立连接，从而下发 Wi-Fi 配网信息。本应用不会收集、存储或上传您的位置信息。"
+      },
+      "camera": {
+        "title": "是否允许访问摄像头？",
+        "permissions": "摄像头",
+        "feature": "扫描二维码",
+        "purpose": "摄像头画面仅用于识别设备上或屏幕上的二维码，不会保存或上传任何照片和视频。"
+      },
+      "chatCamera": {
+        "title": "是否允许访问摄像头？",
+        "permissions": "摄像头（Android 9 还需存储权限，用于在发送前保存照片）",
+        "feature": "在聊天中拍照并发送",
+        "purpose": "仅在您选择拍照时打开摄像头。您拍摄的照片会随消息上传给当前对话的 AI 助手，不会采集其他任何内容。"
+      },
+      "microphone": {
+        "title": "是否允许访问麦克风？",
+        "permissions": "麦克风",
+        "feature": "与摄像头设备进行双向语音对讲",
+        "purpose": "实时画面开始时会打开麦克风，但默认静音；仅在您打开实时画面中的麦克风按钮期间，语音才会传输至该摄像头设备。本应用不会录制或存储您的语音。"
+      },
+      "photos": {
+        "title": "是否允许访问照片？",
+        "permissions": "照片和媒体内容",
+        "feature": "在聊天中发送图片",
+        "purpose": "仅读取您选择的那张图片并作为消息附件发送，本应用不会浏览或上传相册中的其他内容。"
+      },
+      "notifications": {
+        "title": "是否允许发送通知？",
+        "permissions": "通知",
+        "feature": "设备与账号提醒",
+        "purpose": "用于在设备离线、自动化执行或他人向您共享设备时提醒您。您可以随时在系统设置中关闭。"
+      }
+    }
+  },
   "alexa": {
     "guide": "Alexa 指南",
     "step1": "1. 在菜单中点击 \"Skills & Games\"，然后搜索 \"ESP RainMaker Home\"。",

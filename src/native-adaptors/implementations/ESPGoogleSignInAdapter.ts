@@ -18,19 +18,22 @@
  * The native module (`ESPGoogleSignInModule`) wraps Credential Manager on
  * Android and the GoogleSignIn SDK on iOS.
  *
- * Availability is a runtime question — client ids can be unset, Play services
- * can be missing or stale — so `isAvailable` answers per attempt and the SDK
- * falls back to the hosted browser flow when it says no. Google login therefore
- * still works on an unconfigured build.
+ * Availability is a runtime question — the region can switch it off
+ * (ENABLE_NATIVE_GOOGLE_SIGN_IN), client ids can be unset, Play services can be
+ * missing or stale — so `isAvailable` answers per attempt and the SDK falls back
+ * to the hosted browser flow when it says no. Google login therefore still
+ * works on an unconfigured build.
  *
  * NOT available in the CN region: the CN APK ships no Google Play services and
  * the CN cloud has no `/auth/federated` endpoint. CN does not list Google as a
- * provider, so the flow is never reached there.
+ * provider and sets ENABLE_NATIVE_GOOGLE_SIGN_IN=false, so the flow is never
+ * reached there.
  */
 
 import { NativeModules } from "react-native";
 import type { ESPNativeLoginAdapterInterface } from "@espressif/rainmaker-base-sdk";
 
+import { isNativeGoogleSignInEnabled } from "@config/features.config";
 import { OAUTH_PROVIDER_GOOGLE } from "@shared/utils/constants";
 
 const { ESPGoogleSignInModule } = NativeModules;
@@ -49,33 +52,6 @@ interface GoogleIdTokenResult {
   idToken?: string;
 }
 
-/** True while the picker is on screen, for the login flow's abandon watchdog. */
-let pickerInProgress = false;
-
-/**
- * Records whether the picker is on screen.
- * @param isVisible True once the picker is presented, false when it settles.
- */
-function setPickerInProgress(isVisible: boolean): void {
-  pickerInProgress = isVisible;
-}
-
-/**
- * Whether the native picker is on screen right now.
- *
- * The login flow's abandon watchdog cancels an attempt when the app returns to
- * the foreground without an authorization code, which is the correct read for a
- * browser leg the user walked away from. The native picker is not that: it
- * never backgrounds the app on Android, and on iOS the system consent alert
- * ("… wants to use google.com to Sign In") produces an inactive → active cycle
- * while the picker is still up and no token has arrived — which the watchdog
- * would otherwise score as an abandoned login. The overlay's close button still
- * cancels.
- */
-export function isGoogleNativeLoginInProgress(): boolean {
-  return pickerInProgress;
-}
-
 /**
  * Google's account UI as an SDK platform resource.
  *
@@ -91,6 +67,7 @@ export const googleNativeLoginAdapter: ESPNativeLoginAdapterInterface = {
    */
   async isAvailable(identityProvider: string): Promise<boolean> {
     if (identityProvider.toLowerCase() !== OAUTH_PROVIDER_GOOGLE) return false;
+    if (!isNativeGoogleSignInEnabled()) return false;
     if (!ESPGoogleSignInModule) return false;
     try {
       return (await ESPGoogleSignInModule.isAvailable()) === true;
@@ -117,7 +94,6 @@ export const googleNativeLoginAdapter: ESPNativeLoginAdapterInterface = {
   async getIdToken(identityProvider: string): Promise<string | null> {
     if (identityProvider.toLowerCase() !== OAUTH_PROVIDER_GOOGLE) return null;
 
-    setPickerInProgress(true);
     try {
       const result: GoogleIdTokenResult = await ESPGoogleSignInModule.signIn();
       return result?.idToken ?? null;
@@ -133,8 +109,6 @@ export const googleNativeLoginAdapter: ESPNativeLoginAdapterInterface = {
         return null;
       }
       throw error;
-    } finally {
-      setPickerInProgress(false);
     }
   },
 

@@ -28,6 +28,7 @@ import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import chip.devicecontroller.NetworkCredentials
+import com.app.BuildConfig
 import com.app.R
 import java.security.SecureRandom
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -312,12 +313,36 @@ class ChipToolCommissioningActivity : AppCompatActivity() {
         }
     }
 
+    /**
+     * Asks for the Bluetooth permissions. The CN build explains them first.
+     *
+     * The dialog names the permission, the feature and what the data is used
+     * for, and cannot be dismissed by tapping outside or pressing back — the
+     * user must pick Allow or Not now.
+     */
     private fun requestRequiredBlePermissions() {
-        ActivityCompat.requestPermissions(
-            this,
-            requiredBlePermissions().toTypedArray(),
-            REQUEST_BLE_PERMISSIONS
-        )
+        val requestFromOs = {
+            ActivityCompat.requestPermissions(
+                this,
+                requiredBlePermissions().toTypedArray(),
+                REQUEST_BLE_PERMISSIONS
+            )
+        }
+        if (!BuildConfig.FLAVOR.equals("cn", ignoreCase = true)) {
+            requestFromOs()
+            return
+        }
+        AlertDialog.Builder(this)
+            .setTitle(R.string.permission_rationale_ble_title)
+            .setMessage(R.string.permission_rationale_ble_message)
+            .setCancelable(false)
+            .setPositiveButton(R.string.permission_rationale_allow) { _, _ ->
+                requestFromOs()
+            }
+            .setNegativeButton(R.string.permission_rationale_not_now) { _, _ ->
+                failAndFinish(getString(R.string.chiptool_status_permission_denied))
+            }
+            .show()
     }
 
     private fun requiredBlePermissions(): List<String> {

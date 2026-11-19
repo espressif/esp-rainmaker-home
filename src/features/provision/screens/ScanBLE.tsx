@@ -58,6 +58,7 @@ const ScanBLE = () => {
 
     // Handlers
     handleScanAgain,
+    requestPermissions,
     handleBleDeviceConnect,
     handleAgentTermsComplete,
     handleAgentTermsClose,
@@ -114,6 +115,7 @@ const ScanBLE = () => {
               locationGranted,
             )}
             testIdPrefix="scan_ble"
+            onRequestPermission={requestPermissions}
           />
         </ScreenWrapper>
       </>

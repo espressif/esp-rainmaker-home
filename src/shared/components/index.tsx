@@ -61,6 +61,7 @@ export { default as ScreenWrapper } from "./Layout/ScreenWrapper";
 export { default as EditModal } from "./Modals/EditModal";
 export { default as ConfirmationDialog } from "./Modals/ConfirmationDialog";
 export { default as UnsavedChangesDialog } from "./Modals/UnsavedChangesDialog";
+export { default as PermissionRationaleHost } from "./Modals/PermissionRationaleHost";
 
 // Navigation
 export { default as FooterTabs } from "./Navigations/FooterTabs";

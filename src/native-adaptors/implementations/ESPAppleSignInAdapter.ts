@@ -64,22 +64,6 @@ interface AppleSignInResult {
   idToken?: string;
 }
 
-/** True while the sheet is on screen, for the login flow's abandon watchdog. */
-let sheetInProgress = false;
-
-/**
- * Whether a native Apple attempt is running right now.
- *
- * Same purpose as its Google counterpart: the login flow's abandon watchdog
- * cancels an attempt when the app returns to the foreground without an
- * authorization code, which misreads the system sheet — presenting it makes the
- * app inactive, and dismissing it makes the app active again with no browser leg
- * ever involved.
- */
-export function isAppleNativeLoginInProgress(): boolean {
-  return sheetInProgress;
-}
-
 /**
  * Apple's authorization sheet as an SDK platform resource.
  *
@@ -123,7 +107,6 @@ export const appleNativeLoginAdapter: ESPNativeLoginAdapterInterface = {
   async getIdToken(identityProvider: string): Promise<string | null> {
     if (identityProvider.toLowerCase() !== OAUTH_PROVIDER_APPLE) return null;
 
-    sheetInProgress = true;
     try {
       const result: AppleSignInResult = await ESPAppleSignInModule.signIn();
       const idToken = result?.idToken;
@@ -148,8 +131,6 @@ export const appleNativeLoginAdapter: ESPNativeLoginAdapterInterface = {
         return null;
       }
       throw error;
-    } finally {
-      sheetInProgress = false;
     }
   },
 };

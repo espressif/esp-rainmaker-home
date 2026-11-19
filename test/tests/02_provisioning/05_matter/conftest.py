@@ -286,6 +286,19 @@ class MatterDevice:
             time.sleep(1)
         return False
 
+    def read_discriminator(self, attempts=3, timeout=4):
+        """Setup discriminator the commissionable data provider serves, read back over the CHIP shell (`matter config discriminator` prints it as %03x); resent while the console is still starting, None when it never answers."""
+        for _ in range(attempts):
+            self.mark_serial()
+            self._capture.write_line("matter config discriminator")
+            deadline = time.time() + timeout
+            while time.time() < deadline:
+                for line in self.lines()[self._since:]:
+                    if re.fullmatch(r"[0-9a-fA-F]{3}", line.strip()):
+                        return int(line.strip(), 16)
+                time.sleep(0.5)
+        return None
+
     def factory_reset(self):
         if self._capture:
             self._capture.write_line("matter esp factoryreset")
@@ -383,38 +396,40 @@ def matter_device(request, resource_manager, per_test_debug_dir, helper, matter_
     # it None and the manual test asserts on it rather than typing "None".
     manual_code = plan["manual_code"]
     fw_sha = ""
-    skip_app = False
     if fw is not None:
         fw = _resolve_fw_path(fw)
         fw_sha = _file_sha(fw)
-        skip_app = (_flashed_app_sig.get(MATTER_CHIP_MAC) == fw_sha and bool(inject)
-                    and resource_manager.flasher.last_flash_signature(MATTER_CHIP_MAC) is None)
-    logger.info("Firmware provenance [%s]: source=%s fw=%s sha256=%s inject=%s %s flash=%s",
-                plan["scenario"], plan["source"], fw, fw_sha[:12],
-                [hex(offset) for offset, _ in (inject or [])], plan["commission_id"],
-                "fctry-only (app unchanged this session)" if skip_app else ("skipped (reuse)" if fw is None else "app+fctry"))
     # Reserve the Matter chip by MAC
     resource = resource_manager.acquire_mac(MATTER_CHIP_MAC, test_name=request.node.nodeid)
     port = resource.port
     device = None
     try:
+        skip_app = (fw is not None and _flashed_app_sig.get(MATTER_CHIP_MAC) == fw_sha and bool(inject)
+                    and resource_manager.flasher.last_flash_signature(MATTER_CHIP_MAC) is None
+                    and not resource_manager.flasher.changed_since_flash(MATTER_CHIP_MAC, fw_sha))
+        logger.info("Firmware provenance [%s]: source=%s fw=%s sha256=%s inject=%s %s flash=%s",
+                    plan["scenario"], plan["source"], fw, fw_sha[:12],
+                    [hex(offset) for offset, _ in (inject or [])], plan["commission_id"],
+                    "fctry-only (app unchanged this session)" if skip_app else ("skipped (reuse)" if fw is None else "app+fctry"))
         if fw is not None:
             _flash_matter_image(port, fw, inject, skip_app=skip_app)
-            resource_manager.flasher.invalidate_flash_cache(MATTER_CHIP_MAC)
             _flashed_app_sig[MATTER_CHIP_MAC] = fw_sha
-            resource_manager.flasher.invalidate_flash_cache(MATTER_CHIP_MAC)
+            resource_manager.flasher.note_external_flash(MATTER_CHIP_MAC, fw_sha)
         log_path = per_test_debug_dir.root / "matter_esp32c3.log"
         device = MatterDevice(port, log_path)
         device.manual_code = manual_code
         device.start_capture(trigger_reset=True)
         if not device.wait_for_serial(COMMISSIONING_WINDOW_MARKER, timeout=60):
             pytest.skip("Matter device did not open a commissioning window after flashing")
-        if expected_discriminator is not None and not (
-                device.wait_for_serial(f"discriminator={expected_discriminator}/", timeout=5) or
-                device.wait_for_serial(f"discriminator={expected_discriminator:04d}/", timeout=5)):
-            raise RuntimeError(
-                f"Device did not advertise the injected discriminator {expected_discriminator} "
-                "— the image ignored the generated commissionable data (QR would not match)")
+        if expected_discriminator is not None:
+            served = device.read_discriminator()
+            if served is None:
+                raise RuntimeError("Matter shell did not answer `matter config discriminator`; "
+                                   "cannot confirm the injected commissionable data")
+            if served != expected_discriminator:
+                raise RuntimeError(
+                    f"Device serves discriminator {served}, not the injected {expected_discriminator} "
+                    "— the image ignored the generated commissionable data (QR would not match)")
         from hardware import BuildMetadata, record_hardware_report
         metadata = BuildMetadata(chip="esp32c3", product=plan["product"], prov_mode="BLE",
                                  firmware_type=plan["firmware_type"])

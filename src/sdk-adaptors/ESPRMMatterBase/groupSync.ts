@@ -202,6 +202,8 @@ export async function syncHomeWithNodes(
  * Loads the selected home's nodes with one `node_details` call and hands them to
  * the store, which fills the home's rooms from the same reply. Other homes are
  * not fetched here: their nodes load when the user switches to them.
+ * The reply is passed as complete, even when empty, so the store drops
+ * snapshot nodes it does not include.
  * @param home - Selected home, or `null` when the user has none yet
  * @param callbacks - Group-store mutators used to attach fetched nodes
  * @param esprmUser - Matter SDK user used when fetching node details
@@ -214,7 +216,7 @@ async function syncSelectedHomeNodes(
   if (!home) return;
   try {
     const nodes = await fetchMatterGroupNodes(home, esprmUser);
-    if (nodes.length > 0) callbacks.addNodesToGroup(home.id, nodes);
+    callbacks.addNodesToGroup(home.id, nodes, { complete: true });
   } catch (e) {
     // A sync the store gave up on stops here on purpose: not an error.
     if (e instanceof HomeSyncGivenUpError) {

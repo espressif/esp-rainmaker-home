@@ -74,7 +74,9 @@ const themes = {
       bg2: "#1e1e1e",
       bg3: "#2d2d2d",
       bg4: "rgba(255, 255, 255, .1)",
+      bg5: "#121212",
       borderColor: "#595959",
+      darkBorderColor: "#595959",
 
       primary: "#64b5f6",
 

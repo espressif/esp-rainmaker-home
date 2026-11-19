@@ -8,11 +8,14 @@ import { rejectWebUnsupported } from "@native-adaptors/utils/webPlatform";
 
 /**
  * WeChat login is native-only (CN). Always false on web.
- * @returns Whether a WeChat auth code was received
+ * @returns Whether the WeChat app is waiting for a code
  */
-export function hasReceivedWeChatAuthCode(): boolean {
+export function isWaitingForWeChatCode(): boolean {
   return false;
 }
+
+/** No WeChat wait on web. */
+export function stopWaitingForWeChatCode(): void {}
 
 /**
  * WeChat login gate for web — native WeChat SDK is unavailable in the browser.

@@ -231,7 +231,7 @@ export function useSettings(options: UseSettingsOptions): UseSettingsResult {
   }, [home?.name]);
 
   const handleHomeNameUpdate = useCallback(async () => {
-    if (!homeName?.trim() || !home) return;
+    if (!homeName?.trim() || !home || homeName.trim() === home.name) return;
     setIsLoading(true);
     try {
       const res: any = await home.updateGroupInfo({ groupName: homeName });

@@ -5,6 +5,20 @@ All notable changes to the ESP RainMaker Home app will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [6.6.1]
+
+### Enhanced
+
+- **[CN] Permission purpose dialogs** — Show an in-app purpose dialog before every sensitive OS permission prompt; defer requests until first use; drop unused permissions from the CN manifest
+- **Google sign-in** — Add a flag to switch between the native picker and the browser flow
+
+### Fixed
+
+- **Web login and runtime brand** — Recover web login and reapply scanned brand on launch and deployment switch
+- **Home screen, OAuth, and provisioning** — Recover home-screen state from stale snapshots; tighten OAuth resume and provisioning retries
+- **[RMNeo] Camera live view** — Fetch viewer credentials per node so camera live view loads
+- **CI** — Recover GitHub Android release APK builds after disk and heap limits
+
 ## [6.6.0]
 
 ### Added

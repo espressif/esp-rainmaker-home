@@ -160,6 +160,18 @@ Serial logs: `test/debug/<test_name>/esp32c3_<mac>.log` — QR parsed from RainM
 On macOS, a captured/generated QR is saved to `debug/provision_qr.png` and opened with Preview for the phone camera to scan.
 
 
+## Rerunning failures
+
+Every run writes `reports/results_<run_id>.json` (per-test outcome, failure text, artifact links) and, when something failed, `reports/rerun_failed_<run_id>.sh` with the exact command for that run (model, deployment, SDK):
+
+```bash
+bash reports/rerun_failed_<run_id>.sh                 # rerun every failure of that run
+python -m pytest --rerun-failed-from latest ...       # same thing from any pytest command line
+python -m pytest --rerun-failed-from reports/results_<run_id>.json ...   # a specific run: a path or its run id
+```
+
+`--rerun-failed-from` keeps only the tests the earlier run failed or errored (the rest are deselected at collection), so it composes with every other option. On CI, `RERUN_FAILED=y` on a pipeline adds an automatic second pass over the failures as a separate report, so the first report keeps the true flake rate. A rerun is a full session of its own: it sends its own report email and MR comment, both marked `RE-RUN FAILURES` and naming the run they rerun.
+
 ## Test Report
 
 - Reports are written to `reports/` by default (configurable via `config/report_config.yaml`)

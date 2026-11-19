@@ -6,7 +6,6 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useFocusEffect } from "expo-router";
-import { AppState } from "react-native";
 import { useRouter } from "expo-router";
 import { useTranslation } from "react-i18next";
 import { ESPCDFProvisioningDevice } from "@store";
@@ -15,7 +14,6 @@ import { useToast } from "@shared/hooks/useToast";
 import { useDevicePermissions } from "./useDevicePermissions";
 import { parseRMakerCapabilities } from "@features/provision/utils/rmakerCapabilities";
 import { getAgentTermsAccepted } from "@features/agent/utils/storage";
-import ESPAppUtilityAdapter from "@native-adaptors/implementations/ESPAppUtilityAdapter";
 import { getScanErrorType } from "@features/provision/utils/scanBLEHelper";
 import {
   getSupportedDeviceTypes,
@@ -43,6 +41,7 @@ export const useScanBLE = (): UseScanBLEReturn => {
     isChecking,
     allPermissionsGranted,
     checkPermissions,
+    requestPermissions,
   } = useDevicePermissions();
 
   // State
@@ -61,19 +60,6 @@ export const useScanBLE = (): UseScanBLEReturn => {
 
   // Track if we've attempted a scan to prevent infinite retries
   const hasAttemptedScanRef = useRef(false);
-
-  // Re-check permissions when app comes to foreground
-  useEffect(() => {
-    const subscription = AppState.addEventListener("change", (nextAppState) => {
-      if (nextAppState === "active") {
-        checkPermissions();
-      }
-    });
-
-    return () => {
-      subscription.remove();
-    };
-  }, [checkPermissions]);
 
   /**
    * Handle scan again - reset state, disconnect device if connected, and trigger new scan
@@ -103,11 +89,9 @@ export const useScanBLE = (): UseScanBLEReturn => {
 
       switch (errorType) {
         case "permission": {
-          ESPAppUtilityAdapter.requestAllPermissions();
+          // Explains the purpose first, then shows the OS prompt on "Allow".
+          void requestPermissions();
           toast.showError(t("device.scan.ble.blePermissionRequired"));
-          setTimeout(() => {
-            checkPermissions();
-          }, 2000);
           break;
         }
 
@@ -133,7 +117,7 @@ export const useScanBLE = (): UseScanBLEReturn => {
         }
       }
     },
-    [t, toast, checkPermissions]
+    [t, toast, requestPermissions]
   );
 
   /**
@@ -147,7 +131,7 @@ export const useScanBLE = (): UseScanBLEReturn => {
     await checkPermissions();
 
     if (!allPermissionsGranted) {
-      ESPAppUtilityAdapter.requestAllPermissions();
+      await requestPermissions();
       return;
     }
 
@@ -183,6 +167,7 @@ export const useScanBLE = (): UseScanBLEReturn => {
     user,
     handleBleScanError,
     checkPermissions,
+    requestPermissions,
     allPermissionsGranted,
     bluetoothEnabled,
   ]);
@@ -353,6 +338,7 @@ export const useScanBLE = (): UseScanBLEReturn => {
 
     // Handlers
     handleScanAgain,
+    requestPermissions,
     handleBleDeviceConnect,
     handleAgentTermsComplete,
     handleAgentTermsClose,

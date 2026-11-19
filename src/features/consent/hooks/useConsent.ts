@@ -15,7 +15,7 @@ import { setConsentAccepted } from "@features/consent/utils/consentStorage";
 interface UseConsentResult {
   /** True while the agree action is being persisted. */
   isSubmitting: boolean;
-  /** Accept consent, unlock native startup permissions, and continue the flow. */
+  /** Accept consent and continue the flow. */
   agree: () => Promise<void>;
   /** Decline consent and exit the app. */
   disagree: () => void;
@@ -25,8 +25,9 @@ interface UseConsentResult {
  * Stateful logic for the CN-region consent screen.
  *
  * On accept it persists the consent flag (JS), tells the native layer to record
- * consent and run the startup permission prompts that were deferred until now,
- * then re-enters the root gate (`/`) so the normal login flow proceeds.
+ * consent, then re-enters the root gate (`/`) so the normal login flow proceeds.
+ * Android asks for no permission here (each is requested at the point of use,
+ * after the in-app purpose dialog); iOS then asks for Bluetooth + location.
  * On decline: Android exits the app; iOS (where apps must not terminate
  * themselves) explains that consent is required to continue.
  * @returns Submitting state plus `agree` / `disagree` handlers.
@@ -41,8 +42,7 @@ export function useConsent(): UseConsentResult {
     setIsSubmitting(true);
     try {
       await setConsentAccepted();
-      // Native: persist consent + trigger the startup permission prompts that
-      // MainActivity deferred until consent was given.
+      // Native: persist consent (SharedPreferences / UserDefaults).
       await ESPAppUtilityAdapter.acceptCnConsent();
       router.replace("/");
     } finally {

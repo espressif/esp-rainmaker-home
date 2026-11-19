@@ -52,6 +52,7 @@ const ScanQR = () => {
     scannerGatesOpen,
     navigateWithoutQr,
     handleRequestCameraPermission,
+    requestBluetoothPermissions,
     toggleCamera,
     handleScanAgain,
     handleScannedQRCode,
@@ -97,6 +98,7 @@ const ScanQR = () => {
                 locationGranted,
               )}
               testIdPrefix="scan_qr"
+              onRequestPermission={requestBluetoothPermissions}
             />
           ) : bluetoothEnabled === false && !isCheckingBluetooth ? (
             <BluetoothDisabledScreen />

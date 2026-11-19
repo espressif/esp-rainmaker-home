@@ -28,17 +28,20 @@ interface WeChatCodeResult {
   code?: string;
 }
 
-/** True once the current WeChat attempt's authorization code has been received. */
-let weChatAuthCodeReceived = false;
+/** True while the WeChat app is open and no code has come back yet. */
+let waitingForWeChatCode = false;
 
 /**
- * Whether the in-flight WeChat attempt has already received its authorization
- * code from the WeChat SDK — i.e. only the token exchange remains. Used by the
- * login flow's browser-abandon watchdog to avoid cancelling an attempt that is
- * past the WeChat-app phase. Reset at the start of each `performWeChatLogin`.
+ * Whether the WeChat app is open and no authorization code has come back yet.
+ * @returns True while `performWeChatLogin` waits for the code.
  */
-export function hasReceivedWeChatAuthCode(): boolean {
-  return weChatAuthCodeReceived;
+export function isWaitingForWeChatCode(): boolean {
+  return waitingForWeChatCode;
+}
+
+/** Clears the wait for a WeChat request that was given up. */
+export function stopWaitingForWeChatCode(): void {
+  waitingForWeChatCode = false;
 }
 
 /**
@@ -50,7 +53,6 @@ export function hasReceivedWeChatAuthCode(): boolean {
  *   exchange fails.
  */
 export async function performWeChatLogin(): Promise<void> {
-  weChatAuthCodeReceived = false;
   if (!ESPWeChatModule) {
     throw new Error(
       "WECHAT_MODULE_NOT_AVAILABLE: ESPWeChatModule native module not found. Rebuild the CN app."
@@ -72,17 +74,22 @@ export async function performWeChatLogin(): Promise<void> {
   // its own configured cloud).
   const tokenUrl = `${authUrl.replace(/\/+$/, "")}/token`;
 
-  const result: WeChatCodeResult = await ESPWeChatModule.initiateWeChatLogin(
-    tokenUrl,
-    clientId,
-    redirectUrl ?? ""
-  );
+  waitingForWeChatCode = true;
+  let result: WeChatCodeResult;
+  try {
+    result = await ESPWeChatModule.initiateWeChatLogin(
+      tokenUrl,
+      clientId,
+      redirectUrl ?? ""
+    );
+  } finally {
+    waitingForWeChatCode = false;
+  }
 
   const code = result?.code;
   if (!code) {
     throw new Error("WECHAT_AUTH_FAILED: no authorization code returned from native.");
   }
-  weChatAuthCodeReceived = true;
 
   // The Base SDK performs the WeChat token exchange (POST /token with
   // wechat_token_only=true + identity_provider=WECHATNOVA) and persists the

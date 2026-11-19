@@ -222,6 +222,11 @@ export const FORBIDDEN = 6;
 
 // SDK ERRORS
 export const ESP_TOKEN_ERROR = "ESPTokenError";
+/** SDK token error codes that mean the stored session is gone (TokenErrorCodes in the base SDK). */
+export const ESP_TOKEN_ERROR_SESSION_LOST_CODES: readonly string[] = [
+  "MISSING_ACCESS_TOKEN",
+  "MISSING_REFRESH_TOKEN",
+];
 export const OAUTH_CANCELLED_ERROR_TAG = "OAUTH_CANCELLED";
 export const OAUTH_NO_BROWSER_FOUND_ERROR_TAG = "NO_BROWSER_FOUND";
 // Rejection code the native Google modules raise when the user dismisses the
@@ -584,6 +589,10 @@ export const QA_GUIDE_LOAD_FAILED_DESCRIPTION =
 export const COLOR_TAB = "Colour";
 export const WHITE_TAB = "White";
 
+// AUTH NAVIGATION ROUTES
+/** Expo Router href for the Login screen (post-deployment switch destination). */
+export const AUTH_LOGIN_SCREEN_ROUTE = "/(auth)/Login";
+
 // CONTROL NAVIGATION ROUTES
 export const CONTROL_SCREEN_ROUTE = "/(control)/Control";
 export const DEVICE_SETTINGS_SCREEN_ROUTE = "/(control)/Settings";
@@ -749,6 +758,8 @@ export const RM_QR_CODE_PREFIX = "NP:";
 export const PROVISION_TRANSPORT_BLE = "ble";
 /** Provisioning transport id for SoftAP (QR `s` code and native scan flows). */
 export const PROVISION_TRANSPORT_SOFTAP = "softap";
+/** Name of the iOS background task held while a device is being added. */
+export const ADD_DEVICE_BACKGROUND_TASK = "Add device";
 
 export const RM_QR_TRANSPORT_MAP = {
   b: PROVISION_TRANSPORT_BLE,

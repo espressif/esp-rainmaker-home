@@ -5,6 +5,7 @@
 
 """Connect Wi-Fi Page Helper."""
 import logging
+import time
 
 from .base import BasePage
 
@@ -63,9 +64,13 @@ class ConnectWifi(BasePage):
             except Exception as error:
                 logger.warning("Android back dismiss failed: %s", error)
 
-        if self.is_wifi_list_modal_visible(timeout=1):
+        # A notification banner can take a tap for a few seconds, so try a few times.
+        for _ in range(3):
+            if not self.is_wifi_list_modal_visible(timeout=1):
+                break
             logger.info("Trying backdrop tap to dismiss Wi-Fi list modal")
             self._tap_wifi_list_modal_backdrop()
+            time.sleep(1)
 
         # Best-effort: don't fail here (the caller's next action confirms the screen is usable).
         if not self.wait_for_element_to_disappear("network_modal_title", timeout=5):
@@ -74,13 +79,12 @@ class ConnectWifi(BasePage):
         return self
 
     def _tap_wifi_list_modal_backdrop(self):
-        """Tap the dimmed area above the bottom sheet."""
-        try:
-            self.click("close_wifi_modal_button", timeout=2)
-
+        """Tap the dimmed area above the bottom sheet, low in it: a notification banner covers its top part."""
+        backdrop = self.find_visible("close_wifi_modal_button", timeout=2)
+        if backdrop is not None:
+            rect = backdrop.rect
+            self.driver.tap([(rect["x"] + rect["width"] // 2, rect["y"] + max(1, rect["height"] - 15))])
             return
-        except Exception:
-            pass
 
         size = self.driver.get_window_size()
         x = size["width"] // 2

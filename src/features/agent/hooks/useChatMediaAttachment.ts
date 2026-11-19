@@ -9,6 +9,10 @@ import * as ImagePicker from "expo-image-picker";
 import { File } from "expo-file-system";
 import { useTranslation } from "react-i18next";
 import { useToast } from "@shared/hooks/useToast";
+import {
+  requestCameraCapturePermission,
+  requestPhotoLibraryPermission,
+} from "@shared/permissions";
 import { getAgentMediaConfig } from "@features/agent/utils/apiHelper";
 import {
   buildDefaultChatImageFilename,
@@ -238,15 +242,20 @@ export function useChatMediaAttachment(agentId: string | null) {
           return;
         }
 
-        const permission =
-          source === CHAT_IMAGE_ATTACHMENT_SOURCE.CAMERA
-            ? await ImagePicker.requestCameraPermissionsAsync()
-            : await ImagePicker.requestMediaLibraryPermissionsAsync();
+        const isCameraSource = source === CHAT_IMAGE_ATTACHMENT_SOURCE.CAMERA;
+
+        // Explains the purpose first; null is "Not now" (the OS was not asked).
+        const permission = isCameraSource
+          ? await requestCameraCapturePermission()
+          : await requestPhotoLibraryPermission();
+        if (!permission) {
+          return;
+        }
 
         if (!permission.granted) {
           toast.showError(
             t(
-              source === CHAT_IMAGE_ATTACHMENT_SOURCE.CAMERA
+              isCameraSource
                 ? "chat.cameraPermissionDenied"
                 : "chat.imagePermissionDenied"
             )
@@ -254,10 +263,9 @@ export function useChatMediaAttachment(agentId: string | null) {
           return;
         }
 
-        const result =
-          source === CHAT_IMAGE_ATTACHMENT_SOURCE.CAMERA
-            ? await ImagePicker.launchCameraAsync(IMAGE_PICKER_OPTIONS)
-            : await ImagePicker.launchImageLibraryAsync(IMAGE_PICKER_OPTIONS);
+        const result = isCameraSource
+          ? await ImagePicker.launchCameraAsync(IMAGE_PICKER_OPTIONS)
+          : await ImagePicker.launchImageLibraryAsync(IMAGE_PICKER_OPTIONS);
 
         if (result.canceled || !result.assets?.length) {
           return;

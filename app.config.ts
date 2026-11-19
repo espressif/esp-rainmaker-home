@@ -140,10 +140,7 @@ function buildRegionConfig(env: Record<string, string>) {
       enableOta: flag(env.ENABLE_OTA),
       enableAiAgent: flag(env.ENABLE_AI_AGENT),
       enableThirdPartyAuth: flag(env.ENABLE_THIRD_PARTY_AUTH),
-      // Defaults ON when the key is absent (same disable-only `flag()` semantics
-      // as the keys around it), so a region opts OUT by setting it to "false" —
-      // which .env.cn.example does, because the CN cloud serves no
-      // /auth/federated path. See .env.global.example.
+      enableNativeGoogleSignIn: flag(env.ENABLE_NATIVE_GOOGLE_SIGN_IN),
       enableNativeAppleSignIn: flag(env.ENABLE_NATIVE_APPLE_SIGN_IN),
       enableVoiceAssistants: flag(env.ENABLE_VOICE_ASSISTANTS),
       enableControlGroups: flag(env.ENABLE_CONTROL_GROUPS),
@@ -397,21 +394,22 @@ export default {
       // specific binary cannot support (e.g. notifications on the Android CN
       // binary, which ships without FCM). Absent keys default to enabled.
       features: {
-        enableScenes: process.env.ENABLE_SCENES !== 'false',
-        enableSchedules: process.env.ENABLE_SCHEDULES !== 'false',
-        enableAutomations: process.env.ENABLE_AUTOMATIONS !== 'false',
-        enableLocalControl: process.env.ENABLE_LOCAL_CONTROL !== 'false',
-        enableNotifications: process.env.ENABLE_NOTIFICATIONS !== 'false',
-        enableGroupSharing: process.env.ENABLE_GROUP_SHARING !== 'false',
-        enableOta: process.env.ENABLE_OTA !== 'false',
-        enableAiAgent: process.env.ENABLE_AI_AGENT !== 'false',
-        enableThirdPartyAuth: process.env.ENABLE_THIRD_PARTY_AUTH !== 'false',
-        enableVoiceAssistants: process.env.ENABLE_VOICE_ASSISTANTS !== 'false',
-        enableCdfAutoSync: process.env.ENABLE_CDF_AUTOSYNC !== 'false',
-        enableControlGroups: process.env.ENABLE_CONTROL_GROUPS !== 'false',
-        enableOnNetworkProvisioning: process.env.ENABLE_ON_NETWORK_PROVISIONING !== 'false',
-        enableSoftApProvisioning: process.env.ENABLE_SOFTAP_PROVISIONING === 'true',
-        enableBackendSelector: process.env.ENABLE_BACKEND_SELECTOR !== 'false',
+        enableScenes: process.env.ENABLE_SCENES !== "false",
+        enableSchedules: process.env.ENABLE_SCHEDULES !== "false",
+        enableAutomations: process.env.ENABLE_AUTOMATIONS !== "false",
+        enableLocalControl: process.env.ENABLE_LOCAL_CONTROL !== "false",
+        enableNotifications: process.env.ENABLE_NOTIFICATIONS !== "false",
+        enableGroupSharing: process.env.ENABLE_GROUP_SHARING !== "false",
+        enableOta: process.env.ENABLE_OTA !== "false",
+        enableAiAgent: process.env.ENABLE_AI_AGENT !== "false",
+        enableThirdPartyAuth: process.env.ENABLE_THIRD_PARTY_AUTH !== "false",
+        enableVoiceAssistants: process.env.ENABLE_VOICE_ASSISTANTS !== "false",
+        enableCdfAutoSync: process.env.ENABLE_CDF_AUTOSYNC !== "false",
+        enableControlGroups: process.env.ENABLE_CONTROL_GROUPS !== "false",
+        enableOnNetworkProvisioning:
+          process.env.ENABLE_ON_NETWORK_PROVISIONING !== "false",
+        enableSoftApProvisioning: process.env.ENABLE_SOFTAP_PROVISIONING === "true",
+        enableBackendSelector: process.env.ENABLE_BACKEND_SELECTOR !== "false",
       }
 
     }

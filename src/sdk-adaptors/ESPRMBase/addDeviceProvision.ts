@@ -15,6 +15,8 @@ import {
   finalizeProvisionedNode,
 } from "@shared/utils/provisionNode";
 import { ProvisionType } from "@espressif/rainmaker-base-sdk";
+import ESPAppUtilityAdapter from "@native-adaptors/implementations/ESPAppUtilityAdapter";
+import { ADD_DEVICE_BACKGROUND_TASK } from "@shared/utils/constants";
 
 /**
  * Add device provision flow: provision device, set timezone (for CHAL_RESP),
@@ -44,12 +46,15 @@ export async function addDeviceProvision(
   const provisionType = await provisioningDevice.checkChallengeResponseSupport() ? ProvisionType.CHAL_RESP : ProvisionType.MQTT;
 
   try {
-    await provisioningDevice.operations.provision(
-      ssid,
-      password,
-      wrappedOnProgress,
-      groupId,
-      provisionType
+    // Holds iOS background time so the provisioning cloud calls finish if the app goes to the background.
+    await ESPAppUtilityAdapter.runWithBackgroundTime(ADD_DEVICE_BACKGROUND_TASK, () =>
+      provisioningDevice.operations.provision(
+        ssid,
+        password,
+        wrappedOnProgress,
+        groupId,
+        provisionType
+      )
     );
   } catch (error) {
     console.error(`${LOG_PREFIX} Provision failed:`, error);

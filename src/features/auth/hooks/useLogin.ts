@@ -59,14 +59,9 @@ import {
 import {
   performWeChatLogin,
   isWeChatCancellation,
-  hasReceivedWeChatAuthCode,
+  isWaitingForWeChatCode,
+  stopWaitingForWeChatCode,
 } from "@native-adaptors/implementations/ESPWeChatAdapter";
-import {
-  isGoogleNativeLoginInProgress,
-} from "@native-adaptors/implementations/ESPGoogleSignInAdapter";
-import {
-  isAppleNativeLoginInProgress,
-} from "@native-adaptors/implementations/ESPAppleSignInAdapter";
 import { espOauthAdapter } from "@native-adaptors/implementations/ESPOauthAdapter";
 import { runtimeConfigManager } from "@config/runtime.config";
 import asyncStorageAdapter from "@native-adaptors/implementations/ESPAsyncStorage";
@@ -279,6 +274,8 @@ export function useLogin() {
       oauthResumeCancelTimerRef.current = null;
     }
     oauthAttemptInFlightRef.current = false;
+    espOauthAdapter.stopWaitingForBrowser();
+    stopWaitingForWeChatCode();
     setPendingOAuthProvider(null);
     const nextState = cancelOAuthAttempt(oauthFlowStateRef.current);
     oauthFlowStateRef.current = nextState;
@@ -442,22 +439,11 @@ export function useLogin() {
         shouldMonitorOAuthAppLifecycle(oauthFlowStateRef.current.status) &&
         oauthAttemptInFlightRef.current
       ) {
-        // The watchdog exists to catch the user returning from the browser /
-        // WeChat WITHOUT completing auth (no redirect will ever arrive). Once
-        // the authorization code HAS been received, the attempt is past the
-        // browser phase — the token exchange is in flight and will resolve or
-        // fail on its own — so cancelling here would discard a valid login
-        // (seen with SignInWithApple when the CN token exchange exceeded the
-        // grace period). Let it finish; the loading overlay's close button
-        // still allows a manual cancel. The native Google picker and the
-        // system Sign in with Apple sheet never have a browser phase to abandon
-        // at all, so they are excluded outright — see
-        // isGoogleNativeLoginInProgress / isAppleNativeLoginInProgress.
+        // Only a browser or WeChat app still waiting for its redirect can be
+        // abandoned. Native sheets and token exchanges settle on their own.
         if (
-          espOauthAdapter.hasReceivedAuthCode() ||
-          hasReceivedWeChatAuthCode() ||
-          isGoogleNativeLoginInProgress() ||
-          isAppleNativeLoginInProgress()
+          !espOauthAdapter.isWaitingForBrowser() &&
+          !isWaitingForWeChatCode()
         ) {
           return;
         }
@@ -477,8 +463,8 @@ export function useLogin() {
    * listener lives here, where the flow state it guards already lives.
    *
    * Only the browser flow can be abandoned this way; the native account sheet
-   * never backgrounds the app, and `handleOAuthAppBecameActive` additionally
-   * bails when a token is already in flight.
+   * never backgrounds the app, and `handleOAuthAppBecameActive` cancels only
+   * while the browser or WeChat app is still waiting for its redirect.
    */
   useEffect(() => {
     if (!monitorOAuthAppLifecycle) return;

@@ -18,4 +18,9 @@ export const RUNTIME_CONFIG_STORAGE_KEYS = {
    */
   PRIVATE_SDK: "@esp_private_deployment_sdk",
   PRIVATE_CONFIG: "@esp_private_deployment_config",
+  /**
+   * Full brand.json document for the active (usually private) deployment on web.
+   * Cleared when switching to RainMaker Classic / Neo; survives logout like runtime config.
+   */
+  ACTIVE_BRAND_JSON: "@esp_runtime_brand_json",
 } as const;

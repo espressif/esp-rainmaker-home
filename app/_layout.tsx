@@ -23,6 +23,7 @@ import { createTamagui, TamaguiProvider } from "tamagui";
 
 // providers
 import { StoreProvider } from "@context/store.context";
+import { useSessionEndedRedirect } from "@features/auth";
 import { ToastProvider, ToastViewport } from "@tamagui/toast";
 import { Provider as PaperProvider } from "react-native-paper";
 import { SceneProvider } from "@context/scenes.context";
@@ -34,7 +35,12 @@ import { ESPAppRestartAdapter } from "@native-adaptors/implementations/ESPAppRes
 import { useTranslation } from "react-i18next";
 
 // components
-import { Button, FooterTabs, ToastContainer } from "@shared/components";
+import {
+  Button,
+  FooterTabs,
+  PermissionRationaleHost,
+  ToastContainer,
+} from "@shared/components";
 
 // icons
 import { Home, Calendar, User, History, Zap } from "lucide-react-native";
@@ -58,6 +64,12 @@ import {
 } from "@shared/utils/constants";
 
 const config = createTamagui(defaultConfig);
+
+/** Leaves the signed-in screens when the SDK session ends outside a logout. */
+const SessionEndedRedirect = () => {
+  useSessionEndedRedirect();
+  return null;
+};
 
 const stackScreenOptions = {
   headerShown: false,
@@ -136,10 +148,13 @@ const InnerLayout = () => {
                 swipeThreshold={TOAST_PROVIDER_SWIPE_THRESHOLD_DISABLED}
               >
                 <ScheduleProvider>
+                  <SessionEndedRedirect />
                   <Stack screenOptions={stackScreenOptions}>
                     {/* Other components */}
                   </Stack>
                   {isUserRoute && <FooterTabs tabs={tabs} />}
+                  {/* Explains every sensitive permission before the OS prompt (Android CN build). */}
+                  <PermissionRationaleHost />
                   <ToastContainer />
                   <ToastViewport
                     multipleToasts

@@ -52,6 +52,8 @@ CREATE INDEX IF NOT EXISTS idx_resources_chip_status
     ON resources(chip_type, status);
 CREATE INDEX IF NOT EXISTS idx_resources_owner_pid
     ON resources(owner_pid);
+CREATE INDEX IF NOT EXISTS idx_lock_events_mac_time
+    ON lock_events(mac_address, created_at);
 """
 
 
@@ -343,8 +345,27 @@ class SqliteResourceStore:
             self._record_event(connection, mac_address, f"status:{status.value}", error)
             connection.commit()
 
-    def release(self, mac_address: str) -> None:
-        """Release a resource back to the available pool."""
+    def events_since(self, mac_address: str, since: float) -> list:
+        """This chip's lock-log events after `since`, oldest first; every session on this db writes them, whatever branch its code is on."""
+        with self._thread_lock, closing(self._connect()) as connection, connection:
+            rows = connection.execute(
+                """
+                SELECT event, details, created_at FROM lock_events
+                WHERE mac_address = ? AND created_at > ?
+                ORDER BY created_at, id
+                """,
+                (mac_address, since),
+            ).fetchall()
+        return [dict(row) for row in rows]
+
+    def record_event(self, mac_address: str, event: str, details: str = "") -> None:
+        """Append one event to the shared lock log."""
+        with self._thread_lock, closing(self._connect()) as connection, connection:
+            self._record_event(connection, mac_address, event, details)
+            connection.commit()
+
+    def release(self, mac_address: str) -> float:
+        """Release a resource back to the available pool; returns the release time."""
         now = time.time()
         with self._thread_lock, closing(self._connect()) as connection, connection:
             connection.execute(
@@ -358,6 +379,7 @@ class SqliteResourceStore:
             )
             self._record_event(connection, mac_address, "released", "")
             connection.commit()
+        return now
 
 
 def _pid_alive(pid: int) -> bool:

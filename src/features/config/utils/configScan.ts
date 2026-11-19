@@ -11,8 +11,10 @@ import {
   isRmneoStackSdkId,
   normalizeSdkIdentifier,
   SUPPORTED_SDK_IDENTIFIERS,
+  type SDKIdentifier,
 } from "@config/sdk.config";
 import { ESPRMNeoMatter_BASE_SDK_ID } from "@config/sdk.identifiers";
+import { normalizePersistedSdkId } from "@config/sdkSession.config";
 import { CONFIG_FETCH_TIMEOUT_MS } from "@shared/utils/constants";
 import {
   CLIENT_OUTPUTS_BRAND_PATH,
@@ -147,14 +149,13 @@ function preprocessScannedPayload(
   payload: ScannedConfigPayload
 ): ScannedConfigPayload {
   const rawSdk = String(payload.sdk ?? "");
-  // A payload naming the plain RMNeo base is upgraded to the Matter adaptor: it
-  // is a strict superset (same stack plus the fabric verbs), and the base id
-  // resolves `matterCommissioning: false`, which silently disables commissioning
-  // for every privately scanned deployment. Built-in Neo already resolves the
-  // Matter id in `resolveBuiltInSelection`; this keeps scanned ones consistent.
+  // Platform-specific upgrade/downgrade in `sdkSession.config` (`Platform.OS`).
   const canonical = normalizeSdkIdentifier(rawSdk) ?? rawSdk;
   const sdk =
-    canonical === ESPRMNeo_BASE_SDK_ID ? ESPRMNeoMatter_BASE_SDK_ID : canonical;
+    typeof canonical === "string" &&
+    (SUPPORTED_SDK_IDENTIFIERS as readonly string[]).includes(canonical)
+      ? normalizePersistedSdkId(canonical as SDKIdentifier)
+      : canonical;
   const withCanonicalSdk =
     sdk !== rawSdk ? { ...payload, sdk } : payload;
 

@@ -60,7 +60,12 @@ export const ESPAppUtilityAdapter = {
   },
 
   /**
-   * Requests all required permissions.
+   * Triggers the OS Bluetooth + location prompts. No-op on iOS, which asks at
+   * launch.
+   *
+   * Only `promptBleAndLocationPermissions()` (src/shared/permissions) calls
+   * this; on the Android CN build only after the purpose dialog was answered
+   * "Allow".
    */
   requestAllPermissions(): void {
     try {
@@ -71,8 +76,8 @@ export const ESPAppUtilityAdapter = {
   },
 
   /**
-   * Records CN-region privacy consent natively and triggers the startup
-   * permission prompts deferred until consent. Safe to call on any build.
+   * Records CN-region privacy consent natively; iOS then asks for Bluetooth +
+   * location. Safe to call on any build.
    * @returns Resolves true once consent is recorded (false on error).
    */
   async acceptCnConsent(): Promise<boolean> {
@@ -81,6 +86,32 @@ export const ESPAppUtilityAdapter = {
     } catch (error) {
       console.error("ESPAppUtilityAdapter: Error accepting consent:", error);
       return false;
+    }
+  },
+
+  /**
+   * Runs work while holding iOS background time, so a cloud call in flight
+   * finishes even if the user leaves the app. Elsewhere it just runs the work.
+   * @param name - Label for the background task.
+   * @param work - The work to run.
+   * @returns The work's result.
+   */
+  async runWithBackgroundTime<T>(name: string, work: () => Promise<T>): Promise<T> {
+    if (!ESPAppUtilityModule?.beginBackgroundTask) {
+      return work();
+    }
+    let taskId: number | null = null;
+    try {
+      taskId = await ESPAppUtilityModule.beginBackgroundTask(name);
+    } catch (error) {
+      console.warn("ESPAppUtilityAdapter: background time not granted:", error);
+    }
+    try {
+      return await work();
+    } finally {
+      if (taskId !== null) {
+        ESPAppUtilityModule.endBackgroundTask?.(taskId);
+      }
     }
   }
 };

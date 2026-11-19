@@ -10,3 +10,4 @@ export { useForgotPassword } from "./useForgotPassword";
 export { useConfirmationCode } from "./useConfirmationCode";
 export { useResetPassword } from "./useResetPassword";
 export { useChangePassword } from "./useChangePassword";
+export { useSessionEndedRedirect } from "./useSessionEndedRedirect";

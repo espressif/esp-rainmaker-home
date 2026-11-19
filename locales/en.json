@@ -6,6 +6,54 @@
     "declinedTitle": "Consent required",
     "declinedMessage": "You need to accept the privacy policy to use the app."
   },
+  "permissions": {
+    "labels": {
+      "permission": "Permission requested",
+      "feature": "Feature",
+      "purpose": "What it is used for"
+    },
+    "allow": "Allow",
+    "notNow": "Not now",
+    "optionalNote": "This permission is optional. If you decline, only the feature described above will be unavailable — the rest of the app keeps working.",
+    "purposes": {
+      "bleAndLocation": {
+        "title": "Allow nearby devices and location access?",
+        "permissions": "Nearby devices (Bluetooth scan and connect) and precise location",
+        "feature": "Adding a new device — Bluetooth scanning and provisioning",
+        "purpose": "Android requires these permissions to discover the Bluetooth signal of nearby unconfigured devices and connect to them so Wi-Fi credentials can be sent. Your location is not collected, stored, or uploaded."
+      },
+      "camera": {
+        "title": "Allow camera access?",
+        "permissions": "Camera",
+        "feature": "Scanning a QR code",
+        "purpose": "The camera preview is used only to read the QR code printed on the device or shown on screen. No photo or video is saved or uploaded."
+      },
+      "chatCamera": {
+        "title": "Allow camera access?",
+        "permissions": "Camera (and, on Android 9, storage to save the photo before it is sent)",
+        "feature": "Taking a photo to attach to a chat message",
+        "purpose": "The camera opens only when you choose to take a photo. The photo you take is uploaded with your message to the AI agent you are chatting with. Nothing else is captured."
+      },
+      "microphone": {
+        "title": "Allow microphone access?",
+        "permissions": "Microphone",
+        "feature": "Two-way talk with a camera device",
+        "purpose": "The microphone opens when the live view starts but stays muted. Your voice is sent to the camera device only while the mic button in the live view is on. Nothing is recorded or stored by the app."
+      },
+      "photos": {
+        "title": "Allow access to photos?",
+        "permissions": "Photos and media",
+        "feature": "Attaching an image to a chat message",
+        "purpose": "Only the image you pick is read and attached to the message you send. The app does not browse or upload anything else from your gallery."
+      },
+      "notifications": {
+        "title": "Allow notifications?",
+        "permissions": "Notifications",
+        "feature": "Device and account alerts",
+        "purpose": "Used to tell you when a device goes offline, an automation runs, or someone shares a device with you. You can turn this off at any time in system settings."
+      }
+    }
+  },
   "alexa": {
     "guide": "Alexa Guide",
     "step1": "1. Tap \"Skills & Games\" in the menu, then search \"ESP RainMaker Home\".",

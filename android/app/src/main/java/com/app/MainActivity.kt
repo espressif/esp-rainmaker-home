@@ -20,7 +20,6 @@ import android.view.KeyEvent
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 
-import com.app.consent.ConsentPrefs
 import com.app.notification.ESPNotificationQueue
 import com.app.utils.ESPAppUtilityModule
 import com.app.utils.ESPPermissionUtils
@@ -54,13 +53,9 @@ class MainActivity : ReactActivity() {
         // Flavor-specific push init: Global initializes Firebase/FCM, CN is a no-op.
         PushBootstrap.initialize(this)
 
-        // CN region requires privacy consent before anything else. Defer the
-        // startup permission prompts until consent is accepted; the JS consent
-        // screen calls ESPAppUtilityModule.acceptCnConsent() to run them.
-        val needsConsent =
-            BuildConfig.FLAVOR.equals(CN_FLAVOR, ignoreCase = true) &&
-                !ConsentPrefs.isAccepted(this)
-        if (!needsConsent) {
+        // The CN build asks for each permission where it is used, after the
+        // in-app purpose dialog (src/shared/permissions), never at launch.
+        if (!BuildConfig.FLAVOR.equals(CN_FLAVOR, ignoreCase = true)) {
             runStartupPermissionChecks()
         }
 
@@ -69,9 +64,7 @@ class MainActivity : ReactActivity() {
 
     /**
      * Runs the startup permission / hardware prompts (notifications, BLE,
-     * location). Invoked directly at launch for non-CN builds (and CN
-     * builds where consent was already accepted), or after consent via
-     * ESPAppUtilityModule.acceptCnConsent().
+     * location). Invoked at launch on non-CN builds.
      */
     fun runStartupPermissionChecks() {
         checkPermissions()

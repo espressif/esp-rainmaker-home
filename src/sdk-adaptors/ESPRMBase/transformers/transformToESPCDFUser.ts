@@ -22,7 +22,7 @@ import {
     ESPCDFAssumeRoleResponse,
 } from "@store";
 import { mapNodeUpdateDataToEvent } from "@shared/utils/subscriptionHelper";
-import { ESPRMUser, ESPSecurity, ESPTransport, ESPRMEventType, UserCustomDataRequest, ESPGroupSharingRequest, ESPRMGroup, ESPRMBase, ESPNodeUpdateData } from "@espressif/rainmaker-base-sdk";
+import { ESPRMUser, ESPSecurity, ESPTransport, ESPRMEventType, UserCustomDataRequest, ESPGroupSharingRequest, ESPRMGroup, ESPRMBase, ESPNodeUpdateData, type ESPSessionEndedData } from "@espressif/rainmaker-base-sdk";
 import { ESPRMBaseAdaptorIdentifier } from "../constants";
 import { syncHomeWithNodes as esprmSyncHomeWithNodes, setCurrentHome as esprmSetCurrentHome, createHome as esprmCreateHome } from "../groupSync";
 import { addDeviceProvision } from "../addDeviceProvision";
@@ -446,6 +446,15 @@ export function transformToESPCDFUser(
         operations: operations,
         _raw: esprmUser,
         identifier: ESPRMBaseAdaptorIdentifier,
+    });
+
+    // The SDK clears its tokens on a 401 or a rejected refresh. Tell the CDF so
+    // the stores empty and the app leaves the signed-in screens. A logout
+    // already does both itself.
+    esprmUser.subscribe(ESPRMEventType.sessionEnded, (data: ESPSessionEndedData) => {
+        if (data?.reason !== "logout") {
+            cdfUser.sessionEnded(data?.reason ?? "unauthorized");
+        }
     });
 
     // Fetch and update user info asynchronously. One call carries custom data

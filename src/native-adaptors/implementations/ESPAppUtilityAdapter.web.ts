@@ -76,6 +76,9 @@ export const ESPAppUtilityAdapter = {
 
   /** Returns an empty build number on web builds. */
   getBuildNumber: async (): Promise<string> => "",
+
+  /** No background time to hold on web; runs the work. */
+  runWithBackgroundTime: async <T,>(_name: string, work: () => Promise<T>): Promise<T> => work(),
 };
 
 export default ESPAppUtilityAdapter;

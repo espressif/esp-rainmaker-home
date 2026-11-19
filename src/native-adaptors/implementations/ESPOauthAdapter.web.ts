@@ -8,6 +8,12 @@ import { rejectWebUnsupported } from "@native-adaptors/utils/webPlatform";
 
 /** OAuth adaptor stub for web — native deep-link flow is unavailable */
 export class ESPOauthAdapter {
+  isWaitingForBrowser(): boolean {
+    return false;
+  }
+
+  stopWaitingForBrowser(): void {}
+
   async getOauthCode(_requestURL: string): Promise<string> {
     return rejectWebUnsupported("native OAuth");
   }
